@@ -105,6 +105,20 @@ async function loadOverview() {
   loadMovers('gainers');
 }
 
+function updateHeroStatsFromQuotes(quotes) {
+  const map = { heroSpyPrice: 'SPY', heroNasdaqPrice: 'QQQ', heroVixPrice: '^VIX' };
+  Object.entries(map).forEach(([elId, sym]) => {
+    const el = document.getElementById(elId);
+    if (!el) return;
+    const q = quotes.find(x => x.symbol === sym || (sym === '^VIX' && x.symbol === '%5EVIX'));
+    if (!q || !q.price) return;
+    const up = (q.changePct || 0) >= 0;
+    el.classList.remove('up', 'down');
+    el.classList.add(up ? 'up' : 'down');
+    el.textContent = `$${q.price.toFixed(2)}`;
+  });
+}
+
 async function loadIndices() {
   try {
     const quotes = await fetchMultiQuote(INDEX_ETFS);
@@ -127,6 +141,9 @@ async function loadIndices() {
 
       card.onclick = () => { analyzeSymbol(sym.replace('^', '%5E')); switchTab('analyze'); };
     });
+
+    // Feed hero stats
+    updateHeroStatsFromQuotes(quotes);
   } catch (e) {
     console.warn('Indices load failed:', e);
   }
