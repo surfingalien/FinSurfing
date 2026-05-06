@@ -7,7 +7,7 @@
   <title>FinSurf — Stock Intelligence Platform</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;0,600;1,300&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300;0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;0,14..32,800;1,14..32,300&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/styles.css">
   <link rel="stylesheet" href="css/effects.css">
 </head>
@@ -31,9 +31,9 @@
     <header class="header">
       <div class="logo" onclick="switchTab('overview')">
         <svg class="logo-icon" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M4 22 L10 14 L16 18 L22 8 L28 12" stroke="#e3a012" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-          <path d="M4 22 L10 14 L16 18 L22 8 L28 12" stroke="#e3a012" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" opacity="0.12"/>
-          <circle cx="16" cy="18" r="2.5" fill="#0ea5e9"/>
+          <path d="M4 22 L10 14 L16 18 L22 8 L28 12" stroke="#00ffcc" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M4 22 L10 14 L16 18 L22 8 L28 12" stroke="#00ffcc" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" opacity="0.12"/>
+          <circle cx="16" cy="18" r="2.5" fill="#6366f1"/>
         </svg>
         <span class="logo-text"><span class="logo-fin">FIN</span><span class="logo-surf">SURF</span></span>
       </div>
@@ -104,8 +104,8 @@
             <svg class="hero-chart" viewBox="0 0 320 140" fill="none" xmlns="http://www.w3.org/2000/svg">
               <defs>
                 <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stop-color="#e3a012" stop-opacity="0.25"/>
-                  <stop offset="100%" stop-color="#e3a012" stop-opacity="0"/>
+                  <stop offset="0%" stop-color="#00ffcc" stop-opacity="0.20"/>
+                  <stop offset="100%" stop-color="#00ffcc" stop-opacity="0"/>
                 </linearGradient>
                 <filter id="glow">
                   <feGaussianBlur stdDeviation="2.5" result="coloredBlur"/>
@@ -113,9 +113,9 @@
                 </filter>
               </defs>
               <path class="hero-area" d="M0 110 L20 95 L40 100 L60 80 L80 85 L100 65 L120 70 L140 50 L160 55 L180 40 L200 45 L220 30 L240 35 L260 20 L280 25 L300 15 L320 10 L320 140 L0 140 Z" fill="url(#chartGrad)"/>
-              <path class="hero-line" d="M0 110 L20 95 L40 100 L60 80 L80 85 L100 65 L120 70 L140 50 L160 55 L180 40 L200 45 L220 30 L240 35 L260 20 L280 25 L300 15 L320 10" stroke="#e3a012" stroke-width="2" fill="none" filter="url(#glow)"/>
-              <circle class="hero-dot-anim" cx="320" cy="10" r="4" fill="#e3a012"/>
-              <circle cx="320" cy="10" r="10" fill="#e3a012" opacity="0.15" class="hero-pulse"/>
+              <path class="hero-line" d="M0 110 L20 95 L40 100 L60 80 L80 85 L100 65 L120 70 L140 50 L160 55 L180 40 L200 45 L220 30 L240 35 L260 20 L280 25 L300 15 L320 10" stroke="#00ffcc" stroke-width="2" fill="none" filter="url(#glow)"/>
+              <circle class="hero-dot-anim" cx="320" cy="10" r="4" fill="#00ffcc"/>
+              <circle cx="320" cy="10" r="10" fill="#00ffcc" opacity="0.15" class="hero-pulse"/>
             </svg>
           </div>
         </div>
@@ -330,7 +330,7 @@
             <div class="sidebar-placeholder" id="sidebarPlaceholder">
               <div class="placeholder-icon">
                 <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M8 44 L20 28 L32 36 L44 16 L56 24" stroke="#e3a012" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" opacity="0.6"/>
+                  <path d="M8 44 L20 28 L32 36 L44 16 L56 24" stroke="#00ffcc" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" opacity="0.6"/>
                 </svg>
               </div>
               <p>Search for any US stock to see<br>technical analysis &amp; fundamentals</p>
