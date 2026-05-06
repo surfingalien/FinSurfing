@@ -1,0 +1,7 @@
+.DS_Store
+node_modules/
+.env
+*.log
+portfolio-tracker/frontend/node_modules/
+portfolio-tracker/frontend/.next/
+portfolio-tracker/backend/venv/

@@ -1,0 +1,769 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="FinSurf — Professional stock analysis, technical indicators, trading strategies, and fundamental research for US equities.">
+  <title>FinSurf — Stock Intelligence Platform</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;0,600;1,300&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <div id="app">
+
+    <!-- Ticker Bar -->
+    <div class="ticker-wrap">
+      <div class="ticker-track" id="tickerTrack">
+        <span class="ticker-loading">Loading market data…</span>
+      </div>
+    </div>
+
+    <!-- Header -->
+    <header class="header">
+      <div class="logo" onclick="switchTab('overview')">
+        <svg class="logo-icon" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M4 22 L10 14 L16 18 L22 8 L28 12" stroke="#e3a012" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M4 22 L10 14 L16 18 L22 8 L28 12" stroke="#e3a012" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" opacity="0.12"/>
+          <circle cx="16" cy="18" r="2.5" fill="#0ea5e9"/>
+        </svg>
+        <span class="logo-text"><span class="logo-fin">FIN</span><span class="logo-surf">SURF</span></span>
+      </div>
+
+      <nav class="nav">
+        <button class="nav-btn active" data-tab="overview">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+          Overview
+        </button>
+        <button class="nav-btn" data-tab="analyze">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          Analyze
+        </button>
+        <button class="nav-btn" data-tab="strategies">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+          Strategies
+        </button>
+        <button class="nav-btn" data-tab="screener">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+          Screener
+        </button>
+        <button class="nav-btn" data-tab="learn">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+          Learn
+        </button>
+      </nav>
+
+      <div class="header-meta">
+        <span class="market-status" id="marketStatus">
+          <span class="status-dot"></span>
+          <span id="marketStatusText">Markets</span>
+        </span>
+        <span class="header-time" id="headerTime">--:-- --</span>
+      </div>
+    </header>
+
+    <!-- ════════════════════════════════════ OVERVIEW TAB ════════════════════════════════════ -->
+    <main class="main">
+      <div id="tab-overview" class="tab-content active">
+        <div class="section-header">
+          <h1 class="section-title">Market Overview</h1>
+          <span class="section-sub" id="overviewDate">Today</span>
+        </div>
+
+        <!-- Indices Grid -->
+        <div class="indices-grid" id="indicesGrid">
+          <div class="index-card skeleton" data-symbol="SPY">
+            <div class="index-name">S&P 500</div>
+            <div class="index-price">—</div>
+            <div class="index-change">—</div>
+          </div>
+          <div class="index-card skeleton" data-symbol="QQQ">
+            <div class="index-name">Nasdaq 100</div>
+            <div class="index-price">—</div>
+            <div class="index-change">—</div>
+          </div>
+          <div class="index-card skeleton" data-symbol="DIA">
+            <div class="index-name">Dow Jones</div>
+            <div class="index-price">—</div>
+            <div class="index-change">—</div>
+          </div>
+          <div class="index-card skeleton" data-symbol="IWM">
+            <div class="index-name">Russell 2000</div>
+            <div class="index-price">—</div>
+            <div class="index-change">—</div>
+          </div>
+          <div class="index-card skeleton" data-symbol="^VIX">
+            <div class="index-name">VIX</div>
+            <div class="index-price">—</div>
+            <div class="index-change">—</div>
+          </div>
+          <div class="index-card skeleton" data-symbol="GLD">
+            <div class="index-name">Gold ETF</div>
+            <div class="index-price">—</div>
+            <div class="index-change">—</div>
+          </div>
+        </div>
+
+        <div class="overview-layout">
+          <!-- Sector Heatmap -->
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Sector Performance</span>
+              <span class="card-badge">1D</span>
+            </div>
+            <div class="sector-grid" id="sectorGrid">
+              <div class="sector-cell skeleton" data-symbol="XLK" data-sector="Technology">Technology</div>
+              <div class="sector-cell skeleton" data-symbol="XLF" data-sector="Financials">Financials</div>
+              <div class="sector-cell skeleton" data-symbol="XLV" data-sector="Health Care">Health Care</div>
+              <div class="sector-cell skeleton" data-symbol="XLE" data-sector="Energy">Energy</div>
+              <div class="sector-cell skeleton" data-symbol="XLY" data-sector="Cons. Disc.">Cons. Disc.</div>
+              <div class="sector-cell skeleton" data-symbol="XLP" data-sector="Cons. Staples">Cons. Staples</div>
+              <div class="sector-cell skeleton" data-symbol="XLI" data-sector="Industrials">Industrials</div>
+              <div class="sector-cell skeleton" data-symbol="XLU" data-sector="Utilities">Utilities</div>
+              <div class="sector-cell skeleton" data-symbol="XLRE" data-sector="Real Estate">Real Estate</div>
+              <div class="sector-cell skeleton" data-symbol="XLB" data-sector="Materials">Materials</div>
+              <div class="sector-cell skeleton" data-symbol="XLC" data-sector="Comm. Svc.">Comm. Svc.</div>
+            </div>
+          </div>
+
+          <!-- Watchlist / Top Movers -->
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Top Movers</span>
+              <div class="tab-mini">
+                <button class="tab-mini-btn active" data-target="gainers">Gainers</button>
+                <button class="tab-mini-btn" data-target="losers">Losers</button>
+                <button class="tab-mini-btn" data-target="active">Active</button>
+              </div>
+            </div>
+            <div id="moversContainer">
+              <div class="mover-list" id="moverList">
+                <div class="mover-placeholder">Loading movers…</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Popular Stocks Quick View -->
+        <div class="card" style="margin-top: var(--gap);">
+          <div class="card-header">
+            <span class="card-title">Market Leaders</span>
+            <button class="btn-ghost" onclick="switchTab('screener')">Full Screener →</button>
+          </div>
+          <div class="stocks-table-wrap">
+            <table class="stocks-table" id="quickTable">
+              <thead>
+                <tr>
+                  <th>Symbol</th>
+                  <th>Company</th>
+                  <th>Price</th>
+                  <th>Change</th>
+                  <th>Change%</th>
+                  <th>Vol</th>
+                  <th>Mkt Cap</th>
+                  <th>P/E</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="quickTableBody">
+                <tr><td colspan="9" class="table-loading">Loading…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ════════════════════════════════════ ANALYZE TAB ════════════════════════════════════ -->
+      <div id="tab-analyze" class="tab-content">
+        <div class="analyze-toolbar">
+          <div class="search-wrap">
+            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+            <input type="text" id="stockSearch" class="search-input" placeholder="Search symbol or company… (AAPL, TSLA, MSFT)" autocomplete="off" />
+            <div class="search-suggestions" id="searchSuggestions"></div>
+          </div>
+          <div class="period-group">
+            <button class="period-btn" data-period="5d" data-interval="30m">5D</button>
+            <button class="period-btn" data-period="1mo" data-interval="1d">1M</button>
+            <button class="period-btn" data-period="3mo" data-interval="1d">3M</button>
+            <button class="period-btn" data-period="6mo" data-interval="1d">6M</button>
+            <button class="period-btn active" data-period="1y" data-interval="1d">1Y</button>
+            <button class="period-btn" data-period="2y" data-interval="1wk">2Y</button>
+            <button class="period-btn" data-period="5y" data-interval="1wk">5Y</button>
+          </div>
+          <div class="indicator-toggles">
+            <button class="ind-btn" data-ind="sma20">SMA20</button>
+            <button class="ind-btn active" data-ind="sma50">SMA50</button>
+            <button class="ind-btn" data-ind="sma200">SMA200</button>
+            <button class="ind-btn" data-ind="ema">EMA</button>
+            <button class="ind-btn active" data-ind="bb">BB</button>
+            <button class="ind-btn active" data-ind="volume">VOL</button>
+          </div>
+        </div>
+
+        <!-- Stock Header Info -->
+        <div class="stock-header" id="stockHeader" style="display:none;">
+          <div class="stock-id">
+            <span class="stock-symbol" id="stockSymbol">—</span>
+            <span class="stock-name" id="stockName">—</span>
+            <span class="stock-exchange" id="stockExchange">—</span>
+          </div>
+          <div class="stock-price-block">
+            <span class="stock-price" id="stockPrice">—</span>
+            <span class="stock-change" id="stockChange">—</span>
+            <span class="stock-pct" id="stockPct">—</span>
+          </div>
+          <div class="stock-meta">
+            <span class="meta-item"><span class="meta-label">52W High</span><span id="meta52High" class="meta-value">—</span></span>
+            <span class="meta-item"><span class="meta-label">52W Low</span><span id="meta52Low" class="meta-value">—</span></span>
+            <span class="meta-item"><span class="meta-label">Volume</span><span id="metaVolume" class="meta-value">—</span></span>
+            <span class="meta-item"><span class="meta-label">Avg Vol</span><span id="metaAvgVol" class="meta-value">—</span></span>
+          </div>
+        </div>
+
+        <div class="analyze-layout" id="analyzeLayout">
+          <!-- Chart Area -->
+          <div class="chart-column">
+            <div class="card chart-card">
+              <div id="mainChart" class="chart-container"></div>
+            </div>
+            <div class="card chart-card chart-subpanel" id="rsiPanel">
+              <div class="subpanel-label">RSI (14)</div>
+              <div id="rsiChart" class="chart-container" style="height:120px;"></div>
+            </div>
+            <div class="card chart-card chart-subpanel" id="macdPanel">
+              <div class="subpanel-label">MACD (12,26,9)</div>
+              <div id="macdChart" class="chart-container" style="height:120px;"></div>
+            </div>
+            <div class="chart-status" id="chartStatus">
+              Enter a stock symbol above to begin analysis
+            </div>
+          </div>
+
+          <!-- Sidebar -->
+          <div class="analysis-sidebar">
+            <!-- Signal Panel -->
+            <div class="card signal-card" id="signalCard" style="display:none;">
+              <div class="card-header">
+                <span class="card-title">Technical Signals</span>
+              </div>
+              <div class="signal-verdict" id="signalVerdict">
+                <span class="verdict-label">Overall</span>
+                <span class="verdict-pill" id="verdictPill">—</span>
+                <span class="verdict-score" id="verdictScore"></span>
+              </div>
+              <div class="signal-list" id="signalList"></div>
+            </div>
+
+            <!-- Fundamentals -->
+            <div class="card fundamentals-card" id="fundamentalsCard" style="display:none;">
+              <div class="card-header">
+                <span class="card-title">Fundamentals</span>
+              </div>
+              <div class="fundamentals-grid" id="fundamentalsGrid"></div>
+            </div>
+
+            <!-- About -->
+            <div class="card about-card" id="aboutCard" style="display:none;">
+              <div class="card-header">
+                <span class="card-title">About</span>
+              </div>
+              <p class="about-summary" id="aboutSummary"></p>
+              <div class="about-tags" id="aboutTags"></div>
+            </div>
+
+            <!-- Placeholder when nothing loaded -->
+            <div class="sidebar-placeholder" id="sidebarPlaceholder">
+              <div class="placeholder-icon">
+                <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M8 44 L20 28 L32 36 L44 16 L56 24" stroke="#e3a012" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" opacity="0.6"/>
+                </svg>
+              </div>
+              <p>Search for any US stock to see<br>technical analysis &amp; fundamentals</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ════════════════════════════════════ STRATEGIES TAB ════════════════════════════════════ -->
+      <div id="tab-strategies" class="tab-content">
+        <div class="section-header">
+          <h1 class="section-title">Trading Strategies</h1>
+          <p class="section-desc">Evidence-based strategies for US equities. Each strategy includes entry conditions, risk management, and key indicators.</p>
+        </div>
+
+        <div class="strategy-grid" id="strategyGrid">
+
+          <div class="strategy-card" data-strategy="golden-cross">
+            <div class="strategy-tag tag-trend">Trend Following</div>
+            <h3 class="strategy-name">Golden Cross / Death Cross</h3>
+            <p class="strategy-desc">A classic long-term trend signal using the 50-day and 200-day simple moving averages. When the 50-SMA crosses above the 200-SMA, it signals a potential bull trend reversal.</p>
+            <div class="strategy-details">
+              <div class="strategy-block">
+                <div class="strategy-block-title">Entry Conditions (Long)</div>
+                <ul class="strategy-rules">
+                  <li>50-SMA crosses <strong>above</strong> 200-SMA (Golden Cross)</li>
+                  <li>Price is above both moving averages</li>
+                  <li>Volume confirmation on crossover day</li>
+                  <li>RSI above 50 (trend confirmation)</li>
+                </ul>
+              </div>
+              <div class="strategy-block">
+                <div class="strategy-block-title">Risk Management</div>
+                <ul class="strategy-rules">
+                  <li>Stop loss: below 200-SMA</li>
+                  <li>Take profit: trailing stop at 50-SMA</li>
+                  <li>Position size: 2-5% of portfolio</li>
+                  <li>Exit: Death Cross (50-SMA below 200-SMA)</li>
+                </ul>
+              </div>
+            </div>
+            <div class="strategy-indicators">
+              <span class="ind-tag">SMA50</span>
+              <span class="ind-tag">SMA200</span>
+              <span class="ind-tag">Volume</span>
+              <span class="ind-tag">RSI</span>
+            </div>
+            <button class="strategy-analyze-btn" onclick="analyzeStrategy('golden-cross')">Analyze This Strategy →</button>
+          </div>
+
+          <div class="strategy-card" data-strategy="rsi-reversal">
+            <div class="strategy-tag tag-reversal">Mean Reversion</div>
+            <h3 class="strategy-name">RSI Oversold/Overbought Reversal</h3>
+            <p class="strategy-desc">Uses RSI to identify extreme momentum conditions. Stocks that are oversold (RSI &lt;30) or overbought (RSI &gt;70) tend to revert to the mean, creating short-term trading opportunities.</p>
+            <div class="strategy-details">
+              <div class="strategy-block">
+                <div class="strategy-block-title">Entry Conditions (Long)</div>
+                <ul class="strategy-rules">
+                  <li>RSI drops below 30 (oversold zone)</li>
+                  <li>RSI starts turning upward (confirmation)</li>
+                  <li>Price at or near key support level</li>
+                  <li>No strong downtrend in 200-SMA</li>
+                </ul>
+              </div>
+              <div class="strategy-block">
+                <div class="strategy-block-title">Risk Management</div>
+                <ul class="strategy-rules">
+                  <li>Stop loss: 2–3% below entry</li>
+                  <li>Take profit: RSI reaches 50–60</li>
+                  <li>Avoid in strong downtrends</li>
+                  <li>Best on higher time frames (daily+)</li>
+                </ul>
+              </div>
+            </div>
+            <div class="strategy-indicators">
+              <span class="ind-tag">RSI(14)</span>
+              <span class="ind-tag">Support Levels</span>
+              <span class="ind-tag">SMA200</span>
+            </div>
+            <button class="strategy-analyze-btn" onclick="analyzeStrategy('rsi-reversal')">Analyze This Strategy →</button>
+          </div>
+
+          <div class="strategy-card" data-strategy="macd-momentum">
+            <div class="strategy-tag tag-momentum">Momentum</div>
+            <h3 class="strategy-name">MACD Momentum Crossover</h3>
+            <p class="strategy-desc">MACD (Moving Average Convergence Divergence) captures changes in momentum. The crossover of the MACD line above its signal line is a classic bullish entry signal.</p>
+            <div class="strategy-details">
+              <div class="strategy-block">
+                <div class="strategy-block-title">Entry Conditions (Long)</div>
+                <ul class="strategy-rules">
+                  <li>MACD line crosses above Signal line</li>
+                  <li>Crossover happens below zero line (stronger)</li>
+                  <li>Histogram turns positive and expanding</li>
+                  <li>Price in uptrend (above SMA50)</li>
+                </ul>
+              </div>
+              <div class="strategy-block">
+                <div class="strategy-block-title">Risk Management</div>
+                <ul class="strategy-rules">
+                  <li>Stop loss: below recent swing low</li>
+                  <li>Exit: MACD crosses back below signal</li>
+                  <li>Avoid during high VIX / market stress</li>
+                  <li>Works best in trending markets</li>
+                </ul>
+              </div>
+            </div>
+            <div class="strategy-indicators">
+              <span class="ind-tag">MACD(12,26,9)</span>
+              <span class="ind-tag">SMA50</span>
+              <span class="ind-tag">Volume</span>
+            </div>
+            <button class="strategy-analyze-btn" onclick="analyzeStrategy('macd-momentum')">Analyze This Strategy →</button>
+          </div>
+
+          <div class="strategy-card" data-strategy="bollinger-squeeze">
+            <div class="strategy-tag tag-breakout">Breakout</div>
+            <h3 class="strategy-name">Bollinger Band Squeeze</h3>
+            <p class="strategy-desc">When Bollinger Bands narrow (squeeze), it signals a period of low volatility that often precedes a large directional move. Trading the breakout from the squeeze can be highly profitable.</p>
+            <div class="strategy-details">
+              <div class="strategy-block">
+                <div class="strategy-block-title">Entry Conditions</div>
+                <ul class="strategy-rules">
+                  <li>BB Width at 6-month low (squeeze forming)</li>
+                  <li>Price breaks above upper band (bullish)</li>
+                  <li>Volume spike confirms breakout</li>
+                  <li>MACD trending in breakout direction</li>
+                </ul>
+              </div>
+              <div class="strategy-block">
+                <div class="strategy-block-title">Risk Management</div>
+                <ul class="strategy-rules">
+                  <li>Stop loss: back inside the bands</li>
+                  <li>Target: 1.5x–2x the band width</li>
+                  <li>False breakouts are common — wait for close</li>
+                  <li>Ride with trailing stop after breakout</li>
+                </ul>
+              </div>
+            </div>
+            <div class="strategy-indicators">
+              <span class="ind-tag">Bollinger Bands</span>
+              <span class="ind-tag">BB Width</span>
+              <span class="ind-tag">Volume</span>
+              <span class="ind-tag">MACD</span>
+            </div>
+            <button class="strategy-analyze-btn" onclick="analyzeStrategy('bollinger-squeeze')">Analyze This Strategy →</button>
+          </div>
+
+          <div class="strategy-card" data-strategy="value">
+            <div class="strategy-tag tag-value">Value / Fundamental</div>
+            <h3 class="strategy-name">Value + Momentum Combo</h3>
+            <p class="strategy-desc">Combines fundamental cheapness (low P/E, strong earnings) with technical momentum (price uptrend). Often called "GARP" — Growth At a Reasonable Price.</p>
+            <div class="strategy-details">
+              <div class="strategy-block">
+                <div class="strategy-block-title">Selection Criteria</div>
+                <ul class="strategy-rules">
+                  <li>Forward P/E below sector average</li>
+                  <li>EPS growth &gt; 15% YoY</li>
+                  <li>Revenue growth &gt; 10% YoY</li>
+                  <li>Profit margin expanding</li>
+                  <li>Debt/Equity below 1.0</li>
+                  <li>Price above 50-SMA and 200-SMA</li>
+                </ul>
+              </div>
+              <div class="strategy-block">
+                <div class="strategy-block-title">Risk Management</div>
+                <ul class="strategy-rules">
+                  <li>Hold 3–12 months (position trade)</li>
+                  <li>Diversify across 8–12 stocks</li>
+                  <li>Rebalance quarterly</li>
+                  <li>Exit if fundamentals deteriorate</li>
+                </ul>
+              </div>
+            </div>
+            <div class="strategy-indicators">
+              <span class="ind-tag">P/E Ratio</span>
+              <span class="ind-tag">EPS Growth</span>
+              <span class="ind-tag">SMA50</span>
+              <span class="ind-tag">SMA200</span>
+            </div>
+            <button class="strategy-analyze-btn" onclick="switchTab('screener')">Find Value Stocks →</button>
+          </div>
+
+          <div class="strategy-card" data-strategy="relative-strength">
+            <div class="strategy-tag tag-momentum">Relative Strength</div>
+            <h3 class="strategy-name">Relative Strength (52-Week Leaders)</h3>
+            <p class="strategy-desc">Stocks making new 52-week highs on strong volume tend to continue outperforming. This strategy exploits the momentum anomaly documented extensively in academic literature.</p>
+            <div class="strategy-details">
+              <div class="strategy-block">
+                <div class="strategy-block-title">Entry Conditions</div>
+                <ul class="strategy-rules">
+                  <li>Stock within 5% of 52-week high</li>
+                  <li>Outperforming S&P 500 over 3 months</li>
+                  <li>Volume above 30-day average</li>
+                  <li>RS Rating above 80 (IBD-style)</li>
+                  <li>Base breakout from consolidation</li>
+                </ul>
+              </div>
+              <div class="strategy-block">
+                <div class="strategy-block-title">Risk Management</div>
+                <ul class="strategy-rules">
+                  <li>Stop loss: 7–8% from entry (IBD rule)</li>
+                  <li>Buy in tranches as stock moves up</li>
+                  <li>Sell half at 20–25% gain</li>
+                  <li>Exit if market goes into correction</li>
+                </ul>
+              </div>
+            </div>
+            <div class="strategy-indicators">
+              <span class="ind-tag">52W High</span>
+              <span class="ind-tag">Relative Performance</span>
+              <span class="ind-tag">Volume</span>
+            </div>
+            <button class="strategy-analyze-btn" onclick="analyzeStrategy('relative-strength')">Analyze This Strategy →</button>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- ════════════════════════════════════ SCREENER TAB ════════════════════════════════════ -->
+      <div id="tab-screener" class="tab-content">
+        <div class="section-header">
+          <h1 class="section-title">Stock Screener</h1>
+          <p class="section-desc">Filter US equities by fundamental and technical criteria.</p>
+        </div>
+
+        <div class="screener-layout">
+          <div class="screener-filters card">
+            <div class="filter-title">Filters</div>
+
+            <div class="filter-group">
+              <label class="filter-label">Sector</label>
+              <select class="filter-select" id="filterSector">
+                <option value="">All Sectors</option>
+                <option value="Technology">Technology</option>
+                <option value="Financials">Financials</option>
+                <option value="Health Care">Health Care</option>
+                <option value="Energy">Energy</option>
+                <option value="Consumer Cyclical">Consumer Cyclical</option>
+                <option value="Consumer Defensive">Consumer Defensive</option>
+                <option value="Industrials">Industrials</option>
+                <option value="Communication Services">Communication Services</option>
+                <option value="Basic Materials">Basic Materials</option>
+                <option value="Utilities">Utilities</option>
+                <option value="Real Estate">Real Estate</option>
+              </select>
+            </div>
+
+            <div class="filter-group">
+              <label class="filter-label">Market Cap</label>
+              <select class="filter-select" id="filterMktCap">
+                <option value="">Any</option>
+                <option value="mega">Mega (&gt;$200B)</option>
+                <option value="large">Large ($10B–$200B)</option>
+                <option value="mid">Mid ($2B–$10B)</option>
+                <option value="small">Small ($300M–$2B)</option>
+              </select>
+            </div>
+
+            <div class="filter-group">
+              <label class="filter-label">P/E Ratio</label>
+              <div class="range-wrap">
+                <input type="number" class="filter-input" id="filterPeMin" placeholder="Min" min="0" max="999">
+                <span class="range-sep">–</span>
+                <input type="number" class="filter-input" id="filterPeMax" placeholder="Max" min="0" max="999">
+              </div>
+            </div>
+
+            <div class="filter-group">
+              <label class="filter-label">Price Change (1D %)</label>
+              <div class="range-wrap">
+                <input type="number" class="filter-input" id="filterChgMin" placeholder="Min" step="0.1">
+                <span class="range-sep">–</span>
+                <input type="number" class="filter-input" id="filterChgMax" placeholder="Max" step="0.1">
+              </div>
+            </div>
+
+            <div class="filter-group">
+              <label class="filter-label">Price ($)</label>
+              <div class="range-wrap">
+                <input type="number" class="filter-input" id="filterPriceMin" placeholder="Min">
+                <span class="range-sep">–</span>
+                <input type="number" class="filter-input" id="filterPriceMax" placeholder="Max">
+              </div>
+            </div>
+
+            <div class="filter-group">
+              <label class="filter-label">Signal</label>
+              <select class="filter-select" id="filterSignal">
+                <option value="">Any Signal</option>
+                <option value="Strong Buy">Strong Buy</option>
+                <option value="Buy">Buy</option>
+                <option value="Neutral">Neutral</option>
+                <option value="Sell">Sell</option>
+                <option value="Strong Sell">Strong Sell</option>
+              </select>
+            </div>
+
+            <button class="btn-primary" id="runScreener">Run Screener</button>
+            <button class="btn-ghost" id="resetScreener">Reset</button>
+
+            <div class="preset-title">Presets</div>
+            <button class="preset-btn" data-preset="momentum">Momentum Leaders</button>
+            <button class="preset-btn" data-preset="value">Value Stocks</button>
+            <button class="preset-btn" data-preset="oversold">Oversold Bounce</button>
+            <button class="preset-btn" data-preset="growth">Growth Tech</button>
+          </div>
+
+          <div class="screener-results">
+            <div class="screener-meta" id="screenerMeta">
+              <span id="screenerCount">Showing all stocks</span>
+              <div class="sort-group">
+                <label class="filter-label">Sort by</label>
+                <select class="filter-select" id="sortBy">
+                  <option value="mktCap">Market Cap</option>
+                  <option value="change">Change %</option>
+                  <option value="pe">P/E Ratio</option>
+                  <option value="price">Price</option>
+                  <option value="signal">Signal</option>
+                </select>
+              </div>
+            </div>
+            <div class="card">
+              <div class="stocks-table-wrap">
+                <table class="stocks-table" id="screenerTable">
+                  <thead>
+                    <tr>
+                      <th>Symbol</th>
+                      <th>Company</th>
+                      <th>Sector</th>
+                      <th>Price</th>
+                      <th>Chg%</th>
+                      <th>Mkt Cap</th>
+                      <th>P/E</th>
+                      <th>EPS Growth</th>
+                      <th>Signal</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody id="screenerBody">
+                    <tr><td colspan="10" class="table-loading">Loading stock data…</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ════════════════════════════════════ LEARN TAB ════════════════════════════════════ -->
+      <div id="tab-learn" class="tab-content">
+        <div class="section-header">
+          <h1 class="section-title">Technical Analysis Guide</h1>
+          <p class="section-desc">Master the indicators used in FinSurf and understand how to read market signals.</p>
+        </div>
+
+        <div class="learn-grid">
+
+          <div class="learn-card card">
+            <div class="learn-icon">RSI</div>
+            <h3>Relative Strength Index</h3>
+            <p>RSI measures the speed and magnitude of recent price changes on a scale of 0–100. Developed by J. Welles Wilder in 1978.</p>
+            <div class="learn-detail">
+              <div class="learn-formula">RSI = 100 – (100 / (1 + RS))<br><small>RS = Avg Gain / Avg Loss over N periods</small></div>
+              <div class="learn-levels">
+                <div class="learn-level level-buy"><span>&lt; 30</span> Oversold — potential buy</div>
+                <div class="learn-level level-neutral"><span>30–70</span> Neutral zone</div>
+                <div class="learn-level level-sell"><span>&gt; 70</span> Overbought — potential sell</div>
+              </div>
+              <p class="learn-tip"><strong>Pro Tip:</strong> RSI divergence (price makes new high but RSI doesn't) is one of the strongest reversal signals in technical analysis.</p>
+            </div>
+          </div>
+
+          <div class="learn-card card">
+            <div class="learn-icon">MACD</div>
+            <h3>Moving Average Convergence Divergence</h3>
+            <p>MACD is a trend-following momentum indicator that shows the relationship between two exponential moving averages.</p>
+            <div class="learn-detail">
+              <div class="learn-formula">MACD = EMA(12) – EMA(26)<br>Signal = EMA(9) of MACD<br>Histogram = MACD – Signal</div>
+              <div class="learn-levels">
+                <div class="learn-level level-buy"><span>MACD &gt; Signal</span> Bullish momentum</div>
+                <div class="learn-level level-sell"><span>MACD &lt; Signal</span> Bearish momentum</div>
+                <div class="learn-level level-neutral"><span>Histogram expanding</span> Trend strengthening</div>
+              </div>
+              <p class="learn-tip"><strong>Pro Tip:</strong> Bullish crossovers below the zero line (negative MACD turning positive) are often the strongest buy signals.</p>
+            </div>
+          </div>
+
+          <div class="learn-card card">
+            <div class="learn-icon">BB</div>
+            <h3>Bollinger Bands</h3>
+            <p>Created by John Bollinger, these bands use standard deviations to measure volatility and identify potential breakouts or reversals.</p>
+            <div class="learn-detail">
+              <div class="learn-formula">Upper = SMA(20) + 2σ<br>Middle = SMA(20)<br>Lower = SMA(20) – 2σ</div>
+              <div class="learn-levels">
+                <div class="learn-level level-buy"><span>Price near Lower</span> Potential reversal up</div>
+                <div class="learn-level level-neutral"><span>Bands narrow</span> Volatility squeeze — big move coming</div>
+                <div class="learn-level level-sell"><span>Price near Upper</span> Potential reversal down</div>
+              </div>
+              <p class="learn-tip"><strong>Pro Tip:</strong> "Walking the bands" — when price hugs the upper band for many candles — signals a powerful uptrend, not a sell signal.</p>
+            </div>
+          </div>
+
+          <div class="learn-card card">
+            <div class="learn-icon">SMA</div>
+            <h3>Simple Moving Averages</h3>
+            <p>Moving averages smooth out price data and are the foundation of trend identification. The 50-day and 200-day SMAs are the most widely followed.</p>
+            <div class="learn-detail">
+              <div class="learn-formula">SMA(n) = Sum of closing prices / n</div>
+              <div class="learn-levels">
+                <div class="learn-level level-buy"><span>Price &gt; SMA200</span> Long-term uptrend</div>
+                <div class="learn-level level-buy"><span>Golden Cross</span> SMA50 crosses above SMA200</div>
+                <div class="learn-level level-sell"><span>Death Cross</span> SMA50 crosses below SMA200</div>
+              </div>
+              <p class="learn-tip"><strong>Pro Tip:</strong> Institutional investors (hedge funds, mutual funds) closely watch the 200-day SMA as a key support/resistance level, making it a self-fulfilling prophecy.</p>
+            </div>
+          </div>
+
+          <div class="learn-card card">
+            <div class="learn-icon">EMA</div>
+            <h3>Exponential Moving Average</h3>
+            <p>EMA gives more weight to recent prices, making it more responsive to new information than SMA. Popular choices: EMA(12), EMA(26), EMA(50).</p>
+            <div class="learn-detail">
+              <div class="learn-formula">EMA = Price × k + EMA(prev) × (1–k)<br><small>k = 2 / (n + 1)</small></div>
+              <div class="learn-levels">
+                <div class="learn-level level-buy"><span>Price &gt; EMA(50)</span> Short-term bullish</div>
+                <div class="learn-level level-buy"><span>EMA(12) &gt; EMA(26)</span> MACD positive</div>
+                <div class="learn-level level-sell"><span>Price &lt; EMA(50)</span> Short-term bearish</div>
+              </div>
+              <p class="learn-tip"><strong>Pro Tip:</strong> Day traders use the 9 and 20 EMA for short-term signals, while swing traders prefer the 21 and 50 EMA.</p>
+            </div>
+          </div>
+
+          <div class="learn-card card">
+            <div class="learn-icon">VOL</div>
+            <h3>Volume Analysis</h3>
+            <p>Volume confirms price moves. A breakout on high volume is far more reliable than one on low volume. Volume precedes price in many cases.</p>
+            <div class="learn-detail">
+              <div class="learn-formula">Volume Ratio = Today's Volume / 30-Day Avg Volume</div>
+              <div class="learn-levels">
+                <div class="learn-level level-buy"><span>High Vol + Up Day</span> Strong accumulation</div>
+                <div class="learn-level level-neutral"><span>Low Vol + Down Day</span> Normal pullback, not panic</div>
+                <div class="learn-level level-sell"><span>High Vol + Down Day</span> Distribution / selling pressure</div>
+              </div>
+              <p class="learn-tip"><strong>Pro Tip:</strong> "Climax volume" — an extreme spike in volume on a big price move — often marks the end of a trend rather than the continuation.</p>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Glossary -->
+        <div class="card" style="margin-top: var(--gap);">
+          <div class="card-header">
+            <span class="card-title">Trading Glossary</span>
+          </div>
+          <div class="glossary-grid">
+            <div class="glossary-item"><dt>Support</dt><dd>A price level where buying pressure is expected to prevent further decline</dd></div>
+            <div class="glossary-item"><dt>Resistance</dt><dd>A price level where selling pressure is expected to prevent further rise</dd></div>
+            <div class="glossary-item"><dt>Beta</dt><dd>Measures a stock's volatility relative to the market. Beta &gt; 1 = more volatile</dd></div>
+            <div class="glossary-item"><dt>P/E Ratio</dt><dd>Price-to-Earnings ratio. Compares stock price to annual earnings per share</dd></div>
+            <div class="glossary-item"><dt>EPS</dt><dd>Earnings Per Share — company's profit divided by outstanding shares</dd></div>
+            <div class="glossary-item"><dt>Float</dt><dd>The number of shares available for public trading (not held by insiders)</dd></div>
+            <div class="glossary-item"><dt>Short Interest</dt><dd>Percentage of float that has been sold short (borrowed and sold)</dd></div>
+            <div class="glossary-item"><dt>52W Range</dt><dd>The high and low price over the past 52 weeks — a key volatility measure</dd></div>
+            <div class="glossary-item"><dt>VWAP</dt><dd>Volume-Weighted Average Price — intraday benchmark used by institutions</dd></div>
+            <div class="glossary-item"><dt>ATR</dt><dd>Average True Range — measures daily volatility; used to set stop losses</dd></div>
+            <div class="glossary-item"><dt>Divergence</dt><dd>When price and an indicator (RSI/MACD) move in opposite directions — powerful reversal signal</dd></div>
+            <div class="glossary-item"><dt>Doji</dt><dd>Candlestick pattern with small body indicating market indecision</dd></div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <div class="footer-inner">
+        <span class="footer-brand">FinSurf</span>
+        <span class="footer-sep">·</span>
+        <span class="footer-note">Data via Yahoo Finance. For educational purposes only. Not financial advice.</span>
+        <span class="footer-sep">·</span>
+        <a href="https://github.com/surfingalien/FinSurfing" class="footer-link" target="_blank">GitHub</a>
+      </div>
+    </footer>
+  </div>
+
+  <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+  <script src="js/indicators.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
