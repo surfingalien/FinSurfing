@@ -3,10 +3,16 @@
    Uses yahoo-finance2 which handles YF auth internally
 ═══════════════════════════════════════════════ */
 
-const yahooFinance = require('yahoo-finance2').default;
-
-// Suppress noisy validation warnings in logs
-yahooFinance.setGlobalConfig({ validation: { logErrors: false } });
+let yahooFinance;
+try {
+  const _mod = require('yahoo-finance2');
+  yahooFinance = _mod.default || _mod;
+  if (typeof yahooFinance.setGlobalConfig === 'function') {
+    yahooFinance.setGlobalConfig({ validation: { logErrors: false } });
+  }
+} catch (loadErr) {
+  console.error('[proxy] Failed to load yahoo-finance2:', loadErr.message);
+}
 
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -17,6 +23,10 @@ module.exports = async function handler(req, res) {
 
   // Short cache headers
   res.setHeader('Cache-Control', 'public, s-maxage=30, stale-while-revalidate=120');
+
+  if (!yahooFinance) {
+    return res.status(500).json({ error: 'yahoo-finance2 module not loaded' });
+  }
 
   try {
     /* ─── Chart / OHLCV ─────────────────────── */
