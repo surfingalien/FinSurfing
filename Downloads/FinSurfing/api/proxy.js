@@ -1,132 +1,132 @@
 /* ═══════════════════════════════════════════════
-   FinSurf — Vercel Serverless Yahoo Finance Proxy
-   Handles crumb/cookie auth required for server-side YF requests
+   FinSurf — Vercel Serverless Data API
+   Uses yahoo-finance2 which handles YF auth internally
 ═══════════════════════════════════════════════ */
 
-// Module-level session cache — persists across warm function invocations
-let session = { crumb: null, cookie: null, expires: 0 };
+const yahooFinance = require('yahoo-finance2').default;
 
-const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
-
-function parseCookies(headers) {
-  const raw = headers.get('set-cookie') || '';
-  // Join multiple Set-Cookie headers if present
-  return raw.split(/,(?=[^ ].*?=)/).map(c => c.split(';')[0].trim()).filter(Boolean).join('; ');
-}
-
-async function refreshSession() {
-  let cookies = '';
-
-  // Step 1: Hit fc.yahoo.com to obtain initial session/consent cookies
-  try {
-    const r = await fetch('https://fc.yahoo.com', {
-      headers: { 'User-Agent': UA, 'Accept': '*/*' },
-      redirect: 'follow',
-    });
-    const c = parseCookies(r.headers);
-    if (c) cookies = c;
-  } catch (_) { /* non-critical */ }
-
-  // Step 2: Get crumb from Yahoo Finance
-  const crumbRes = await fetch('https://query1.finance.yahoo.com/v1/test/getcrumb', {
-    headers: {
-      'User-Agent': UA,
-      'Accept': 'text/plain, */*',
-      'Accept-Language': 'en-US,en;q=0.9',
-      'Referer': 'https://finance.yahoo.com/',
-      ...(cookies ? { 'Cookie': cookies } : {}),
-    },
-    redirect: 'follow',
-  });
-
-  const crumb = (await crumbRes.text()).trim();
-  if (!crumb || crumb.includes('<')) throw new Error('Failed to get YF crumb');
-
-  // Merge cookies from crumb response
-  const crumbCookies = parseCookies(crumbRes.headers);
-  if (crumbCookies) cookies = [cookies, crumbCookies].filter(Boolean).join('; ');
-
-  session = { crumb, cookie: cookies, expires: Date.now() + 25 * 60 * 1000 }; // 25 min TTL
-  return session;
-}
-
-async function getSession() {
-  if (session.crumb && Date.now() < session.expires) return session;
-  return refreshSession();
-}
+// Suppress noisy validation warnings in logs
+yahooFinance.setGlobalConfig({ validation: { logErrors: false } });
 
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  const { url } = req.query;
-  if (!url) return res.status(400).json({ error: 'Missing ?url= parameter' });
+  const { type, symbol, symbols, interval, range, modules } = req.query;
 
-  const decoded = decodeURIComponent(url);
-  if (!decoded.includes('yahoo.com')) {
-    return res.status(403).json({ error: 'Only Yahoo Finance URLs are allowed' });
-  }
+  // Short cache headers
+  res.setHeader('Cache-Control', 'public, s-maxage=30, stale-while-revalidate=120');
 
   try {
-    const { crumb, cookie } = await getSession();
+    /* ─── Chart / OHLCV ─────────────────────── */
+    if (type === 'chart') {
+      if (!symbol) return res.status(400).json({ error: 'Missing symbol' });
 
-    // Append crumb to the URL
-    const sep = decoded.includes('?') ? '&' : '?';
-    const targetUrl = `${decoded}${sep}crumb=${encodeURIComponent(crumb)}`;
+      const period1 = rangeToDate(range || '1y');
+      const intervalStr = interval || '1d';
 
-    const response = await fetch(targetUrl, {
-      headers: {
-        'User-Agent': UA,
-        'Accept': 'application/json, text/plain, */*',
-        'Accept-Language': 'en-US,en;q=0.9',
-        'Referer': 'https://finance.yahoo.com/',
-        'Origin': 'https://finance.yahoo.com',
-        ...(cookie ? { 'Cookie': cookie } : {}),
-      },
-      redirect: 'follow',
-    });
-
-    // If 401, session expired — force refresh and retry once
-    if (response.status === 401 || response.status === 403) {
-      session.expires = 0; // invalidate
-      const { crumb: c2, cookie: ck2 } = await refreshSession();
-      const sep2 = decoded.includes('?') ? '&' : '?';
-      const retryUrl = `${decoded}${sep2}crumb=${encodeURIComponent(c2)}`;
-      const retry = await fetch(retryUrl, {
-        headers: {
-          'User-Agent': UA,
-          'Accept': 'application/json, text/plain, */*',
-          'Accept-Language': 'en-US,en;q=0.9',
-          'Referer': 'https://finance.yahoo.com/',
-          'Origin': 'https://finance.yahoo.com',
-          ...(ck2 ? { 'Cookie': ck2 } : {}),
-        },
-        redirect: 'follow',
+      const result = await yahooFinance.chart(symbol, {
+        interval: intervalStr,
+        period1,
+        period2: 'now',
       });
-      const text2 = await retry.text();
-      res.setHeader('Cache-Control', 'public, s-maxage=30, stale-while-revalidate=60');
-      res.setHeader('Content-Type', 'application/json');
-      return res.status(retry.ok ? 200 : retry.status).send(text2);
+
+      return res.status(200).json({ chart: { result: [formatChartResult(result, symbol)] } });
     }
 
-    const text = await response.text();
+    /* ─── Batch quotes ──────────────────────── */
+    if (type === 'quote') {
+      const syms = (symbols || symbol || '').split(',').map(s => s.trim()).filter(Boolean);
+      if (!syms.length) return res.status(400).json({ error: 'Missing symbols' });
 
-    if (!response.ok) {
-      return res.status(response.status).json({
-        error: `Yahoo Finance returned ${response.status}`,
-        body: text.slice(0, 200)
+      const results = await yahooFinance.quote(syms);
+      const arr = Array.isArray(results) ? results : [results];
+
+      return res.status(200).json({
+        quoteResponse: {
+          result: arr.map(q => ({
+            symbol:                      q.symbol,
+            shortName:                   q.shortName || q.longName || q.symbol,
+            longName:                    q.longName,
+            regularMarketPrice:          q.regularMarketPrice,
+            regularMarketChange:         q.regularMarketChange,
+            regularMarketChangePercent:  q.regularMarketChangePercent,
+            regularMarketVolume:         q.regularMarketVolume,
+            fiftyTwoWeekHigh:            q.fiftyTwoWeekHigh,
+            fiftyTwoWeekLow:             q.fiftyTwoWeekLow,
+            marketCap:                   q.marketCap,
+            trailingPE:                  q.trailingPE,
+            fullExchangeName:            q.fullExchangeName || q.exchange,
+          }))
+        }
       });
     }
 
-    res.setHeader('Cache-Control', 'public, s-maxage=30, stale-while-revalidate=60');
-    res.setHeader('Content-Type', 'application/json');
-    return res.status(200).send(text);
+    /* ─── Fundamentals (quoteSummary) ────────── */
+    if (type === 'summary') {
+      if (!symbol) return res.status(400).json({ error: 'Missing symbol' });
+
+      const moduleList = (modules || 'summaryDetail,financialData,defaultKeyStatistics,assetProfile').split(',');
+
+      const result = await yahooFinance.quoteSummary(symbol, {
+        modules: moduleList,
+      });
+
+      return res.status(200).json({ quoteSummary: { result: [result] } });
+    }
+
+    /* ─── Search / autocomplete ─────────────── */
+    if (type === 'search') {
+      const q = req.query.q || req.query.query || '';
+      if (!q) return res.status(400).json({ error: 'Missing q' });
+
+      const result = await yahooFinance.search(q, { quotesCount: 8, newsCount: 0 });
+      return res.status(200).json({ quotes: result.quotes });
+    }
+
+    return res.status(400).json({ error: 'Missing or invalid type param. Use: chart | quote | summary | search' });
 
   } catch (err) {
-    console.error('Proxy error:', err.message);
+    console.error(`[proxy] type=${type} symbol=${symbol}`, err.message);
     return res.status(500).json({ error: err.message });
   }
+};
+
+/* ── Helpers ─────────────────────────────────── */
+function rangeToDate(range) {
+  const now = new Date();
+  const map = {
+    '5d': 5, '1mo': 30, '3mo': 90, '6mo': 180,
+    '1y': 365, '2y': 730, '5y': 1825
+  };
+  const days = map[range] || 365;
+  return new Date(now - days * 86400000).toISOString().slice(0, 10);
+}
+
+function formatChartResult(r, sym) {
+  // yahoo-finance2 returns a nicely structured object; map it to the shape
+  // our frontend parseChartData() expects
+  const quotes  = r.quotes || [];
+  const meta    = r.meta   || {};
+  const ts      = quotes.map(q => Math.floor(new Date(q.date).getTime() / 1000));
+  const opens   = quotes.map(q => q.open);
+  const highs   = quotes.map(q => q.high);
+  const lows    = quotes.map(q => q.low);
+  const closes  = quotes.map(q => q.close || q.adjclose);
+  const volumes = quotes.map(q => q.volume || 0);
+
+  return {
+    timestamp: ts,
+    indicators: {
+      quote: [{ open: opens, high: highs, low: lows, close: closes, volume: volumes }]
+    },
+    meta: {
+      symbol:             meta.symbol || sym,
+      currency:           meta.currency || 'USD',
+      exchangeName:       meta.exchangeName || meta.fullExchangeName || '',
+      regularMarketPrice: meta.regularMarketPrice || closes[closes.length - 1],
+      previousClose:      meta.chartPreviousClose || meta.previousClose,
+    }
+  };
 }
