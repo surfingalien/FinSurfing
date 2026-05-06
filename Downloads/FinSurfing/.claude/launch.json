@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "finsurf",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["-e", "const h=require('http'),fs=require('fs'),p=require('path'),m={'html':'text/html','css':'text/css','js':'application/javascript'};h.createServer((q,r)=>{let f=p.join('/Users/SurfingAlien/Downloads/FinSurfing',q.url==='/'?'/index.html':q.url);try{r.writeHead(200,{'Content-Type':m[f.split('.').pop()]||'text/plain'});fs.createReadStream(f).pipe(r)}catch(e){r.writeHead(404);r.end('not found')}}).listen(4200)"],
+      "port": 4200
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+# Next.js
+.next/
+node_modules/
+.env*
+.DS_Store
+
+# Python
+backend/venv/
+backend/__pycache__/
+*.pyc
