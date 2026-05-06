@@ -1,12 +1,6 @@
 {
   "version": 2,
   "name": "finsurf",
-  "functions": {
-    "api/*.js": {
-      "memory": 128,
-      "maxDuration": 15
-    }
-  },
   "headers": [
     {
       "source": "/(.*)",
