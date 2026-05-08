@@ -134,6 +134,9 @@ export default function PortfolioView({ portfolio }) {
                   <th className="text-right px-3 py-3 text-slate-400 font-medium hidden sm:table-cell">
                     <SortBtn col="changePct" label="Day %" />
                   </th>
+                  <th className="text-right px-3 py-3 text-slate-400 font-medium hidden sm:table-cell">
+                    <SortBtn col="todayGL" label="Today P/L" />
+                  </th>
                   <th className="text-right px-3 py-3 text-slate-400 font-medium">
                     <SortBtn col="mktValue" label="Mkt Value" />
                   </th>
@@ -161,6 +164,11 @@ export default function PortfolioView({ portfolio }) {
                     </td>
                     <td className="px-3 py-3 text-right hidden sm:table-cell">
                       <ChangeBadge pct={pos.changePct} />
+                    </td>
+                    <td className={`px-3 py-3 text-right font-mono text-xs hidden sm:table-cell ${(pos.todayGL ?? 0) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                      {pos.todayGL != null
+                        ? `${pos.todayGL >= 0 ? '+' : ''}$${fmt(Math.abs(pos.todayGL))}`
+                        : <span className="text-slate-600">—</span>}
                     </td>
                     <td className="px-3 py-3 text-right font-mono text-white font-medium">
                       {pos.mktValue !== null ? `$${fmt(pos.mktValue)}` : `$${fmt(pos.costBasis)}`}

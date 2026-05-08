@@ -4,7 +4,7 @@ import { fetchQuotes } from '../../services/api'
 import { TICKER_SYMBOLS } from '../../data/portfolio'
 import { fmt, fmtPct } from '../../services/api'
 
-export default function Header({ activeTab, onTabChange }) {
+export default function Header({ activeTab, onTabChange, triggeredCount = 0 }) {
   const [tickerData, setTickerData] = useState([])
   const [time, setTime] = useState(new Date())
   const [marketOpen, setMarketOpen] = useState(false)
@@ -17,6 +17,7 @@ export default function Header({ activeTab, onTabChange }) {
     { id: 'montecarlo',      label: 'Retirement',   icon: '◎' },
     { id: 'screener',        label: 'Screener',     icon: '◈' },
     { id: 'strategies',      label: 'Strategies',   icon: '▣' },
+    { id: 'alerts',          label: 'Alerts',       icon: '◎', badge: triggeredCount },
   ]
 
   useEffect(() => {
@@ -94,7 +95,7 @@ export default function Header({ activeTab, onTabChange }) {
               <button
                 key={tab.id}
                 onClick={() => onTabChange(tab.id)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-all duration-150
+                className={`relative flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-all duration-150
                   ${activeTab === tab.id
                     ? 'bg-mint-500/15 text-mint-400 border border-mint-500/25'
                     : 'text-slate-400 hover:text-white hover:bg-white/[0.05]'
@@ -102,6 +103,11 @@ export default function Header({ activeTab, onTabChange }) {
               >
                 <span className="text-[10px] opacity-60">{tab.icon}</span>
                 {tab.label}
+                {tab.badge > 0 && (
+                  <span className="absolute -top-1 -right-1 w-4 h-4 bg-amber-500 text-black text-[9px] font-bold rounded-full flex items-center justify-center animate-pulse">
+                    {tab.badge > 9 ? '9+' : tab.badge}
+                  </span>
+                )}
               </button>
             ))}
           </nav>
