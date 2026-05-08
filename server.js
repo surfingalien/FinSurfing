@@ -56,19 +56,29 @@ async function getChartQuote(symbol) {
   const r    = data?.chart?.result?.[0]
   if (!r) return null
   const m    = r.meta || {}
+
+  const price     = m.regularMarketPrice ?? null
+  // chart API returns chartPreviousClose (not previousClose) for change base
+  const prevClose = m.chartPreviousClose ?? m.previousClose ?? null
+  // Yahoo rarely includes regularMarketChange in chart meta — compute it
+  const change    = m.regularMarketChange
+    ?? (price != null && prevClose != null ? +((price - prevClose).toFixed(4)) : null)
+  const changePct = m.regularMarketChangePercent
+    ?? (change != null && prevClose != null ? +((change / prevClose * 100).toFixed(4)) : null)
+
   return {
     symbol:    m.symbol || symbol,
     name:      m.symbol || symbol,
-    price:     m.regularMarketPrice      ?? m.previousClose ?? null,
-    change:    m.regularMarketChange     ?? null,
-    changePct: m.regularMarketChangePercent ?? null,
-    volume:    m.regularMarketVolume     ?? null,
-    high52:    m.fiftyTwoWeekHigh        ?? null,
-    low52:     m.fiftyTwoWeekLow         ?? null,
-    dayHigh:   m.regularMarketDayHigh    ?? null,
-    dayLow:    m.regularMarketDayLow     ?? null,
-    open:      m.regularMarketOpen       ?? null,
-    prevClose: m.previousClose           ?? null,
+    price,
+    change,
+    changePct,
+    volume:    m.regularMarketVolume  ?? null,
+    high52:    m.fiftyTwoWeekHigh     ?? null,
+    low52:     m.fiftyTwoWeekLow      ?? null,
+    dayHigh:   m.regularMarketDayHigh ?? null,
+    dayLow:    m.regularMarketDayLow  ?? null,
+    open:      m.regularMarketOpen    ?? null,
+    prevClose,
     marketCap: null,
     pe:        null,
   }
