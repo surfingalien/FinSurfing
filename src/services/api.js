@@ -1,5 +1,5 @@
 const cache = new Map()
-const TTL = 5 * 60 * 1000 // 5 min
+const TTL = 30 * 1000 // 30 sec — keeps rapid re-renders cheap but lets Refresh work
 
 function cached(key, fn) {
   const hit = cache.get(key)
@@ -21,19 +21,21 @@ export async function fetchQuotes(symbols) {
     const data = await apiFetch(`/api/quote?symbols=${symbols.join(',')}`)
     return (data?.quoteResponse?.result || []).map(q => ({
       symbol:    q.symbol,
-      name:      q.shortName || q.longName || q.symbol,
-      price:     q.regularMarketPrice ?? null,
-      change:    q.regularMarketChange ?? null,
-      changePct: q.regularMarketChangePercent ?? null,
-      volume:    q.regularMarketVolume ?? null,
-      high52:    q.fiftyTwoWeekHigh ?? null,
-      low52:     q.fiftyTwoWeekLow ?? null,
-      dayHigh:   q.regularMarketDayHigh ?? null,
-      dayLow:    q.regularMarketDayLow ?? null,
-      open:      q.regularMarketOpen ?? null,
-      prevClose: q.regularMarketPreviousClose ?? null,
+      // v7/quote uses shortName/longName; chart fallback uses name
+      name:      q.shortName || q.longName || q.name || q.symbol,
+      // v7/quote uses regularMarket* fields; chart fallback uses short names
+      price:     q.regularMarketPrice    ?? q.price     ?? null,
+      change:    q.regularMarketChange   ?? q.change    ?? null,
+      changePct: q.regularMarketChangePercent ?? q.changePct ?? null,
+      volume:    q.regularMarketVolume   ?? q.volume    ?? null,
+      high52:    q.fiftyTwoWeekHigh      ?? q.high52    ?? null,
+      low52:     q.fiftyTwoWeekLow       ?? q.low52     ?? null,
+      dayHigh:   q.regularMarketDayHigh  ?? q.dayHigh   ?? null,
+      dayLow:    q.regularMarketDayLow   ?? q.dayLow    ?? null,
+      open:      q.regularMarketOpen     ?? q.open      ?? null,
+      prevClose: q.regularMarketPreviousClose ?? q.prevClose ?? null,
       marketCap: q.marketCap ?? null,
-      pe:        q.trailingPE ?? null,
+      pe:        q.trailingPE ?? q.pe ?? null,
     }))
   })
 }
