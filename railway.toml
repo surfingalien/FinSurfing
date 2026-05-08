@@ -1,9 +1,5 @@
 [build]
 builder = "NIXPACKS"
-buildCommand = "npm install && npm run build"
-
-[build.nixpacksConfig]
-providers = ["node"]
 
 [deploy]
 startCommand = "NODE_ENV=production node server.js"
