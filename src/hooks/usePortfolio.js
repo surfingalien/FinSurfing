@@ -2,10 +2,18 @@ import { useState, useEffect, useCallback } from 'react'
 import { INITIAL_PORTFOLIO } from '../data/portfolio'
 import { fetchQuotes } from '../services/api'
 
-const LS_KEY = 'finsurf_portfolio'
+const LS_KEY     = 'finsurf_portfolio'
+const VERSION_KEY = 'finsurf_portfolio_v'
+const DATA_VERSION = '2'   // bump when INITIAL_PORTFOLIO changes
 
 function loadStored() {
   try {
+    // If the stored version doesn't match, wipe it so the new defaults load
+    if (localStorage.getItem(VERSION_KEY) !== DATA_VERSION) {
+      localStorage.removeItem(LS_KEY)
+      localStorage.setItem(VERSION_KEY, DATA_VERSION)
+      return null
+    }
     const raw = localStorage.getItem(LS_KEY)
     return raw ? JSON.parse(raw) : null
   } catch { return null }

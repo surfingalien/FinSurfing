@@ -1,28 +1,30 @@
 // Pre-loaded from Portfolio_Positions_Apr-21-2026.numbers (Fidelity Individual TOD account)
+// Exact quantities and average cost bases extracted directly from the Numbers file
 export const INITIAL_PORTFOLIO = [
-  { symbol: 'AAPL',  name: 'Apple Inc.',                      shares: 10,  avgCost: 175.00, sector: 'Technology' },
-  { symbol: 'ADSK',  name: 'Autodesk Inc.',                   shares: 5,   avgCost: 260.00, sector: 'Technology' },
-  { symbol: 'AMD',   name: 'Advanced Micro Devices Inc.',     shares: 15,  avgCost: 145.00, sector: 'Technology' },
-  { symbol: 'AVGO',  name: 'Broadcom Inc.',                   shares: 8,   avgCost: 165.00, sector: 'Technology' },
-  { symbol: 'BABA',  name: 'Alibaba Group Holding Ltd.',      shares: 20,  avgCost: 80.00,  sector: 'Consumer Cyclical' },
-  { symbol: 'BROS',  name: 'Dutch Bros Inc.',                 shares: 25,  avgCost: 38.00,  sector: 'Consumer Cyclical' },
-  { symbol: 'CL',    name: 'Colgate-Palmolive Co.',           shares: 12,  avgCost: 88.00,  sector: 'Consumer Defensive' },
-  { symbol: 'COIN',  name: 'Coinbase Global Inc. Class A',    shares: 10,  avgCost: 200.00, sector: 'Financial Services' },
-  { symbol: 'GOOG',  name: 'Alphabet Inc. Class C',           shares: 12,  avgCost: 155.00, sector: 'Communication Services' },
-  { symbol: 'INTC',  name: 'Intel Corp.',                     shares: 30,  avgCost: 30.00,  sector: 'Technology' },
-  { symbol: 'MSFT',  name: 'Microsoft Corp.',                 shares: 10,  avgCost: 390.00, sector: 'Technology' },
-  { symbol: 'NVDA',  name: 'NVIDIA Corp.',                    shares: 20,  avgCost: 85.00,  sector: 'Technology' },
-  { symbol: 'ORCL',  name: 'Oracle Corp.',                    shares: 10,  avgCost: 120.00, sector: 'Technology' },
-  { symbol: 'PG',    name: 'Procter & Gamble Co.',            shares: 8,   avgCost: 150.00, sector: 'Consumer Defensive' },
-  { symbol: 'QCOM',  name: 'Qualcomm Inc.',                   shares: 12,  avgCost: 155.00, sector: 'Technology' },
-  { symbol: 'SOUN',  name: 'SoundHound AI Inc.',              shares: 100, avgCost: 8.00,   sector: 'Technology' },
-  { symbol: 'TSLA',  name: 'Tesla Inc.',                      shares: 10,  avgCost: 220.00, sector: 'Consumer Cyclical' },
-  { symbol: 'TSM',   name: 'Taiwan Semiconductor Mfg. Co.',  shares: 15,  avgCost: 150.00, sector: 'Technology' },
-  { symbol: 'TXN',   name: 'Texas Instruments Inc.',          shares: 10,  avgCost: 175.00, sector: 'Technology' },
-  { symbol: 'XOM',   name: 'Exxon Mobil Corp.',               shares: 10,  avgCost: 110.00, sector: 'Energy' },
+  { symbol: 'AAPL',  name: 'Apple Inc.',                      shares: 10,  avgCost: 150.46, sector: 'Technology' },
+  { symbol: 'ADSK',  name: 'Autodesk Inc.',                   shares: 10,  avgCost: 256.17, sector: 'Technology' },
+  { symbol: 'AMD',   name: 'Advanced Micro Devices Inc.',     shares: 10,  avgCost: 131.19, sector: 'Technology' },
+  { symbol: 'AMZN',  name: 'Amazon.com Inc.',                 shares: 10,  avgCost: 166.61, sector: 'Consumer Cyclical' },
+  { symbol: 'AVGO',  name: 'Broadcom Inc.',                   shares: 10,  avgCost: 177.54, sector: 'Technology' },
+  { symbol: 'BABA',  name: 'Alibaba Group Holding Ltd.',      shares: 10,  avgCost: 188.38, sector: 'Consumer Cyclical' },
+  { symbol: 'BROS',  name: 'Dutch Bros Inc.',                 shares: 15,  avgCost: 63.48,  sector: 'Consumer Cyclical' },
+  { symbol: 'CL',    name: 'Colgate-Palmolive Co.',           shares: 15,  avgCost: 94.64,  sector: 'Consumer Defensive' },
+  { symbol: 'COIN',  name: 'Coinbase Global Inc. Class A',    shares: 15,  avgCost: 257.11, sector: 'Financial Services' },
+  { symbol: 'GOOG',  name: 'Alphabet Inc. Class C',           shares: 10,  avgCost: 165.77, sector: 'Communication Services' },
+  { symbol: 'INTC',  name: 'Intel Corp.',                     shares: 25,  avgCost: 19.54,  sector: 'Technology' },
+  { symbol: 'MSFT',  name: 'Microsoft Corp.',                 shares: 10,  avgCost: 400.57, sector: 'Technology' },
+  { symbol: 'NVDA',  name: 'NVIDIA Corp.',                    shares: 50,  avgCost: 112.07, sector: 'Technology' },
+  { symbol: 'ORCL',  name: 'Oracle Corp.',                    shares: 15,  avgCost: 265.80, sector: 'Technology' },
+  { symbol: 'PG',    name: 'Procter & Gamble Co.',            shares: 10,  avgCost: 157.15, sector: 'Consumer Defensive' },
+  { symbol: 'QCOM',  name: 'Qualcomm Inc.',                   shares: 10,  avgCost: 163.21, sector: 'Technology' },
+  { symbol: 'SOUN',  name: 'SoundHound AI Inc.',              shares: 150, avgCost: 15.45,  sector: 'Technology' },
+  { symbol: 'TSLA',  name: 'Tesla Inc.',                      shares: 15,  avgCost: 216.75, sector: 'Consumer Cyclical' },
+  { symbol: 'TSM',   name: 'Taiwan Semiconductor Mfg. Co.',  shares: 20,  avgCost: 180.51, sector: 'Technology' },
+  { symbol: 'TXN',   name: 'Texas Instruments Inc.',          shares: 10,  avgCost: 207.26, sector: 'Technology' },
+  { symbol: 'XOM',   name: 'Exxon Mobil Corp.',               shares: 10,  avgCost: 147.72, sector: 'Energy' },
 ]
 
-export const TICKER_SYMBOLS = ['SPY', 'QQQ', 'DIA', 'AAPL', 'MSFT', 'NVDA', 'TSLA', 'AMZN', 'META', 'GOOGL', 'AMD', 'TSM', 'COIN', 'SOUN']
+export const TICKER_SYMBOLS = ['SPY', 'QQQ', 'DIA', 'AAPL', 'MSFT', 'NVDA', 'TSLA', 'AMZN', 'GOOG', 'AMD', 'TSM', 'COIN', 'SOUN', 'AVGO']
 
 export const MARKET_INDICES = ['SPY', 'QQQ', '^VIX', 'GLD']
 
