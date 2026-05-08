@@ -8,6 +8,7 @@ import SimulationView from './components/MonteCarlo/SimulationView'
 import ScreenerView from './components/Screener/ScreenerView'
 import StrategiesView from './components/Strategies/StrategiesView'
 import AlertsView from './components/Alerts/AlertsView'
+import ResearchView from './components/Research/ResearchView'
 import { usePortfolio } from './hooks/usePortfolio'
 import { useWatchlist } from './hooks/useWatchlist'
 import { useAlerts } from './hooks/useAlerts'
@@ -66,6 +67,12 @@ export default function App() {
           <AlertsView
             alerts={alertsHook}
             quotesMap={quotesMap}
+            portfolioSymbols={portfolio.positions.map(p => p.symbol)}
+            watchlistSymbols={watchlist.symbols}
+          />
+        )}
+        {activeTab === 'research' && (
+          <ResearchView
             portfolioSymbols={portfolio.positions.map(p => p.symbol)}
             watchlistSymbols={watchlist.symbols}
           />

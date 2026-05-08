@@ -18,6 +18,7 @@ export default function Header({ activeTab, onTabChange, triggeredCount = 0 }) {
     { id: 'screener',        label: 'Screener',     icon: '◈' },
     { id: 'strategies',      label: 'Strategies',   icon: '▣' },
     { id: 'alerts',          label: 'Alerts',       icon: '◎', badge: triggeredCount },
+    { id: 'research',        label: 'Research',     icon: '◉' },
   ]
 
   useEffect(() => {
