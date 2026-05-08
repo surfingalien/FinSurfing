@@ -74,7 +74,7 @@ export function usePortfolio() {
     const mktValue   = price !== null ? price * pos.shares : null
     const gainLoss   = mktValue !== null ? mktValue - costBasis : null
     const gainLossPct= gainLoss !== null ? (gainLoss / costBasis) * 100 : null
-    const todayGL    = q?.change !== null ? q.change * pos.shares : null
+    const todayGL    = q?.change != null ? q.change * pos.shares : null
     return { ...pos, ...q, price, costBasis, mktValue, gainLoss, gainLossPct, todayGL }
   })
 
