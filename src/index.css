@@ -1,0 +1,93 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    @apply bg-surface-400 text-white font-sans antialiased;
+    background-image:
+      radial-gradient(ellipse 80% 50% at 20% -10%, rgba(99, 102, 241, 0.12) 0%, transparent 60%),
+      radial-gradient(ellipse 60% 40% at 80% 110%, rgba(0, 255, 204, 0.08) 0%, transparent 60%);
+    min-height: 100vh;
+  }
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: #0a0f1a; }
+  ::-webkit-scrollbar-thumb { background: #2a3550; border-radius: 2px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4570; }
+}
+
+@layer components {
+  .glass {
+    @apply bg-white/[0.04] backdrop-blur-sm border border-white/[0.07] rounded-xl;
+  }
+  .glass-card {
+    @apply glass p-4 transition-all duration-200;
+  }
+  .glass-card:hover {
+    @apply bg-white/[0.06] border-white/[0.12];
+  }
+  .btn-primary {
+    @apply px-4 py-2 rounded-lg bg-mint-500/20 text-mint-400 border border-mint-500/30
+           hover:bg-mint-500/30 hover:border-mint-500/50 transition-all duration-150
+           font-medium text-sm focus:outline-none focus:ring-2 focus:ring-mint-500/40;
+  }
+  .btn-ghost {
+    @apply px-4 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.06]
+           transition-all duration-150 font-medium text-sm focus:outline-none;
+  }
+  .btn-danger {
+    @apply px-3 py-1.5 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20
+           hover:bg-red-500/20 transition-all duration-150 text-sm;
+  }
+  .input {
+    @apply w-full px-3 py-2 rounded-lg bg-white/[0.05] border border-white/[0.1]
+           text-white placeholder-slate-500 text-sm
+           focus:outline-none focus:border-mint-500/50 focus:bg-white/[0.08]
+           transition-all duration-150;
+  }
+  .badge-up {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium
+           bg-emerald-500/10 text-emerald-400 border border-emerald-500/20;
+  }
+  .badge-down {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium
+           bg-red-500/10 text-red-400 border border-red-500/20;
+  }
+  .badge-neutral {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium
+           bg-slate-500/10 text-slate-400 border border-slate-500/20;
+  }
+  .tab-active {
+    @apply text-white bg-white/[0.08] border-b-2 border-mint-500;
+  }
+  .stat-label { @apply text-xs text-slate-500 uppercase tracking-wider; }
+  .stat-value { @apply text-lg font-semibold font-mono; }
+  .mono { @apply font-mono; }
+  .section-title { @apply text-base font-semibold text-white mb-4; }
+  .divider { @apply border-t border-white/[0.06] my-4; }
+}
+
+/* Ticker bar animation */
+.ticker-track {
+  display: flex;
+  width: max-content;
+  animation: ticker 60s linear infinite;
+}
+.ticker-track:hover { animation-play-state: paused; }
+
+@keyframes ticker {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+/* Chart tooltip */
+.recharts-tooltip-wrapper { z-index: 100 !important; }
+.recharts-default-tooltip {
+  background: rgba(10, 15, 26, 0.95) !important;
+  border: 1px solid rgba(255,255,255,0.1) !important;
+  border-radius: 8px !important;
+  font-family: 'JetBrains Mono', monospace !important;
+  font-size: 12px !important;
+}
