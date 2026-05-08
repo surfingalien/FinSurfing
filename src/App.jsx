@@ -9,6 +9,7 @@ import ScreenerView from './components/Screener/ScreenerView'
 import StrategiesView from './components/Strategies/StrategiesView'
 import AlertsView from './components/Alerts/AlertsView'
 import ResearchView from './components/Research/ResearchView'
+import AIAdvisoryView from './components/Research/AIAdvisoryView'
 import { usePortfolio } from './hooks/usePortfolio'
 import { useWatchlist } from './hooks/useWatchlist'
 import { useAlerts } from './hooks/useAlerts'
@@ -72,10 +73,7 @@ export default function App() {
           />
         )}
         {activeTab === 'research' && (
-          <ResearchView
-            portfolioSymbols={portfolio.positions.map(p => p.symbol)}
-            watchlistSymbols={watchlist.symbols}
-          />
+          <AIAdvisoryView portfolio={portfolio} />
         )}
       </main>
 
