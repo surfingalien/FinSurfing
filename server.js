@@ -8,15 +8,13 @@ const require = createRequire(import.meta.url)
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 const app = express()
-const PORT = process.env.PORT || 3001
+const PORT = parseInt(process.env.PORT, 10) || 3001
 
 app.use(cors())
 app.use(express.json())
 
-// Serve built React app in production
-if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(path.join(__dirname, 'dist')))
-}
+// Always serve the built React app (dist/ is always present in production container)
+app.use(express.static(path.join(__dirname, 'dist')))
 
 const YF_HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
@@ -100,13 +98,12 @@ app.get('/api/news', async (req, res) => {
   }
 })
 
-// SPA fallback in production
-if (process.env.NODE_ENV === 'production') {
-  app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, 'dist', 'index.html'))
-  })
-}
+// SPA fallback — serve index.html for all non-API routes
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'dist', 'index.html'))
+})
 
-app.listen(PORT, () => {
-  console.log(`FinSurf API server running on port ${PORT}`)
+// Bind to 0.0.0.0 so Railway's proxy can reach the container
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`FinSurf running on http://0.0.0.0:${PORT}`)
 })

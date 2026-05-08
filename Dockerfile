@@ -2,16 +2,15 @@ FROM node:18-alpine
 
 WORKDIR /app
 
-# Install dependencies first (cached layer)
+# Install dependencies (cached layer)
 COPY package*.json ./
 RUN npm install
 
-# Copy source and build
+# Copy source and build the React app
 COPY . .
 RUN npm run build
 
-EXPOSE 3001
-
+# Railway injects PORT at runtime — don't hardcode EXPOSE
 ENV NODE_ENV=production
 
 CMD ["node", "server.js"]
