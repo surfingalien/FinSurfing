@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { PlusCircle, X, RefreshCw, Search, Star } from 'lucide-react'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import { fmt, fmtPct, fmtLarge, fmtVol, fetchChart } from '../../services/api'
@@ -7,11 +7,11 @@ import { searchSymbol } from '../../services/api'
 
 function MiniSparkline({ symbol }) {
   const [data, setData] = useState(null)
-  useState(() => {
+  useEffect(() => {
     fetchChart(symbol, '1d', '1mo').then(d => {
       setData(d.candles.map(c => ({ v: c.close })))
     }).catch(() => {})
-  })
+  }, [symbol])
   if (!data) return <div className="w-24 h-10 bg-white/[0.03] rounded animate-pulse" />
   const up = data.length > 1 && data[data.length-1].v >= data[0].v
   return (
