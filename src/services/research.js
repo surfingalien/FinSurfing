@@ -102,7 +102,7 @@ export function findKeyLevels(candles, currentPrice) {
 }
 
 /* ── RSI divergence ─────────────────────────────── */
-function detectDivergence(candles, rsiValues, lookback = 30) {
+export function detectDivergence(candles, rsiValues, lookback = 30) {
   if (rsiValues.length < lookback) return null
   const offset = candles.length - rsiValues.length
   const recentC = candles.slice(-lookback)
