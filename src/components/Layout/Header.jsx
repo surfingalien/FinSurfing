@@ -10,6 +10,7 @@ export default function Header({ activeTab, onTabChange, triggeredCount = 0 }) {
   const [marketOpen, setMarketOpen] = useState(false)
 
   const tabs = [
+    { id: 'dashboard',       label: 'Dashboard',    icon: '▦' },
     { id: 'portfolio',       label: 'Portfolio',    icon: '◈' },
     { id: 'watchlist',       label: 'Watchlist',    icon: '◉' },
     { id: 'analyze',         label: 'Analyze',      icon: '◆' },

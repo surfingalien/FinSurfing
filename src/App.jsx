@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react'
 import Header from './components/Layout/Header'
+import DashboardView from './components/Dashboard/DashboardView'
 import PortfolioView from './components/Portfolio/PortfolioView'
 import WatchlistView from './components/Watchlist/WatchlistView'
 import AnalysisView from './components/Analysis/AnalysisView'
@@ -34,6 +35,8 @@ export default function App() {
     setActiveTab(tab)
   }
 
+  const navigateToAnalyze = (symbol) => navigateTo('analyze', symbol)
+
   return (
     <div className="min-h-screen flex flex-col">
       <Header
@@ -43,6 +46,9 @@ export default function App() {
       />
 
       <main className="flex-1 max-w-screen-2xl mx-auto w-full px-4 py-6">
+        {activeTab === 'dashboard' && (
+          <DashboardView portfolio={portfolio} onAnalyze={navigateToAnalyze} />
+        )}
         {activeTab === 'portfolio' && (
           <PortfolioView portfolio={portfolio} />
         )}
