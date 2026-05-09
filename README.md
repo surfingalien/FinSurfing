@@ -76,8 +76,8 @@ railway up
 
 ---
 
-## Portfolio (pre-loaded from Fidelity Apr 21, 2026)
+## Portfolio
 
-`AAPL` `ADSK` `AMD` `AVGO` `BABA` `BROS` `CL` `COIN` `GOOG` `INTC` `MSFT` `NVDA` `ORCL` `PG` `QCOM` `SOUN` `TSLA` `TSM` `TXN` `XOM`
+`AAPL` `ARM` `ADSK` `AMD` `AVGO` `BABA` `BROS` `CL` `COIN` `GOOG` `INTC` `MSFT` `NVDA` `ORCL` `PG` `QCOM` `SOUN` `TSLA` `TSM` `TXN` `XOM`
 
 > Data powered by Yahoo Finance. Not financial advice.
