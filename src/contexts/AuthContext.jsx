@@ -71,7 +71,12 @@ export function AuthProvider({ children }) {
     setAuthError(null)
     const res  = await API('/login', { method: 'POST', body: { email, password, rememberMe } })
     const data = await res.json()
-    if (!res.ok) throw new Error(data.error || 'Login failed')
+    if (!res.ok) {
+      const err = new Error(data.error || 'Login failed')
+      if (data.requiresVerification) err.requiresVerification = true
+      if (data.email) err.email = data.email
+      throw err
+    }
     setUser(data.user)
     setAccessToken(data.accessToken)
     scheduleRefresh(data.expiresIn)

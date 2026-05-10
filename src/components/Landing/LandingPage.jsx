@@ -5,8 +5,8 @@
 import { useState } from 'react'
 import {
   TrendingUp, Shield, Zap, BarChart2, Brain, Bell,
-  Search, PieChart, Activity, Lock, ArrowRight, Star,
-  ChevronRight, Globe, Award, Users,
+  Search, PieChart, Activity, ArrowRight, Star,
+  ChevronRight, Globe,
 } from 'lucide-react'
 
 // ── Feature data ──────────────────────────────────
@@ -269,7 +269,7 @@ export default function LandingPage({ onSignIn, onRegister, onTryDemo }) {
           a full stock screener — all in one dark, beautiful dashboard.
         </p>
 
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-6">
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
           <button
             onClick={onTryDemo}
             className="flex items-center gap-2 px-8 py-3.5 rounded-xl font-bold text-[#0a0e1a]
@@ -287,16 +287,6 @@ export default function LandingPage({ onSignIn, onRegister, onTryDemo }) {
             Create Free Account
             <ArrowRight size={16} />
           </button>
-        </div>
-
-        {/* Demo credentials hint */}
-        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-lg
-                        bg-white/[0.03] border border-white/[0.06] text-xs text-slate-500">
-          <Lock size={11} />
-          Demo login:&nbsp;
-          <code className="text-[#00ffcc]">admin@finsurf.app</code>
-          &nbsp;/&nbsp;
-          <code className="text-[#00ffcc]">Admin@demo1</code>
         </div>
       </section>
 

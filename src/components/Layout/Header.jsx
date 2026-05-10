@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
-import { Activity, LogOut, User, ChevronDown, LogIn } from 'lucide-react'
+import { Activity, LogOut, User, ChevronDown, LogIn, KeyRound } from 'lucide-react'
+import ChangePasswordModal from '../Auth/ChangePasswordModal'
 import { fetchQuotes } from '../../services/api'
 import { TICKER_SYMBOLS } from '../../data/portfolio'
 import { fmt, fmtPct } from '../../services/api'
@@ -9,7 +10,8 @@ import CreatePortfolioModal from '../Portfolio/CreatePortfolioModal'
 
 // ── User menu (top-right corner when logged in) ───────────────────────────────
 function UserMenu({ user, onLogout, onNavigate }) {
-  const [open, setOpen] = useState(false)
+  const [open,           setOpen]           = useState(false)
+  const [showChangePw,   setShowChangePw]   = useState(false)
   const ref = useRef(null)
 
   useEffect(() => {
@@ -62,6 +64,15 @@ function UserMenu({ user, onLogout, onNavigate }) {
               Manage Portfolios
             </button>
             <button
+              onClick={() => { setOpen(false); setShowChangePw(true) }}
+              className="w-full flex items-center gap-3 px-4 py-2 text-xs text-slate-300
+                         hover:bg-white/5 hover:text-white transition-colors text-left"
+            >
+              <KeyRound size={13} />
+              Change Password
+            </button>
+            <div className="my-1 border-t border-white/[0.05]" />
+            <button
               onClick={() => { setOpen(false); onLogout() }}
               className="w-full flex items-center gap-3 px-4 py-2 text-xs text-red-400
                          hover:bg-red-500/10 transition-colors text-left"
@@ -71,6 +82,10 @@ function UserMenu({ user, onLogout, onNavigate }) {
             </button>
           </div>
         </div>
+      )}
+
+      {showChangePw && (
+        <ChangePasswordModal onClose={() => setShowChangePw(false)} />
       )}
     </div>
   )

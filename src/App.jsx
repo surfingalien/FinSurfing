@@ -1,12 +1,13 @@
 import { useState, useMemo } from 'react'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
-import { PortfolioProvider } from './contexts/PortfolioContext'
+import { PortfolioProvider, usePortfolioContext } from './contexts/PortfolioContext'
 import LandingPage from './components/Landing/LandingPage'
 import AuthPage from './components/Auth/AuthPage'
 import Header from './components/Layout/Header'
 import DashboardView from './components/Dashboard/DashboardView'
 import PortfolioView from './components/Portfolio/PortfolioView'
 import PortfolioManagerView from './components/Portfolio/PortfolioManagerView'
+import PortfolioSetupWizard from './components/Portfolio/PortfolioSetupWizard'
 import WatchlistView from './components/Watchlist/WatchlistView'
 import AnalysisView from './components/Analysis/AnalysisView'
 import AdvisoryView from './components/Recommendations/AdvisoryView'
@@ -84,8 +85,12 @@ function AppInner() {
 
 // ── Main app (authenticated or guest) ─────────────────────────────────────────
 function MainApp({ onSignIn }) {
+  const { isAuthenticated } = useAuth()
+  const { portfolios, loadingPortfolios } = usePortfolioContext()
+
   const [activeTab,     setActiveTab]     = useState('dashboard')
   const [analyzeSymbol, setAnalyzeSymbol] = useState('AAPL')
+  const [wizardDone,    setWizardDone]    = useState(false)
 
   const portfolio = usePortfolio()
   const watchlist = useWatchlist()
@@ -104,6 +109,17 @@ function MainApp({ onSignIn }) {
   }
 
   const navigateToAnalyze = (symbol) => navigateTo('analyze', symbol)
+
+  // Show portfolio setup wizard for new authenticated users with no portfolios
+  const showWizard = isAuthenticated && !loadingPortfolios && portfolios.length === 0 && !wizardDone
+
+  if (showWizard) {
+    return (
+      <PortfolioSetupWizard
+        onComplete={() => { setWizardDone(true); setActiveTab('dashboard') }}
+      />
+    )
+  }
 
   return (
     <div className="min-h-screen flex flex-col">
