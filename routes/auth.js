@@ -37,6 +37,7 @@ const nodemailer    = require('nodemailer')
 const { query }     = require('../db/db')
 const { requireAuth, SECRET } = require('../middleware/auth')
 const { MEM }       = require('../db/memstore')
+const { makeAdminHoldings } = require('../db/adminSeed')
 
 const router = express.Router()
 
@@ -126,17 +127,18 @@ async function sendEmail({ to, subject, html }) {
     // Create admin system portfolio in memory
     const pid = 'port-admin-' + crypto.randomBytes(4).toString('hex')
     MEM.portfolios.set(pid, {
-      id: pid, user_id: id, name: 'Admin Portfolio',
-      type: 'brokerage', description: 'System admin portfolio',
+      id: pid, user_id: id, name: 'My Portfolio',
+      type: 'brokerage', description: 'Fidelity Individual TOD Account',
       currency: 'USD', color: '#ff6b6b',
       is_default: true, is_archived: false,
       visibility: 'private', is_system: true, is_featured: false,
       copy_trade_enabled: false,
       created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
     })
-    MEM.holdings.set(pid, [])
+    // Seed the 21 Fidelity positions — visible only to admin
+    MEM.holdings.set(pid, makeAdminHoldings(pid))
 
-    console.log('[AUTH] Admin account ready (in-memory)')
+    console.log('[AUTH] Admin account ready with portfolio holdings (in-memory)')
   }
 })()
 

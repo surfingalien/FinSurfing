@@ -11,6 +11,8 @@ const portfolioRoutes = require('./routes/portfolios')
 const publicRoutes    = require('./routes/public')
 const adminRoutes     = require('./routes/admin')
 
+const { seedAdminDB } = require('./db/adminSeed')
+
 // ── Auto-migrate: run schema.sql when DATABASE_URL is present ────────────────
 // Runs once at startup; all CREATE TABLE / CREATE INDEX statements use
 // IF NOT EXISTS so repeated runs are safe (idempotent).
@@ -40,6 +42,10 @@ const adminRoutes     = require('./routes/admin')
       })
     }
     console.log('[DB] Schema migration complete')
+
+    // Seed admin user + Fidelity portfolio holdings (idempotent — skips if already present)
+    const { query: q } = require('./db/db')
+    await seedAdminDB(q)
   } catch (err) {
     console.error('[DB] Migration failed:', err.message)
   }
