@@ -294,13 +294,13 @@ function ForgotPasswordForm({ onBack }) {
 }
 
 /* ── Main AuthPage ────────────────────────────── */
-export default function AuthPage({ onContinueWithoutAccount }) {
-  const [view, setView] = useState('login')  // 'login' | 'register' | 'forgot'
+export default function AuthPage({ onContinueWithoutAccount, onBack, initialView = 'login' }) {
+  const [view, setView] = useState(initialView)  // 'login' | 'register' | 'forgot'
 
   const titles = {
-    login:    { title: 'Welcome back', sub: 'Sign in to your FinSurf account' },
+    login:    { title: 'Welcome back',    sub: 'Sign in to your FinSurf account' },
     register: { title: 'Get started free', sub: 'Create your secure portfolio account' },
-    forgot:   { title: 'Reset password', sub: 'We\'ll send a secure link to your email' },
+    forgot:   { title: 'Reset password',  sub: 'We\'ll send a secure link to your email' },
   }
   const { title, sub } = titles[view]
 
@@ -313,6 +313,19 @@ export default function AuthPage({ onContinueWithoutAccount }) {
       </div>
 
       <div className="relative w-full max-w-md space-y-6">
+        {/* Back to landing */}
+        {onBack && (
+          <button
+            onClick={onBack}
+            className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-300 transition-colors"
+          >
+            <svg viewBox="0 0 16 16" fill="none" className="w-3.5 h-3.5">
+              <path d="M10 3L5 8l5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            Back to home
+          </button>
+        )}
+
         {/* Logo */}
         <div className="text-center space-y-2">
           <div className="inline-flex items-center gap-2">
@@ -329,6 +342,14 @@ export default function AuthPage({ onContinueWithoutAccount }) {
             <h1 className="text-xl font-bold text-white">{title}</h1>
             <p className="text-sm text-slate-500 mt-0.5">{sub}</p>
           </div>
+        </div>
+
+        {/* Demo credentials hint */}
+        <div className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg
+                        bg-[#00ffcc]/5 border border-[#00ffcc]/15 text-xs text-slate-500">
+          <span className="text-[#00ffcc]">🔑</span>
+          Demo:&nbsp;<code className="text-[#00ffcc]">admin@finsurf.app</code>
+          &nbsp;/&nbsp;<code className="text-[#00ffcc]">Admin@demo1</code>
         </div>
 
         {/* Card */}

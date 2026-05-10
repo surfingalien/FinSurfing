@@ -3,6 +3,8 @@
  * Portfolio routes — full CRUD for portfolios + holdings.
  * All routes require a valid access token (requireAuth middleware).
  * Row-level security enforced by always filtering on user_id = req.user.userId.
+ *
+ * Demo mode (no DATABASE_URL): returns hardcoded demo portfolios; write ops are no-ops.
  */
 const express   = require('express')
 const { query } = require('../db/db')
@@ -10,6 +12,40 @@ const { requireAuth } = require('../middleware/auth')
 
 const router = express.Router()
 router.use(requireAuth)
+
+const DEMO_MODE = !process.env.DATABASE_URL
+const DEMO_PORTFOLIOS = [
+  {
+    id: 'demo-p1', name: 'Main Brokerage', type: 'brokerage',
+    description: 'Primary demo portfolio', currency: 'USD',
+    tax_status: 'taxable', custodian: 'Demo Broker',
+    cash_balance: 5000, color: '#00ffcc', icon: null,
+    is_default: true, is_archived: false,
+    created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+    cashBalance: 5000, holdingCount: 4,
+  },
+  {
+    id: 'demo-p2', name: 'Roth IRA', type: 'roth_ira',
+    description: 'Retirement demo account', currency: 'USD',
+    tax_status: 'tax_free', custodian: 'Demo IRA',
+    cash_balance: 1500, color: '#6366f1', icon: null,
+    is_default: false, is_archived: false,
+    created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+    cashBalance: 1500, holdingCount: 2,
+  },
+]
+const DEMO_HOLDINGS = {
+  'demo-p1': [
+    { id: 'h1', symbol: 'AAPL', name: 'Apple Inc.', shares: 10, avgCost: 150, sector: 'Technology', assetClass: 'equity' },
+    { id: 'h2', symbol: 'MSFT', name: 'Microsoft Corp.', shares: 5, avgCost: 290, sector: 'Technology', assetClass: 'equity' },
+    { id: 'h3', symbol: 'NVDA', name: 'NVIDIA Corp.', shares: 8, avgCost: 420, sector: 'Technology', assetClass: 'equity' },
+    { id: 'h4', symbol: 'SPY',  name: 'SPDR S&P 500 ETF', shares: 20, avgCost: 440, sector: 'Index', assetClass: 'etf' },
+  ],
+  'demo-p2': [
+    { id: 'h5', symbol: 'QQQ', name: 'Invesco QQQ Trust', shares: 5, avgCost: 380, sector: 'Index', assetClass: 'etf' },
+    { id: 'h6', symbol: 'BRK-B', name: 'Berkshire Hathaway B', shares: 3, avgCost: 340, sector: 'Financials', assetClass: 'equity' },
+  ],
+}
 
 // Allowed portfolio types (sync with schema enum)
 const VALID_TYPES = [
@@ -20,6 +56,7 @@ const VALID_TYPES = [
 // ── GET /api/portfolios ───────────────────────────
 // List all portfolios for the authenticated user
 router.get('/', async (req, res) => {
+  if (DEMO_MODE) return res.json(DEMO_PORTFOLIOS)
   try {
     const r = await query(
       `SELECT p.id, p.name, p.type, p.description, p.currency, p.tax_status,
@@ -47,6 +84,7 @@ router.get('/', async (req, res) => {
 // ── POST /api/portfolios ──────────────────────────
 // Create a new portfolio
 router.post('/', async (req, res) => {
+  if (DEMO_MODE) return res.status(201).json({ ...DEMO_PORTFOLIOS[0], id: 'demo-new-' + Date.now(), name: req.body.name || 'New Portfolio', is_default: false })
   const { name, type = 'brokerage', description, currency = 'USD',
           taxStatus = 'taxable', custodian, cashBalance = 0, color = '#6366f1', icon } = req.body
 
@@ -72,6 +110,11 @@ router.post('/', async (req, res) => {
 // ── GET /api/portfolios/:id ───────────────────────
 // Get single portfolio with holdings
 router.get('/:id', async (req, res) => {
+  if (DEMO_MODE) {
+    const p = DEMO_PORTFOLIOS.find(p => p.id === req.params.id)
+    if (!p) return res.status(404).json({ error: 'Portfolio not found' })
+    return res.json({ ...p, holdings: DEMO_HOLDINGS[p.id] || [] })
+  }
   try {
     const pRes = await query(
       `SELECT * FROM portfolios WHERE id = $1 AND user_id = $2`,
@@ -106,6 +149,10 @@ router.get('/:id', async (req, res) => {
 // ── PATCH /api/portfolios/:id ─────────────────────
 // Update portfolio metadata
 router.patch('/:id', async (req, res) => {
+  if (DEMO_MODE) {
+    const p = DEMO_PORTFOLIOS.find(p => p.id === req.params.id)
+    return res.json(p || DEMO_PORTFOLIOS[0])
+  }
   const { name, description, custodian, cashBalance, color, icon, taxStatus } = req.body
 
   try {
@@ -140,6 +187,7 @@ router.patch('/:id', async (req, res) => {
 
 // ── POST /api/portfolios/:id/set-default ─────────
 router.post('/:id/set-default', async (req, res) => {
+  if (DEMO_MODE) return res.json({ ok: true })
   try {
     // Verify ownership
     const check = await query(
@@ -161,6 +209,7 @@ router.post('/:id/set-default', async (req, res) => {
 // ── DELETE /api/portfolios/:id ────────────────────
 // Soft-delete (archive). Cannot delete the default portfolio.
 router.delete('/:id', async (req, res) => {
+  if (DEMO_MODE) return res.json({ ok: true })
   try {
     const check = await query(
       'SELECT id, is_default FROM portfolios WHERE id = $1 AND user_id = $2',
@@ -179,6 +228,7 @@ router.delete('/:id', async (req, res) => {
 // ── POST /api/portfolios/:id/holdings ────────────
 // Add or update a holding (upsert by symbol)
 router.post('/:id/holdings', async (req, res) => {
+  if (DEMO_MODE) return res.status(201).json({ id: 'demo-h-' + Date.now(), symbol: req.body.symbol, shares: req.body.shares, avgCost: req.body.avgCost })
   const { symbol, name, shares, avgCost, sector, assetClass = 'equity' } = req.body
   if (!symbol?.trim()) return res.status(400).json({ error: 'Symbol required' })
   if (isNaN(shares) || shares <= 0) return res.status(400).json({ error: 'Valid shares required' })
@@ -219,6 +269,7 @@ router.post('/:id/holdings', async (req, res) => {
 
 // ── DELETE /api/portfolios/:id/holdings/:hid ─────
 router.delete('/:id/holdings/:hid', async (req, res) => {
+  if (DEMO_MODE) return res.json({ ok: true })
   try {
     // JOIN ensures user owns the portfolio
     const r = await query(
@@ -238,6 +289,7 @@ router.delete('/:id/holdings/:hid', async (req, res) => {
 // ── POST /api/portfolios/:id/import ──────────────
 // Bulk import holdings (e.g. from existing localStorage data)
 router.post('/:id/import', async (req, res) => {
+  if (DEMO_MODE) return res.json({ ok: true, imported: req.body.holdings?.length ?? 0 })
   const { holdings } = req.body
   if (!Array.isArray(holdings) || !holdings.length)
     return res.status(400).json({ error: 'holdings array required' })

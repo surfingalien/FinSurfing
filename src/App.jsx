@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { PortfolioProvider } from './contexts/PortfolioContext'
+import LandingPage from './components/Landing/LandingPage'
 import AuthPage from './components/Auth/AuthPage'
 import Header from './components/Layout/Header'
 import DashboardView from './components/Dashboard/DashboardView'
@@ -21,25 +22,62 @@ import { useAlerts } from './hooks/useAlerts'
 // ── Inner app (renders once auth state is known) ──────────────────────────────
 function AppInner() {
   const { isAuthenticated, loading: authLoading } = useAuth()
-  const [guestMode, setGuestMode] = useState(false)
 
-  // Show spinner while restoring session
+  // 'landing' | 'login' | 'register' | 'app'
+  const [screen, setScreen] = useState('landing')
+
+  // On session restore, skip straight to app
+  if (!authLoading && isAuthenticated && screen === 'landing') {
+    // Don't re-render — just fall through to app section below
+  }
+
+  // Show spinner while restoring session (only briefly)
   if (authLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-[#00ffcc]/30 border-t-[#00ffcc] rounded-full animate-spin" />
+      <div className="min-h-screen flex items-center justify-center" style={{ background: '#060810' }}>
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-8 h-8 border-2 border-[#00ffcc]/30 border-t-[#00ffcc] rounded-full animate-spin" />
+          <span className="text-xs text-slate-600">Restoring session…</span>
+        </div>
       </div>
     )
   }
 
-  // Show auth page when not authenticated and not in guest mode
-  if (!isAuthenticated && !guestMode) {
-    return <AuthPage onContinueWithoutAccount={() => setGuestMode(true)} />
+  // Authenticated — go straight to app regardless of screen state
+  if (isAuthenticated) {
+    return (
+      <PortfolioProvider>
+        <MainApp onSignIn={() => setScreen('landing')} />
+      </PortfolioProvider>
+    )
   }
 
+  // Landing page
+  if (screen === 'landing') {
+    return (
+      <LandingPage
+        onSignIn={() => setScreen('login')}
+        onRegister={() => setScreen('register')}
+        onTryDemo={() => setScreen('app')}
+      />
+    )
+  }
+
+  // Auth forms (login / register / forgot)
+  if (screen === 'login' || screen === 'register') {
+    return (
+      <AuthPage
+        initialView={screen}
+        onContinueWithoutAccount={() => setScreen('app')}
+        onBack={() => setScreen('landing')}
+      />
+    )
+  }
+
+  // Guest / demo app mode
   return (
     <PortfolioProvider>
-      <MainApp onSignIn={() => setGuestMode(false)} />
+      <MainApp onSignIn={() => setScreen('login')} />
     </PortfolioProvider>
   )
 }

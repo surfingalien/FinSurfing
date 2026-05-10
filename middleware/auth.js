@@ -1,15 +1,15 @@
 'use strict'
 const jwt = require('jsonwebtoken')
 
-const SECRET = process.env.JWT_SECRET
+// Fallback secret for demo/dev mode — replaced by env var in production
+const FALLBACK_SECRET = 'finsurf-demo-secret-DO-NOT-USE-IN-PRODUCTION-32ch'
+const SECRET = process.env.JWT_SECRET || FALLBACK_SECRET
 
 /**
  * Verify the Bearer access token and attach `req.user = { userId, email }`.
  * Returns 401 on any failure — never leaks token details.
  */
 function requireAuth(req, res, next) {
-  if (!SECRET) return res.status(503).json({ error: 'Auth not configured' })
-
   const header = req.headers.authorization || ''
   if (!header.startsWith('Bearer ')) {
     return res.status(401).json({ error: 'Missing access token' })
@@ -30,7 +30,6 @@ function requireAuth(req, res, next) {
  * Optional auth — attaches req.user if token present and valid, never rejects.
  */
 function optionalAuth(req, res, next) {
-  if (!SECRET) return next()
   const header = req.headers.authorization || ''
   if (!header.startsWith('Bearer ')) return next()
   try {
@@ -40,4 +39,4 @@ function optionalAuth(req, res, next) {
   next()
 }
 
-module.exports = { requireAuth, optionalAuth }
+module.exports = { requireAuth, optionalAuth, SECRET }
