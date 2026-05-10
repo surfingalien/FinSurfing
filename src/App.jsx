@@ -86,15 +86,20 @@ function AppInner() {
 
 // ── Main app (authenticated or guest) ─────────────────────────────────────────
 function MainApp({ onSignIn }) {
-  const { isAuthenticated, user } = useAuth()
-  const { portfolios, loadingPortfolios } = usePortfolioContext()
+  const { isAuthenticated, user, authFetch } = useAuth()
+  const { portfolios, loadingPortfolios, activePortfolioId } = usePortfolioContext()
 
   const [activeTab,     setActiveTab]     = useState('dashboard')
   const [analyzeSymbol, setAnalyzeSymbol] = useState('AAPL')
   const [wizardDone,    setWizardDone]    = useState(false)
 
-  // Pass userId so localStorage is namespaced per-user (prevents data leaking between accounts)
-  const portfolio = usePortfolio(user?.id || null)
+  // When authenticated: fetch holdings from API, keyed to the active portfolio.
+  // When guest: fall back to localStorage namespaced by userId.
+  const portfolio = usePortfolio(
+    isAuthenticated && activePortfolioId
+      ? { userId: user?.id, activePortfolioId, authFetch }
+      : { userId: null }
+  )
   const watchlist = useWatchlist()
 
   const quotesMap = useMemo(() => {

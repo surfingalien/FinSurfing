@@ -211,7 +211,18 @@ router.get('/:id', async (req, res) => {
     if (!p || p.is_archived) return res.status(404).json({ error: 'Portfolio not found' })
     if (!ownsPortfolio(p, req.user.userId, req.user.role))
       return res.status(403).json({ error: 'Access denied' })
-    const holdings = MEM.holdings.get(p.id) || []
+    const rawHoldings = MEM.holdings.get(p.id) || []
+    // Normalize to same shape as DB mode
+    const holdings = rawHoldings.map(h => ({
+      id:         h.id,
+      symbol:     h.symbol,
+      name:       h.name,
+      shares:     parseFloat(h.shares),
+      avgCost:    parseFloat(h.avgCost ?? h.avg_cost_basis ?? h.avg_cost ?? 0),
+      sector:     h.sector || null,
+      assetClass: h.assetClass || h.asset_class || 'equity',
+      createdAt:  h.created_at,
+    }))
     return res.json({ ...p, holdings })
   }
 
