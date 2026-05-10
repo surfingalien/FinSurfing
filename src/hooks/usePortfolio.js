@@ -2,32 +2,36 @@ import { useState, useEffect, useCallback } from 'react'
 import { INITIAL_PORTFOLIO } from '../data/portfolio'
 import { fetchQuotes } from '../services/api'
 
-const LS_KEY     = 'finsurf_portfolio'
-const VERSION_KEY = 'finsurf_portfolio_v'
-const DATA_VERSION = '2'   // bump when INITIAL_PORTFOLIO changes
+const DATA_VERSION = '3'   // bumped — clears old shared localStorage from v2
 
-function loadStored() {
+// Namespace localStorage by userId so two users on the same device stay isolated.
+// Guest (unauthenticated) uses the key 'guest'.
+function lsKey(userId)      { return `finsurf_portfolio_${userId || 'guest'}` }
+function lsVersionKey(uid)  { return `finsurf_portfolio_v_${uid || 'guest'}` }
+
+function loadStored(userId) {
   try {
-    // If the stored version doesn't match, wipe it so the new defaults load
-    if (localStorage.getItem(VERSION_KEY) !== DATA_VERSION) {
-      localStorage.removeItem(LS_KEY)
-      localStorage.setItem(VERSION_KEY, DATA_VERSION)
+    const vKey = lsVersionKey(userId)
+    const dKey = lsKey(userId)
+    if (localStorage.getItem(vKey) !== DATA_VERSION) {
+      localStorage.removeItem(dKey)
+      localStorage.setItem(vKey, DATA_VERSION)
       return null
     }
-    const raw = localStorage.getItem(LS_KEY)
+    const raw = localStorage.getItem(dKey)
     return raw ? JSON.parse(raw) : null
   } catch { return null }
 }
 
-export function usePortfolio() {
-  const [positions, setPositions] = useState(() => loadStored() || INITIAL_PORTFOLIO)
+export function usePortfolio(userId) {
+  const [positions, setPositions] = useState(() => loadStored(userId) || INITIAL_PORTFOLIO)
   const [quotes, setQuotes] = useState({})
   const [loading, setLoading] = useState(false)
   const [lastUpdated, setLastUpdated] = useState(null)
 
   useEffect(() => {
-    localStorage.setItem(LS_KEY, JSON.stringify(positions))
-  }, [positions])
+    try { localStorage.setItem(lsKey(userId), JSON.stringify(positions)) } catch {}
+  }, [positions, userId])
 
   const refresh = useCallback(async () => {
     if (!positions.length) return

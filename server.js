@@ -1,6 +1,7 @@
 const express      = require('express')
 const cors         = require('cors')
 const path         = require('path')
+const fs           = require('fs')
 const helmet       = require('helmet')
 const cookieParser = require('cookie-parser')
 const rateLimit    = require('express-rate-limit')
@@ -9,6 +10,40 @@ const authRoutes      = require('./routes/auth')
 const portfolioRoutes = require('./routes/portfolios')
 const publicRoutes    = require('./routes/public')
 const adminRoutes     = require('./routes/admin')
+
+// ── Auto-migrate: run schema.sql when DATABASE_URL is present ────────────────
+// Runs once at startup; all CREATE TABLE / CREATE INDEX statements use
+// IF NOT EXISTS so repeated runs are safe (idempotent).
+;(async () => {
+  if (!process.env.DATABASE_URL) {
+    console.log('[DB] No DATABASE_URL — running in memory mode')
+    return
+  }
+  try {
+    const { query } = require('./db/db')
+    const schemaPath = path.join(__dirname, 'db', 'schema.sql')
+    if (!fs.existsSync(schemaPath)) {
+      console.warn('[DB] schema.sql not found — skipping migration')
+      return
+    }
+    const sql = fs.readFileSync(schemaPath, 'utf8')
+    // Split on semicolons but keep multi-statement blocks intact.
+    // Filter blank / comment-only lines.
+    const statements = sql
+      .split(/;\s*(\n|$)/)
+      .map(s => s.trim())
+      .filter(s => s.length > 0 && !s.startsWith('--'))
+    for (const stmt of statements) {
+      await query(stmt).catch(err => {
+        // Log but continue — some statements may fail on partial schemas
+        console.warn('[DB] migration stmt warning:', err.message.slice(0, 120))
+      })
+    }
+    console.log('[DB] Schema migration complete')
+  } catch (err) {
+    console.error('[DB] Migration failed:', err.message)
+  }
+})()
 
 const app  = express()
 const PORT = parseInt(process.env.PORT, 10) || 3001

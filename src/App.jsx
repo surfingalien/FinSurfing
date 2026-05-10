@@ -86,14 +86,15 @@ function AppInner() {
 
 // ── Main app (authenticated or guest) ─────────────────────────────────────────
 function MainApp({ onSignIn }) {
-  const { isAuthenticated } = useAuth()
+  const { isAuthenticated, user } = useAuth()
   const { portfolios, loadingPortfolios } = usePortfolioContext()
 
   const [activeTab,     setActiveTab]     = useState('dashboard')
   const [analyzeSymbol, setAnalyzeSymbol] = useState('AAPL')
   const [wizardDone,    setWizardDone]    = useState(false)
 
-  const portfolio = usePortfolio()
+  // Pass userId so localStorage is namespaced per-user (prevents data leaking between accounts)
+  const portfolio = usePortfolio(user?.id || null)
   const watchlist = useWatchlist()
 
   const quotesMap = useMemo(() => {
