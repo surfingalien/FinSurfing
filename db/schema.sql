@@ -1,0 +1,241 @@
+-- FinSurf PostgreSQL Schema
+-- Run once: psql $DATABASE_URL -f db/schema.sql
+-- Requires: pgcrypto extension (gen_random_uuid)
+
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+-- ─────────────────────────────────────────────────
+--  USERS
+-- ─────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS users (
+  id                    UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+  email                 VARCHAR(255) UNIQUE NOT NULL,
+  password_hash         VARCHAR(255),           -- NULL for OAuth-only accounts
+  display_name          VARCHAR(100),
+  avatar_url            TEXT,
+  is_verified           BOOLEAN      NOT NULL DEFAULT FALSE,
+  is_active             BOOLEAN      NOT NULL DEFAULT TRUE,
+  -- MFA
+  mfa_enabled           BOOLEAN      NOT NULL DEFAULT FALSE,
+  mfa_secret            VARCHAR(200),           -- encrypted TOTP secret
+  -- Security
+  failed_login_attempts INTEGER      NOT NULL DEFAULT 0,
+  locked_until          TIMESTAMPTZ,
+  -- GDPR
+  data_export_requested BOOLEAN      NOT NULL DEFAULT FALSE,
+  deletion_requested_at TIMESTAMPTZ,
+  created_at            TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+  updated_at            TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+
+-- ─────────────────────────────────────────────────
+--  OAUTH ACCOUNTS (Google / Apple / Microsoft)
+-- ─────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS oauth_accounts (
+  id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id         UUID        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  provider        VARCHAR(50) NOT NULL,   -- 'google' | 'apple' | 'microsoft'
+  provider_user_id VARCHAR(255) NOT NULL,
+  access_token    TEXT,
+  refresh_token   TEXT,
+  token_expires_at TIMESTAMPTZ,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(provider, provider_user_id)
+);
+
+-- ─────────────────────────────────────────────────
+--  REFRESH TOKENS  (HTTP-only cookie store)
+-- ─────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS refresh_tokens (
+  id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     UUID        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token_hash  VARCHAR(255) NOT NULL UNIQUE,  -- SHA-256 of the raw token
+  device_info JSONB,
+  ip_address  INET,
+  expires_at  TIMESTAMPTZ NOT NULL,
+  revoked_at  TIMESTAMPTZ,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user ON refresh_tokens(user_id);
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_hash ON refresh_tokens(token_hash);
+
+-- ─────────────────────────────────────────────────
+--  PASSWORD RESET TOKENS  (single-use, 1 h TTL)
+-- ─────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS password_resets (
+  id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id    UUID        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token_hash VARCHAR(255) NOT NULL UNIQUE,
+  expires_at TIMESTAMPTZ NOT NULL,
+  used_at    TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- ─────────────────────────────────────────────────
+--  EMAIL VERIFICATION TOKENS
+-- ─────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS email_verifications (
+  id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     UUID        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token_hash  VARCHAR(255) NOT NULL UNIQUE,
+  expires_at  TIMESTAMPTZ NOT NULL,
+  verified_at TIMESTAMPTZ,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- ─────────────────────────────────────────────────
+--  AUTH AUDIT LOG  (GDPR-compliant, no passwords)
+-- ─────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS auth_logs (
+  id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id    UUID        REFERENCES users(id) ON DELETE SET NULL,
+  event      VARCHAR(60) NOT NULL,  -- login_success | login_failed | logout | register |
+                                    -- password_reset_request | password_reset_success |
+                                    -- token_refresh | account_locked | mfa_enabled
+  ip_address INET,
+  user_agent TEXT,
+  metadata   JSONB,                 -- e.g. { "reason": "wrong_password", "attempt": 3 }
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_auth_logs_user ON auth_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_auth_logs_event ON auth_logs(event);
+CREATE INDEX IF NOT EXISTS idx_auth_logs_created ON auth_logs(created_at DESC);
+
+-- ─────────────────────────────────────────────────
+--  PORTFOLIOS  (one user → many portfolios)
+-- ─────────────────────────────────────────────────
+CREATE TYPE portfolio_type AS ENUM (
+  'brokerage', 'roth_ira', 'traditional_ira', '401k', '403b',
+  'mutual_fund', 'crypto', 'hsa', 'paper', 'cash', 'other'
+);
+
+CREATE TYPE tax_status AS ENUM ('taxable', 'tax_deferred', 'tax_exempt');
+
+CREATE TABLE IF NOT EXISTS portfolios (
+  id           UUID           PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id      UUID           NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name         VARCHAR(100)   NOT NULL,
+  type         portfolio_type NOT NULL DEFAULT 'brokerage',
+  description  TEXT,
+  currency     VARCHAR(10)    NOT NULL DEFAULT 'USD',
+  tax_status   tax_status     NOT NULL DEFAULT 'taxable',
+  custodian    VARCHAR(100),           -- 'Fidelity', 'Schwab', 'Robinhood', etc.
+  cash_balance DECIMAL(18,4)  NOT NULL DEFAULT 0,
+  color        VARCHAR(7)     NOT NULL DEFAULT '#00ffcc',  -- UI accent hex
+  icon         VARCHAR(50),
+  is_default   BOOLEAN        NOT NULL DEFAULT FALSE,
+  is_archived  BOOLEAN        NOT NULL DEFAULT FALSE,
+  created_at   TIMESTAMPTZ    NOT NULL DEFAULT NOW(),
+  updated_at   TIMESTAMPTZ    NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_portfolios_user ON portfolios(user_id);
+
+-- Enforce single default per user
+CREATE UNIQUE INDEX IF NOT EXISTS idx_portfolios_default
+  ON portfolios(user_id) WHERE is_default = TRUE AND is_archived = FALSE;
+
+-- ─────────────────────────────────────────────────
+--  HOLDINGS  (one portfolio → many holdings)
+-- ─────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS holdings (
+  id             UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
+  portfolio_id   UUID          NOT NULL REFERENCES portfolios(id) ON DELETE CASCADE,
+  symbol         VARCHAR(20)   NOT NULL,
+  name           VARCHAR(255),
+  shares         DECIMAL(18,6) NOT NULL DEFAULT 0,
+  avg_cost_basis DECIMAL(18,4) NOT NULL DEFAULT 0,
+  sector         VARCHAR(100),
+  asset_class    VARCHAR(50)   DEFAULT 'equity',  -- equity|etf|bond|crypto|cash|option
+  created_at     TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+  updated_at     TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+  UNIQUE(portfolio_id, symbol)
+);
+
+CREATE INDEX IF NOT EXISTS idx_holdings_portfolio ON holdings(portfolio_id);
+
+-- ─────────────────────────────────────────────────
+--  TRANSACTIONS  (audit trail for every trade)
+-- ─────────────────────────────────────────────────
+CREATE TYPE tx_type AS ENUM (
+  'BUY', 'SELL', 'DIVIDEND', 'CONTRIBUTION', 'WITHDRAWAL',
+  'FEE', 'TRANSFER_IN', 'TRANSFER_OUT', 'SPLIT'
+);
+
+CREATE TABLE IF NOT EXISTS transactions (
+  id           UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
+  portfolio_id UUID          NOT NULL REFERENCES portfolios(id) ON DELETE CASCADE,
+  holding_id   UUID          REFERENCES holdings(id) ON DELETE SET NULL,
+  type         tx_type       NOT NULL,
+  symbol       VARCHAR(20),
+  shares       DECIMAL(18,6),
+  price        DECIMAL(18,4),
+  amount       DECIMAL(18,4) NOT NULL,  -- total value of transaction
+  fees         DECIMAL(18,4) NOT NULL DEFAULT 0,
+  notes        TEXT,
+  executed_at  TIMESTAMPTZ   NOT NULL,
+  created_at   TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_tx_portfolio ON transactions(portfolio_id);
+CREATE INDEX IF NOT EXISTS idx_tx_executed  ON transactions(executed_at DESC);
+
+-- ─────────────────────────────────────────────────
+--  WATCHLISTS  (per user)
+-- ─────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS watchlists (
+  id         UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id    UUID         NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name       VARCHAR(100) NOT NULL DEFAULT 'My Watchlist',
+  symbols    TEXT[]       NOT NULL DEFAULT '{}',
+  created_at TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_watchlists_user ON watchlists(user_id);
+
+-- ─────────────────────────────────────────────────
+--  PRICE ALERTS  (per user × symbol)
+-- ─────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS alerts (
+  id           UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id      UUID          NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  portfolio_id UUID          REFERENCES portfolios(id) ON DELETE CASCADE,
+  symbol       VARCHAR(20)   NOT NULL,
+  condition    VARCHAR(20)   NOT NULL,   -- 'above' | 'below' | 'pct_change'
+  target_value DECIMAL(18,4) NOT NULL,
+  note         TEXT,
+  is_active    BOOLEAN       NOT NULL DEFAULT TRUE,
+  triggered_at TIMESTAMPTZ,
+  created_at   TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_alerts_user ON alerts(user_id);
+
+-- ─────────────────────────────────────────────────
+--  updated_at trigger helper
+-- ─────────────────────────────────────────────────
+CREATE OR REPLACE FUNCTION set_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DO $$ BEGIN
+  CREATE TRIGGER users_updated_at       BEFORE UPDATE ON users       FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+  CREATE TRIGGER portfolios_updated_at  BEFORE UPDATE ON portfolios  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+  CREATE TRIGGER holdings_updated_at   BEFORE UPDATE ON holdings    FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+  CREATE TRIGGER watchlists_updated_at BEFORE UPDATE ON watchlists  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;

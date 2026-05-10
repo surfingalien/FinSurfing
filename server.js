@@ -1,13 +1,78 @@
-const express = require('express')
-const cors    = require('cors')
-const path    = require('path')
+const express      = require('express')
+const cors         = require('cors')
+const path         = require('path')
+const helmet       = require('helmet')
+const cookieParser = require('cookie-parser')
+const rateLimit    = require('express-rate-limit')
+
+const authRoutes      = require('./routes/auth')
+const portfolioRoutes = require('./routes/portfolios')
 
 const app  = express()
 const PORT = parseInt(process.env.PORT, 10) || 3001
+const PROD = process.env.NODE_ENV === 'production'
 
-app.use(cors())
-app.use(express.json())
+// ── Security headers (OWASP-recommended) ─────────
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc:  ["'self'"],
+      scriptSrc:   ["'self'", "'unsafe-inline'"],   // Vite needs inline scripts
+      styleSrc:    ["'self'", "'unsafe-inline'"],
+      imgSrc:      ["'self'", 'data:', 'https:'],
+      connectSrc:  ["'self'", 'https://query1.finance.yahoo.com', 'https://query2.finance.yahoo.com'],
+      fontSrc:     ["'self'", 'data:'],
+      objectSrc:   ["'none'"],
+      upgradeInsecureRequests: PROD ? [] : null,
+    },
+  },
+  hsts: PROD ? { maxAge: 31536000, includeSubDomains: true } : false,
+  frameguard: { action: 'deny' },
+  xssFilter: true,
+  noSniff: true,
+  referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+}))
+
+// ── CORS — tighten in production ──────────────────
+const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:5173']
+app.use(cors({
+  origin: PROD ? ALLOWED_ORIGINS : true,
+  credentials: true,   // allow cookies on cross-origin in dev
+}))
+
+app.use(cookieParser())
+app.use(express.json({ limit: '256kb' }))
 app.use(express.static(path.join(__dirname, 'dist')))
+
+// ── Rate limiting (OWASP auth defence) ───────────
+const baseLimit = rateLimit({
+  windowMs: 60 * 1000, max: 120, standardHeaders: true, legacyHeaders: false,
+  message: { error: 'Too many requests — slow down' },
+})
+
+const authLoginLimit = rateLimit({
+  windowMs: 15 * 60 * 1000, max: 10, skipSuccessfulRequests: true,
+  message: { error: 'Too many login attempts — try again in 15 minutes' },
+})
+
+const authRegisterLimit = rateLimit({
+  windowMs: 60 * 60 * 1000, max: 5,
+  message: { error: 'Too many registrations from this IP' },
+})
+
+const authForgotLimit = rateLimit({
+  windowMs: 60 * 60 * 1000, max: 3,
+  message: { error: 'Too many password reset requests — try again in 1 hour' },
+})
+
+app.use('/api', baseLimit)
+app.use('/api/auth/login',           authLoginLimit)
+app.use('/api/auth/register',        authRegisterLimit)
+app.use('/api/auth/forgot-password', authForgotLimit)
+
+// ── Auth & Portfolio routes ───────────────────────
+app.use('/api/auth',       authRoutes)
+app.use('/api/portfolios', portfolioRoutes)
 
 /* ── Safe fetch helpers ────────────────────────── */
 const YF1 = 'https://query1.finance.yahoo.com'
@@ -84,8 +149,12 @@ async function getChartQuote(symbol) {
   }
 }
 
-/* ── Health ────────────────────────────────────── */
-app.get('/health', (_req, res) => res.json({ ok: true, ts: Date.now() }))
+/* ── Health (includes DB status) ──────────────── */
+app.get('/health', async (_req, res) => {
+  let dbOk = false
+  try { const { ping } = require('./db/db'); dbOk = await ping() } catch {}
+  res.json({ ok: true, db: dbOk, ts: Date.now() })
+})
 
 /* ── Quote (batch) ─────────────────────────────── */
 app.get('/api/quote', async (req, res) => {
