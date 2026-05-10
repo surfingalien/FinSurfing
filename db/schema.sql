@@ -10,6 +10,8 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 CREATE TABLE IF NOT EXISTS users (
   id                    UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
   email                 VARCHAR(255) UNIQUE NOT NULL,
+  username              VARCHAR(50)  UNIQUE,            -- auto-generated from email prefix
+  role                  VARCHAR(20)  NOT NULL DEFAULT 'user', -- 'user' | 'admin'
   password_hash         VARCHAR(255),           -- NULL for OAuth-only accounts
   display_name          VARCHAR(100),
   avatar_url            TEXT,
@@ -28,7 +30,8 @@ CREATE TABLE IF NOT EXISTS users (
   updated_at            TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+CREATE INDEX IF NOT EXISTS idx_users_email    ON users(email);
+CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
 
 -- ─────────────────────────────────────────────────
 --  OAUTH ACCOUNTS (Google / Apple / Microsoft)
@@ -116,28 +119,83 @@ CREATE TYPE portfolio_type AS ENUM (
 CREATE TYPE tax_status AS ENUM ('taxable', 'tax_deferred', 'tax_exempt');
 
 CREATE TABLE IF NOT EXISTS portfolios (
-  id           UUID           PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id      UUID           NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  name         VARCHAR(100)   NOT NULL,
-  type         portfolio_type NOT NULL DEFAULT 'brokerage',
-  description  TEXT,
-  currency     VARCHAR(10)    NOT NULL DEFAULT 'USD',
-  tax_status   tax_status     NOT NULL DEFAULT 'taxable',
-  custodian    VARCHAR(100),           -- 'Fidelity', 'Schwab', 'Robinhood', etc.
-  cash_balance DECIMAL(18,4)  NOT NULL DEFAULT 0,
-  color        VARCHAR(7)     NOT NULL DEFAULT '#00ffcc',  -- UI accent hex
-  icon         VARCHAR(50),
-  is_default   BOOLEAN        NOT NULL DEFAULT FALSE,
-  is_archived  BOOLEAN        NOT NULL DEFAULT FALSE,
-  created_at   TIMESTAMPTZ    NOT NULL DEFAULT NOW(),
-  updated_at   TIMESTAMPTZ    NOT NULL DEFAULT NOW()
+  id                  UUID           PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id             UUID           NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name                VARCHAR(100)   NOT NULL,
+  type                portfolio_type NOT NULL DEFAULT 'brokerage',
+  description         TEXT,
+  currency            VARCHAR(10)    NOT NULL DEFAULT 'USD',
+  tax_status          tax_status     NOT NULL DEFAULT 'taxable',
+  custodian           VARCHAR(100),           -- 'Fidelity', 'Schwab', 'Robinhood', etc.
+  cash_balance        DECIMAL(18,4)  NOT NULL DEFAULT 0,
+  color               VARCHAR(7)     NOT NULL DEFAULT '#00ffcc',  -- UI accent hex
+  icon                VARCHAR(50),
+  is_default          BOOLEAN        NOT NULL DEFAULT FALSE,
+  is_archived         BOOLEAN        NOT NULL DEFAULT FALSE,
+  -- Multi-tenant sharing
+  visibility          VARCHAR(20)    NOT NULL DEFAULT 'private', -- 'private'|'public'|'followers_only'
+  is_system           BOOLEAN        NOT NULL DEFAULT FALSE,     -- TRUE for admin's portfolio
+  is_featured         BOOLEAN        NOT NULL DEFAULT FALSE,     -- promoted by admin
+  copy_trade_enabled  BOOLEAN        NOT NULL DEFAULT FALSE,
+  created_at          TIMESTAMPTZ    NOT NULL DEFAULT NOW(),
+  updated_at          TIMESTAMPTZ    NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_portfolios_user ON portfolios(user_id);
+CREATE INDEX IF NOT EXISTS idx_portfolios_user       ON portfolios(user_id);
+CREATE INDEX IF NOT EXISTS idx_portfolios_visibility ON portfolios(visibility) WHERE is_archived = FALSE;
 
 -- Enforce single default per user
 CREATE UNIQUE INDEX IF NOT EXISTS idx_portfolios_default
   ON portfolios(user_id) WHERE is_default = TRUE AND is_archived = FALSE;
+
+-- ─────────────────────────────────────────────────
+--  PORTFOLIO SHARES  (explicit grants to other users)
+-- ─────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS portfolio_shares (
+  id                  UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  portfolio_id        UUID        NOT NULL REFERENCES portfolios(id) ON DELETE CASCADE,
+  shared_with_user_id UUID        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  permission          VARCHAR(20) NOT NULL DEFAULT 'view',  -- 'view' | 'copy_trade'
+  expires_at          TIMESTAMPTZ,
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(portfolio_id, shared_with_user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_portfolio_shares_portfolio ON portfolio_shares(portfolio_id);
+CREATE INDEX IF NOT EXISTS idx_portfolio_shares_user      ON portfolio_shares(shared_with_user_id);
+
+-- ─────────────────────────────────────────────────
+--  ACCESS LOGS  (portfolio view/edit audit trail)
+-- ─────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS access_logs (
+  id                  BIGSERIAL   PRIMARY KEY,
+  actor_user_id       UUID        REFERENCES users(id) ON DELETE SET NULL,
+  target_portfolio_id UUID        REFERENCES portfolios(id) ON DELETE SET NULL,
+  action              VARCHAR(50) NOT NULL,  -- 'view_public'|'view_private'|'edit'|'admin_view'|...
+  ip_address          INET,
+  metadata            JSONB       NOT NULL DEFAULT '{}',
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_access_logs_portfolio ON access_logs(target_portfolio_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_access_logs_actor     ON access_logs(actor_user_id, created_at DESC);
+
+-- ─────────────────────────────────────────────────
+--  PUBLIC PORTFOLIO VIEW
+-- ─────────────────────────────────────────────────
+CREATE OR REPLACE VIEW public_portfolio_view AS
+SELECT
+  p.id, p.name, p.description, p.visibility, p.copy_trade_enabled,
+  p.color, p.is_featured, p.created_at, p.updated_at,
+  u.id   AS user_id,
+  u.username,
+  u.display_name,
+  COUNT(h.id) AS holding_count
+FROM portfolios p
+JOIN  users    u ON u.id = p.user_id
+LEFT JOIN holdings h ON h.portfolio_id = p.id
+WHERE p.visibility = 'public' AND p.is_archived = FALSE AND u.is_active = TRUE
+GROUP BY p.id, u.id;
 
 -- ─────────────────────────────────────────────────
 --  HOLDINGS  (one portfolio → many holdings)

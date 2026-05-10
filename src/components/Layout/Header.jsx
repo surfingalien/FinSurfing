@@ -111,6 +111,7 @@ export default function Header({ activeTab, onTabChange, triggeredCount = 0, onS
     { id: 'strategies',      label: 'Strategies',   icon: '▣' },
     { id: 'alerts',          label: 'Alerts',       icon: '◎', badge: triggeredCount },
     { id: 'research',        label: 'AI Advisory',  icon: '◉' },
+    ...(user?.role === 'admin' ? [{ id: 'admin', label: 'Admin', icon: '⬡', admin: true }] : []),
   ]
 
   useEffect(() => {
@@ -202,9 +203,13 @@ export default function Header({ activeTab, onTabChange, triggeredCount = 0, onS
                 key={tab.id}
                 onClick={() => onTabChange(tab.id)}
                 className={`relative flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all duration-150
-                  ${activeTab === tab.id
-                    ? 'bg-mint-500/15 text-mint-400 border border-mint-500/25'
-                    : 'text-slate-400 hover:text-white hover:bg-white/[0.05]'
+                  ${tab.admin
+                    ? activeTab === tab.id
+                      ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                      : 'text-amber-500/60 hover:text-amber-400 hover:bg-amber-500/10'
+                    : activeTab === tab.id
+                      ? 'bg-mint-500/15 text-mint-400 border border-mint-500/25'
+                      : 'text-slate-400 hover:text-white hover:bg-white/[0.05]'
                   }`}
               >
                 <span className="text-[10px] opacity-60">{tab.icon}</span>

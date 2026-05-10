@@ -7,6 +7,8 @@ const rateLimit    = require('express-rate-limit')
 
 const authRoutes      = require('./routes/auth')
 const portfolioRoutes = require('./routes/portfolios')
+const publicRoutes    = require('./routes/public')
+const adminRoutes     = require('./routes/admin')
 
 const app  = express()
 const PORT = parseInt(process.env.PORT, 10) || 3001
@@ -50,6 +52,11 @@ const baseLimit = rateLimit({
   message: { error: 'Too many requests — slow down' },
 })
 
+const publicLimit = rateLimit({
+  windowMs: 60 * 1000, max: 60, standardHeaders: true, legacyHeaders: false,
+  message: { error: 'Too many requests — slow down' },
+})
+
 const authLoginLimit = rateLimit({
   windowMs: 15 * 60 * 1000, max: 10, skipSuccessfulRequests: true,
   message: { error: 'Too many login attempts — try again in 15 minutes' },
@@ -73,6 +80,8 @@ app.use('/api/auth/forgot-password', authForgotLimit)
 // ── Auth & Portfolio routes ───────────────────────
 app.use('/api/auth',       authRoutes)
 app.use('/api/portfolios', portfolioRoutes)
+app.use('/api/public',     publicLimit, publicRoutes)
+app.use('/api/admin',      adminRoutes)
 
 /* ── Safe fetch helpers ────────────────────────── */
 const YF1 = 'https://query1.finance.yahoo.com'
@@ -149,11 +158,14 @@ async function getChartQuote(symbol) {
   }
 }
 
-/* ── Health (includes DB status) ──────────────── */
+/* ── Health (includes DB status + demo mode) ───── */
 app.get('/health', async (_req, res) => {
+  const demoMode = !process.env.DATABASE_URL
   let dbOk = false
-  try { const { ping } = require('./db/db'); dbOk = await ping() } catch {}
-  res.json({ ok: true, db: dbOk, ts: Date.now() })
+  if (!demoMode) {
+    try { const { ping } = require('./db/db'); dbOk = await ping() } catch {}
+  }
+  res.json({ ok: true, db: dbOk, demoMode, ts: Date.now() })
 })
 
 /* ── Quote (batch) ─────────────────────────────── */

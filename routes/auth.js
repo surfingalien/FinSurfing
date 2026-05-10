@@ -36,6 +36,7 @@ const crypto        = require('crypto')
 const nodemailer    = require('nodemailer')
 const { query }     = require('../db/db')
 const { requireAuth, SECRET } = require('../middleware/auth')
+const { MEM }       = require('../db/memstore')
 
 const router = express.Router()
 
@@ -83,42 +84,64 @@ async function sendEmail({ to, subject, html }) {
   return false
 }
 
-// ── In-memory store (no-DB mode) ───────────────────
-const MEM = {
-  users:    new Map(), // id → user
-  byEmail:  new Map(), // email → id
-  tokens:   new Map(), // sha256(raw) → { userId, expiresAt }
-  otp:      new Map(), // email → { code, expiresAt, attempts }
-  resets:   new Map(), // sha256(token) → { userId, expiresAt, used }
-}
-
-// Pre-seed admin account in memory (env-var based, private)
+// ── Pre-seed admin account in memory (env-var based, private) ─────────
 ;(async () => {
   if (!DB_MODE && ADMIN_EMAIL && ADMIN_PASSWORD) {
-    const id   = 'admin-' + crypto.randomBytes(4).toString('hex')
-    const hash = await bcrypt.hash(ADMIN_PASSWORD, BCRYPT_ROUNDS)
-    MEM.users.set(id, {
-      id, email: ADMIN_EMAIL, displayName: 'Admin',
+    const id       = 'admin-' + crypto.randomBytes(4).toString('hex')
+    const hash     = await bcrypt.hash(ADMIN_PASSWORD, BCRYPT_ROUNDS)
+    const username = generateUsername(ADMIN_EMAIL)
+    const user = {
+      id, email: ADMIN_EMAIL, username, role: 'admin',
+      displayName: 'Admin',
       passwordHash: hash, isVerified: true,
       failedAttempts: 0, lockedUntil: null,
       createdAt: new Date().toISOString(),
-    })
+    }
+    MEM.users.set(id, user)
     MEM.byEmail.set(ADMIN_EMAIL, id)
+    MEM.byUsername.set(username, id)
+
+    // Create admin system portfolio in memory
+    const pid = 'port-admin-' + crypto.randomBytes(4).toString('hex')
+    MEM.portfolios.set(pid, {
+      id: pid, user_id: id, name: 'Admin Portfolio',
+      type: 'brokerage', description: 'System admin portfolio',
+      currency: 'USD', color: '#ff6b6b',
+      is_default: true, is_archived: false,
+      visibility: 'private', is_system: true, is_featured: false,
+      copy_trade_enabled: false,
+      created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+    })
+    MEM.holdings.set(pid, [])
+
     console.log('[AUTH] Admin account ready (in-memory)')
   }
 })()
 
 // ── Helpers ────────────────────────────────────────
-function sha256(s)      { return crypto.createHash('sha256').update(s).digest('hex') }
-function otp6()         { return String(Math.floor(100000 + Math.random() * 900000)) }
+function sha256(s)        { return crypto.createHash('sha256').update(s).digest('hex') }
+function otp6()           { return String(Math.floor(100000 + Math.random() * 900000)) }
 function validateEmail(e) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e) && e.length <= 255 }
 function validatePassword(p) {
   return typeof p === 'string' && p.length >= 8 && p.length <= 128
     && /[a-zA-Z]/.test(p) && /\d/.test(p)
 }
 
-function issueAccessToken(userId, email) {
-  return jwt.sign({ sub: userId, email }, SECRET, { algorithm: 'HS256', expiresIn: ACCESS_TTL })
+/**
+ * Generate a URL-safe username from email prefix.
+ * e.g. "john.doe+tag@example.com" → "john_doe_tag"
+ */
+function generateUsername(email) {
+  const prefix = email.split('@')[0] || 'user'
+  return prefix.toLowerCase().replace(/[^a-z0-9]/g, '_').slice(0, 30)
+}
+
+function issueAccessToken(userId, email, role) {
+  return jwt.sign(
+    { sub: userId, email, role: role || 'user' },
+    SECRET,
+    { algorithm: 'HS256', expiresIn: ACCESS_TTL }
+  )
 }
 
 // ── DB helpers ─────────────────────────────────────
@@ -144,6 +167,34 @@ async function auditLog(userId, event, req, meta = {}) {
   } catch {}
 }
 
+/**
+ * Generate a unique username in DB mode, appending 4 random digits on collision.
+ */
+async function dbGenerateUsername(base) {
+  const check = await query('SELECT id FROM users WHERE username = $1', [base])
+  if (!check.rows.length) return base
+  // Try up to 5 times with random suffix
+  for (let i = 0; i < 5; i++) {
+    const candidate = base.slice(0, 26) + '_' + String(Math.floor(1000 + Math.random() * 9000))
+    const c2 = await query('SELECT id FROM users WHERE username = $1', [candidate])
+    if (!c2.rows.length) return candidate
+  }
+  // last resort: use timestamp
+  return base.slice(0, 20) + '_' + Date.now().toString().slice(-6)
+}
+
+/**
+ * Generate a unique username in memory mode.
+ */
+function memGenerateUsername(base) {
+  if (!MEM.byUsername.has(base)) return base
+  for (let i = 0; i < 5; i++) {
+    const candidate = base.slice(0, 26) + '_' + String(Math.floor(1000 + Math.random() * 9000))
+    if (!MEM.byUsername.has(candidate)) return candidate
+  }
+  return base.slice(0, 20) + '_' + Date.now().toString().slice(-6)
+}
+
 // ── Mem helpers ─────────────────────────────────────
 function memIssueRefresh(userId) {
   const raw = crypto.randomBytes(32).toString('hex')
@@ -156,8 +207,10 @@ async function respondWithTokens(res, user, req, remember) {
   const userId = user.id || user.userId
   const email  = user.email
   const name   = user.displayName || user.display_name || null
+  const role   = user.role || 'user'
+  const username = user.username || null
 
-  const accessToken  = issueAccessToken(userId, email)
+  const accessToken  = issueAccessToken(userId, email, role)
   const refreshToken = DB_MODE
     ? await dbIssueRefresh(userId, req)
     : memIssueRefresh(userId)
@@ -165,7 +218,7 @@ async function respondWithTokens(res, user, req, remember) {
   res.cookie(REFRESH_COOKIE, refreshToken, cookieOpts(remember))
   return res.json({
     accessToken, expiresIn: ACCESS_TTL,
-    user: { id: userId, email, displayName: name },
+    user: { id: userId, email, displayName: name, role, username },
   })
 }
 
@@ -199,6 +252,8 @@ router.post('/register', async (req, res) => {
     return res.status(400).json({ error: 'Password must be 8+ characters with a letter and number' })
 
   const lEmail = email.toLowerCase()
+  const isAdmin = ADMIN_EMAIL && lEmail === ADMIN_EMAIL
+  const role    = isAdmin ? 'admin' : 'user'
 
   // ── DB mode ───────────────────────────────────
   if (DB_MODE) {
@@ -208,10 +263,13 @@ router.post('/register', async (req, res) => {
       if (existing.rows.length)
         return res.status(409).json({ error: 'An account with that email already exists' })
 
+      const usernameBase = generateUsername(lEmail)
+      const username     = await dbGenerateUsername(usernameBase)
+
       const r = await query(
-        `INSERT INTO users (email, password_hash, display_name, is_verified)
-         VALUES ($1,$2,$3,FALSE) RETURNING id, email, display_name`,
-        [lEmail, hash, displayName?.trim().slice(0, 100) || null]
+        `INSERT INTO users (email, password_hash, display_name, username, role, is_verified)
+         VALUES ($1,$2,$3,$4,$5,FALSE) RETURNING id, email, display_name, username, role`,
+        [lEmail, hash, displayName?.trim().slice(0, 100) || null, username, role]
       )
       const user = r.rows[0]
       const code = otp6()
@@ -239,10 +297,13 @@ router.post('/register', async (req, res) => {
   if (MEM.byEmail.has(lEmail))
     return res.status(409).json({ error: 'An account with that email already exists' })
 
-  const hash = await bcrypt.hash(password, BCRYPT_ROUNDS)
-  const id   = 'u-' + crypto.randomBytes(8).toString('hex')
+  const hash         = await bcrypt.hash(password, BCRYPT_ROUNDS)
+  const id           = 'u-' + crypto.randomBytes(8).toString('hex')
+  const usernameBase = generateUsername(lEmail)
+  const username     = memGenerateUsername(usernameBase)
+
   const user = {
-    id, email: lEmail,
+    id, email: lEmail, username, role,
     displayName: displayName?.trim().slice(0, 100) || null,
     passwordHash: hash, isVerified: false,
     failedAttempts: 0, lockedUntil: null,
@@ -250,6 +311,23 @@ router.post('/register', async (req, res) => {
   }
   MEM.users.set(id, user)
   MEM.byEmail.set(lEmail, id)
+  MEM.byUsername.set(username, id)
+
+  // Create default portfolio for new user
+  const pid = 'port-' + crypto.randomBytes(8).toString('hex')
+  MEM.portfolios.set(pid, {
+    id: pid, user_id: id, name: 'My Portfolio',
+    type: 'brokerage', description: null,
+    currency: 'USD', color: '#00ffcc',
+    is_default: true, is_archived: false,
+    visibility: 'private',
+    is_system: isAdmin,
+    is_featured: false,
+    copy_trade_enabled: false,
+    cash_balance: 0,
+    created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+  })
+  MEM.holdings.set(pid, [])
 
   const code = otp6()
   MEM.otp.set(lEmail, { code, expiresAt: Date.now() + 10 * 60000, attempts: 0 })
@@ -271,9 +349,10 @@ router.post('/verify-email', async (req, res) => {
   // ── DB mode ───────────────────────────────────
   if (DB_MODE) {
     try {
-      const userRes = await query('SELECT id FROM users WHERE email = $1', [lEmail])
+      const userRes = await query('SELECT id, role FROM users WHERE email = $1', [lEmail])
       if (!userRes.rows[0]) return res.status(404).json({ error: 'Account not found' })
       const userId = userRes.rows[0].id
+      const role   = userRes.rows[0].role || 'user'
 
       const otpRes = await query(
         `SELECT id, expires_at FROM email_verifications
@@ -288,18 +367,28 @@ router.post('/verify-email', async (req, res) => {
       await query('UPDATE users SET is_verified = TRUE WHERE id = $1', [userId])
       await query('DELETE FROM email_verifications WHERE user_id = $1', [userId])
 
+      // Determine if this is the admin email
+      const isAdminUser = ADMIN_EMAIL && lEmail === ADMIN_EMAIL
+
       // Create default portfolio
       await query(
-        `INSERT INTO portfolios (user_id, name, type, is_default, color)
-         VALUES ($1,'My Portfolio','brokerage',TRUE,'#00ffcc')
+        `INSERT INTO portfolios (user_id, name, type, is_default, color, visibility, is_system)
+         VALUES ($1,'My Portfolio','brokerage',TRUE,'#00ffcc','private',$2)
          ON CONFLICT DO NOTHING`,
-        [userId]
+        [userId, isAdminUser]
       )
       await auditLog(userId, 'email_verified', req)
 
-      const uRes = await query('SELECT id, email, display_name FROM users WHERE id = $1', [userId])
-      const u    = uRes.rows[0]
-      return respondWithTokens(res, { id: u.id, email: u.email, displayName: u.display_name }, req, true)
+      const uRes = await query(
+        'SELECT id, email, display_name, username, role FROM users WHERE id = $1',
+        [userId]
+      )
+      const u = uRes.rows[0]
+      return respondWithTokens(res, {
+        id: u.id, email: u.email,
+        displayName: u.display_name,
+        role: u.role, username: u.username
+      }, req, true)
     } catch (err) {
       console.error('[auth/verify-email]', err.message)
       return res.status(500).json({ error: 'Verification failed' })
@@ -368,7 +457,7 @@ router.post('/login', async (req, res) => {
   if (DB_MODE) {
     try {
       const r = await query(
-        `SELECT id, email, display_name, password_hash, is_active, is_verified,
+        `SELECT id, email, display_name, username, role, password_hash, is_active, is_verified,
                 failed_login_attempts, locked_until
          FROM users WHERE email = $1`,
         [lEmail]
@@ -398,7 +487,11 @@ router.post('/login', async (req, res) => {
 
       await query('UPDATE users SET failed_login_attempts=0,locked_until=NULL WHERE id=$1', [user.id])
       await auditLog(user.id, 'login_success', req)
-      return respondWithTokens(res, { id: user.id, email: user.email, displayName: user.display_name }, req, !!rememberMe)
+      return respondWithTokens(res, {
+        id: user.id, email: user.email,
+        displayName: user.display_name,
+        role: user.role, username: user.username
+      }, req, !!rememberMe)
     } catch (err) {
       console.error('[auth/login]', err.message)
       return res.status(500).json({ error: 'Login failed — try again' })
@@ -411,7 +504,7 @@ router.post('/login', async (req, res) => {
   const dummy = '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewHHg9/EFzxUbX1u'
 
   if (user?.lockedUntil && new Date(user.lockedUntil) > new Date())
-    return res.status(429).json({ error: `Account locked. Try again later.` })
+    return res.status(429).json({ error: 'Account locked. Try again later.' })
 
   const match = await bcrypt.compare(password, user?.passwordHash || dummy)
 
@@ -454,9 +547,9 @@ router.post('/refresh', async (req, res) => {
     const newRaw = memIssueRefresh(sess.userId)
     res.cookie(REFRESH_COOKIE, newRaw, cookieOpts())
     return res.json({
-      accessToken: issueAccessToken(user.id, user.email),
+      accessToken: issueAccessToken(user.id, user.email, user.role || 'user'),
       expiresIn:   ACCESS_TTL,
-      user: { id: user.id, email: user.email, displayName: user.displayName },
+      user: { id: user.id, email: user.email, displayName: user.displayName, role: user.role || 'user', username: user.username || null },
     })
   }
 
@@ -464,7 +557,7 @@ router.post('/refresh', async (req, res) => {
   try {
     const r = await query(
       `SELECT rt.id, rt.user_id, rt.expires_at, rt.revoked_at,
-              u.email, u.display_name, u.is_active
+              u.email, u.display_name, u.username, u.role, u.is_active
        FROM refresh_tokens rt JOIN users u ON u.id=rt.user_id
        WHERE rt.token_hash=$1`,
       [hash]
@@ -482,9 +575,9 @@ router.post('/refresh', async (req, res) => {
     const newRaw = await dbIssueRefresh(rt.user_id, req)
     res.cookie(REFRESH_COOKIE, newRaw, cookieOpts())
     return res.json({
-      accessToken: issueAccessToken(rt.user_id, rt.email),
+      accessToken: issueAccessToken(rt.user_id, rt.email, rt.role || 'user'),
       expiresIn:   ACCESS_TTL,
-      user: { id: rt.user_id, email: rt.email, displayName: rt.display_name },
+      user: { id: rt.user_id, email: rt.email, displayName: rt.display_name, role: rt.role || 'user', username: rt.username || null },
     })
   } catch (err) {
     console.error('[auth/refresh]', err.message)
@@ -516,17 +609,21 @@ router.get('/me', requireAuth, async (req, res) => {
   if (!DB_MODE) {
     const user = MEM.users.get(req.user.userId)
     if (!user) return res.status(404).json({ error: 'User not found' })
-    return res.json({ id: user.id, email: user.email, displayName: user.displayName, isVerified: user.isVerified })
+    return res.json({
+      id: user.id, email: user.email, displayName: user.displayName,
+      isVerified: user.isVerified, role: user.role || 'user', username: user.username || null,
+    })
   }
   try {
     const r = await query(
-      'SELECT id,email,display_name,avatar_url,is_verified,mfa_enabled FROM users WHERE id=$1',
+      'SELECT id,email,display_name,username,role,avatar_url,is_verified,mfa_enabled FROM users WHERE id=$1',
       [req.user.userId]
     )
     if (!r.rows[0]) return res.status(404).json({ error: 'User not found' })
     const u = r.rows[0]
     return res.json({
       id: u.id, email: u.email, displayName: u.display_name,
+      username: u.username, role: u.role || 'user',
       avatarUrl: u.avatar_url, isVerified: u.is_verified, mfaEnabled: u.mfa_enabled,
     })
   } catch (err) {
@@ -540,15 +637,18 @@ router.patch('/me', requireAuth, async (req, res) => {
   if (!DB_MODE) {
     const user = MEM.users.get(req.user.userId)
     if (user) user.displayName = displayName?.trim().slice(0, 100) || user.displayName
-    return res.json({ id: user?.id, email: user?.email, displayName: user?.displayName })
+    return res.json({
+      id: user?.id, email: user?.email, displayName: user?.displayName,
+      role: user?.role || 'user', username: user?.username || null,
+    })
   }
   try {
     const r = await query(
-      'UPDATE users SET display_name=$1 WHERE id=$2 RETURNING id,email,display_name',
+      'UPDATE users SET display_name=$1 WHERE id=$2 RETURNING id,email,display_name,username,role',
       [displayName?.trim().slice(0, 100), req.user.userId]
     )
     const u = r.rows[0]
-    return res.json({ id: u.id, email: u.email, displayName: u.display_name })
+    return res.json({ id: u.id, email: u.email, displayName: u.display_name, username: u.username, role: u.role })
   } catch { return res.status(500).json({ error: 'Update failed' }) }
 })
 

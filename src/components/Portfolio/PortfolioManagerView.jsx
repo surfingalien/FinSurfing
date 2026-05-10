@@ -6,9 +6,12 @@ import { useState } from 'react'
 import {
   Plus, Star, StarOff, Trash2, Pencil, Loader2,
   TrendingUp, Wallet, Shield, AlertTriangle,
+  Globe, Lock, Users, Share2, ChevronDown, ChevronUp,
 } from 'lucide-react'
 import { usePortfolioContext, PORTFOLIO_TYPE_ICONS, PORTFOLIO_TYPE_LABELS } from '../../contexts/PortfolioContext'
 import CreatePortfolioModal from './CreatePortfolioModal'
+import PortfolioVisibilityToggle from './PortfolioVisibilityToggle'
+import PortfolioShareModal from './PortfolioShareModal'
 
 function StatCard({ label, value, sub, accent = '#00ffcc' }) {
   return (
@@ -20,100 +23,171 @@ function StatCard({ label, value, sub, accent = '#00ffcc' }) {
   )
 }
 
+// Visibility badge shown on card
+const VIS_MAP = {
+  public:         { Icon: Globe,  label: 'Public',      color: '#00ffcc' },
+  followers_only: { Icon: Users,  label: 'Shared',      color: '#6366f1' },
+  private:        { Icon: Lock,   label: 'Private',     color: '#64748b' },
+}
+
 function PortfolioCard({ p, onEdit, onDelete, onSetDefault, isDeleting, isSettingDefault }) {
   const icon  = PORTFOLIO_TYPE_ICONS[p.type]  ?? '◉'
   const label = PORTFOLIO_TYPE_LABELS[p.type] ?? p.type
+  const vis   = VIS_MAP[p.visibility] || VIS_MAP.private
+
+  const [showSettings, setShowSettings] = useState(false)
+  const [showShare,    setShowShare]    = useState(false)
+  const [localPortfolio, setLocalPortfolio] = useState(p)
+
+  // Merge updated visibility/copy_trade back into local state
+  const handleVisUpdated = (patch) => {
+    setLocalPortfolio(prev => ({ ...prev, ...patch }))
+  }
 
   return (
-    <div
-      className="rounded-xl border p-4 transition-all"
-      style={{
-        background: p.is_default ? `${p.color}08` : 'rgba(255,255,255,0.02)',
-        borderColor: p.is_default ? `${p.color}40` : 'rgba(255,255,255,0.06)',
-      }}
-    >
-      <div className="flex items-start gap-3">
-        {/* Icon blob */}
-        <div
-          className="w-10 h-10 rounded-xl flex items-center justify-center text-xl shrink-0"
-          style={{ background: `${p.color}20` }}
-        >
-          {icon}
-        </div>
+    <>
+      <div
+        className="rounded-xl border transition-all"
+        style={{
+          background: localPortfolio.is_default ? `${localPortfolio.color}08` : 'rgba(255,255,255,0.02)',
+          borderColor: localPortfolio.is_default ? `${localPortfolio.color}40` : 'rgba(255,255,255,0.06)',
+        }}
+      >
+        {/* Card header */}
+        <div className="p-4">
+          <div className="flex items-start gap-3">
+            {/* Icon blob */}
+            <div
+              className="w-10 h-10 rounded-xl flex items-center justify-center text-xl shrink-0"
+              style={{ background: `${localPortfolio.color}20` }}
+            >
+              {icon}
+            </div>
 
-        {/* Info */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-semibold text-white text-sm truncate">{p.name}</span>
-            {p.is_default && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[#00ffcc]/15 text-[#00ffcc] font-medium">
-                default
+            {/* Info */}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-semibold text-white text-sm truncate">{localPortfolio.name}</span>
+                {localPortfolio.is_default && (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[#00ffcc]/15 text-[#00ffcc] font-medium">
+                    default
+                  </span>
+                )}
+                {/* Visibility badge */}
+                <span
+                  className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full font-medium"
+                  style={{
+                    color: vis.color,
+                    background: `${vis.color}15`,
+                    border: `1px solid ${vis.color}25`,
+                  }}
+                >
+                  <vis.Icon size={9} />
+                  {vis.label}
+                </span>
+              </div>
+              <div className="text-xs text-slate-500 mt-0.5">{label}{localPortfolio.custodian ? ` · ${localPortfolio.custodian}` : ''}</div>
+              {localPortfolio.description && (
+                <div className="text-xs text-slate-600 mt-1 line-clamp-1">{localPortfolio.description}</div>
+              )}
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center gap-1 shrink-0">
+              {/* Set default */}
+              <button
+                onClick={() => onSetDefault(localPortfolio.id)}
+                disabled={localPortfolio.is_default || isSettingDefault}
+                title={localPortfolio.is_default ? 'Default portfolio' : 'Set as default'}
+                className={`p-1.5 rounded-lg transition-colors
+                  ${localPortfolio.is_default
+                    ? 'text-[#00ffcc] cursor-default'
+                    : 'text-slate-600 hover:text-yellow-400 hover:bg-yellow-400/10'
+                  }`}
+              >
+                {isSettingDefault
+                  ? <Loader2 size={14} className="animate-spin" />
+                  : localPortfolio.is_default ? <Star size={14} fill="currentColor" /> : <StarOff size={14} />
+                }
+              </button>
+
+              {/* Share */}
+              <button
+                onClick={() => setShowShare(true)}
+                title="Share / manage access"
+                className="p-1.5 rounded-lg text-slate-600 hover:text-[#6366f1] hover:bg-[#6366f1]/10 transition-colors"
+              >
+                <Share2 size={14} />
+              </button>
+
+              {/* Edit */}
+              <button
+                onClick={() => onEdit(localPortfolio)}
+                title="Edit portfolio"
+                className="p-1.5 rounded-lg text-slate-600 hover:text-slate-300 hover:bg-white/5 transition-colors"
+              >
+                <Pencil size={14} />
+              </button>
+
+              {/* Delete */}
+              <button
+                onClick={() => onDelete(localPortfolio.id)}
+                disabled={localPortfolio.is_default || isDeleting}
+                title={localPortfolio.is_default ? 'Cannot delete default portfolio' : 'Archive portfolio'}
+                className={`p-1.5 rounded-lg transition-colors
+                  ${localPortfolio.is_default
+                    ? 'text-slate-700 cursor-not-allowed'
+                    : 'text-slate-600 hover:text-red-400 hover:bg-red-500/10'
+                  }`}
+              >
+                {isDeleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+              </button>
+            </div>
+          </div>
+
+          {/* Footer stats */}
+          <div className="mt-3 pt-3 border-t border-white/[0.05] flex gap-4 text-xs text-slate-500">
+            <span>
+              <span className="text-slate-400 font-medium">{localPortfolio.holdingCount ?? 0}</span> holdings
+            </span>
+            {localPortfolio.cashBalance > 0 && (
+              <span>
+                <span className="text-slate-400 font-medium">${localPortfolio.cashBalance.toLocaleString()}</span> cash
               </span>
             )}
+            <span className="ml-auto capitalize">{localPortfolio.tax_status?.replace('_', ' ') ?? '—'}</span>
+
+            {/* Toggle visibility panel */}
+            <button
+              onClick={() => setShowSettings(v => !v)}
+              className="flex items-center gap-1 text-slate-500 hover:text-slate-300 transition-colors ml-2"
+            >
+              <Globe size={11} />
+              <span>Visibility</span>
+              {showSettings ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
+            </button>
           </div>
-          <div className="text-xs text-slate-500 mt-0.5">{label}{p.custodian ? ` · ${p.custodian}` : ''}</div>
-          {p.description && (
-            <div className="text-xs text-slate-600 mt-1 line-clamp-1">{p.description}</div>
-          )}
         </div>
 
-        {/* Actions */}
-        <div className="flex items-center gap-1 shrink-0">
-          {/* Set default */}
-          <button
-            onClick={() => onSetDefault(p.id)}
-            disabled={p.is_default || isSettingDefault}
-            title={p.is_default ? 'Default portfolio' : 'Set as default'}
-            className={`p-1.5 rounded-lg transition-colors
-              ${p.is_default
-                ? 'text-[#00ffcc] cursor-default'
-                : 'text-slate-600 hover:text-yellow-400 hover:bg-yellow-400/10'
-              }`}
-          >
-            {isSettingDefault
-              ? <Loader2 size={14} className="animate-spin" />
-              : p.is_default ? <Star size={14} fill="currentColor" /> : <StarOff size={14} />
-            }
-          </button>
-
-          {/* Edit */}
-          <button
-            onClick={() => onEdit(p)}
-            title="Edit portfolio"
-            className="p-1.5 rounded-lg text-slate-600 hover:text-slate-300 hover:bg-white/5 transition-colors"
-          >
-            <Pencil size={14} />
-          </button>
-
-          {/* Delete */}
-          <button
-            onClick={() => onDelete(p.id)}
-            disabled={p.is_default || isDeleting}
-            title={p.is_default ? 'Cannot delete default portfolio' : 'Archive portfolio'}
-            className={`p-1.5 rounded-lg transition-colors
-              ${p.is_default
-                ? 'text-slate-700 cursor-not-allowed'
-                : 'text-slate-600 hover:text-red-400 hover:bg-red-500/10'
-              }`}
-          >
-            {isDeleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
-          </button>
-        </div>
-      </div>
-
-      {/* Footer stats */}
-      <div className="mt-3 pt-3 border-t border-white/[0.05] flex gap-4 text-xs text-slate-500">
-        <span>
-          <span className="text-slate-400 font-medium">{p.holdingCount ?? 0}</span> holdings
-        </span>
-        {p.cashBalance > 0 && (
-          <span>
-            <span className="text-slate-400 font-medium">${p.cashBalance.toLocaleString()}</span> cash
-          </span>
+        {/* Collapsible visibility panel */}
+        {showSettings && (
+          <div className="px-4 pb-4 pt-1 border-t border-white/[0.04]">
+            <PortfolioVisibilityToggle
+              portfolio={localPortfolio}
+              onUpdated={handleVisUpdated}
+            />
+          </div>
         )}
-        <span className="ml-auto capitalize">{p.tax_status?.replace('_', ' ') ?? '—'}</span>
       </div>
-    </div>
+
+      {/* Share modal */}
+      {showShare && (
+        <PortfolioShareModal
+          portfolio={localPortfolio}
+          onClose={() => setShowShare(false)}
+        />
+      )}
+    </>
   )
 }
 

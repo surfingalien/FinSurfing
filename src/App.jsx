@@ -8,6 +8,7 @@ import DashboardView from './components/Dashboard/DashboardView'
 import PortfolioView from './components/Portfolio/PortfolioView'
 import PortfolioManagerView from './components/Portfolio/PortfolioManagerView'
 import PortfolioSetupWizard from './components/Portfolio/PortfolioSetupWizard'
+import AdminDashboard from './components/Admin/AdminDashboard'
 import WatchlistView from './components/Watchlist/WatchlistView'
 import AnalysisView from './components/Analysis/AnalysisView'
 import AdvisoryView from './components/Recommendations/AdvisoryView'
@@ -168,6 +169,9 @@ function MainApp({ onSignIn }) {
         )}
         {activeTab === 'research' && (
           <AIAdvisoryView portfolio={portfolio} />
+        )}
+        {activeTab === 'admin' && (
+          <AdminDashboard />
         )}
       </main>
 
