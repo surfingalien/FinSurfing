@@ -10,6 +10,7 @@ const authRoutes      = require('./routes/auth')
 const portfolioRoutes = require('./routes/portfolios')
 const publicRoutes    = require('./routes/public')
 const adminRoutes     = require('./routes/admin')
+const agentRoutes     = require('./routes/agent')
 
 const { seedAdminDB } = require('./db/adminSeed')
 
@@ -123,6 +124,7 @@ app.use('/api/auth',       authRoutes)
 app.use('/api/portfolios', portfolioRoutes)
 app.use('/api/public',     publicLimit, publicRoutes)
 app.use('/api/admin',      adminRoutes)
+app.use('/api/agent',      agentRoutes)
 
 /* ── Safe fetch helpers ────────────────────────── */
 const YF1 = 'https://query1.finance.yahoo.com'

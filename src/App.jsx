@@ -16,7 +16,7 @@ import SimulationView from './components/MonteCarlo/SimulationView'
 import ScreenerView from './components/Screener/ScreenerView'
 import StrategiesView from './components/Strategies/StrategiesView'
 import AlertsView from './components/Alerts/AlertsView'
-import AIAdvisoryView from './components/Research/AIAdvisoryView'
+import StockAgentView from './components/Research/StockAgentView'
 import { usePortfolio } from './hooks/usePortfolio'
 import { useWatchlist } from './hooks/useWatchlist'
 import { useAlerts } from './hooks/useAlerts'
@@ -174,7 +174,7 @@ function MainApp({ onSignIn }) {
           />
         )}
         {activeTab === 'research' && (
-          <AIAdvisoryView portfolio={portfolio} />
+          <StockAgentView portfolio={portfolio} />
         )}
         {activeTab === 'admin' && (
           <AdminDashboard />
