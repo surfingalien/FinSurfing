@@ -4,6 +4,7 @@ import { PortfolioProvider, usePortfolioContext } from './contexts/PortfolioCont
 import LandingPage from './components/Landing/LandingPage'
 import AuthPage from './components/Auth/AuthPage'
 import Header from './components/Layout/Header'
+import Sidebar from './components/Layout/Sidebar'
 import DashboardView from './components/Dashboard/DashboardView'
 import PortfolioView from './components/Portfolio/PortfolioView'
 import PortfolioManagerView from './components/Portfolio/PortfolioManagerView'
@@ -92,6 +93,7 @@ function MainApp({ onSignIn }) {
   const [activeTab,     setActiveTab]     = useState('dashboard')
   const [analyzeSymbol, setAnalyzeSymbol] = useState('AAPL')
   const [wizardDone,    setWizardDone]    = useState(false)
+  const [mobileNav,     setMobileNav]     = useState(false)
 
   // When authenticated: fetch holdings from API, keyed to the active portfolio.
   // When guest: fall back to localStorage namespaced by userId.
@@ -129,64 +131,76 @@ function MainApp({ onSignIn }) {
   }
 
   return (
-    <div className="min-h-screen flex flex-col">
-      <Header
+    <div className="flex h-screen overflow-hidden" style={{ background: '#060810' }}>
+      {/* ── Sidebar ── */}
+      <Sidebar
         activeTab={activeTab}
         onTabChange={setActiveTab}
         triggeredCount={alertsHook.triggered.length}
         onSignIn={onSignIn}
+        mobileOpen={mobileNav}
+        onMobileClose={() => setMobileNav(false)}
       />
 
-      <main className="flex-1 max-w-screen-2xl mx-auto w-full px-4 py-6">
-        {activeTab === 'dashboard' && (
-          <DashboardView portfolio={portfolio} onAnalyze={navigateToAnalyze} />
-        )}
-        {activeTab === 'portfolio' && (
-          <PortfolioView portfolio={portfolio} />
-        )}
-        {activeTab === 'portfolios' && (
-          <PortfolioManagerView />
-        )}
-        {activeTab === 'watchlist' && (
-          <WatchlistView watchlist={watchlist} onAnalyze={sym => navigateTo('analyze', sym)} />
-        )}
-        {activeTab === 'analyze' && (
-          <AnalysisView defaultSymbol={analyzeSymbol} />
-        )}
-        {activeTab === 'recommendations' && (
-          <AdvisoryView portfolio={portfolio} />
-        )}
-        {activeTab === 'montecarlo' && (
-          <SimulationView portfolio={portfolio} />
-        )}
-        {activeTab === 'screener' && (
-          <ScreenerView onSelectSymbol={sym => navigateTo('analyze', sym)} />
-        )}
-        {activeTab === 'strategies' && (
-          <StrategiesView onAnalyze={sym => navigateTo('analyze', sym)} />
-        )}
-        {activeTab === 'alerts' && (
-          <AlertsView
-            alerts={alertsHook}
-            quotesMap={quotesMap}
-            portfolioSymbols={portfolio.positions.map(p => p.symbol)}
-            watchlistSymbols={watchlist.symbols}
-          />
-        )}
-        {activeTab === 'research' && (
-          <StockAgentView portfolio={portfolio} />
-        )}
-        {activeTab === 'admin' && (
-          <AdminDashboard />
-        )}
-      </main>
+      {/* ── Right column: top-bar + scrollable content ── */}
+      <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
+        {/* Slim top bar (ticker + hamburger) */}
+        <Header onMobileMenuOpen={() => setMobileNav(true)} />
 
-      <footer className="border-t border-white/[0.04] py-4 px-6">
-        <div className="max-w-screen-2xl mx-auto flex items-center justify-between text-xs text-slate-600">
-          <span>FinSurf v2.0 · Real-time US Equity Platform</span>
-          <span>Data via Yahoo Finance · Not financial advice</span>
-        </div>
-      </footer>
+        {/* Scrollable main content */}
+        <main className="flex-1 overflow-y-auto">
+          <div className="max-w-screen-2xl mx-auto w-full px-4 py-6">
+            {activeTab === 'dashboard' && (
+              <DashboardView portfolio={portfolio} onAnalyze={navigateToAnalyze} />
+            )}
+            {activeTab === 'portfolio' && (
+              <PortfolioView portfolio={portfolio} />
+            )}
+            {activeTab === 'portfolios' && (
+              <PortfolioManagerView />
+            )}
+            {activeTab === 'watchlist' && (
+              <WatchlistView watchlist={watchlist} onAnalyze={sym => navigateTo('analyze', sym)} />
+            )}
+            {activeTab === 'analyze' && (
+              <AnalysisView defaultSymbol={analyzeSymbol} />
+            )}
+            {activeTab === 'recommendations' && (
+              <AdvisoryView portfolio={portfolio} />
+            )}
+            {activeTab === 'montecarlo' && (
+              <SimulationView portfolio={portfolio} />
+            )}
+            {activeTab === 'screener' && (
+              <ScreenerView onSelectSymbol={sym => navigateTo('analyze', sym)} />
+            )}
+            {activeTab === 'strategies' && (
+              <StrategiesView onAnalyze={sym => navigateTo('analyze', sym)} />
+            )}
+            {activeTab === 'alerts' && (
+              <AlertsView
+                alerts={alertsHook}
+                quotesMap={quotesMap}
+                portfolioSymbols={portfolio.positions.map(p => p.symbol)}
+                watchlistSymbols={watchlist.symbols}
+              />
+            )}
+            {activeTab === 'research' && (
+              <StockAgentView portfolio={portfolio} />
+            )}
+            {activeTab === 'admin' && (
+              <AdminDashboard />
+            )}
+          </div>
+
+          <footer className="border-t border-white/[0.04] py-4 px-6">
+            <div className="max-w-screen-2xl mx-auto flex items-center justify-between text-xs text-slate-600">
+              <span>FinSurf v2.0 · Real-time US Equity Platform</span>
+              <span>Data via Yahoo Finance · Not financial advice</span>
+            </div>
+          </footer>
+        </main>
+      </div>
     </div>
   )
 }
