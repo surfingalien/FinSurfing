@@ -208,7 +208,16 @@ export function usePortfolio({ userId, activePortfolioId, authFetch } = {}) {
     const mktValue   = price !== null ? price * pos.shares : null
     const gainLoss   = mktValue !== null ? mktValue - costBasis : null
     const gainLossPct= gainLoss !== null && costBasis > 0 ? (gainLoss / costBasis) * 100 : null
-    const todayGL    = q?.change != null ? q.change * pos.shares : null
+
+    // ── Today's P/L: always anchored to prevClose, not q.change.
+    // q.change (regularMarketChange) can carry yesterday's value overnight
+    // or between midnight and pre-market, causing the "no reset" bug.
+    // Computing (price - prevClose) × shares guarantees a fresh daily baseline.
+    const prevClose  = q?.prevClose ?? null
+    const todayGL    = price !== null && prevClose !== null
+      ? (price - prevClose) * pos.shares
+      : q?.change != null ? q.change * pos.shares : null   // graceful fallback
+
     return { ...pos, ...q, price, costBasis, mktValue, gainLoss, gainLossPct, todayGL }
   })
 

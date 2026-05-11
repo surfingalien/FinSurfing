@@ -101,15 +101,29 @@ function formatInline(text) {
 
 // ── Tool call indicator ───────────────────────────────────────────────────────
 
+const TOOL_META = {
+  get_technical_analysis: { icon: '📊', label: 'Technical Analysis', color: 'mint' },
+  get_fundamentals:       { icon: '📋', label: 'Fundamentals + Sentiment', color: 'indigo' },
+  compare_stocks:         { icon: '⚖️', label: 'Stock Comparison', color: 'amber' },
+}
+
 function ToolCallBadge({ name, input, done }) {
+  const meta = TOOL_META[name] || { icon: '🔧', label: name, color: 'mint' }
+  const sym  = input?.symbol || (input?.symbols ? input.symbols.join(', ') : '')
+
+  const colorDone = meta.color === 'indigo' ? 'bg-indigo-500/5 border-indigo-500/20 text-indigo-300'
+    : meta.color === 'amber' ? 'bg-amber-500/5 border-amber-500/20 text-amber-300'
+    : 'bg-emerald-500/5 border-emerald-500/20 text-emerald-400'
+  const colorPending = meta.color === 'indigo' ? 'bg-indigo-500/5 border-indigo-500/20 text-indigo-400'
+    : meta.color === 'amber' ? 'bg-amber-500/5 border-amber-500/20 text-amber-400'
+    : 'bg-mint-500/5 border-mint-500/20 text-mint-400'
+
   return (
     <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-mono border
-      ${done
-        ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-400'
-        : 'bg-mint-500/5 border-mint-500/20 text-mint-400'}`}>
+      ${done ? colorDone : colorPending}`}>
       {done
-        ? <><BarChart2 className="w-3 h-3 shrink-0" /> Data fetched: <strong>{input?.symbol}</strong></>
-        : <><RefreshCw className="w-3 h-3 animate-spin shrink-0" /> Fetching {input?.symbol} data…</>
+        ? <><BarChart2 className="w-3 h-3 shrink-0" /> {meta.icon} {meta.label}{sym ? `: ${sym}` : ''} ✓</>
+        : <><RefreshCw className="w-3 h-3 animate-spin shrink-0" /> {meta.icon} Running {meta.label}{sym ? ` for ${sym}` : ''}…</>
       }
     </div>
   )
@@ -170,14 +184,14 @@ function MessageBubble({ msg }) {
 // ── Quick prompts ─────────────────────────────────────────────────────────────
 
 const QUICK_PROMPTS = [
-  { icon: '📊', label: 'Technical Analysis',    prompt: 'Give me a full technical analysis for {sym} including RSI, MACD, Bollinger Bands, and key support/resistance levels.' },
-  { icon: '📈', label: 'Trade Setup',           prompt: 'What is the current trade setup for {sym}? Include entry, target price, and stop loss with risk/reward ratio.' },
-  { icon: '🔍', label: 'Trend Check',           prompt: 'Analyze the trend for {sym}. Is it in an uptrend or downtrend? What are the key moving averages saying?' },
-  { icon: '⚡', label: 'Quick Scan',            prompt: 'Quick scan of {sym}: what is the overall signal (buy/sell/hold) and why?' },
-  { icon: '📉', label: 'Support & Resistance',  prompt: 'Identify the key support and resistance levels for {sym} and explain their significance.' },
-  { icon: '🎯', label: 'Volume Analysis',       prompt: 'Analyze the volume profile for {sym}. Is current volume confirming the price action?' },
-  { icon: '⚠️', label: 'Risk Assessment',      prompt: 'What are the main technical risks for a long position in {sym} right now?' },
-  { icon: '🔄', label: 'Compare Two Stocks',   prompt: 'Compare {sym} vs SPY technically. Which is showing more relative strength?' },
+  { icon: '📊', label: 'Full Analysis',         prompt: 'Give me a complete multi-specialist analysis for {sym}: technical, fundamental, sentiment, and a trade hypothesis with entry/target/stop.' },
+  { icon: '📈', label: 'Trade Setup',           prompt: 'What is the current trade setup for {sym}? Include entry zone, target price, stop loss, and ATR-based risk/reward.' },
+  { icon: '💼', label: 'Fundamental Deep Dive', prompt: 'Run a fundamental analysis on {sym}: valuation vs peers, margin trends, earnings quality, and DCF fair value vs current price.' },
+  { icon: '📰', label: 'News & Sentiment',      prompt: 'What is the current news sentiment and insider activity for {sym}? Are there any catalysts or red flags?' },
+  { icon: '⚡', label: 'Quick Signal',          prompt: 'Quick signal for {sym}: overall bias (bullish/bearish/neutral), key RSI and MACD readings, and the most important level to watch.' },
+  { icon: '📉', label: 'Support & Resistance',  prompt: 'Identify and explain the key support and resistance levels for {sym} using the technical analysis tool.' },
+  { icon: '⚖️', label: 'Compare vs Sector',    prompt: 'Compare {sym} vs SPY and QQQ on relative strength, trend alignment, and RSI momentum.' },
+  { icon: '⚠️', label: 'Risk Assessment',      prompt: 'Assess the key risks for a long position in {sym} right now — technical, fundamental, and macro.' },
 ]
 
 // ── No API key banner ─────────────────────────────────────────────────────────
@@ -209,17 +223,17 @@ export default function StockAgentView({ portfolio }) {
   const [symbol,     setSymbol]     = useState('')
   const [streaming,  setStreaming]  = useState(false)
   const [hasKey,     setHasKey]     = useState(null)      // null = unknown, true/false
+  const [agentCaps,  setAgentCaps]  = useState({})        // { hasFMP, hasAV }
   const [error,      setError]      = useState(null)
 
   const bottomRef  = useRef(null)
   const inputRef   = useRef(null)
-  const abortRef   = useRef(null)
 
-  // Check API key on mount
+  // Check API key + data-source availability on mount
   useEffect(() => {
     fetch('/api/agent/health')
       .then(r => r.json())
-      .then(d => setHasKey(d.hasKey))
+      .then(d => { setHasKey(d.hasKey); setAgentCaps({ hasFMP: d.hasFMP, hasAV: d.hasAV }) })
       .catch(() => setHasKey(false))
   }, [])
 
@@ -410,7 +424,15 @@ I'm your real-time stock analyst powered by Claude. I can:
           </button>
         ))}
         <div className="ml-auto flex items-center gap-2 pr-1 pb-0.5">
-          <span className="text-[10px] text-slate-600 font-mono">claude-opus-4-7 · adaptive thinking</span>
+          {/* Data source badges */}
+          <span className="text-[10px] text-slate-600 font-mono">Yahoo ✓</span>
+          <span className={`text-[10px] font-mono ${agentCaps.hasFMP ? 'text-emerald-500' : 'text-slate-700'}`}>
+            FMP {agentCaps.hasFMP ? '✓' : '○'}
+          </span>
+          <span className={`text-[10px] font-mono ${agentCaps.hasAV ? 'text-emerald-500' : 'text-slate-700'}`}>
+            AV {agentCaps.hasAV ? '✓' : '○'}
+          </span>
+          <span className="text-[10px] text-slate-700 font-mono border-l border-white/[0.06] pl-2">claude-opus-4-7</span>
         </div>
       </div>
 

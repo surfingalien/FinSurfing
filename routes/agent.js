@@ -1,15 +1,22 @@
 /**
  * routes/agent.js
  *
- * Stock Analyst Agent — uses Claude claude-opus-4-7 with tool_use to fetch live
- * data and compute technical indicators, then produces structured research briefings.
+ * Multi-Specialist Stock Analyst Agent
+ * ─────────────────────────────────────
+ * Inspired by TradingAgents (Tauri Research) multi-agent pattern:
+ *   • Technical Analyst  — OHLCV + RSI/MACD/BB/SMA/ATR from Yahoo Finance
+ *   • Fundamental Analyst — P/E, margins, growth, DCF from FMP
+ *   • Sentiment Analyst  — News sentiment from Alpha Vantage + FMP
+ *   • Insider Tracker    — Insider buy/sell from FMP
+ *   • Risk Manager       — Claude synthesises all reports into a trade plan
  *
- * POST /api/agent/analyze
- *   Body: { symbol?, prompt, history? }
- *   Streams: newline-delimited JSON events (SSE-style)
+ * Data sources (each optional — degrades gracefully):
+ *   Yahoo Finance  → always available (our existing /api/chart proxy)
+ *   Alpha Vantage  → ALPHA_VANTAGE_API_KEY env var
+ *   FMP            → FMP_API_KEY env var
  *
- * GET  /api/agent/health
- *   Returns { ok, hasKey }
+ * POST /api/agent/analyze   — SSE streaming chat
+ * GET  /api/agent/health    — key status check
  */
 
 'use strict'
@@ -17,90 +24,121 @@
 const express  = require('express')
 const router   = express.Router()
 const { computeAll } = require('../utils/technicals')
+const { fetchAllFundamentals } = require('../utils/dataProviders')
 
-// ── Lazy-load Anthropic (requires ANTHROPIC_API_KEY at runtime) ───────────────
+// ── Lazy-load Anthropic SDK ───────────────────────────────────────────────────
 let _client = null
 function getClient() {
   if (_client) return _client
-  if (!process.env.ANTHROPIC_API_KEY) {
-    throw new Error('ANTHROPIC_API_KEY environment variable is not set')
-  }
+  if (!process.env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY is not set')
   const Anthropic = require('@anthropic-ai/sdk')
   _client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
   return _client
 }
 
-// ── Tool: get_stock_data ──────────────────────────────────────────────────────
+// ── Tool definitions ──────────────────────────────────────────────────────────
 
-const TOOL_DEF = {
-  name: 'get_stock_data',
-  description: `Fetches live stock price, OHLCV history, and computes all technical indicators for a symbol.
-Returns: current price, RSI(14), MACD(12,26,9), Bollinger Bands(20,2), SMA50, SMA200, ATR(14),
-support/resistance levels, volume analysis, and price action metrics.
-Use this whenever you need actual market data or indicator values for any ticker symbol.`,
-  input_schema: {
-    type: 'object',
-    properties: {
-      symbol: {
-        type: 'string',
-        description: 'Stock ticker symbol (e.g. AAPL, TSLA, NVDA)',
+const TOOLS = [
+  {
+    name: 'get_technical_analysis',
+    description: `TECHNICAL ANALYST role.
+Fetches OHLCV price history and computes all technical indicators server-side:
+• RSI(14) with overbought/oversold signal
+• MACD(12,26,9) — macd line, signal line, histogram, trend label
+• Bollinger Bands(20,2) — upper/middle/lower, %B, bandwidth, squeeze signal
+• SMA50, SMA200, EMA20 — with golden/death cross zone detection
+• ATR(14) — average true range for stop sizing
+• Support & Resistance — nearest levels above/below from pivot analysis
+• Volume analysis — relative volume vs 20-day average, trend
+• Price action — trend direction, candle body ratio, short/long trend
+
+Data source: Yahoo Finance OHLCV (always available).
+Use this first for any technical or price-action question.`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        symbol: { type: 'string', description: 'Stock ticker, e.g. AAPL' },
+        range:  { type: 'string', enum: ['3mo','6mo','1y','2y'], description: 'History range (default 1y; use 2y for SMA200)' },
       },
-      range: {
-        type: 'string',
-        enum: ['3mo', '6mo', '1y', '2y'],
-        description: 'Historical data range (default: 1y). Use 2y for SMA200.',
-      },
+      required: ['symbol'],
     },
-    required: ['symbol'],
   },
-}
+  {
+    name: 'get_fundamentals',
+    description: `FUNDAMENTAL ANALYST + SENTIMENT ANALYST + INSIDER TRACKER roles combined.
+Fetches from FMP (Financial Modeling Prep) and Alpha Vantage:
+• Company profile, sector, employees, CEO
+• Valuation: P/E, P/B, P/S, EV/EBITDA, DCF fair value vs current price
+• Profitability: gross/operating/net margins, ROE, ROIC
+• Growth: revenue & net income year-over-year
+• Debt: D/E ratio, current ratio, interest coverage
+• Dividends: yield, last dividend amount
+• Last 4 quarters of earnings trend (revenue, net income, EPS)
+• Analyst revenue & EPS estimates for next quarter
+• Peer companies list
+• Last 10 insider transactions (buys vs sells) with insider sentiment
+• Last 8–10 news articles with sentiment scoring (bullish/bearish/neutral)
 
-// ── Fetch OHLCV from local proxy ──────────────────────────────────────────────
+Requires FMP_API_KEY and/or ALPHA_VANTAGE_API_KEY env vars (degrades gracefully if absent).
+Use for value/growth analysis, earnings context, and news sentiment.`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        symbol: { type: 'string', description: 'Stock ticker, e.g. MSFT' },
+      },
+      required: ['symbol'],
+    },
+  },
+  {
+    name: 'compare_stocks',
+    description: `Compare 2–4 stocks side-by-side: fetch technical analysis for each and return all results.
+Use for relative strength, sector rotation, or head-to-head comparison questions.`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        symbols: {
+          type: 'array',
+          items: { type: 'string' },
+          minItems: 2,
+          maxItems: 4,
+          description: 'Array of 2–4 ticker symbols',
+        },
+        range: { type: 'string', enum: ['3mo','6mo','1y'], description: 'History range (default 1y)' },
+      },
+      required: ['symbols'],
+    },
+  },
+]
+
+// ── Yahoo Finance OHLCV fetch ─────────────────────────────────────────────────
 
 async function fetchOHLCV(symbol, range = '1y') {
-  // Build internal URL pointing to our own server
-  const port = process.env.PORT || 3001
-  const baseUrl = process.env.INTERNAL_BASE_URL || `http://localhost:${port}`
-  const url = `${baseUrl}/api/chart?symbol=${encodeURIComponent(symbol)}&interval=1d&range=${range}`
+  const port    = process.env.PORT || 3001
+  const base    = process.env.INTERNAL_BASE_URL || `http://localhost:${port}`
+  const url     = `${base}/api/chart?symbol=${encodeURIComponent(symbol)}&interval=1d&range=${range}`
+  const res     = await fetch(url, { signal: AbortSignal.timeout(15000) })
+  const data    = await res.json()
+  const result  = data?.chart?.result?.[0]
+  if (!result) throw new Error(`No chart data for ${symbol}`)
 
-  const res  = await fetch(url, { signal: AbortSignal.timeout(15000) })
-  const data = await res.json()
+  const ts        = result.timestamp || []
+  const q         = result.indicators?.quote?.[0] || {}
+  const adjClose  = result.indicators?.adjclose?.[0]?.adjclose
 
-  const result    = data?.chart?.result?.[0]
-  if (!result) throw new Error(`No chart data returned for ${symbol}`)
-
-  const timestamps = result.timestamp || []
-  const quotes     = result.indicators?.quote?.[0] || {}
-  const adjClose   = result.indicators?.adjclose?.[0]?.adjclose
-
-  const opens   = quotes.open   || []
-  const highs   = quotes.high   || []
-  const lows    = quotes.low    || []
-  const closes  = adjClose || quotes.close || []
-  const volumes = quotes.volume || []
-
-  // Filter nulls (market holidays)
-  const valid = timestamps.reduce((acc, t, i) => {
-    if (closes[i] != null) {
-      acc.ts.push(t)
-      acc.o.push(opens[i]   || closes[i])
-      acc.h.push(highs[i]   || closes[i])
-      acc.l.push(lows[i]    || closes[i])
-      acc.c.push(closes[i])
-      acc.v.push(volumes[i] || 0)
+  const valid = ts.reduce((acc, t, i) => {
+    const c = (adjClose || q.close)?.[i]
+    if (c != null) {
+      acc.ts.push(t); acc.o.push(q.open?.[i] || c); acc.h.push(q.high?.[i] || c)
+      acc.l.push(q.low?.[i] || c); acc.c.push(c); acc.v.push(q.volume?.[i] || 0)
     }
     return acc
   }, { ts: [], o: [], h: [], l: [], c: [], v: [] })
 
   return {
-    symbol:     result.meta?.symbol || symbol,
-    currency:   result.meta?.currency || 'USD',
+    symbol:   result.meta?.symbol || symbol,
+    currency: result.meta?.currency || 'USD',
     timestamps: valid.ts,
-    opens:      valid.o,
-    highs:      valid.h,
-    lows:       valid.l,
-    closes:     valid.c,
-    volumes:    valid.v,
+    opens: valid.o, highs: valid.h, lows: valid.l, closes: valid.c, volumes: valid.v,
     meta: {
       regularMarketPrice: result.meta?.regularMarketPrice,
       previousClose:      result.meta?.chartPreviousClose || result.meta?.previousClose,
@@ -110,245 +148,267 @@ async function fetchOHLCV(symbol, range = '1y') {
   }
 }
 
-// ── Execute tool call ─────────────────────────────────────────────────────────
+// ── Tool executors ────────────────────────────────────────────────────────────
 
-async function executeGetStockData({ symbol, range = '1y' }) {
+async function executeTechnicalAnalysis({ symbol, range = '1y' }) {
   const ticker = symbol.toUpperCase().trim()
+  const ohlcv  = await fetchOHLCV(ticker, range)
+  const ta     = computeAll({ opens: ohlcv.opens, highs: ohlcv.highs, lows: ohlcv.lows, closes: ohlcv.closes, volumes: ohlcv.volumes })
 
-  // Expand range for SMA200 if needed
-  const effectiveRange = range === '2y' ? '2y' : '1y'
+  const p   = ta.priceAction
+  const ind = ta.indicators
 
-  const ohlcv = await fetchOHLCV(ticker, effectiveRange)
-  const technicals = computeAll({
-    opens:   ohlcv.opens,
-    highs:   ohlcv.highs,
-    lows:    ohlcv.lows,
-    closes:  ohlcv.closes,
-    volumes: ohlcv.volumes,
-  })
-
-  // Build human-readable summary alongside structured data
-  const p = technicals.priceAction
-  const ind = technicals.indicators
-  const sr  = technicals.supportResistance
-  const vol = technicals.volume
+  // Build plain-English interpretation for Claude to use in its report
+  const interpretation = []
+  if (ind?.rsi?.value != null) {
+    interpretation.push(`RSI(14) = ${ind.rsi.value} → ${ind.rsi.signal}`)
+  }
+  if (ind?.macd?.macdLine != null) {
+    interpretation.push(`MACD histogram ${ind.macd.histogram > 0 ? 'positive' : 'negative'} (${ind.macd.histogram}) → ${ind.macd.trend}`)
+  }
+  if (ind?.bb?.percentB != null) {
+    interpretation.push(`Price at ${ind.bb.percentB}% of Bollinger Band width (${ind.bb.signal})`)
+  }
+  if (ta.maSignals?.length) {
+    interpretation.push(`Moving averages: ${ta.maSignals.join(', ')}`)
+  }
+  if (ind?.sma50 && p?.price) {
+    const pct = ((p.price - ind.sma50) / ind.sma50 * 100).toFixed(1)
+    interpretation.push(`Price ${pct > 0 ? '+' : ''}${pct}% vs SMA50`)
+  }
+  if (ind?.sma200 && p?.price) {
+    const pct = ((p.price - ind.sma200) / ind.sma200 * 100).toFixed(1)
+    interpretation.push(`Price ${pct > 0 ? '+' : ''}${pct}% vs SMA200`)
+  }
 
   return {
     symbol: ticker,
     timestamp: new Date().toISOString(),
     quote: {
-      price:        p?.price ?? ohlcv.meta.regularMarketPrice,
-      change:       p?.dayChange,
-      changePct:    p?.dayChangePct,
-      open:         p?.open,
-      high:         p?.high,
-      low:          p?.low,
-      prevClose:    ohlcv.meta.previousClose,
+      price:     p?.price ?? ohlcv.meta.regularMarketPrice,
+      change:    p?.dayChange,
+      changePct: p?.dayChangePct,
+      open: p?.open, high: p?.high, low: p?.low,
+      prevClose: ohlcv.meta.previousClose,
     },
-    technicals: {
-      rsi:          ind?.rsi,
-      macd:         ind?.macd,
+    indicators: {
+      rsi:  ind?.rsi,
+      macd: ind?.macd,
       bollingerBands: ind?.bb,
-      sma50:        ind?.sma50,
-      sma200:       ind?.sma200,
-      ema20:        ind?.ema20,
-      atr:          ind?.atr,
-      maSignals:    technicals?.maSignals,
+      sma50: ind?.sma50, sma200: ind?.sma200, ema20: ind?.ema20,
+      atr:  ind?.atr,
+      maSignals: ta.maSignals,
     },
-    supportResistance: sr,
-    volume:        vol,
-    priceAction:   p,
-    dataPoints:    technicals.dataPoints,
-    meta: {
-      exchange:        ohlcv.meta.exchange,
-      instrumentType:  ohlcv.meta.instrumentType,
-      rangeUsed:       effectiveRange,
-    },
+    supportResistance: ta.supportResistance,
+    volume:      ta.volume,
+    priceAction: p,
+    interpretation,
+    dataPoints:  ta.dataPoints,
+    source:      'yahoo_finance',
   }
 }
 
-// ── System prompt ─────────────────────────────────────────────────────────────
+async function executeGetFundamentals({ symbol }) {
+  return fetchAllFundamentals(symbol.toUpperCase().trim())
+}
 
-const SYSTEM_PROMPT = `You are FinSurf AI, an expert stock analyst and trader with deep expertise in:
-- Technical analysis (RSI, MACD, Bollinger Bands, moving averages, support/resistance)
-- Price action and candlestick patterns
-- Volume analysis and market microstructure
-- Risk management and position sizing
-- Options flow and market sentiment
-- Sector rotation and macro context
+async function executeCompareStocks({ symbols, range = '1y' }) {
+  const results = await Promise.all(
+    symbols.map(async s => {
+      try { return await executeTechnicalAnalysis({ symbol: s, range }) }
+      catch (e) { return { symbol: s.toUpperCase(), error: e.message } }
+    })
+  )
 
-When a user asks about a stock, ALWAYS call get_stock_data first to fetch live data before analysis.
-Never make up prices or indicator values — use the tool.
+  // Build comparison matrix
+  const validResults = results.filter(r => !r.error)
+  const comparison = {
+    symbols: symbols.map(s => s.toUpperCase()),
+    bySymbol: Object.fromEntries(results.map(r => [r.symbol, r])),
+    relativeStrength: validResults
+      .map(r => ({
+        symbol: r.symbol,
+        changePct:     r.quote?.changePct,
+        rsi:           r.indicators?.rsi?.value,
+        macdTrend:     r.indicators?.macd?.trend,
+        aboveSMA200:   r.indicators?.maSignals?.includes('above_sma200'),
+        goldenCross:   r.indicators?.maSignals?.includes('golden_cross_zone'),
+        relVol:        r.volume?.relativeVolume,
+      }))
+      .sort((a, b) => (b.changePct || 0) - (a.changePct || 0)),
+  }
 
-Structure your responses as clear, actionable research briefings:
+  return { timestamp: new Date().toISOString(), comparison }
+}
 
-**Executive Summary** — 2-3 sentence bottom line (bullish/bearish/neutral + key reason)
-**Price Action** — current price context, trend, key levels
-**Indicator Breakdown** — RSI reading and signal, MACD trend, Bollinger Band position
-**Moving Averages** — position vs SMA50/200, golden/death cross status
-**Support & Resistance** — nearest levels above and below with significance
-**Volume** — current vs average, any unusual activity
-**Trade Hypothesis** — entry zone, target(s), stop loss, risk/reward ratio
-**Risk Factors** — 2-3 specific risks to the thesis
+// ── System prompt (multi-specialist TradingAgents pattern) ────────────────────
 
-Keep analysis concise but complete. Use bullet points within sections.
-For screening or comparison tasks, use multiple get_stock_data calls.
-Always disclose: "Not financial advice. Do your own research."`
+const SYSTEM_PROMPT = `You are FinSurf AI — a multi-specialist stock analyst team embodied in one model.
+You have access to three tools and adopt different analyst personas depending on which tool results you're interpreting:
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔬 TECHNICAL ANALYST (get_technical_analysis)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Focus: price action, trend, momentum, chart structure.
+- Interpret RSI, MACD histogram, Bollinger Band position precisely
+- Identify trend using SMA50/200 alignment and price location
+- Quote ATR for stop-loss sizing (e.g. "1.5× ATR = $X stop from entry")
+- Identify the nearest support and resistance levels with significance
+- Comment on volume confirmation or divergence
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📊 FUNDAMENTAL ANALYST (get_fundamentals)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Focus: valuation, profitability, growth, balance sheet.
+- Compare P/E, EV/EBITDA, P/B vs sector norms
+- Flag DCF discount/premium to current price
+- Highlight margin trends (expanding/contracting)
+- Note debt risk (D/E > 2× is elevated; interest coverage < 3× is risky)
+- Summarise analyst estimate vs recent earnings trend
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📰 SENTIMENT ANALYST (get_fundamentals — news/insider data)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Focus: news flow, insider activity, market narrative.
+- Summarise bullish vs bearish article ratio with key headlines
+- Flag insider buys > sells (bullish signal) or sells > buys (bearish)
+- Note sentiment divergence from price (e.g. bearish news but stock rising = strength)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⚖️ RISK MANAGER (final synthesis after all tool results)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+After gathering all analyst reports, always produce a structured briefing:
+
+**Executive Summary** — 2-3 sentences: overall signal (Bullish/Bearish/Neutral), conviction level, and the single most important factor.
+
+**Technical Picture** — trend, key levels, indicator signals in bullets
+
+**Fundamental Context** — valuation verdict, growth quality, any red flags
+
+**Sentiment & Catalysts** — news tone, insider activity, upcoming events
+
+**Trade Hypothesis**
+- Bias: [Bullish / Bearish / Neutral]
+- Entry zone: $X – $Y
+- Target 1: $Z (R/R: X:1)  |  Target 2: $W
+- Stop loss: $V (based on ATR or key support)
+- Risk/Reward: X:1
+
+**Key Risks** — 3 bullet points of specific risks to the thesis
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+RULES:
+- ALWAYS call get_technical_analysis before forming any view on a stock
+- For value/growth questions, ALSO call get_fundamentals
+- For comparisons, call compare_stocks (it fetches all symbols at once)
+- Never guess prices or indicator values — use the tools
+- If a data source is unavailable, note it clearly and work with what you have
+- End every analysis with: "⚠️ Not financial advice — do your own research."
+
+Current data sources: Yahoo Finance (always) · FMP · Alpha Vantage`
 
 // ── POST /api/agent/analyze ───────────────────────────────────────────────────
 
 router.post('/analyze', async (req, res) => {
   const { prompt, symbol, history = [] } = req.body || {}
+  if (!prompt) return res.status(400).json({ error: 'prompt is required' })
 
-  if (!prompt) {
-    return res.status(400).json({ error: 'prompt is required' })
-  }
-
-  // Check API key
   let client
-  try {
-    client = getClient()
-  } catch (err) {
-    return res.status(503).json({ error: err.message, code: 'NO_API_KEY' })
-  }
+  try { client = getClient() }
+  catch (err) { return res.status(503).json({ error: err.message, code: 'NO_API_KEY' }) }
 
-  // ── Set up SSE streaming ──
+  // SSE headers
   res.setHeader('Content-Type', 'text/event-stream; charset=utf-8')
   res.setHeader('Cache-Control', 'no-cache')
   res.setHeader('X-Accel-Buffering', 'no')
 
-  function send(event, data) {
-    res.write(`data: ${JSON.stringify({ event, ...data })}\n\n`)
-  }
+  const send = (event, data) => res.write(`data: ${JSON.stringify({ event, ...data })}\n\n`)
 
-  function sendError(msg) {
-    send('error', { message: msg })
-    res.end()
-  }
+  const userContent = symbol ? `Analyze ${symbol.toUpperCase()}. ${prompt}` : prompt
 
-  // Build initial user message
-  const userContent = symbol
-    ? `Analyze ${symbol.toUpperCase()}. ${prompt}`
-    : prompt
-
-  // Reconstruct message history (only user/assistant turns)
   const messages = [
-    ...history.slice(-10).map(m => ({
-      role:    m.role,
-      content: m.content,
-    })),
+    ...history.slice(-10).map(m => ({ role: m.role, content: m.content })),
     { role: 'user', content: userContent },
   ]
 
-  // ── Agentic tool-use loop ──
   let iteration = 0
-  const MAX_ITERATIONS = 5
+  const MAX_ITERATIONS = 6
 
   try {
     while (iteration < MAX_ITERATIONS) {
       iteration++
 
-      const streamParams = {
-        model:      'claude-opus-4-7',
+      const stream = client.messages.stream({
+        model:    'claude-opus-4-7',
         max_tokens: 8192,
-        thinking:   { type: 'adaptive' },
-        system:     SYSTEM_PROMPT,
-        tools:      [TOOL_DEF],
+        thinking: { type: 'adaptive' },
+        system:   SYSTEM_PROMPT,
+        tools:    TOOLS,
         messages,
-      }
-
-      // Stream the response
-      const stream  = client.messages.stream(streamParams)
-      let   fullText = ''
-      let   toolUseBlocks = []
-
-      // Forward text deltas as they arrive
-      stream.on('text', (text) => {
-        fullText += text
-        send('delta', { text })
       })
 
-      // Notify when tool is being called
-      stream.on('message', () => {}) // no-op, handled via finalMessage
+      let fullText = ''
+      stream.on('text', text => { fullText += text; send('delta', { text }) })
 
       const message = await stream.finalMessage()
 
-      // Check stop reason
       if (message.stop_reason === 'end_turn') {
-        // Done — emit completion
-        send('done', {
-          usage: {
-            input_tokens:  message.usage?.input_tokens,
-            output_tokens: message.usage?.output_tokens,
-          },
-        })
+        send('done', { usage: { input_tokens: message.usage?.input_tokens, output_tokens: message.usage?.output_tokens } })
         res.end()
         return
       }
 
       if (message.stop_reason === 'tool_use') {
-        // Collect tool_use blocks
         const toolUses = message.content.filter(b => b.type === 'tool_use')
+        if (!toolUses.length) { send('done', {}); res.end(); return }
 
-        if (!toolUses.length) {
-          send('done', {})
-          res.end()
-          return
-        }
-
-        // Append assistant message
         messages.push({ role: 'assistant', content: message.content })
 
-        // Execute tools in parallel
         const toolResults = await Promise.all(
-          toolUses.map(async (tu) => {
+          toolUses.map(async tu => {
             send('tool_start', { name: tu.name, input: tu.input })
             try {
               let result
-              if (tu.name === 'get_stock_data') {
-                result = await executeGetStockData(tu.input)
-                send('tool_end', { name: tu.name, symbol: tu.input.symbol })
-              } else {
-                result = { error: `Unknown tool: ${tu.name}` }
+              switch (tu.name) {
+                case 'get_technical_analysis':
+                  result = await executeTechnicalAnalysis(tu.input)
+                  send('tool_end', { name: tu.name, symbol: tu.input.symbol })
+                  break
+                case 'get_fundamentals':
+                  result = await executeGetFundamentals(tu.input)
+                  send('tool_end', { name: tu.name, symbol: tu.input.symbol })
+                  break
+                case 'compare_stocks':
+                  result = await executeCompareStocks(tu.input)
+                  send('tool_end', { name: tu.name, symbols: tu.input.symbols })
+                  break
+                default:
+                  result = { error: `Unknown tool: ${tu.name}` }
               }
-              return {
-                type:        'tool_result',
-                tool_use_id: tu.id,
-                content:     JSON.stringify(result),
-              }
+              return { type: 'tool_result', tool_use_id: tu.id, content: JSON.stringify(result) }
             } catch (err) {
               send('tool_error', { name: tu.name, error: err.message })
-              return {
-                type:        'tool_result',
-                tool_use_id: tu.id,
-                content:     JSON.stringify({ error: err.message }),
-                is_error:    true,
-              }
+              return { type: 'tool_result', tool_use_id: tu.id, content: JSON.stringify({ error: err.message }), is_error: true }
             }
           })
         )
 
-        // Append tool results and loop
         messages.push({ role: 'user', content: toolResults })
         continue
       }
 
-      // Unexpected stop reason
       send('done', {})
       res.end()
       return
     }
 
-    // Hit max iterations
-    send('error', { message: 'Agent reached maximum iterations. Please try again.' })
+    send('error', { message: 'Agent reached maximum iterations.' })
     res.end()
-
   } catch (err) {
     console.error('[Agent] Error:', err.message)
-    if (!res.headersSent) {
-      return res.status(500).json({ error: err.message })
-    }
-    sendError(err.message)
+    if (!res.headersSent) return res.status(500).json({ error: err.message })
+    send('error', { message: err.message })
+    res.end()
   }
 })
 
@@ -356,9 +416,12 @@ router.post('/analyze', async (req, res) => {
 
 router.get('/health', (_req, res) => {
   res.json({
-    ok:     true,
-    hasKey: !!process.env.ANTHROPIC_API_KEY,
-    model:  'claude-opus-4-7',
+    ok:           true,
+    hasKey:       !!process.env.ANTHROPIC_API_KEY,
+    hasFMP:       !!process.env.FMP_API_KEY,
+    hasAV:        !!process.env.ALPHA_VANTAGE_API_KEY,
+    model:        'claude-opus-4-7',
+    tools:        TOOLS.map(t => t.name),
   })
 })
 

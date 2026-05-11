@@ -471,10 +471,15 @@ export default function DashboardView({ portfolio, onAnalyze }) {
       const price = q?.price ?? p.avgCost
       totalCost  += p.avgCost * p.shares
       totalValue += price * p.shares
-      if (q?.change != null) {
-        todayGL += q.change * p.shares
-        if (q.change > 0) upCount++
-        else if (q.change < 0) dnCount++
+      // Anchor to prevClose (not q.change) so the figure resets cleanly each day
+      const prevClose = q?.prevClose ?? null
+      const dayMove   = price !== null && prevClose !== null
+        ? price - prevClose
+        : q?.change ?? null
+      if (dayMove != null) {
+        todayGL += dayMove * p.shares
+        if (dayMove > 0) upCount++
+        else if (dayMove < 0) dnCount++
       }
     })
     return {
