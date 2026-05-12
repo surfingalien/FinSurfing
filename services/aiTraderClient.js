@@ -57,18 +57,19 @@ async function loginAgent({ email, password }) {
 // ── Signal publishing ─────────────────────────────────────────────────────────
 
 async function publishSignal(token, { market = 'us-stock', action, symbol, price, quantity, content }) {
+  const body = {
+    market,
+    action,
+    symbol,
+    content,
+    executed_at: new Date().toISOString(),
+  }
+  if (price    != null) body.price    = price
+  if (quantity != null) body.quantity = quantity
   return atFetch('/api/signals/realtime', {
     method: 'POST',
     headers: authHeader(token),
-    body: JSON.stringify({
-      market,
-      action,
-      symbol,
-      price,
-      quantity,
-      content,
-      executed_at: 'now',
-    }),
+    body: JSON.stringify(body),
   })
 }
 
