@@ -2,7 +2,6 @@
 builder = "NIXPACKS"
 
 [deploy]
-startCommand = "NODE_ENV=production node server.js"
 healthcheckPath = "/health"
 healthcheckTimeout = 60
 restartPolicyType = "ON_FAILURE"
