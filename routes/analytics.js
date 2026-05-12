@@ -12,8 +12,10 @@ const express         = require('express')
 const { requireAuth } = require('../middleware/auth')
 const { query }       = require('../db/db')
 
+const { optionalAuth } = require('../middleware/auth')
+
 const router = express.Router()
-router.use(requireAuth)
+router.use(optionalAuth)
 
 const DB_MODE = !!process.env.DATABASE_URL
 
@@ -75,37 +77,46 @@ function beta(stockRet, mktRet) {
 }
 
 // ── Main route ────────────────────────────────────────────────────────────────
+// Accepts optional ?symbols=AAPL,MSFT,GOOG query param for manual analysis
+// Falls back to reading from the authenticated user's active portfolio when no symbols provided
 router.get('/portfolio', async (req, res) => {
-  const userId = req.user.userId
+  const userId = req.user?.userId
 
   let symbols = []
   let holdingMeta = {}
 
-  if (DB_MODE) {
+  // Parse manually supplied symbols from query string
+  if (req.query.symbols) {
+    const manualSyms = req.query.symbols
+      .split(',')
+      .map(s => s.trim().toUpperCase().replace(/[^A-Z0-9.-]/g, ''))
+      .filter(Boolean)
+      .slice(0, 20)
+    manualSyms.forEach(s => {
+      symbols.push(s)
+      holdingMeta[s] = { sector: 'Unknown', shares: 1, avgCost: 0 }
+    })
+  } else if (userId && DB_MODE) {
     try {
-      // Find the active (default) portfolio for the user
       const pRes = await query(
         `SELECT id FROM portfolios WHERE user_id = $1 AND is_archived = FALSE ORDER BY is_default DESC LIMIT 1`,
         [userId]
       )
       const portfolioId = pRes.rows[0]?.id
-      if (!portfolioId) return res.status(404).json({ error: 'No portfolio found' })
-
-      const hRes = await query(
-        `SELECT symbol, sector, shares, avg_cost FROM holdings WHERE portfolio_id = $1`,
-        [portfolioId]
-      )
-      for (const h of hRes.rows) {
-        symbols.push(h.symbol)
-        holdingMeta[h.symbol] = { sector: h.sector || 'Unknown', shares: parseFloat(h.shares), avgCost: parseFloat(h.avg_cost || 0) }
+      if (portfolioId) {
+        const hRes = await query(
+          `SELECT symbol, sector, shares, avg_cost FROM holdings WHERE portfolio_id = $1`,
+          [portfolioId]
+        )
+        for (const h of hRes.rows) {
+          symbols.push(h.symbol)
+          holdingMeta[h.symbol] = { sector: h.sector || 'Unknown', shares: parseFloat(h.shares), avgCost: parseFloat(h.avg_cost || 0) }
+        }
       }
     } catch (err) {
       console.error('[analytics] DB error:', err.message)
       return res.status(500).json({ error: 'Database error' })
     }
-  } else {
-    // In-memory fallback: nothing to analyse
-    return res.json({ symbols: [], beta: null, correlations: [], sectors: [] })
   }
 
   if (symbols.length === 0)

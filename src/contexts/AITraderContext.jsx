@@ -16,13 +16,17 @@ import {
   markNotificationsRead,
   publishSignal as apiPublishSignal,
   registerAgent as apiRegisterAgent,
+  setAuthToken,
 } from '../services/aiTraderService'
 
 const AITraderContext = createContext(null)
 
 export function AITraderProvider({ children }) {
-  const { isAuthenticated } = useAuth()
+  const { isAuthenticated, accessToken } = useAuth()
   const toast = useToast()
+
+  // Keep service module in sync with the in-memory token
+  useEffect(() => { setAuthToken(accessToken) }, [accessToken])
 
   const [status,        setStatus]        = useState(null)   // { registered, agentId, signalCount, unreadCount }
   const [notifications, setNotifications] = useState([])

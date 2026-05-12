@@ -6,7 +6,6 @@
  */
 
 import { useState, useCallback } from 'react'
-import { useAuth } from '../../contexts/AuthContext'
 import {
   FlaskConical, Play, TrendingUp, TrendingDown, BarChart3,
   AlertTriangle, CheckCircle2, Clock, DollarSign, Percent, Info,
@@ -174,8 +173,6 @@ function TradeLog({ trades }) {
 // ── Main view ─────────────────────────────────────────────────────────────────
 
 export default function BacktestView() {
-  const { authFetch } = useAuth()
-
   const [symbol,          setSymbol]          = useState('AAPL')
   const [strategyId,      setStrategyId]       = useState('sma_crossover')
   const [range,           setRange]            = useState('1y')
@@ -201,7 +198,7 @@ export default function BacktestView() {
     strategy.params.forEach(p => { params[p.key] = Number(getParam(p.key, p.default)) })
 
     try {
-      const r = await authFetch('/api/backtest', {
+      const r = await fetch('/api/backtest', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ symbol: sym, strategy: strategyId, params, range, initialCapital }),
@@ -214,7 +211,7 @@ export default function BacktestView() {
     } finally {
       setLoading(false)
     }
-  }, [symbol, strategyId, range, initialCapital, paramValues, strategy, authFetch])
+  }, [symbol, strategyId, range, initialCapital, paramValues, strategy])
 
   const m = result?.metrics
 
