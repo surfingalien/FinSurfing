@@ -345,7 +345,23 @@ app.get('/api/quote', async (req, res) => {
   const symbols = (req.query.symbols || '').split(',').filter(Boolean)
   if (!symbols.length) return res.status(400).json({ error: 'symbols required' })
   try {
-    // 1st choice: yahoo-finance2 (manages crumb/cookie automatically)
+    // 1st choice: Finnhub — works reliably from cloud IPs (no Yahoo IP block)
+    {
+      const fh = await getFinnhubQuotes(symbols).catch(() => null)
+      if (fh && fh.some(r => r.regularMarketPrice != null)) {
+        return res.json({ quoteResponse: { result: fh } })
+      }
+    }
+
+    // 2nd choice: FMP batch quote — also cloud-friendly
+    {
+      const fmp = await getFMPQuotes(symbols).catch(() => null)
+      if (fmp && fmp.some(r => r.regularMarketPrice != null)) {
+        return res.json({ quoteResponse: { result: fmp } })
+      }
+    }
+
+    // 3rd choice: yahoo-finance2 (handles crumb internally — last resort for Yahoo)
     if (yf2) {
       try {
         const raw     = await yf2.quote(symbols, {}, { validateResult: false })
@@ -362,7 +378,6 @@ app.get('/api/quote', async (req, res) => {
           regularMarketDayLow:         q.regularMarketDayLow         ?? null,
           regularMarketOpen:           q.regularMarketOpen           ?? null,
           regularMarketPreviousClose:  q.regularMarketPreviousClose  ?? null,
-          // yahoo-finance2 returns regularMarketTime as a Date object
           regularMarketTime: q.regularMarketTime instanceof Date
             ? Math.floor(q.regularMarketTime.getTime() / 1000)
             : (q.regularMarketTime ?? null),
@@ -379,26 +394,6 @@ app.get('/api/quote', async (req, res) => {
       }
     }
 
-    // 2nd choice: Finnhub (reliable from cloud IPs, no IP block)
-    {
-      const fh = await getFinnhubQuotes(symbols).catch(() => null)
-      if (fh && fh.some(r => r.regularMarketPrice != null)) {
-        console.log('[Finnhub] quote OK')
-        return res.json({ quoteResponse: { result: fh } })
-      }
-      if (fh) console.warn('[Finnhub] quote returned no prices')
-    }
-
-    // 3rd choice: FMP batch quote (also reliable from cloud IPs)
-    {
-      const fmp = await getFMPQuotes(symbols).catch(() => null)
-      if (fmp && fmp.some(r => r.regularMarketPrice != null)) {
-        console.log('[FMP] quote OK')
-        return res.json({ quoteResponse: { result: fmp } })
-      }
-      if (fmp) console.warn('[FMP] quote returned no prices')
-    }
-
     // 4th choice: raw v7 endpoint with crumb
     const url  = `${YF1}/v7/finance/quote?symbols=${symbols.join(',')}&fields=regularMarketPrice,regularMarketChange,regularMarketChangePercent,regularMarketVolume,marketCap,trailingPE,fiftyTwoWeekHigh,fiftyTwoWeekLow,shortName,longName,regularMarketDayHigh,regularMarketDayLow,regularMarketOpen,regularMarketPreviousClose,regularMarketTime`
     const data = await yfFetch(url, 12000)
@@ -407,7 +402,7 @@ app.get('/api/quote', async (req, res) => {
       return res.json({ quoteResponse: { result: results } })
     }
 
-    // 5th choice: per-symbol chart API (v8 — most resilient from cloud IPs)
+    // 5th choice: per-symbol chart API (v8)
     const quotes = await Promise.all(
       symbols.map(s => getChartQuote(s).catch(() => ({ symbol: s, price: null })))
     )
