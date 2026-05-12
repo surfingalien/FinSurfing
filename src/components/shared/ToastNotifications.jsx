@@ -7,7 +7,7 @@
  */
 
 import { useState, useEffect, useCallback, createContext, useContext } from 'react'
-import { X, UserPlus, Bell, Award, Zap } from 'lucide-react'
+import { X, UserPlus, Bell, Award, Zap, TrendingUp } from 'lucide-react'
 
 // ── Toast context (used by AITraderContext to fire toasts) ────────────────────
 
@@ -20,17 +20,19 @@ export function useToast() {
 // ── Icon + colour map ─────────────────────────────────────────────────────────
 
 const TOAST_META = {
-  new_follower:            { icon: UserPlus, color: 'mint',   label: 'New Follower' },
-  discussion_reply:        { icon: Bell,     color: 'indigo', label: 'Signal Reply' },
-  strategy_reply_accepted: { icon: Award,    color: 'amber',  label: 'Analysis Accepted' },
-  default:                 { icon: Zap,      color: 'slate',  label: 'Trader Network' },
+  new_follower:            { icon: UserPlus, color: 'mint',    label: 'New Follower' },
+  discussion_reply:        { icon: Bell,     color: 'indigo',  label: 'Signal Reply' },
+  strategy_reply_accepted: { icon: Award,    color: 'amber',   label: 'Analysis Accepted' },
+  signal_performance:      { icon: Award,    color: 'emerald', label: 'Signal P&L Update' },
+  default:                 { icon: Zap,      color: 'slate',   label: 'Trader Network' },
 }
 
 const COLOR = {
-  mint:   { bg: 'bg-mint-500/10',   border: 'border-mint-500/25',   text: 'text-mint-400',   icon: 'text-mint-400' },
-  indigo: { bg: 'bg-indigo-500/10', border: 'border-indigo-500/25', text: 'text-indigo-300', icon: 'text-indigo-400' },
-  amber:  { bg: 'bg-amber-500/10',  border: 'border-amber-500/25',  text: 'text-amber-300',  icon: 'text-amber-400' },
-  slate:  { bg: 'bg-slate-500/10',  border: 'border-slate-500/20',  text: 'text-slate-300',  icon: 'text-slate-400' },
+  mint:    { bg: 'bg-mint-500/10',    border: 'border-mint-500/25',    text: 'text-mint-400',    icon: 'text-mint-400' },
+  indigo:  { bg: 'bg-indigo-500/10',  border: 'border-indigo-500/25',  text: 'text-indigo-300',  icon: 'text-indigo-400' },
+  amber:   { bg: 'bg-amber-500/10',   border: 'border-amber-500/25',   text: 'text-amber-300',   icon: 'text-amber-400' },
+  emerald: { bg: 'bg-emerald-500/10', border: 'border-emerald-500/25', text: 'text-emerald-300', icon: 'text-emerald-400' },
+  slate:   { bg: 'bg-slate-500/10',   border: 'border-slate-500/20',   text: 'text-slate-300',   icon: 'text-slate-400' },
 }
 
 // ── Single toast ──────────────────────────────────────────────────────────────

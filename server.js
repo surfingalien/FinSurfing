@@ -13,6 +13,7 @@ const adminRoutes       = require('./routes/admin')
 const agentRoutes       = require('./routes/agent')
 const tradingRoutes     = require('./routes/trading')
 const copyTradingRoutes = require('./routes/copy-trading')
+const earningsRoutes    = require('./routes/earnings')
 
 const { seedAdminDB } = require('./db/adminSeed')
 
@@ -129,6 +130,7 @@ app.use('/api/admin',        adminRoutes)
 app.use('/api/agent',        agentRoutes)
 app.use('/api/trading',      tradingRoutes)
 app.use('/api/copy-trading', copyTradingRoutes)
+app.use('/api/earnings',     earningsRoutes)
 
 /* ── Safe fetch helpers ────────────────────────── */
 const YF1 = 'https://query1.finance.yahoo.com'
@@ -303,6 +305,87 @@ app.get('*', (_req, res) => {
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`FinSurf listening on 0.0.0.0:${PORT}`)
 })
+
+// ── Signal performance checker (every 5 min) ─────────────────────────────────
+// Fetches current price for signals that are 1d/7d/30d old and haven't been
+// checked yet, stores the P&L, and creates a notification for notable moves.
+if (process.env.DATABASE_URL) {
+  const { query: dbQ } = require('./db/db')
+
+  async function checkSignalPerformance() {
+    try {
+      const { rows } = await dbQ(`
+        SELECT id, user_id, symbol, action, price AS entry_price, published_at,
+               checked_1d_at, checked_7d_at, checked_30d_at
+        FROM ai_trader_signals
+        WHERE (checked_1d_at  IS NULL AND published_at < NOW() - INTERVAL '1 day')
+           OR (checked_7d_at  IS NULL AND published_at < NOW() - INTERVAL '7 days')
+           OR (checked_30d_at IS NULL AND published_at < NOW() - INTERVAL '30 days')
+        LIMIT 20
+      `)
+      if (!rows.length) return
+
+      // Batch-fetch current prices
+      const uniqueSymbols = [...new Set(rows.map(r => r.symbol))]
+      const priceMap = {}
+      for (const sym of uniqueSymbols) {
+        try {
+          const url = `http://localhost:${process.env.PORT || 3001}/api/chart?symbol=${encodeURIComponent(sym)}&interval=1d&range=2d`
+          const d   = await fetch(url, { signal: AbortSignal.timeout(8000) }).then(r => r.json())
+          const price = d?.chart?.result?.[0]?.meta?.regularMarketPrice
+          if (price) priceMap[sym] = price
+        } catch {}
+      }
+
+      for (const sig of rows) {
+        const currentPrice = priceMap[sig.symbol]
+        if (!currentPrice || !sig.entry_price) continue
+
+        const now    = Date.now()
+        const age    = now - new Date(sig.published_at).getTime()
+        const dayMs  = 86_400_000
+        const isBull = ['buy', 'cover'].includes(sig.action)
+        const rawPnl = (currentPrice - sig.entry_price) / sig.entry_price * 100
+        const pnl    = isBull ? rawPnl : -rawPnl   // short/sell inverts direction
+
+        const updates = []
+        const params  = []
+        let   p       = 1
+
+        if (!sig.checked_1d_at  && age >= dayMs)      { updates.push(`price_1d=$${p++}, pnl_1d=$${p++}, checked_1d_at=NOW()`);   params.push(currentPrice, +pnl.toFixed(4)) }
+        if (!sig.checked_7d_at  && age >= 7 * dayMs)  { updates.push(`price_7d=$${p++}, pnl_7d=$${p++}, checked_7d_at=NOW()`);   params.push(currentPrice, +pnl.toFixed(4)) }
+        if (!sig.checked_30d_at && age >= 30 * dayMs) { updates.push(`price_30d=$${p++}, pnl_30d=$${p++}, checked_30d_at=NOW()`); params.push(currentPrice, +pnl.toFixed(4)) }
+
+        if (!updates.length) continue
+
+        params.push(sig.id)
+        await dbQ(`UPDATE ai_trader_signals SET ${updates.join(', ')} WHERE id=$${p}`, params).catch(() => {})
+
+        // Fire notification for notable moves (>3% absolute P&L)
+        if (Math.abs(pnl) >= 3) {
+          const label = age >= 30 * dayMs ? '30-day' : age >= 7 * dayMs ? '7-day' : '1-day'
+          const dir   = pnl >= 0 ? 'up' : 'down'
+          await dbQ(
+            `INSERT INTO ai_trader_notifications (user_id, type, data)
+             VALUES ($1, 'signal_performance', $2)`,
+            [sig.user_id, JSON.stringify({
+              symbol:   sig.symbol,
+              action:   sig.action,
+              pnl:      +pnl.toFixed(2),
+              period:   label,
+              content:  `Your ${sig.action.toUpperCase()} ${sig.symbol} signal is ${dir} ${Math.abs(pnl).toFixed(1)}% over ${label}`,
+            })]
+          ).catch(() => {})
+        }
+      }
+    } catch {}
+  }
+
+  setTimeout(() => {
+    checkSignalPerformance()
+    setInterval(checkSignalPerformance, 5 * 60_000)
+  }, 60_000)
+}
 
 // ── AI-Trader background heartbeat poller (every 60 s) ───────────────────────
 // Polls notifications for every user that has registered an AI-Trader agent.
