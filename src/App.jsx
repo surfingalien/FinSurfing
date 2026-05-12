@@ -22,6 +22,10 @@ import AlertsView from './components/Alerts/AlertsView'
 import StockAgentView from './components/Research/StockAgentView'
 import TradingNetworkView from './components/Trading/TradingNetworkView'
 import EarningsCalendarView from './components/EarningsCalendar/EarningsCalendarView'
+import BacktestView from './components/Backtest/BacktestView'
+import PortfolioAnalyticsView from './components/Analytics/PortfolioAnalyticsView'
+import RebalancerView from './components/Rebalancer/RebalancerView'
+import TraderProfileView from './components/Profile/TraderProfileView'
 import { usePortfolio } from './hooks/usePortfolio'
 import { useWatchlist } from './hooks/useWatchlist'
 import { useAlerts } from './hooks/useAlerts'
@@ -98,10 +102,11 @@ function MainApp({ onSignIn }) {
   const { isAuthenticated, user, authFetch } = useAuth()
   const { portfolios, loadingPortfolios, activePortfolioId } = usePortfolioContext()
 
-  const [activeTab,     setActiveTab]     = useState('dashboard')
-  const [analyzeSymbol, setAnalyzeSymbol] = useState('AAPL')
-  const [wizardDone,    setWizardDone]    = useState(false)
-  const [mobileNav,     setMobileNav]     = useState(false)
+  const [activeTab,       setActiveTab]       = useState('dashboard')
+  const [analyzeSymbol,   setAnalyzeSymbol]   = useState('AAPL')
+  const [wizardDone,      setWizardDone]      = useState(false)
+  const [mobileNav,       setMobileNav]       = useState(false)
+  const [traderUsername,  setTraderUsername]  = useState(null)
   const mainRef = useRef(null)
 
   // Reset scroll to top whenever the active tab changes
@@ -133,6 +138,11 @@ function MainApp({ onSignIn }) {
   }
 
   const navigateToAnalyze = (symbol) => navigateTo('analyze', symbol)
+
+  const navigateToTraderProfile = (username) => {
+    setTraderUsername(username)
+    changeTab('trader-profile')
+  }
 
   // Show portfolio setup wizard for new authenticated users with no portfolios
   const showWizard = isAuthenticated && !loadingPortfolios && portfolios.length === 0 && !wizardDone
@@ -208,6 +218,21 @@ function MainApp({ onSignIn }) {
             )}
             {activeTab === 'earnings' && (
               <EarningsCalendarView portfolio={portfolio} onAnalyze={navigateToAnalyze} />
+            )}
+            {activeTab === 'backtest' && (
+              <BacktestView />
+            )}
+            {activeTab === 'analytics' && (
+              <PortfolioAnalyticsView />
+            )}
+            {activeTab === 'rebalancer' && (
+              <RebalancerView />
+            )}
+            {activeTab === 'trader-profile' && (
+              <TraderProfileView
+                username={traderUsername}
+                onBack={() => changeTab('trading')}
+              />
             )}
             {activeTab === 'admin' && (
               <AdminDashboard />
