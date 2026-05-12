@@ -14,6 +14,7 @@ import {
   TrendingUp, SlidersHorizontal, GitBranch, Bell, Bot,
   ShieldCheck, ChevronLeft, ChevronRight, LogIn, LogOut,
   User, KeyRound, Activity, X, Menu, FolderOpen, Users, Calendar,
+  FlaskConical, BarChart3,
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useAITrader } from '../../contexts/AITraderContext'
@@ -35,8 +36,11 @@ function buildTabs(user, triggeredCount, tradingUnread) {
     { id: 'strategies',      label: 'Strategies',     icon: GitBranch },
     { id: 'alerts',          label: 'Alerts',         icon: Bell,  badge: triggeredCount },
     { id: 'research',        label: 'AI Agent',       icon: Bot },
-    { id: 'trading',         label: 'Trader Network', icon: Users,    badge: tradingUnread },
+    { id: 'trading',         label: 'Trader Network', icon: Users,         badge: tradingUnread },
     { id: 'earnings',        label: 'Earnings',       icon: Calendar },
+    { id: 'backtest',        label: 'Backtester',     icon: FlaskConical },
+    { id: 'analytics',       label: 'Risk Analytics', icon: Activity },
+    { id: 'rebalancer',      label: 'AI Rebalancer',  icon: BarChart3 },
     ...(user?.role === 'admin'
       ? [{ id: 'admin', label: 'Admin', icon: ShieldCheck, admin: true }]
       : []),

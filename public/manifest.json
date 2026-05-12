@@ -1,0 +1,44 @@
+{
+  "name": "FinSurf — Stock Intelligence Platform",
+  "short_name": "FinSurf",
+  "description": "Real-time portfolio tracking, AI advisory, and technical analysis for US equities.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#060810",
+  "theme_color": "#00ffcc",
+  "orientation": "portrait-primary",
+  "categories": ["finance", "business"],
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect width='192' height='192' fill='%23060810' rx='32'/><path d='M24 132 L60 84 L96 108 L132 48 L168 72' stroke='%2300ffcc' stroke-width='15' stroke-linecap='round' stroke-linejoin='round' fill='none'/><path d='M24 132 L60 84 L96 108 L132 48 L168 72' stroke='%2300ffcc' stroke-width='48' stroke-linecap='round' stroke-linejoin='round' opacity='0.12' fill='none'/><circle cx='96' cy='108' r='15' fill='%236366f1'/></svg>",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' fill='%23060810' rx='80'/><path d='M64 352 L160 224 L256 288 L352 128 L448 192' stroke='%2300ffcc' stroke-width='40' stroke-linecap='round' stroke-linejoin='round' fill='none'/><path d='M64 352 L160 224 L256 288 L352 128 L448 192' stroke='%2300ffcc' stroke-width='128' stroke-linecap='round' stroke-linejoin='round' opacity='0.12' fill='none'/><circle cx='256' cy='288' r='40' fill='%236366f1'/></svg>",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Dashboard",
+      "url": "/?tab=dashboard",
+      "description": "View your portfolio dashboard"
+    },
+    {
+      "name": "Watchlist",
+      "url": "/?tab=watchlist",
+      "description": "View your watchlist"
+    },
+    {
+      "name": "AI Agent",
+      "url": "/?tab=research",
+      "description": "Ask the AI stock agent"
+    }
+  ],
+  "screenshots": [],
+  "prefer_related_applications": false
+}

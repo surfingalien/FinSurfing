@@ -14,6 +14,9 @@ const agentRoutes       = require('./routes/agent')
 const tradingRoutes     = require('./routes/trading')
 const copyTradingRoutes = require('./routes/copy-trading')
 const earningsRoutes    = require('./routes/earnings')
+const backtestRoutes    = require('./routes/backtest')
+const analyticsRoutes   = require('./routes/analytics')
+const rebalancerRoutes  = require('./routes/rebalancer')
 
 const { seedAdminDB } = require('./db/adminSeed')
 
@@ -131,6 +134,9 @@ app.use('/api/agent',        agentRoutes)
 app.use('/api/trading',      tradingRoutes)
 app.use('/api/copy-trading', copyTradingRoutes)
 app.use('/api/earnings',     earningsRoutes)
+app.use('/api/backtest',     backtestRoutes)
+app.use('/api/analytics',    analyticsRoutes)
+app.use('/api/rebalancer',   rebalancerRoutes)
 
 /* ── Safe fetch helpers ────────────────────────── */
 const YF1 = 'https://query1.finance.yahoo.com'

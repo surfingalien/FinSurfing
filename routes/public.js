@@ -271,4 +271,73 @@ router.get('/users/:username/portfolio', async (req, res) => {
   }
 })
 
+// ── GET /api/public/trader/:username ───────────────
+// Returns AI-Trader public profile: bio, recent signals, follower count
+router.get('/trader/:username', async (req, res) => {
+  const { username } = req.params
+
+  if (!DB_MODE) return res.status(503).json({ error: 'Trader profiles require database mode' })
+
+  try {
+    const uRes = await query(
+      `SELECT id, username, display_name, ai_trader_agent_id, ai_trader_registered_at
+       FROM users WHERE username = $1 AND is_active = TRUE`,
+      [username]
+    )
+    const owner = uRes.rows[0]
+    if (!owner || !owner.ai_trader_agent_id)
+      return res.status(404).json({ error: 'Trader not found or not registered on AI-Trader' })
+
+    // Recent signals
+    const sigRes = await query(
+      `SELECT symbol, direction, timeframe, conviction, analysis,
+              entry_price, pnl_1d, pnl_7d, pnl_30d, created_at
+       FROM ai_trader_signals
+       WHERE user_id = $1
+       ORDER BY created_at DESC LIMIT 20`,
+      [owner.id]
+    )
+
+    // Follower count (how many users follow this trader on our platform)
+    const followRes = await query(
+      `SELECT COUNT(*) AS cnt FROM ai_trader_following WHERE following_agent_id = $1`,
+      [owner.ai_trader_agent_id]
+    )
+
+    // Win-rate from signals with pnl_1d data
+    const signals = sigRes.rows
+    const scored  = signals.filter(s => s.pnl_1d != null)
+    const wins    = scored.filter(s => {
+      const pnl = parseFloat(s.pnl_1d)
+      return s.direction === 'buy' ? pnl > 0 : pnl < 0
+    })
+    const winRate = scored.length > 0 ? +((wins.length / scored.length) * 100).toFixed(1) : null
+
+    return res.json({
+      username:      owner.username,
+      displayName:   owner.display_name,
+      agentId:       owner.ai_trader_agent_id,
+      memberSince:   owner.ai_trader_registered_at,
+      followers:     parseInt(followRes.rows[0]?.cnt || 0),
+      totalSignals:  signals.length,
+      winRate,
+      recentSignals: signals.map(s => ({
+        symbol:    s.symbol,
+        direction: s.direction,
+        timeframe: s.timeframe,
+        conviction: s.conviction,
+        analysis:  s.analysis,
+        entryPrice: s.entry_price ? parseFloat(s.entry_price) : null,
+        pnl1d:  s.pnl_1d  ? parseFloat(s.pnl_1d)  : null,
+        pnl7d:  s.pnl_7d  ? parseFloat(s.pnl_7d)  : null,
+        pnl30d: s.pnl_30d ? parseFloat(s.pnl_30d) : null,
+        publishedAt: s.created_at,
+      })),
+    })
+  } catch (err) {
+    console.error('[public/trader/:username]', err.message)
+    return res.status(500).json({ error: 'Failed to fetch trader profile' })
+  }
+})
+
 module.exports = router
