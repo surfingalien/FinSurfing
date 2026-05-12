@@ -233,7 +233,7 @@ export default function StockAgentView({ portfolio }) {
   useEffect(() => {
     fetch('/api/agent/health')
       .then(r => r.json())
-      .then(d => { setHasKey(d.hasKey); setAgentCaps({ hasFMP: d.hasFMP, hasAV: d.hasAV }) })
+      .then(d => { setHasKey(d.hasKey); setAgentCaps({ hasFMP: d.hasFMP, hasAV: d.hasAV, hasFinnhub: d.hasFinnhub }) })
       .catch(() => setHasKey(false))
   }, [])
 
@@ -431,6 +431,9 @@ I'm your real-time stock analyst powered by Claude. I can:
           </span>
           <span className={`text-[10px] font-mono ${agentCaps.hasAV ? 'text-emerald-500' : 'text-slate-700'}`}>
             AV {agentCaps.hasAV ? '✓' : '○'}
+          </span>
+          <span className={`text-[10px] font-mono ${agentCaps.hasFinnhub ? 'text-emerald-500' : 'text-slate-700'}`}>
+            Finnhub {agentCaps.hasFinnhub ? '✓' : '○'}
           </span>
           <span className="text-[10px] text-slate-700 font-mono border-l border-white/[0.06] pl-2">claude-opus-4-7</span>
         </div>

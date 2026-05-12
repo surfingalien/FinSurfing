@@ -471,11 +471,15 @@ export default function DashboardView({ portfolio, onAnalyze }) {
       const price = q?.price ?? p.avgCost
       totalCost  += p.avgCost * p.shares
       totalValue += price * p.shares
-      // Anchor to prevClose (not q.change) so the figure resets cleanly each day
-      const prevClose = q?.prevClose ?? null
-      const dayMove   = price !== null && prevClose !== null
-        ? price - prevClose
-        : q?.change ?? null
+      // Only count today's move when the quote timestamp is from today's date
+      const prevClose  = q?.prevClose ?? null
+      const marketTime = q?.marketTime ?? null
+      const isToday    = marketTime
+        ? new Date(marketTime * 1000).toDateString() === new Date().toDateString()
+        : true
+      const dayMove = isToday
+        ? (price !== null && prevClose !== null ? price - prevClose : q?.change ?? null)
+        : 0   // reset to zero between sessions
       if (dayMove != null) {
         todayGL += dayMove * p.shares
         if (dayMove > 0) upCount++

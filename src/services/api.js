@@ -33,8 +33,10 @@ export async function fetchQuotes(symbols) {
       dayHigh:   q.regularMarketDayHigh  ?? q.dayHigh   ?? null,
       dayLow:    q.regularMarketDayLow   ?? q.dayLow    ?? null,
       open:      q.regularMarketOpen     ?? q.open      ?? null,
-      prevClose: q.regularMarketPreviousClose ?? q.prevClose ?? null,
-      marketCap: q.marketCap ?? null,
+      prevClose:  q.regularMarketPreviousClose ?? q.prevClose ?? null,
+      // Unix seconds timestamp of last regular-session trade — used to detect stale overnight data
+      marketTime: q.regularMarketTime ?? null,
+      marketCap:  q.marketCap ?? null,
       pe:        q.trailingPE ?? q.pe ?? null,
     }))
   })

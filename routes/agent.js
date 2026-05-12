@@ -420,6 +420,7 @@ router.get('/health', (_req, res) => {
     hasKey:       !!process.env.ANTHROPIC_API_KEY,
     hasFMP:       !!process.env.FMP_API_KEY,
     hasAV:        !!process.env.ALPHA_VANTAGE_API_KEY,
+    hasFinnhub:   !!process.env.FINNHUB_API_KEY,
     model:        'claude-opus-4-7',
     tools:        TOOLS.map(t => t.name),
   })

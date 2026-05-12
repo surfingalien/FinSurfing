@@ -184,20 +184,21 @@ async function getChartQuote(symbol) {
     ?? (change != null && prevClose != null ? +((change / prevClose * 100).toFixed(4)) : null)
 
   return {
-    symbol:    m.symbol || symbol,
-    name:      m.symbol || symbol,
+    symbol:      m.symbol || symbol,
+    name:        m.symbol || symbol,
     price,
     change,
     changePct,
-    volume:    m.regularMarketVolume  ?? null,
-    high52:    m.fiftyTwoWeekHigh     ?? null,
-    low52:     m.fiftyTwoWeekLow      ?? null,
-    dayHigh:   m.regularMarketDayHigh ?? null,
-    dayLow:    m.regularMarketDayLow  ?? null,
-    open:      m.regularMarketOpen    ?? null,
+    volume:      m.regularMarketVolume  ?? null,
+    high52:      m.fiftyTwoWeekHigh     ?? null,
+    low52:       m.fiftyTwoWeekLow      ?? null,
+    dayHigh:     m.regularMarketDayHigh ?? null,
+    dayLow:      m.regularMarketDayLow  ?? null,
+    open:        m.regularMarketOpen    ?? null,
     prevClose,
-    marketCap: null,
-    pe:        null,
+    regularMarketTime: m.regularMarketTime ?? null,  // Unix seconds — used for daily P/L reset
+    marketCap:   null,
+    pe:          null,
   }
 }
 
@@ -217,7 +218,7 @@ app.get('/api/quote', async (req, res) => {
   if (!symbols.length) return res.status(400).json({ error: 'symbols required' })
   try {
     // Try v7 quote endpoint first
-    const url  = `${YF1}/v7/finance/quote?symbols=${symbols.join(',')}&fields=regularMarketPrice,regularMarketChange,regularMarketChangePercent,regularMarketVolume,marketCap,trailingPE,fiftyTwoWeekHigh,fiftyTwoWeekLow,shortName,longName,regularMarketDayHigh,regularMarketDayLow,regularMarketOpen,regularMarketPreviousClose`
+    const url  = `${YF1}/v7/finance/quote?symbols=${symbols.join(',')}&fields=regularMarketPrice,regularMarketChange,regularMarketChangePercent,regularMarketVolume,marketCap,trailingPE,fiftyTwoWeekHigh,fiftyTwoWeekLow,shortName,longName,regularMarketDayHigh,regularMarketDayLow,regularMarketOpen,regularMarketPreviousClose,regularMarketTime`
     const data = await yfFetch(url, 12000)
     const results = data?.quoteResponse?.result
     if (results && results.length) {

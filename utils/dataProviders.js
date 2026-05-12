@@ -2,19 +2,22 @@
  * utils/dataProviders.js
  *
  * Unified data-fetching layer for the AI Agent.
- * Supports three sources (each optional — gracefully degrades):
+ * Supports four sources (each optional — gracefully degrades):
  *
  *   Yahoo Finance  → OHLCV + real-time quote  (always available via /api/chart & /api/quote)
- *   Alpha Vantage  → News sentiment, earnings calendar  (ALPHA_VANTAGE_API_KEY)
+ *   Alpha Vantage  → News sentiment with scored articles  (ALPHA_VANTAGE_API_KEY)
  *   FMP            → Fundamentals, analyst estimates, DCF, institutional flows  (FMP_API_KEY)
+ *   Finnhub        → News, earnings calendar, social sentiment  (FINNHUB_API_KEY)
+ *                    Free tier: 60 req/min — https://finnhub.io/dashboard
  *
  * All functions return plain JS objects safe to JSON.stringify into tool results.
  */
 
 'use strict'
 
-const AV_BASE  = 'https://www.alphavantage.co/query'
-const FMP_BASE = 'https://financialmodelingprep.com/api'
+const AV_BASE      = 'https://www.alphavantage.co/query'
+const FMP_BASE     = 'https://financialmodelingprep.com/api'
+const FINNHUB_BASE = 'https://finnhub.io/api/v1'
 
 // ── Helper: timed fetch with abort ───────────────────────────────────────────
 async function timedFetch(url, timeoutMs = 10000) {
@@ -271,34 +274,148 @@ async function fetchFMPInsiderActivity(symbol) {
   }
 }
 
+// ── Finnhub ───────────────────────────────────────────────────────────────────
+
+/**
+ * fetchFinnhubNews(symbol)
+ * Last 10 company news articles from Finnhub (free 60 req/min tier).
+ */
+async function fetchFinnhubNews(symbol) {
+  const key = process.env.FINNHUB_API_KEY
+  if (!key) return { source: 'finnhub', available: false, reason: 'FINNHUB_API_KEY not set' }
+
+  const now   = new Date()
+  const from  = new Date(now - 7 * 24 * 3600 * 1000).toISOString().slice(0, 10)
+  const to    = now.toISOString().slice(0, 10)
+  const url   = `${FINNHUB_BASE}/company-news?symbol=${symbol}&from=${from}&to=${to}&token=${key}`
+  const data  = await timedFetch(url, 10000)
+
+  if (!Array.isArray(data)) return { source: 'finnhub', available: false, reason: 'Unexpected response' }
+
+  const BULL = ['surge', 'rally', 'gain', 'beat', 'record', 'upgrade', 'bullish', 'strong', 'growth', 'outperform']
+  const BEAR = ['drop', 'fall', 'miss', 'loss', 'downgrade', 'bearish', 'weak', 'decline', 'underperform', 'risk']
+
+  const articles = data.slice(0, 10).map(a => {
+    const text = (a.headline + ' ' + (a.summary || '')).toLowerCase()
+    const bull = BULL.filter(w => text.includes(w)).length
+    const bear = BEAR.filter(w => text.includes(w)).length
+    return {
+      title:       a.headline,
+      source:      a.source,
+      publishedAt: new Date(a.datetime * 1000).toISOString(),
+      url:         a.url,
+      sentiment:   bull > bear ? 'Bullish' : bear > bull ? 'Bearish' : 'Neutral',
+      summary:     a.summary?.slice(0, 200),
+    }
+  })
+
+  const bullish = articles.filter(a => a.sentiment === 'Bullish').length
+  const bearish = articles.filter(a => a.sentiment === 'Bearish').length
+
+  return {
+    source: 'finnhub',
+    available: true,
+    symbol,
+    totalArticles: articles.length,
+    bullish, bearish, neutral: articles.length - bullish - bearish,
+    articles,
+  }
+}
+
+/**
+ * fetchFinnhubSentiment(symbol)
+ * Finnhub's aggregated news sentiment score (buzz + sentiment metrics).
+ */
+async function fetchFinnhubSentiment(symbol) {
+  const key = process.env.FINNHUB_API_KEY
+  if (!key) return null
+
+  try {
+    const data = await timedFetch(`${FINNHUB_BASE}/news-sentiment?symbol=${symbol}&token=${key}`)
+    if (!data?.sentiment) return null
+    return {
+      buzz:             data.buzz?.buzz,
+      articlesInLastWeek: data.buzz?.articlesInLastWeek,
+      weeklyAverage:    data.buzz?.weeklyAverage,
+      companyNewsScore: data.companyNewsScore,
+      sectorAvgBullishPercent: data.sectorAverageBullishPercent,
+      sectorAvgNewsScore:      data.sectorAverageNewsScore,
+      bullishPercent:   data.sentiment?.bullishPercent,
+      bearishPercent:   data.sentiment?.bearishPercent,
+      sentiment:        data.sentiment?.bullishPercent > 0.6 ? 'Bullish'
+                      : data.sentiment?.bullishPercent < 0.4 ? 'Bearish' : 'Neutral',
+    }
+  } catch { return null }
+}
+
+/**
+ * fetchFinnhubEarnings(symbol)
+ * Upcoming and recent earnings dates.
+ */
+async function fetchFinnhubEarnings(symbol) {
+  const key = process.env.FINNHUB_API_KEY
+  if (!key) return null
+
+  try {
+    const from = new Date().toISOString().slice(0, 10)
+    const to   = new Date(Date.now() + 90 * 24 * 3600 * 1000).toISOString().slice(0, 10)
+    const data = await timedFetch(`${FINNHUB_BASE}/calendar/earnings?symbol=${symbol}&from=${from}&to=${to}&token=${key}`)
+    const upcoming = data?.earningsCalendar?.slice(0, 3) || []
+    return upcoming.map(e => ({
+      date:          e.date,
+      epsEstimate:   e.epsEstimate,
+      revenueEstimate: e.revenueEstimate,
+      quarter:       e.quarter,
+      year:          e.year,
+    }))
+  } catch { return null }
+}
+
 // ── Orchestrated "get_fundamentals" tool handler ──────────────────────────────
 
 /**
  * fetchAllFundamentals(symbol)
- * Calls FMP fundamentals + FMP news + AV sentiment in parallel.
- * Falls back gracefully if any source is unavailable.
+ * Calls all data sources in parallel. Priority for news:
+ *   Alpha Vantage (scored) > Finnhub (buzz + scored) > FMP (keyword-scored)
  */
 async function fetchAllFundamentals(symbol) {
   const ticker = symbol.toUpperCase().trim()
 
-  const [fundamentals, fmpNews, avSentiment, insider] = await Promise.allSettled([
-    fetchFMPFundamentals(ticker),
-    fetchFMPNews(ticker),
-    fetchAVNewsSentiment(ticker),
-    fetchFMPInsiderActivity(ticker),
-  ])
+  const [fundamentals, avSentiment, fmpNews, finnhubNews, finnhubSentiment, finnhubEarnings, insider] =
+    await Promise.allSettled([
+      fetchFMPFundamentals(ticker),
+      fetchAVNewsSentiment(ticker),
+      fetchFMPNews(ticker),
+      fetchFinnhubNews(ticker),
+      fetchFinnhubSentiment(ticker),
+      fetchFinnhubEarnings(ticker),
+      fetchFMPInsiderActivity(ticker),
+    ])
+
+  // Best available news source (priority: AV > Finnhub > FMP)
+  const news = avSentiment.value?.available ? avSentiment.value
+    : finnhubNews.value?.available         ? finnhubNews.value
+    : fmpNews.value?.available             ? fmpNews.value
+    : { available: false, reason: 'No news API keys configured' }
 
   return {
     symbol: ticker,
     timestamp: new Date().toISOString(),
-    fundamentals:  fundamentals.value  || { available: false, error: fundamentals.reason?.message },
-    news:          avSentiment.value?.available ? avSentiment.value : fmpNews.value || { available: false },
-    insiderActivity: insider.value   || { available: false, error: insider.reason?.message },
+    fundamentals:    fundamentals.value || { available: false, error: fundamentals.reason?.message },
+    news,
+    sentimentMetrics: finnhubSentiment.value || null,
+    upcomingEarnings: finnhubEarnings.value  || null,
+    insiderActivity:  insider.value          || { available: false, error: insider.reason?.message },
     dataSources: {
       fmp:          !!process.env.FMP_API_KEY,
       alphaVantage: !!process.env.ALPHA_VANTAGE_API_KEY,
+      finnhub:      !!process.env.FINNHUB_API_KEY,
     },
   }
 }
 
-module.exports = { fetchAllFundamentals, fetchAVNewsSentiment, fetchFMPFundamentals, fetchFMPNews }
+module.exports = {
+  fetchAllFundamentals,
+  fetchAVNewsSentiment, fetchFMPFundamentals, fetchFMPNews,
+  fetchFinnhubNews, fetchFinnhubSentiment,
+}

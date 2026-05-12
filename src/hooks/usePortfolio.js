@@ -209,14 +209,22 @@ export function usePortfolio({ userId, activePortfolioId, authFetch } = {}) {
     const gainLoss   = mktValue !== null ? mktValue - costBasis : null
     const gainLossPct= gainLoss !== null && costBasis > 0 ? (gainLoss / costBasis) * 100 : null
 
-    // ── Today's P/L: always anchored to prevClose, not q.change.
-    // q.change (regularMarketChange) can carry yesterday's value overnight
-    // or between midnight and pre-market, causing the "no reset" bug.
-    // Computing (price - prevClose) × shares guarantees a fresh daily baseline.
+    // ── Today's P/L — proper daily reset.
+    // Problem: after a session closes, Yahoo keeps regularMarketPrice = that
+    // session's close and regularMarketPreviousClose = the prior session's close,
+    // so (price − prevClose) equals yesterday's full move, not "today's" move.
+    // Fix: check regularMarketTime (Unix seconds). If it's from a previous
+    // calendar date, the market hasn't traded today → todayGL = 0.
     const prevClose  = q?.prevClose ?? null
-    const todayGL    = price !== null && prevClose !== null
+    const marketTime = q?.marketTime ?? null   // Unix seconds
+    const isToday    = marketTime
+      ? new Date(marketTime * 1000).toDateString() === new Date().toDateString()
+      : true   // if timestamp missing, trust the change value
+    const todayGL    = isToday && price !== null && prevClose !== null
       ? (price - prevClose) * pos.shares
-      : q?.change != null ? q.change * pos.shares : null   // graceful fallback
+      : isToday && q?.change != null
+        ? q.change * pos.shares
+        : 0   // prior session data — reset to 0 until today's session begins
 
     return { ...pos, ...q, price, costBasis, mktValue, gainLoss, gainLossPct, todayGL }
   })
