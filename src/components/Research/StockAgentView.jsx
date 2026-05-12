@@ -12,9 +12,10 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import {
   Send, Cpu, RefreshCw, Sparkles, TrendingUp, BarChart2,
-  AlertTriangle, ChevronRight, Zap, X, Info, Search,
+  AlertTriangle, ChevronRight, Zap, X, Info, Search, Share2,
 } from 'lucide-react'
 import AIAdvisoryView from './AIAdvisoryView'
+import PublishSignalModal from '../Trading/PublishSignalModal'
 
 // ── Markdown-lite renderer ────────────────────────────────────────────────────
 // Renders the structured sections Claude outputs without a full MD library
@@ -217,14 +218,15 @@ function NoKeyBanner() {
 // ── Main StockAgentView ───────────────────────────────────────────────────────
 
 export default function StockAgentView({ portfolio }) {
-  const [tab,        setTab]        = useState('agent')   // 'agent' | 'classic'
-  const [messages,   setMessages]   = useState([])
-  const [input,      setInput]      = useState('')
-  const [symbol,     setSymbol]     = useState('')
-  const [streaming,  setStreaming]  = useState(false)
-  const [hasKey,     setHasKey]     = useState(null)      // null = unknown, true/false
-  const [agentCaps,  setAgentCaps]  = useState({})        // { hasFMP, hasAV }
-  const [error,      setError]      = useState(null)
+  const [tab,         setTab]        = useState('agent')   // 'agent' | 'classic'
+  const [messages,    setMessages]  = useState([])
+  const [input,       setInput]     = useState('')
+  const [symbol,      setSymbol]    = useState('')
+  const [streaming,   setStreaming] = useState(false)
+  const [hasKey,      setHasKey]    = useState(null)      // null = unknown, true/false
+  const [agentCaps,   setAgentCaps] = useState({})        // { hasFMP, hasAV }
+  const [error,       setError]     = useState(null)
+  const [showPublish, setShowPublish] = useState(false)
 
   const bottomRef  = useRef(null)
   const inputRef   = useRef(null)
@@ -484,10 +486,16 @@ I'm your real-time stock analyst powered by Claude. I can:
             </div>
 
             {messages.length > 1 && (
-              <button onClick={clearChat}
-                className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 glass rounded-lg text-xs text-slate-400 hover:text-white border border-white/[0.06] hover:border-white/[0.15] transition-all">
-                <X className="w-3 h-3" /> Clear
-              </button>
+              <>
+                <button onClick={() => setShowPublish(true)} disabled={streaming}
+                  className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 glass rounded-lg text-xs text-mint-400 hover:text-mint-300 border border-mint-500/20 hover:border-mint-500/40 transition-all disabled:opacity-50">
+                  <Share2 className="w-3 h-3" /> Publish Signal
+                </button>
+                <button onClick={clearChat}
+                  className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 glass rounded-lg text-xs text-slate-400 hover:text-white border border-white/[0.06] hover:border-white/[0.15] transition-all">
+                  <X className="w-3 h-3" /> Clear
+                </button>
+              </>
             )}
           </div>
 
@@ -570,6 +578,18 @@ I'm your real-time stock analyst powered by Claude. I can:
             </p>
           </div>
         </div>
+      )}
+
+      {/* Publish Signal modal — pre-filled with last assistant message */}
+      {showPublish && (
+        <PublishSignalModal
+          symbol={symbol}
+          analysis={(() => {
+            const last = [...messages].reverse().find(m => m.role === 'assistant' && m.content && !m.streaming)
+            return last?.content?.slice(0, 1000) || ''
+          })()}
+          onClose={() => setShowPublish(false)}
+        />
       )}
     </div>
   )

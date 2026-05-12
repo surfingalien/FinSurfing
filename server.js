@@ -6,11 +6,13 @@ const helmet       = require('helmet')
 const cookieParser = require('cookie-parser')
 const rateLimit    = require('express-rate-limit')
 
-const authRoutes      = require('./routes/auth')
-const portfolioRoutes = require('./routes/portfolios')
-const publicRoutes    = require('./routes/public')
-const adminRoutes     = require('./routes/admin')
-const agentRoutes     = require('./routes/agent')
+const authRoutes        = require('./routes/auth')
+const portfolioRoutes   = require('./routes/portfolios')
+const publicRoutes      = require('./routes/public')
+const adminRoutes       = require('./routes/admin')
+const agentRoutes       = require('./routes/agent')
+const tradingRoutes     = require('./routes/trading')
+const copyTradingRoutes = require('./routes/copy-trading')
 
 const { seedAdminDB } = require('./db/adminSeed')
 
@@ -64,7 +66,7 @@ app.use(helmet({
       scriptSrc:   ["'self'", "'unsafe-inline'"],   // Vite needs inline scripts
       styleSrc:    ["'self'", "'unsafe-inline'"],
       imgSrc:      ["'self'", 'data:', 'https:'],
-      connectSrc:  ["'self'", 'https://query1.finance.yahoo.com', 'https://query2.finance.yahoo.com'],
+      connectSrc:  ["'self'", 'https://query1.finance.yahoo.com', 'https://query2.finance.yahoo.com', 'https://ai4trade.ai'],
       fontSrc:     ["'self'", 'data:'],
       objectSrc:   ["'none'"],
       upgradeInsecureRequests: PROD ? [] : null,
@@ -120,11 +122,13 @@ app.use('/api/auth/register',        authRegisterLimit)
 app.use('/api/auth/forgot-password', authForgotLimit)
 
 // ── Auth & Portfolio routes ───────────────────────
-app.use('/api/auth',       authRoutes)
-app.use('/api/portfolios', portfolioRoutes)
-app.use('/api/public',     publicLimit, publicRoutes)
-app.use('/api/admin',      adminRoutes)
-app.use('/api/agent',      agentRoutes)
+app.use('/api/auth',         authRoutes)
+app.use('/api/portfolios',   portfolioRoutes)
+app.use('/api/public',       publicLimit, publicRoutes)
+app.use('/api/admin',        adminRoutes)
+app.use('/api/agent',        agentRoutes)
+app.use('/api/trading',      tradingRoutes)
+app.use('/api/copy-trading', copyTradingRoutes)
 
 /* ── Safe fetch helpers ────────────────────────── */
 const YF1 = 'https://query1.finance.yahoo.com'
@@ -299,3 +303,39 @@ app.get('*', (_req, res) => {
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`FinSurf listening on 0.0.0.0:${PORT}`)
 })
+
+// ── AI-Trader background heartbeat poller (every 60 s) ───────────────────────
+// Polls notifications for every user that has registered an AI-Trader agent.
+// Stores new messages in ai_trader_notifications so GET /api/trading/notifications
+// can serve them instantly without blocking the request.
+if (process.env.DATABASE_URL) {
+  const at = require('./services/aiTraderClient')
+  const { query: dbQ } = require('./db/db')
+
+  async function runHeartbeatCycle() {
+    try {
+      const { rows } = await dbQ(
+        'SELECT id, ai_trader_token FROM users WHERE ai_trader_token IS NOT NULL LIMIT 100'
+      )
+      for (const user of rows) {
+        try {
+          const hb = await at.pollHeartbeat(user.ai_trader_token)
+          if (!hb?.messages?.length) continue
+          for (const msg of hb.messages) {
+            await dbQ(
+              `INSERT INTO ai_trader_notifications (user_id, type, data)
+               VALUES ($1, $2, $3)`,
+              [user.id, msg.type || 'info', JSON.stringify(msg)]
+            ).catch(() => {})
+          }
+        } catch {}
+      }
+    } catch {}
+  }
+
+  // Stagger first run by 30 s to let DB settle after startup
+  setTimeout(() => {
+    runHeartbeatCycle()
+    setInterval(runHeartbeatCycle, 60_000)
+  }, 30_000)
+}

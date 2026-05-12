@@ -1,6 +1,8 @@
 import { useState, useMemo, useRef, useCallback } from 'react'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { PortfolioProvider, usePortfolioContext } from './contexts/PortfolioContext'
+import { AITraderProvider } from './contexts/AITraderContext'
+import { ToastProvider } from './components/shared/ToastNotifications'
 import LandingPage from './components/Landing/LandingPage'
 import AuthPage from './components/Auth/AuthPage'
 import Header from './components/Layout/Header'
@@ -18,6 +20,7 @@ import ScreenerView from './components/Screener/ScreenerView'
 import StrategiesView from './components/Strategies/StrategiesView'
 import AlertsView from './components/Alerts/AlertsView'
 import StockAgentView from './components/Research/StockAgentView'
+import TradingNetworkView from './components/Trading/TradingNetworkView'
 import { usePortfolio } from './hooks/usePortfolio'
 import { useWatchlist } from './hooks/useWatchlist'
 import { useAlerts } from './hooks/useAlerts'
@@ -50,7 +53,9 @@ function AppInner() {
   if (isAuthenticated) {
     return (
       <PortfolioProvider>
-        <MainApp onSignIn={() => setScreen('landing')} />
+        <AITraderProvider>
+          <MainApp onSignIn={() => setScreen('landing')} />
+        </AITraderProvider>
       </PortfolioProvider>
     )
   }
@@ -80,7 +85,9 @@ function AppInner() {
   // Guest / demo app mode
   return (
     <PortfolioProvider>
-      <MainApp onSignIn={() => setScreen('login')} />
+      <AITraderProvider>
+        <MainApp onSignIn={() => setScreen('login')} />
+      </AITraderProvider>
     </PortfolioProvider>
   )
 }
@@ -195,6 +202,9 @@ function MainApp({ onSignIn }) {
             {activeTab === 'research' && (
               <StockAgentView portfolio={portfolio} />
             )}
+            {activeTab === 'trading' && (
+              <TradingNetworkView />
+            )}
             {activeTab === 'admin' && (
               <AdminDashboard />
             )}
@@ -215,8 +225,10 @@ function MainApp({ onSignIn }) {
 // ── Root export ───────────────────────────────────────────────────────────────
 export default function App() {
   return (
-    <AuthProvider>
-      <AppInner />
-    </AuthProvider>
+    <ToastProvider>
+      <AuthProvider>
+        <AppInner />
+      </AuthProvider>
+    </ToastProvider>
   )
 }
