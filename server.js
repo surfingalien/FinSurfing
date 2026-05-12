@@ -6,6 +6,15 @@ const helmet       = require('helmet')
 const cookieParser = require('cookie-parser')
 const rateLimit    = require('express-rate-limit')
 
+// yahoo-finance2 handles crumb/cookie auth automatically — preferred over raw Yahoo API calls
+let yf2
+try {
+  yf2 = require('yahoo-finance2').default
+  yf2.setGlobalConfig({ validation: { logErrors: false, logWarnings: false } })
+} catch (e) {
+  console.warn('[YF2] yahoo-finance2 unavailable, using raw API only:', e.message)
+}
+
 const authRoutes        = require('./routes/auth')
 const portfolioRoutes   = require('./routes/portfolios')
 const publicRoutes      = require('./routes/public')
@@ -155,28 +164,69 @@ const HEADERS = {
   'sec-fetch-site':  'same-site',
 }
 
+// ── Yahoo Finance crumb/cookie cache ──────────────────────────────────────────
+// Yahoo's v7 API requires a crumb + session cookie from cloud IPs.
+// We fetch once per ~45 min and attach to all raw Yahoo Finance requests.
+const yfCrumb = { value: null, cookie: null, fetchedAt: 0 }
+const CRUMB_TTL = 45 * 60 * 1000
+
+async function getYFCrumb() {
+  if (yfCrumb.value && Date.now() - yfCrumb.fetchedAt < CRUMB_TTL) return yfCrumb
+  try {
+    const r1 = await fetch('https://finance.yahoo.com/', {
+      headers: { ...HEADERS, Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8' },
+      redirect: 'follow',
+      signal: AbortSignal.timeout(10000),
+    })
+    // Collect all Set-Cookie values into a single Cookie header string
+    const rawCookie = r1.headers.get('set-cookie') || ''
+    const cookie = rawCookie.split(',').map(c => c.trim().split(';')[0]).filter(Boolean).join('; ')
+    const r2 = await fetch('https://query1.finance.yahoo.com/v1/test/getcrumb', {
+      headers: { ...HEADERS, Cookie: cookie },
+      signal: AbortSignal.timeout(8000),
+    })
+    const crumb = (await r2.text()).trim()
+    if (crumb && crumb.length >= 3 && !crumb.startsWith('<')) {
+      Object.assign(yfCrumb, { value: crumb, cookie, fetchedAt: Date.now() })
+      console.log('[YF] Crumb refreshed')
+      return yfCrumb
+    }
+  } catch (e) {
+    console.warn('[YF] crumb fetch failed:', e.message)
+  }
+  return null
+}
+
 async function yfFetch(url, timeoutMs = 10000) {
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), timeoutMs)
   try {
-    // Try query1 first, fall back to query2
-    const base = url.startsWith(YF1) ? url : url
-    const res  = await fetch(base, { headers: HEADERS, signal: ctrl.signal })
+    const auth = await getYFCrumb()
+    const headers = { ...HEADERS }
+    let authUrl = url
+    if (auth?.value) {
+      headers.Cookie = auth.cookie
+      authUrl += (url.includes('?') ? '&' : '?') + `crumb=${encodeURIComponent(auth.value)}`
+    }
+    const res  = await fetch(authUrl, { headers, signal: ctrl.signal })
     const text = await res.text()
     try {
       return JSON.parse(text)
     } catch {
-      // Yahoo returned non-JSON (rate limit / bot challenge) — try query2
-      const alt = url.replace(YF1, YF2).replace(YF2 + YF2.slice(YF2.indexOf('/')), YF2)
-      const res2  = await fetch(url.includes(YF1) ? url.replace(YF1, YF2) : url.replace(YF2, YF1),
-                                { headers: HEADERS, signal: AbortSignal.timeout(timeoutMs) })
-      const text2 = await res2.text()
+      // Yahoo returned non-JSON (rate limit / bot challenge) — invalidate crumb and try alt host
+      if (auth) { yfCrumb.value = null; yfCrumb.fetchedAt = 0 }
+      const altUrl = url.includes(YF1) ? url.replace(YF1, YF2) : url.replace(YF2, YF1)
+      const res2   = await fetch(altUrl, { headers: HEADERS, signal: AbortSignal.timeout(timeoutMs) })
+      const text2  = await res2.text()
       try { return JSON.parse(text2) } catch { return null }
     }
   } finally {
     clearTimeout(timer)
   }
 }
+
+// Warm up the crumb cache at startup so the first quote request doesn't pay the cost
+setTimeout(() => getYFCrumb().catch(() => {}), 3000)
 
 /* ── Price via chart v8 (most reliable from cloud IPs) */
 async function getChartQuote(symbol) {
@@ -229,20 +279,54 @@ app.get('/api/quote', async (req, res) => {
   const symbols = (req.query.symbols || '').split(',').filter(Boolean)
   if (!symbols.length) return res.status(400).json({ error: 'symbols required' })
   try {
-    // Try v7 quote endpoint first
+    // 1st choice: yahoo-finance2 (manages crumb/cookie automatically)
+    if (yf2) {
+      try {
+        const raw     = await yf2.quote(symbols, {}, { validateResult: false })
+        const rawArr  = Array.isArray(raw) ? raw : [raw]
+        const results = rawArr.map(q => ({
+          symbol:                      q.symbol,
+          shortName:                   q.shortName  || q.longName || q.symbol,
+          longName:                    q.longName   || q.shortName || q.symbol,
+          regularMarketPrice:          q.regularMarketPrice          ?? null,
+          regularMarketChange:         q.regularMarketChange         ?? null,
+          regularMarketChangePercent:  q.regularMarketChangePercent  ?? null,
+          regularMarketVolume:         q.regularMarketVolume         ?? null,
+          regularMarketDayHigh:        q.regularMarketDayHigh        ?? null,
+          regularMarketDayLow:         q.regularMarketDayLow         ?? null,
+          regularMarketOpen:           q.regularMarketOpen           ?? null,
+          regularMarketPreviousClose:  q.regularMarketPreviousClose  ?? null,
+          // yahoo-finance2 returns regularMarketTime as a Date object
+          regularMarketTime: q.regularMarketTime instanceof Date
+            ? Math.floor(q.regularMarketTime.getTime() / 1000)
+            : (q.regularMarketTime ?? null),
+          fiftyTwoWeekHigh:  q.fiftyTwoWeekHigh  ?? null,
+          fiftyTwoWeekLow:   q.fiftyTwoWeekLow   ?? null,
+          marketCap:         q.marketCap          ?? null,
+          trailingPE:        q.trailingPE         ?? null,
+        }))
+        if (results.some(r => r.regularMarketPrice != null)) {
+          return res.json({ quoteResponse: { result: results } })
+        }
+      } catch (e) {
+        console.warn('[YF2] quote error:', e.message)
+      }
+    }
+
+    // 2nd choice: raw v7 endpoint with crumb
     const url  = `${YF1}/v7/finance/quote?symbols=${symbols.join(',')}&fields=regularMarketPrice,regularMarketChange,regularMarketChangePercent,regularMarketVolume,marketCap,trailingPE,fiftyTwoWeekHigh,fiftyTwoWeekLow,shortName,longName,regularMarketDayHigh,regularMarketDayLow,regularMarketOpen,regularMarketPreviousClose,regularMarketTime`
     const data = await yfFetch(url, 12000)
     const results = data?.quoteResponse?.result
-    if (results && results.length) {
+    if (results && results.length && results.some(r => r.regularMarketPrice != null)) {
       return res.json({ quoteResponse: { result: results } })
     }
-    // Fallback: fetch each symbol via chart API (works on more IPs)
+
+    // 3rd choice: per-symbol chart API (v8 — most resilient from cloud IPs)
     const quotes = await Promise.all(
       symbols.map(s => getChartQuote(s).catch(() => ({ symbol: s, price: null })))
     )
     res.json({ quoteResponse: { result: quotes } })
   } catch (e) {
-    // Last resort: return empty quotes so UI shows dashes, not crash
     res.json({ quoteResponse: { result: symbols.map(s => ({ symbol: s, price: null })) } })
   }
 })
@@ -268,6 +352,18 @@ app.get('/api/summary', async (req, res) => {
   const { symbol, modules = 'summaryDetail,financialData,defaultKeyStatistics,assetProfile' } = req.query
   if (!symbol) return res.status(400).json({ error: 'symbol required' })
   try {
+    // 1st choice: yahoo-finance2
+    if (yf2) {
+      try {
+        const moduleList = modules.split(',')
+        const data = await yf2.quoteSummary(symbol, { modules: moduleList }, { validateResult: false })
+        // Wrap in the v10-compatible envelope the client expects
+        return res.json({ quoteSummary: { result: [data], error: null } })
+      } catch (e) {
+        console.warn('[YF2] quoteSummary error:', e.message)
+      }
+    }
+    // Fallback: raw v10 endpoint with crumb
     const url  = `${YF1}/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=${modules}`
     const data = await yfFetch(url, 15000)
     if (data) return res.json(data)
@@ -283,6 +379,14 @@ app.get('/api/search', async (req, res) => {
   const { q } = req.query
   if (!q) return res.status(400).json({ error: 'q required' })
   try {
+    if (yf2) {
+      try {
+        const data = await yf2.search(q, { quotesCount: 10, newsCount: 0 }, { validateResult: false })
+        if (data?.quotes?.length) return res.json(data)
+      } catch (e) {
+        console.warn('[YF2] search error:', e.message)
+      }
+    }
     const url  = `${YF2}/v1/finance/search?q=${encodeURIComponent(q)}&quotesCount=10&newsCount=0`
     const data = await yfFetch(url, 10000)
     res.json(data || { quotes: [] })
