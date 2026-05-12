@@ -166,9 +166,8 @@ export default function RebalancerView() {
 
     try {
       const resp = await authFetch('/api/rebalancer/suggest', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ holdings, targetAllocation, riskProfile }),
+        method: 'POST',
+        body:   { holdings, targetAllocation, riskProfile },
       })
 
       if (!resp.ok) {

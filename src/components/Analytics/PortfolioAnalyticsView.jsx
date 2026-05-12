@@ -5,10 +5,9 @@
  * correlation heatmap, and sector concentration donut.
  */
 
-import { useState, useEffect } from 'react'
-import { useAuth } from '../../contexts/AuthContext'
+import { useState, useEffect, useRef } from 'react'
 import {
-  Activity, BarChart3, PieChart, AlertTriangle, RefreshCw, Info,
+  Activity, BarChart3, PieChart, AlertTriangle, RefreshCw, Info, Plus, X,
 } from 'lucide-react'
 
 // ── Colour helpers ────────────────────────────────────────────────────────────
@@ -180,16 +179,20 @@ function SectorDonut({ sectors }) {
 // ── Main view ─────────────────────────────────────────────────────────────────
 
 export default function PortfolioAnalyticsView() {
-  const { authFetch, isAuthenticated } = useAuth()
+  const [manualSymbols, setManualSymbols] = useState([])
+  const [inputVal,      setInputVal]      = useState('')
   const [data,    setData]    = useState(null)
   const [loading, setLoading] = useState(false)
   const [error,   setError]   = useState(null)
+  const inputRef = useRef(null)
 
-  const load = async () => {
-    if (!isAuthenticated) return
+  const load = async (syms) => {
     setLoading(true); setError(null)
     try {
-      const r = await authFetch('/api/analytics/portfolio')
+      const url = syms?.length
+        ? `/api/analytics/portfolio?symbols=${syms.join(',')}`
+        : '/api/analytics/portfolio'
+      const r = await fetch(url, { credentials: 'include' })
       const d = await r.json()
       if (!r.ok) throw new Error(d.error || 'Analytics failed')
       setData(d)
@@ -200,14 +203,30 @@ export default function PortfolioAnalyticsView() {
     }
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { load(manualSymbols.length ? manualSymbols : null) }, [])
+
+  const addSymbol = () => {
+    const sym = inputVal.trim().toUpperCase().replace(/[^A-Z0-9.-]/g, '')
+    if (!sym || manualSymbols.includes(sym) || manualSymbols.length >= 20) return
+    const next = [...manualSymbols, sym]
+    setManualSymbols(next)
+    setInputVal('')
+    load(next)
+    inputRef.current?.focus()
+  }
+
+  const removeSymbol = (sym) => {
+    const next = manualSymbols.filter(s => s !== sym)
+    setManualSymbols(next)
+    load(next.length ? next : null)
+  }
 
   const noData = !loading && data && data.symbols?.length === 0
 
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
           <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20">
             <Activity className="w-5 h-5 text-amber-400" />
@@ -217,7 +236,7 @@ export default function PortfolioAnalyticsView() {
             <p className="text-xs text-slate-500">Beta, correlations & sector concentration vs SPY</p>
           </div>
         </div>
-        <button onClick={load} disabled={loading}
+        <button onClick={() => load(manualSymbols.length ? manualSymbols : null)} disabled={loading}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-slate-400
                      hover:text-white hover:bg-white/[0.06] border border-white/[0.06] transition-all">
           <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
@@ -225,11 +244,41 @@ export default function PortfolioAnalyticsView() {
         </button>
       </div>
 
-      {!isAuthenticated && (
-        <div className="p-6 rounded-2xl bg-white/[0.02] border border-white/[0.06] text-center text-slate-500 text-sm">
-          Sign in to view your portfolio analytics.
+      {/* Symbol input — manual analysis without needing a portfolio */}
+      <div className="bg-white/[0.02] border border-white/[0.06] rounded-2xl p-4">
+        <div className="text-xs font-semibold text-slate-400 mb-3">
+          Analyse symbols
+          <span className="ml-2 text-slate-600 font-normal">— or leave empty to use your portfolio</span>
         </div>
-      )}
+        <div className="flex gap-2 flex-wrap">
+          {manualSymbols.map(s => (
+            <span key={s} className="flex items-center gap-1.5 px-2.5 py-1 bg-amber-500/10 border border-amber-500/25
+                                      text-amber-300 text-xs rounded-lg font-mono">
+              {s}
+              <button onClick={() => removeSymbol(s)} className="text-amber-500/50 hover:text-amber-300">
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          ))}
+          <div className="flex gap-1.5">
+            <input
+              ref={inputRef}
+              value={inputVal}
+              onChange={e => setInputVal(e.target.value.toUpperCase())}
+              onKeyDown={e => e.key === 'Enter' && addSymbol()}
+              placeholder="AAPL"
+              className="w-24 bg-white/[0.04] border border-white/[0.08] rounded-lg px-2.5 py-1
+                         text-xs text-white placeholder-slate-600 focus:outline-none focus:border-amber-500/50
+                         transition-colors font-mono"
+            />
+            <button onClick={addSymbol}
+              className="flex items-center gap-1 px-2.5 py-1 bg-amber-500/15 border border-amber-500/25
+                         text-amber-400 text-xs rounded-lg hover:bg-amber-500/25 transition-colors">
+              <Plus className="w-3 h-3" /> Add
+            </button>
+          </div>
+        </div>
+      </div>
 
       {error && (
         <div className="flex items-center gap-3 p-4 rounded-xl bg-red-500/10 border border-red-500/25 text-red-400 text-sm">
@@ -246,7 +295,7 @@ export default function PortfolioAnalyticsView() {
 
       {noData && (
         <div className="p-6 rounded-2xl bg-white/[0.02] border border-white/[0.06] text-center text-slate-500 text-sm">
-          No holdings found. Add stocks to your portfolio to see analytics.
+          Add symbols above (e.g. AAPL, MSFT, GOOGL) or sign in to analyse your portfolio automatically.
         </div>
       )}
 

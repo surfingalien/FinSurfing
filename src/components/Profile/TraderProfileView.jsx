@@ -7,7 +7,7 @@
 
 import { useState, useEffect } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
-import { useAITrader } from '../../contexts/AITraderContext'
+import { followTrader as svcFollow, unfollowTrader as svcUnfollow } from '../../services/aiTraderService'
 import {
   User, TrendingUp, TrendingDown, Award, Users, Calendar,
   ArrowLeft, AlertTriangle, UserPlus, UserMinus,
@@ -88,7 +88,6 @@ function StatCard({ label, value, sub, icon: Icon, color = 'text-white' }) {
 
 export default function TraderProfileView({ username, onBack }) {
   const { authFetch } = useAuth()
-  const { followTrader, unfollowTrader } = useAITrader()
 
   const [profile,   setProfile]   = useState(null)
   const [loading,   setLoading]   = useState(true)
@@ -114,10 +113,10 @@ export default function TraderProfileView({ username, onBack }) {
     setToggling(true)
     try {
       if (following) {
-        await unfollowTrader(profile.agentId)
+        await svcUnfollow(String(profile.agentId))
         setFollowing(false)
       } else {
-        await followTrader(profile.agentId)
+        await svcFollow(String(profile.agentId), profile.displayName || profile.username)
         setFollowing(true)
       }
     } catch {}

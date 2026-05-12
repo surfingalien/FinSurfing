@@ -5,10 +5,15 @@
  * Never calls ai4trade.ai directly — always goes through /api/trading/* and /api/copy-trading/*.
  */
 
+// Auth token supplied by AITraderContext (in-memory JWT — never in localStorage)
+let _authToken = null
+export function setAuthToken(token) { _authToken = token }
+
 async function apiFetch(path, opts = {}) {
-  const token = localStorage.getItem('accessToken')
+  const token = _authToken
   const res = await fetch(path, {
     ...opts,
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
