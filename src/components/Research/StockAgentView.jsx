@@ -407,7 +407,7 @@ I'm your real-time stock analyst powered by Claude. I can:
   const portfolioSymbols = portfolio?.positions?.map(p => p.symbol) ?? []
 
   return (
-    <div className="space-y-0 animate-fade-in flex flex-col" style={{ height: 'calc(100vh - 160px)', minHeight: 600 }}>
+    <div className="space-y-0 animate-fade-in flex flex-col" style={{ height: 'calc(100vh - 112px)', minHeight: 400 }}>
 
       {/* ── Tabs ── */}
       <div className="flex items-center gap-2 border-b border-white/[0.06] pb-0 shrink-0">

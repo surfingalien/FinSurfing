@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef, useCallback } from 'react'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { PortfolioProvider, usePortfolioContext } from './contexts/PortfolioContext'
 import LandingPage from './components/Landing/LandingPage'
@@ -94,6 +94,13 @@ function MainApp({ onSignIn }) {
   const [analyzeSymbol, setAnalyzeSymbol] = useState('AAPL')
   const [wizardDone,    setWizardDone]    = useState(false)
   const [mobileNav,     setMobileNav]     = useState(false)
+  const mainRef = useRef(null)
+
+  // Reset scroll to top whenever the active tab changes
+  const changeTab = useCallback((tab) => {
+    setActiveTab(tab)
+    if (mainRef.current) mainRef.current.scrollTop = 0
+  }, [])
 
   // When authenticated: fetch holdings from API, keyed to the active portfolio.
   // When guest: fall back to localStorage namespaced by userId.
@@ -114,7 +121,7 @@ function MainApp({ onSignIn }) {
 
   const navigateTo = (tab, symbol) => {
     if (symbol) setAnalyzeSymbol(symbol)
-    setActiveTab(tab)
+    changeTab(tab)
   }
 
   const navigateToAnalyze = (symbol) => navigateTo('analyze', symbol)
@@ -135,7 +142,7 @@ function MainApp({ onSignIn }) {
       {/* ── Sidebar ── */}
       <Sidebar
         activeTab={activeTab}
-        onTabChange={setActiveTab}
+        onTabChange={changeTab}
         triggeredCount={alertsHook.triggered.length}
         onSignIn={onSignIn}
         mobileOpen={mobileNav}
@@ -148,7 +155,7 @@ function MainApp({ onSignIn }) {
         <Header onMobileMenuOpen={() => setMobileNav(true)} />
 
         {/* Scrollable main content */}
-        <main className="flex-1 overflow-y-auto">
+        <main ref={mainRef} className="flex-1 overflow-y-auto">
           <div className="max-w-screen-2xl mx-auto w-full px-4 py-6">
             {activeTab === 'dashboard' && (
               <DashboardView portfolio={portfolio} onAnalyze={navigateToAnalyze} />
