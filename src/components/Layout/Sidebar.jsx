@@ -13,27 +13,29 @@ import {
   LayoutDashboard, PieChart, Eye, LineChart, Lightbulb,
   TrendingUp, SlidersHorizontal, GitBranch, Bell, Bot,
   ShieldCheck, ChevronLeft, ChevronRight, LogIn, LogOut,
-  User, KeyRound, Activity, X, Menu, FolderOpen,
+  User, KeyRound, Activity, X, Menu, FolderOpen, Users,
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
+import { useAITrader } from '../../contexts/AITraderContext'
 import AccountSwitcher from '../Portfolio/AccountSwitcher'
 import CreatePortfolioModal from '../Portfolio/CreatePortfolioModal'
 import ChangePasswordModal from '../Auth/ChangePasswordModal'
 
 // ── Nav item definitions ──────────────────────────────────────────────────────
 
-function buildTabs(user, triggeredCount) {
+function buildTabs(user, triggeredCount, tradingUnread) {
   return [
-    { id: 'dashboard',       label: 'Dashboard',   icon: LayoutDashboard },
-    { id: 'portfolio',       label: 'Portfolio',   icon: PieChart },
-    { id: 'watchlist',       label: 'Watchlist',   icon: Eye },
-    { id: 'analyze',         label: 'Analyze',     icon: LineChart },
-    { id: 'recommendations', label: 'Advisory',    icon: Lightbulb },
-    { id: 'montecarlo',      label: 'Retirement',  icon: TrendingUp },
-    { id: 'screener',        label: 'Screener',    icon: SlidersHorizontal },
-    { id: 'strategies',      label: 'Strategies',  icon: GitBranch },
-    { id: 'alerts',          label: 'Alerts',      icon: Bell, badge: triggeredCount },
-    { id: 'research',        label: 'AI Agent',    icon: Bot },
+    { id: 'dashboard',       label: 'Dashboard',      icon: LayoutDashboard },
+    { id: 'portfolio',       label: 'Portfolio',      icon: PieChart },
+    { id: 'watchlist',       label: 'Watchlist',      icon: Eye },
+    { id: 'analyze',         label: 'Analyze',        icon: LineChart },
+    { id: 'recommendations', label: 'Advisory',       icon: Lightbulb },
+    { id: 'montecarlo',      label: 'Retirement',     icon: TrendingUp },
+    { id: 'screener',        label: 'Screener',       icon: SlidersHorizontal },
+    { id: 'strategies',      label: 'Strategies',     icon: GitBranch },
+    { id: 'alerts',          label: 'Alerts',         icon: Bell,  badge: triggeredCount },
+    { id: 'research',        label: 'AI Agent',       icon: Bot },
+    { id: 'trading',         label: 'Trader Network', icon: Users, badge: tradingUnread },
     ...(user?.role === 'admin'
       ? [{ id: 'admin', label: 'Admin', icon: ShieldCheck, admin: true }]
       : []),
@@ -176,12 +178,14 @@ export default function Sidebar({
   onMobileClose,
 }) {
   const { user, isAuthenticated } = useAuth()
+  const { unreadCount: tradingUnread = 0 } = useAITrader()
+
   const [collapsed,   setCollapsed]   = useState(() => {
     try { return localStorage.getItem('finsurf_sidebar_collapsed') === '1' } catch { return false }
   })
   const [showCreate, setShowCreate]   = useState(false)
 
-  const tabs = buildTabs(user, triggeredCount)
+  const tabs = buildTabs(user, triggeredCount, tradingUnread)
 
   const toggleCollapse = () => {
     setCollapsed(v => {

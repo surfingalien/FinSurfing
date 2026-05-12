@@ -297,3 +297,50 @@ EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 DO $$ BEGIN
   CREATE TRIGGER watchlists_updated_at BEFORE UPDATE ON watchlists  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+-- ─────────────────────────────────────────────────
+--  AI-TRADER INTEGRATION
+-- ─────────────────────────────────────────────────
+
+ALTER TABLE users ADD COLUMN IF NOT EXISTS ai_trader_token      TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS ai_trader_agent_id   INTEGER;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS ai_trader_registered_at TIMESTAMPTZ;
+
+CREATE TABLE IF NOT EXISTS ai_trader_signals (
+  id             UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id        UUID         NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  at_signal_id   VARCHAR(100),              -- ID returned by AI-Trader API
+  symbol         VARCHAR(20)  NOT NULL,
+  action         VARCHAR(20)  NOT NULL,     -- buy | sell | short | cover
+  price          DECIMAL(18,4),
+  quantity       INTEGER,
+  analysis       TEXT,
+  followers      INTEGER      NOT NULL DEFAULT 0,
+  published_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+  created_at     TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_signals_user   ON ai_trader_signals(user_id);
+CREATE INDEX IF NOT EXISTS idx_signals_symbol ON ai_trader_signals(symbol);
+
+CREATE TABLE IF NOT EXISTS ai_trader_notifications (
+  id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id    UUID        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  type       VARCHAR(50) NOT NULL,   -- new_follower | discussion_reply | strategy_reply_accepted
+  data       JSONB       NOT NULL DEFAULT '{}',
+  is_read    BOOLEAN     NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_at_notifs_user ON ai_trader_notifications(user_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS ai_trader_following (
+  id           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id      UUID        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  leader_id    VARCHAR(100) NOT NULL,
+  leader_name  VARCHAR(200),
+  followed_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(user_id, leader_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_at_following_user ON ai_trader_following(user_id);
