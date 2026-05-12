@@ -29,7 +29,9 @@ export function AITraderProvider({ children }) {
   const [loading,       setLoading]       = useState(false)
   const [publishing,    setPublishing]    = useState(false)
   const prevNotifsRef = useRef(null)
-  const pollRef = useRef(null)
+  const pollRef  = useRef(null)
+  const wsRef    = useRef(null)
+  const wsRetry  = useRef(0)
 
   const loadStatus = useCallback(async () => {
     if (!isAuthenticated) return
@@ -73,12 +75,87 @@ export function AITraderProvider({ children }) {
     loadNotifications()
   }, [isAuthenticated, loadStatus, loadNotifications])
 
-  // Poll notifications every 60 s
+  // WebSocket connection — real-time heartbeat (D)
+  // Falls back to 60 s polling if WebSocket is unavailable or fails.
+  const connectWS = useCallback((token, agentId) => {
+    if (!token) return
+    if (wsRef.current?.readyState === WebSocket.OPEN) return
+
+    const wsUrl = `wss://ai4trade.ai/ws/notify/${token}`
+    let ws
+    try {
+      ws = new WebSocket(wsUrl)
+    } catch {
+      return  // environment doesn't support WebSocket — polling handles it
+    }
+
+    wsRef.current = ws
+
+    ws.onopen = () => {
+      wsRetry.current = 0
+      clearInterval(pollRef.current)  // WS active — stop polling
+    }
+
+    ws.onmessage = (evt) => {
+      try {
+        const msg = JSON.parse(evt.data)
+        if (!msg?.type) return
+        const data     = msg.data || msg
+        const message  = data?.follower_name
+          ? `${data.follower_name} started following your signal`
+          : data?.content || null
+        toast?.fire(msg.type, message)
+        setNotifications(prev => {
+          const next = [{ id: `ws-${Date.now()}`, type: msg.type, data, is_read: false, created_at: new Date().toISOString() }, ...prev].slice(0, 50)
+          setStatus(s => s ? { ...s, unreadCount: next.filter(n => !n.is_read).length } : s)
+          return next
+        })
+      } catch {}
+    }
+
+    ws.onerror = () => {}
+
+    ws.onclose = () => {
+      if (!isAuthenticated) return
+      // Exponential backoff: 5 s, 10 s, 20 s … cap 120 s, then fall back to polling
+      const delay = Math.min(5000 * 2 ** wsRetry.current, 120_000)
+      wsRetry.current += 1
+      if (wsRetry.current > 6) {
+        // Too many failures — use polling as permanent fallback
+        if (!pollRef.current) {
+          pollRef.current = setInterval(loadNotifications, 60_000)
+        }
+        return
+      }
+      setTimeout(() => connectWS(token, agentId), delay)
+    }
+  }, [isAuthenticated, toast, loadNotifications])
+
+  // Polling + WS lifecycle — one effect owns both (D)
   useEffect(() => {
-    if (!isAuthenticated) return
+    if (!isAuthenticated) {
+      wsRef.current?.close()
+      clearInterval(pollRef.current)
+      return
+    }
+
+    // Start polling immediately as the safety net
+    clearInterval(pollRef.current)
     pollRef.current = setInterval(loadNotifications, 60_000)
-    return () => clearInterval(pollRef.current)
-  }, [isAuthenticated, loadNotifications])
+
+    // Attempt WS if user has a registered agent; WS onopen pauses the poll
+    if (status?.registered) {
+      // Token is persisted server-side; we pass agentId to WS URL as proxy
+      // connectWS is a no-op if WS already open
+      const token = localStorage.getItem('at_token') || ''
+      connectWS(token, status.agentId)
+    }
+
+    return () => {
+      clearInterval(pollRef.current)
+      wsRef.current?.close()
+    }
+  }, [isAuthenticated, status?.registered, connectWS, loadNotifications])
 
   const registerAgent = useCallback(async () => {
     setLoading(true)

@@ -21,6 +21,7 @@ import StrategiesView from './components/Strategies/StrategiesView'
 import AlertsView from './components/Alerts/AlertsView'
 import StockAgentView from './components/Research/StockAgentView'
 import TradingNetworkView from './components/Trading/TradingNetworkView'
+import EarningsCalendarView from './components/EarningsCalendar/EarningsCalendarView'
 import { usePortfolio } from './hooks/usePortfolio'
 import { useWatchlist } from './hooks/useWatchlist'
 import { useAlerts } from './hooks/useAlerts'
@@ -204,6 +205,9 @@ function MainApp({ onSignIn }) {
             )}
             {activeTab === 'trading' && (
               <TradingNetworkView />
+            )}
+            {activeTab === 'earnings' && (
+              <EarningsCalendarView portfolio={portfolio} onAnalyze={navigateToAnalyze} />
             )}
             {activeTab === 'admin' && (
               <AdminDashboard />

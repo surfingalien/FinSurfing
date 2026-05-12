@@ -5,9 +5,10 @@
  * Pre-filled with symbol + analysis text extracted from the AI Agent's last response.
  */
 
-import { useState } from 'react'
-import { X, Send, TrendingUp, TrendingDown, Minus, AlertTriangle, CheckCircle } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { X, Send, TrendingUp, TrendingDown, Minus, AlertTriangle, CheckCircle, Newspaper, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react'
 import { useAITrader } from '../../contexts/AITraderContext'
+import { getMarketContext } from '../../services/aiTraderService'
 
 const ACTION_OPTIONS = [
   { value: 'buy',   label: 'BUY',   icon: TrendingUp,   cls: 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10' },
@@ -15,6 +16,85 @@ const ACTION_OPTIONS = [
   { value: 'short', label: 'SHORT', icon: TrendingDown,  cls: 'text-orange-400 border-orange-500/30 bg-orange-500/10' },
   { value: 'cover', label: 'COVER', icon: Minus,         cls: 'text-slate-400 border-slate-500/30 bg-slate-500/10' },
 ]
+
+// ── Market context mini-panel (E) ─────────────────────────────────────────────
+
+function MarketContextPanel({ symbol }) {
+  const [ctx,      setCtx]      = useState(null)
+  const [loading,  setLoading]  = useState(false)
+  const [expanded, setExpanded] = useState(true)
+  const debounce = useRef(null)
+
+  useEffect(() => {
+    if (!symbol || symbol.length < 1) return
+    setLoading(true)
+    clearTimeout(debounce.current)
+    debounce.current = setTimeout(async () => {
+      try {
+        const data = await getMarketContext(symbol)
+        setCtx(data)
+      } catch {
+        setCtx(null)
+      } finally {
+        setLoading(false)
+      }
+    }, 600)
+    return () => clearTimeout(debounce.current)
+  }, [symbol])
+
+  const news = ctx?.news?.items || ctx?.news?.news || ctx?.news || []
+  const newsArray = Array.isArray(news) ? news.slice(0, 4) : []
+
+  if (!symbol) return null
+
+  return (
+    <div className="rounded-xl border border-white/[0.06] overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setExpanded(v => !v)}
+        className="w-full flex items-center gap-2 px-4 py-2.5 bg-white/[0.02] hover:bg-white/[0.04] transition-colors text-left"
+      >
+        <Newspaper className="w-3.5 h-3.5 text-slate-500" />
+        <span className="text-xs font-medium text-slate-400 flex-1">Market Context — {symbol}</span>
+        {loading && <div className="w-3 h-3 border border-slate-600 border-t-slate-400 rounded-full animate-spin" />}
+        {expanded ? <ChevronUp className="w-3.5 h-3.5 text-slate-600" /> : <ChevronDown className="w-3.5 h-3.5 text-slate-600" />}
+      </button>
+
+      {expanded && (
+        <div className="px-4 pb-3 pt-1 space-y-1.5">
+          {loading && !newsArray.length ? (
+            <p className="text-xs text-slate-600 py-2">Fetching news…</p>
+          ) : newsArray.length === 0 ? (
+            <p className="text-xs text-slate-600 py-2">No recent news found.</p>
+          ) : (
+            newsArray.map((item, i) => {
+              const title     = item.title || item.headline || item.summary || ''
+              const publisher = item.publisher || item.source || ''
+              const url       = item.link || item.url || null
+              return (
+                <div key={i} className="flex items-start gap-2 py-1 border-b border-white/[0.04] last:border-0">
+                  <span className="text-slate-600 text-xs mt-0.5 shrink-0">·</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-slate-300 leading-snug line-clamp-2">{title}</p>
+                    {publisher && <p className="text-[10px] text-slate-600 mt-0.5">{publisher}</p>}
+                  </div>
+                  {url && (
+                    <a href={url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}
+                      className="shrink-0 text-slate-700 hover:text-mint-400 transition-colors mt-0.5">
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  )}
+                </div>
+              )
+            })
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Main modal ────────────────────────────────────────────────────────────────
 
 export default function PublishSignalModal({ symbol = '', analysis = '', onClose }) {
   const { publishSignal, publishing, status } = useAITrader()
@@ -147,6 +227,9 @@ export default function PublishSignalModal({ symbol = '', analysis = '', onClose
                 />
               </div>
             </div>
+
+            {/* Market context (E) */}
+            <MarketContextPanel symbol={form.symbol} />
 
             {/* Analysis text */}
             <div>

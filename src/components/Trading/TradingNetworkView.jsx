@@ -48,6 +48,18 @@ function timeAgo(ts) {
   return `${Math.floor(h / 24)}d ago`
 }
 
+// ── P&L badge (C) ────────────────────────────────────────────────────────────
+
+function PnlBadge({ label, pnl }) {
+  const pos = pnl >= 0
+  return (
+    <span className={`text-[10px] font-bold font-mono px-1.5 py-0.5 rounded
+      ${pos ? 'bg-emerald-500/15 text-emerald-400' : 'bg-red-500/15 text-red-400'}`}>
+      {label} {pos ? '+' : ''}{pnl.toFixed(1)}%
+    </span>
+  )
+}
+
 // ── Sub-panel: My Signals ─────────────────────────────────────────────────────
 
 function MySignalsPanel({ onPublish }) {
@@ -113,10 +125,14 @@ function MySignalsPanel({ onPublish }) {
                   <Icon className="w-4 h-4" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-0.5">
+                  <div className="flex items-center gap-2 mb-0.5 flex-wrap">
                     <span className="text-sm font-mono font-bold text-white">{sig.symbol}</span>
                     <span className={`text-xs font-bold uppercase ${ACTION_COLOR[sig.action] || 'text-slate-400'}`}>{sig.action}</span>
                     {sig.price && <span className="text-xs font-mono text-slate-400">${sig.price}</span>}
+                    {/* P&L performance badges (C) */}
+                    {sig.pnl_1d  != null && <PnlBadge label="1d"  pnl={sig.pnl_1d}  />}
+                    {sig.pnl_7d  != null && <PnlBadge label="7d"  pnl={sig.pnl_7d}  />}
+                    {sig.pnl_30d != null && <PnlBadge label="30d" pnl={sig.pnl_30d} />}
                     {sig.followers > 0 && (
                       <span className="ml-auto text-xs text-slate-500 flex items-center gap-1">
                         <Users className="w-3 h-3" />{sig.followers}
@@ -143,6 +159,7 @@ const NOTIF_META = {
   new_follower:             { label: 'New Follower',        icon: UserPlus,  color: 'mint' },
   discussion_reply:         { label: 'Reply to Signal',     icon: Bell,      color: 'indigo' },
   strategy_reply_accepted:  { label: 'Analysis Accepted',  icon: Award,     color: 'amber' },
+  signal_performance:       { label: 'Signal P&L Update',  icon: TrendingUp, color: 'emerald' },
   info:                     { label: 'Notification',        icon: Zap,       color: 'slate' },
 }
 
@@ -191,8 +208,8 @@ function NotificationsPanel() {
             const meta  = NOTIF_META[n.type] || NOTIF_META.info
             const Icon  = meta.icon
             const data  = typeof n.data === 'string' ? JSON.parse(n.data) : n.data
-            const colorMap = { mint: 'text-mint-400', indigo: 'text-indigo-400', amber: 'text-amber-400', slate: 'text-slate-400' }
-            const bgMap    = { mint: 'bg-mint-500/8', indigo: 'bg-indigo-500/8', amber: 'bg-amber-500/8', slate: 'bg-slate-500/5' }
+            const colorMap = { mint: 'text-mint-400', indigo: 'text-indigo-400', amber: 'text-amber-400', slate: 'text-slate-400', emerald: 'text-emerald-400' }
+            const bgMap    = { mint: 'bg-mint-500/8', indigo: 'bg-indigo-500/8', amber: 'bg-amber-500/8', slate: 'bg-slate-500/5', emerald: 'bg-emerald-500/8' }
 
             return (
               <div key={n.id}

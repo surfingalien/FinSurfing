@@ -323,6 +323,18 @@ CREATE TABLE IF NOT EXISTS ai_trader_signals (
 CREATE INDEX IF NOT EXISTS idx_signals_user   ON ai_trader_signals(user_id);
 CREATE INDEX IF NOT EXISTS idx_signals_symbol ON ai_trader_signals(symbol);
 
+-- Signal performance columns (C)
+ALTER TABLE ai_trader_signals ADD COLUMN IF NOT EXISTS entry_price   DECIMAL(18,4);
+ALTER TABLE ai_trader_signals ADD COLUMN IF NOT EXISTS price_1d      DECIMAL(18,4);
+ALTER TABLE ai_trader_signals ADD COLUMN IF NOT EXISTS price_7d      DECIMAL(18,4);
+ALTER TABLE ai_trader_signals ADD COLUMN IF NOT EXISTS price_30d     DECIMAL(18,4);
+ALTER TABLE ai_trader_signals ADD COLUMN IF NOT EXISTS pnl_1d        DECIMAL(8,4);
+ALTER TABLE ai_trader_signals ADD COLUMN IF NOT EXISTS pnl_7d        DECIMAL(8,4);
+ALTER TABLE ai_trader_signals ADD COLUMN IF NOT EXISTS pnl_30d       DECIMAL(8,4);
+ALTER TABLE ai_trader_signals ADD COLUMN IF NOT EXISTS checked_1d_at  TIMESTAMPTZ;
+ALTER TABLE ai_trader_signals ADD COLUMN IF NOT EXISTS checked_7d_at  TIMESTAMPTZ;
+ALTER TABLE ai_trader_signals ADD COLUMN IF NOT EXISTS checked_30d_at TIMESTAMPTZ;
+
 CREATE TABLE IF NOT EXISTS ai_trader_notifications (
   id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id    UUID        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
