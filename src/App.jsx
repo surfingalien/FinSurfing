@@ -223,7 +223,7 @@ function MainApp({ onSignIn }) {
               <BacktestView />
             )}
             {activeTab === 'analytics' && (
-              <PortfolioAnalyticsView />
+              <PortfolioAnalyticsView portfolio={portfolio} />
             )}
             {activeTab === 'rebalancer' && (
               <RebalancerView />

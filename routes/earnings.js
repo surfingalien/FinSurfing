@@ -17,23 +17,34 @@ const YF1 = 'https://query1.finance.yahoo.com'
 const YF2 = 'https://query2.finance.yahoo.com'
 
 const HEADERS = {
-  'User-Agent':      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-  'Accept':          'application/json',
+  'User-Agent':      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+  'Accept':          'application/json, text/plain, */*',
   'Accept-Language': 'en-US,en;q=0.9',
   'Referer':         'https://finance.yahoo.com/',
+  'Origin':          'https://finance.yahoo.com',
+  'sec-fetch-dest':  'empty',
+  'sec-fetch-mode':  'cors',
+  'sec-fetch-site':  'same-site',
 }
 
 async function yfGet(url) {
   const res  = await fetch(url, { headers: HEADERS, signal: AbortSignal.timeout(12000) })
+  if (!res.ok) return null
   const text = await res.text()
   try { return JSON.parse(text) } catch { return null }
 }
 
 async function fetchEarningsForSymbol(symbol) {
-  const url  = `${YF1}/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=calendarEvents,summaryDetail,price`
-  let data   = await yfGet(url)
-  if (!data)  data = await yfGet(url.replace(YF1, YF2))
-  if (!data)  return { symbol, error: 'unavailable' }
+  const modules = 'calendarEvents,summaryDetail,price'
+  const path    = `/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=${modules}&corsDomain=finance.yahoo.com`
+  let data      = await yfGet(`${YF1}${path}`)
+  if (!data)    data = await yfGet(`${YF2}${path}`)
+  // v11 fallback
+  if (!data) {
+    const p11 = `/v11/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=${modules}`
+    data = await yfGet(`${YF1}${p11}`) || await yfGet(`${YF2}${p11}`)
+  }
+  if (!data)    return { symbol, error: 'unavailable' }
 
   const result = data?.quoteSummary?.result?.[0]
   if (!result) return { symbol, error: 'no data' }

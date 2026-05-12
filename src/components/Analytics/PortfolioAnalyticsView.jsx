@@ -178,13 +178,26 @@ function SectorDonut({ sectors }) {
 
 // ── Main view ─────────────────────────────────────────────────────────────────
 
-export default function PortfolioAnalyticsView() {
-  const [manualSymbols, setManualSymbols] = useState([])
+export default function PortfolioAnalyticsView({ portfolio }) {
+  // Pre-seed from portfolio positions on first render
+  const portfolioSymbols = portfolio?.positions?.map(p => p.symbol).filter(Boolean) ?? []
+
+  const [manualSymbols, setManualSymbols] = useState(() => portfolioSymbols)
   const [inputVal,      setInputVal]      = useState('')
   const [data,    setData]    = useState(null)
   const [loading, setLoading] = useState(false)
   const [error,   setError]   = useState(null)
   const inputRef = useRef(null)
+  const seededRef = useRef(false)
+
+  // Re-seed whenever portfolio changes (e.g. after initial load)
+  useEffect(() => {
+    if (seededRef.current) return
+    if (portfolioSymbols.length > 0) {
+      seededRef.current = true
+      setManualSymbols(portfolioSymbols)
+    }
+  }, [portfolioSymbols.join(',')])
 
   const load = async (syms) => {
     setLoading(true); setError(null)
@@ -203,7 +216,10 @@ export default function PortfolioAnalyticsView() {
     }
   }
 
-  useEffect(() => { load(manualSymbols.length ? manualSymbols : null) }, [])
+  useEffect(() => {
+    const initial = portfolioSymbols.length ? portfolioSymbols : null
+    load(initial)
+  }, [])
 
   const addSymbol = () => {
     const sym = inputVal.trim().toUpperCase().replace(/[^A-Z0-9.-]/g, '')

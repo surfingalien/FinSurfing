@@ -36,6 +36,82 @@ function getClient() {
   return _client
 }
 
+// ── Yahoo Finance direct fetch (avoids internal HTTP proxy) ──────────────────
+const YF_HEADERS = {
+  'User-Agent':      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+  'Accept':          'application/json, text/plain, */*',
+  'Accept-Language': 'en-US,en;q=0.9',
+  'Referer':         'https://finance.yahoo.com/',
+  'Origin':          'https://finance.yahoo.com',
+  'sec-fetch-dest':  'empty',
+  'sec-fetch-mode':  'cors',
+  'sec-fetch-site':  'same-site',
+}
+
+async function yfDirect(path) {
+  const base = 'https://query1.finance.yahoo.com'
+  const fallback = 'https://query2.finance.yahoo.com'
+  let res
+  try {
+    res = await fetch(`${base}${path}`, { headers: YF_HEADERS, signal: AbortSignal.timeout(12000) })
+    if (!res.ok) throw new Error(`q1 HTTP ${res.status}`)
+  } catch {
+    res = await fetch(`${fallback}${path}`, { headers: YF_HEADERS, signal: AbortSignal.timeout(12000) })
+  }
+  const text = await res.text()
+  try { return JSON.parse(text) } catch { throw new Error('Yahoo Finance returned non-JSON') }
+}
+
+// ── Gemini streaming helper ───────────────────────────────────────────────────
+async function* streamGemini(model, systemPrompt, messages, signal) {
+  const key = process.env.GEMINI_API_KEY
+  if (!key) throw new Error('GEMINI_API_KEY is not set')
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?key=${key}&alt=sse`
+
+  const contents = messages.map(m => ({
+    role:  m.role === 'assistant' ? 'model' : 'user',
+    parts: [{ text: m.content }],
+  }))
+
+  const body = {
+    system_instruction: { parts: [{ text: systemPrompt }] },
+    contents,
+    generationConfig: { maxOutputTokens: 4096, temperature: 0.7 },
+  }
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    signal,
+  })
+  if (!res.ok) {
+    const err = await res.text()
+    throw new Error(`Gemini API error ${res.status}: ${err.slice(0, 200)}`)
+  }
+
+  const reader  = res.body.getReader()
+  const decoder = new TextDecoder()
+  let buf = ''
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buf += decoder.decode(value, { stream: true })
+    const lines = buf.split('\n')
+    buf = lines.pop()
+    for (const line of lines) {
+      if (!line.startsWith('data:')) continue
+      const payload = line.slice(5).trim()
+      if (!payload || payload === '[DONE]') continue
+      try {
+        const obj = JSON.parse(payload)
+        const text = obj?.candidates?.[0]?.content?.parts?.[0]?.text
+        if (text) yield text
+      } catch {}
+    }
+  }
+}
+
 // ── Tool definitions ──────────────────────────────────────────────────────────
 
 const TOOLS = [
@@ -113,12 +189,8 @@ Use for relative strength, sector rotation, or head-to-head comparison questions
 // ── Yahoo Finance OHLCV fetch ─────────────────────────────────────────────────
 
 async function fetchOHLCV(symbol, range = '1y') {
-  const port    = process.env.PORT || 3001
-  const base    = process.env.INTERNAL_BASE_URL || `http://localhost:${port}`
-  const url     = `${base}/api/chart?symbol=${encodeURIComponent(symbol)}&interval=1d&range=${range}`
-  const res     = await fetch(url, { signal: AbortSignal.timeout(15000) })
-  const data    = await res.json()
-  const result  = data?.chart?.result?.[0]
+  const data   = await yfDirect(`/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=${range}`)
+  const result = data?.chart?.result?.[0]
   if (!result) throw new Error(`No chart data for ${symbol}`)
 
   const ts        = result.timestamp || []
@@ -310,12 +382,11 @@ Current data sources: Yahoo Finance (always) · FMP · Alpha Vantage`
 // ── POST /api/agent/analyze ───────────────────────────────────────────────────
 
 router.post('/analyze', async (req, res) => {
-  const { prompt, symbol, history = [] } = req.body || {}
+  const { prompt, symbol, history = [], model: reqModel } = req.body || {}
   if (!prompt) return res.status(400).json({ error: 'prompt is required' })
 
-  let client
-  try { client = getClient() }
-  catch (err) { return res.status(503).json({ error: err.message, code: 'NO_API_KEY' }) }
+  const model    = reqModel || 'claude-opus-4-7'
+  const isGemini = model.startsWith('gemini')
 
   // SSE headers
   res.setHeader('Content-Type', 'text/event-stream; charset=utf-8')
@@ -323,6 +394,49 @@ router.post('/analyze', async (req, res) => {
   res.setHeader('X-Accel-Buffering', 'no')
 
   const send = (event, data) => res.write(`data: ${JSON.stringify({ event, ...data })}\n\n`)
+
+  // ── Gemini path ─────────────────────────────────────────────────────────────
+  if (isGemini) {
+    try {
+      let contextData = ''
+      if (symbol) {
+        const sym = symbol.toUpperCase().trim()
+        send('tool_start', { name: 'get_technical_analysis', input: { symbol: sym } })
+        try {
+          const ta = await executeTechnicalAnalysis({ symbol: sym })
+          contextData = `\n\nLive technical data for ${sym}:\n${JSON.stringify(ta, null, 2)}`
+          send('tool_end', { name: 'get_technical_analysis', symbol: sym })
+        } catch (e) {
+          send('tool_error', { name: 'get_technical_analysis', error: e.message })
+        }
+      }
+
+      const abortCtrl = new AbortController()
+      req.on('close', () => abortCtrl.abort())
+
+      const msgs = [
+        ...history.slice(-10).map(m => ({ role: m.role, content: m.content })),
+        { role: 'user', content: symbol ? `Analyze ${symbol.toUpperCase()}. ${prompt}` : prompt },
+      ]
+
+      for await (const text of streamGemini(model, SYSTEM_PROMPT + contextData, msgs, abortCtrl.signal)) {
+        send('delta', { text })
+      }
+      send('done', {})
+      res.end()
+    } catch (err) {
+      console.error('[Agent/Gemini] Error:', err.message)
+      if (!res.headersSent) return res.status(500).json({ error: err.message })
+      send('error', { message: err.message })
+      res.end()
+    }
+    return
+  }
+
+  // ── Anthropic path ──────────────────────────────────────────────────────────
+  let client
+  try { client = getClient() }
+  catch (err) { return res.status(503).json({ error: err.message, code: 'NO_API_KEY' }) }
 
   const userContent = symbol ? `Analyze ${symbol.toUpperCase()}. ${prompt}` : prompt
 
@@ -338,14 +452,17 @@ router.post('/analyze', async (req, res) => {
     while (iteration < MAX_ITERATIONS) {
       iteration++
 
-      const stream = client.messages.stream({
-        model:    'claude-opus-4-7',
+      const streamParams = {
+        model,
         max_tokens: 8192,
-        thinking: { type: 'adaptive' },
         system:   SYSTEM_PROMPT,
         tools:    TOOLS,
         messages,
-      })
+      }
+      // Extended thinking only on opus-4-7
+      if (model === 'claude-opus-4-7') streamParams.thinking = { type: 'adaptive' }
+
+      const stream = client.messages.stream(streamParams)
 
       let fullText = ''
       stream.on('text', text => { fullText += text; send('delta', { text }) })
@@ -421,7 +538,7 @@ router.get('/health', (_req, res) => {
     hasFMP:       !!process.env.FMP_API_KEY,
     hasAV:        !!process.env.ALPHA_VANTAGE_API_KEY,
     hasFinnhub:   !!process.env.FINNHUB_API_KEY,
-    model:        'claude-opus-4-7',
+    hasGemini:    !!process.env.GEMINI_API_KEY,
     tools:        TOOLS.map(t => t.name),
   })
 })

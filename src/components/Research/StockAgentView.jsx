@@ -217,14 +217,23 @@ function NoKeyBanner() {
 
 // ── Main StockAgentView ───────────────────────────────────────────────────────
 
+const MODELS = [
+  { id: 'claude-opus-4-7',    label: 'Opus 4.7',      provider: 'claude' },
+  { id: 'claude-sonnet-4-6',  label: 'Sonnet 4.6',    provider: 'claude' },
+  { id: 'claude-haiku-4-5',   label: 'Haiku 4.5',     provider: 'claude' },
+  { id: 'gemini-2.0-flash',   label: 'Gemini Flash',  provider: 'gemini' },
+  { id: 'gemini-1.5-pro',     label: 'Gemini 1.5 Pro',provider: 'gemini' },
+]
+
 export default function StockAgentView({ portfolio }) {
   const [tab,         setTab]        = useState('agent')   // 'agent' | 'classic'
   const [messages,    setMessages]  = useState([])
   const [input,       setInput]     = useState('')
   const [symbol,      setSymbol]    = useState('')
+  const [model,       setModel]     = useState('claude-opus-4-7')
   const [streaming,   setStreaming] = useState(false)
   const [hasKey,      setHasKey]    = useState(null)      // null = unknown, true/false
-  const [agentCaps,   setAgentCaps] = useState({})        // { hasFMP, hasAV }
+  const [agentCaps,   setAgentCaps] = useState({})        // { hasFMP, hasAV, hasGemini }
   const [error,       setError]     = useState(null)
   const [showPublish, setShowPublish] = useState(false)
 
@@ -235,7 +244,10 @@ export default function StockAgentView({ portfolio }) {
   useEffect(() => {
     fetch('/api/agent/health')
       .then(r => r.json())
-      .then(d => { setHasKey(d.hasKey); setAgentCaps({ hasFMP: d.hasFMP, hasAV: d.hasAV, hasFinnhub: d.hasFinnhub }) })
+      .then(d => {
+        setHasKey(d.hasKey)
+        setAgentCaps({ hasFMP: d.hasFMP, hasAV: d.hasAV, hasFinnhub: d.hasFinnhub, hasGemini: d.hasGemini })
+      })
       .catch(() => setHasKey(false))
   }, [])
 
@@ -303,7 +315,7 @@ I'm your real-time stock analyst powered by Claude. I can:
       const res = await fetch('/api/agent/analyze', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ prompt: text, symbol: sym, history }),
+        body:    JSON.stringify({ prompt: text, symbol: sym, history, model }),
       })
 
       if (!res.ok) {
@@ -437,7 +449,21 @@ I'm your real-time stock analyst powered by Claude. I can:
           <span className={`text-[10px] font-mono ${agentCaps.hasFinnhub ? 'text-emerald-500' : 'text-slate-700'}`}>
             Finnhub {agentCaps.hasFinnhub ? '✓' : '○'}
           </span>
-          <span className="text-[10px] text-slate-700 font-mono border-l border-white/[0.06] pl-2">claude-opus-4-7</span>
+          {/* Model selector */}
+          <div className="border-l border-white/[0.06] pl-2">
+            <select
+              value={model}
+              onChange={e => setModel(e.target.value)}
+              disabled={streaming}
+              className="bg-white/[0.04] border border-white/[0.08] rounded-md px-2 py-0.5 text-[10px]
+                         text-slate-300 font-mono focus:outline-none focus:border-mint-500/40
+                         disabled:opacity-50 cursor-pointer"
+            >
+              {MODELS.filter(m => m.provider === 'claude' || agentCaps.hasGemini).map(m => (
+                <option key={m.id} value={m.id}>{m.label}</option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 
@@ -574,7 +600,7 @@ I'm your real-time stock analyst powered by Claude. I can:
               </button>
             </div>
             <p className="text-[10px] text-slate-700 mt-1.5 px-1">
-              Not financial advice · Real-time data via Yahoo Finance · Powered by Anthropic Claude
+              Not financial advice · Real-time data via Yahoo Finance · Model: {model}
             </p>
           </div>
         </div>
