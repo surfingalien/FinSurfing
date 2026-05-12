@@ -264,6 +264,72 @@ async function getChartQuote(symbol) {
   }
 }
 
+/* ── Finnhub live quotes (works reliably from cloud IPs) ──────────────────── */
+// Finnhub /quote returns { c: price, d: change, dp: changePct, h, l, o, pc, t }
+async function getFinnhubQuotes(symbols) {
+  const key = process.env.FINNHUB_API_KEY
+  if (!key) return null
+  try {
+    const results = await Promise.all(
+      symbols.map(async sym => {
+        try {
+          const r = await fetch(
+            `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(sym)}&token=${key}`,
+            { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(8000) }
+          )
+          const d = await r.json()
+          if (d?.c == null || d.c === 0) return { symbol: sym, price: null }
+          return {
+            symbol,
+            shortName:                  sym,
+            regularMarketPrice:         d.c,
+            regularMarketChange:        d.d   ?? null,
+            regularMarketChangePercent: d.dp  ?? null,
+            regularMarketDayHigh:       d.h   ?? null,
+            regularMarketDayLow:        d.l   ?? null,
+            regularMarketOpen:          d.o   ?? null,
+            regularMarketPreviousClose: d.pc  ?? null,
+            regularMarketTime:          d.t   ?? null,
+          }
+        } catch { return { symbol: sym, price: null } }
+      })
+    )
+    return results
+  } catch { return null }
+}
+
+/* ── FMP live quotes (batch, works from cloud IPs) ─────────────────────────── */
+// FMP /quote/:symbols returns [{ symbol, price, change, changesPercentage, ... }]
+async function getFMPQuotes(symbols) {
+  const key = process.env.FMP_API_KEY
+  if (!key) return null
+  try {
+    const r = await fetch(
+      `https://financialmodelingprep.com/api/v3/quote/${symbols.join(',')}?apikey=${key}`,
+      { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(10000) }
+    )
+    const data = await r.json()
+    if (!Array.isArray(data) || !data.length) return null
+    return data.map(q => ({
+      symbol:                     q.symbol,
+      shortName:                  q.name   || q.symbol,
+      regularMarketPrice:         q.price                ?? null,
+      regularMarketChange:        q.change               ?? null,
+      regularMarketChangePercent: q.changesPercentage    ?? null,
+      regularMarketVolume:        q.volume               ?? null,
+      regularMarketDayHigh:       q.dayHigh              ?? null,
+      regularMarketDayLow:        q.dayLow               ?? null,
+      regularMarketOpen:          q.open                 ?? null,
+      regularMarketPreviousClose: q.previousClose        ?? null,
+      regularMarketTime:          q.timestamp            ?? null,
+      fiftyTwoWeekHigh:           q.yearHigh             ?? null,
+      fiftyTwoWeekLow:            q.yearLow              ?? null,
+      marketCap:                  q.marketCap            ?? null,
+      trailingPE:                 q.pe                   ?? null,
+    }))
+  } catch { return null }
+}
+
 /* ── Health (includes DB status + demo mode) ───── */
 app.get('/health', async (_req, res) => {
   const demoMode = !process.env.DATABASE_URL
@@ -313,7 +379,27 @@ app.get('/api/quote', async (req, res) => {
       }
     }
 
-    // 2nd choice: raw v7 endpoint with crumb
+    // 2nd choice: Finnhub (reliable from cloud IPs, no IP block)
+    {
+      const fh = await getFinnhubQuotes(symbols).catch(() => null)
+      if (fh && fh.some(r => r.regularMarketPrice != null)) {
+        console.log('[Finnhub] quote OK')
+        return res.json({ quoteResponse: { result: fh } })
+      }
+      if (fh) console.warn('[Finnhub] quote returned no prices')
+    }
+
+    // 3rd choice: FMP batch quote (also reliable from cloud IPs)
+    {
+      const fmp = await getFMPQuotes(symbols).catch(() => null)
+      if (fmp && fmp.some(r => r.regularMarketPrice != null)) {
+        console.log('[FMP] quote OK')
+        return res.json({ quoteResponse: { result: fmp } })
+      }
+      if (fmp) console.warn('[FMP] quote returned no prices')
+    }
+
+    // 4th choice: raw v7 endpoint with crumb
     const url  = `${YF1}/v7/finance/quote?symbols=${symbols.join(',')}&fields=regularMarketPrice,regularMarketChange,regularMarketChangePercent,regularMarketVolume,marketCap,trailingPE,fiftyTwoWeekHigh,fiftyTwoWeekLow,shortName,longName,regularMarketDayHigh,regularMarketDayLow,regularMarketOpen,regularMarketPreviousClose,regularMarketTime`
     const data = await yfFetch(url, 12000)
     const results = data?.quoteResponse?.result
@@ -321,7 +407,7 @@ app.get('/api/quote', async (req, res) => {
       return res.json({ quoteResponse: { result: results } })
     }
 
-    // 3rd choice: per-symbol chart API (v8 — most resilient from cloud IPs)
+    // 5th choice: per-symbol chart API (v8 — most resilient from cloud IPs)
     const quotes = await Promise.all(
       symbols.map(s => getChartQuote(s).catch(() => ({ symbol: s, price: null })))
     )
