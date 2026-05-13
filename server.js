@@ -183,13 +183,16 @@ async function getFinnhubQuotes(symbols) {
       if (cached) return cached
       try {
         const d = await apiFetch(fhUrl(`/quote?symbol=${encodeURIComponent(sym)}`), 8000)
-        if (!d?.c) return { symbol: sym, regularMarketPrice: null }
+        // d.c === 0 happens after market hours on the free tier — fall back to d.pc (previous close)
+        const price = d?.c || d?.pc || null
+        if (!price) return { symbol: sym, regularMarketPrice: null }
+        const isStale = !d.c && !!d.pc  // using prev close when market is closed
         const q = {
           symbol:                     sym,
           shortName:                  sym,
-          regularMarketPrice:         d.c,
-          regularMarketChange:        d.d   ?? null,
-          regularMarketChangePercent: d.dp  ?? null,
+          regularMarketPrice:         price,
+          regularMarketChange:        isStale ? 0 : (d.d   ?? null),
+          regularMarketChangePercent: isStale ? 0 : (d.dp  ?? null),
           regularMarketDayHigh:       d.h   ?? null,
           regularMarketDayLow:        d.l   ?? null,
           regularMarketOpen:          d.o   ?? null,
@@ -404,8 +407,9 @@ async function finnhubHealthCheck() {
   if (!FH_KEY()) { console.log('[Finnhub] FINNHUB_API_KEY not set — using FMP only'); return }
   try {
     const d = await apiFetch(fhUrl('/quote?symbol=SPY'), 8000)
-    if (d?.c) {
-      console.log(`[Finnhub] health OK — SPY $${d.c}`)
+    const price = d?.c || d?.pc
+    if (price) {
+      console.log(`[Finnhub] health OK — SPY $${price}${!d.c ? ' (prev close)' : ''}`)
     } else {
       console.warn('[Finnhub] health check: unexpected response', JSON.stringify(d).slice(0, 120))
     }
