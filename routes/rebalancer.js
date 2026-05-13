@@ -8,17 +8,23 @@
  *   targetAllocation — { 'Technology': 30, 'Healthcare': 20, ... } (% by sector)
  *   riskProfile      — 'conservative' | 'moderate' | 'aggressive'
  *
- * Streams Claude's rebalancing plan via SSE — powered by AWS Bedrock.
+ * Streams Claude's rebalancing plan via SSE.
  */
 
-const express             = require('express')
-const { requireAuth }     = require('../middleware/auth')
-const { getBedrockClient } = require('../utils/bedrockClient')
+const express         = require('express')
+const { requireAuth } = require('../middleware/auth')
 
 const router = express.Router()
 router.use(requireAuth)
 
-const DEFAULT_MODEL = 'us.anthropic.claude-3-5-sonnet-20241022-v2:0'
+let _client = null
+function getClient() {
+  if (_client) return _client
+  if (!process.env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY not set')
+  const Anthropic = require('@anthropic-ai/sdk')
+  _client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+  return _client
+}
 
 router.post('/suggest', async (req, res) => {
   const { holdings = [], targetAllocation = {}, riskProfile = 'moderate' } = req.body
@@ -26,7 +32,6 @@ router.post('/suggest', async (req, res) => {
   if (!Array.isArray(holdings) || holdings.length === 0)
     return res.status(400).json({ error: 'holdings array is required' })
 
-  // Compute current portfolio value + sector weights
   const totalValue = holdings.reduce((s, h) => s + (h.shares * h.currentPrice || 0), 0)
   if (totalValue <= 0)
     return res.status(400).json({ error: 'Portfolio value is zero — provide currentPrice for holdings' })
@@ -82,18 +87,17 @@ Be direct and actionable. Use dollar amounts, share counts, and percentages thro
   res.flushHeaders()
 
   try {
-    const { ConverseStreamCommand } = require('@aws-sdk/client-bedrock-runtime')
-    const client  = getBedrockClient()
-    const command = new ConverseStreamCommand({
-      modelId:         DEFAULT_MODEL,
-      messages:        [{ role: 'user', content: [{ text: prompt }] }],
-      inferenceConfig: { maxTokens: 1500, temperature: 0.7 },
+    const client = getClient()
+    const stream = await client.messages.stream({
+      model:      'claude-opus-4-5',
+      max_tokens: 1500,
+      messages:   [{ role: 'user', content: prompt }],
     })
 
-    const response = await client.send(command)
-    for await (const event of response.stream) {
-      const text = event.contentBlockDelta?.delta?.text
-      if (text) res.write(`data: ${JSON.stringify({ text })}\n\n`)
+    for await (const chunk of stream) {
+      if (chunk.type === 'content_block_delta' && chunk.delta?.type === 'text_delta') {
+        res.write(`data: ${JSON.stringify({ text: chunk.delta.text })}\n\n`)
+      }
     }
 
     res.write('data: [DONE]\n\n')
