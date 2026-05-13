@@ -8,33 +8,28 @@
  *   • Fundamental Analyst — P/E, margins, growth, DCF from FMP
  *   • Sentiment Analyst  — News sentiment from Alpha Vantage + FMP
  *   • Insider Tracker    — Insider buy/sell from FMP
- *   • Risk Manager       — Claude synthesises all reports into a trade plan
+ *   • Risk Manager       — Claude (via AWS Bedrock) synthesises all reports
  *
  * Data sources (each optional — degrades gracefully):
- *   Yahoo Finance  → always available (our existing /api/chart proxy)
+ *   Yahoo Finance  → always available (direct fetch, no proxy)
  *   Alpha Vantage  → ALPHA_VANTAGE_API_KEY env var
  *   FMP            → FMP_API_KEY env var
  *
+ * AI backends:
+ *   AWS Bedrock    → AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY + AWS_REGION
+ *   Google Gemini  → GEMINI_API_KEY (streaming REST)
+ *
  * POST /api/agent/analyze   — SSE streaming chat
- * GET  /api/agent/health    — key status check
+ * GET  /api/agent/health    — credential status check
  */
 
 'use strict'
 
 const express  = require('express')
 const router   = express.Router()
-const { computeAll } = require('../utils/technicals')
+const { computeAll }           = require('../utils/technicals')
 const { fetchAllFundamentals } = require('../utils/dataProviders')
-
-// ── Lazy-load Anthropic SDK ───────────────────────────────────────────────────
-let _client = null
-function getClient() {
-  if (_client) return _client
-  if (!process.env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY is not set')
-  const Anthropic = require('@anthropic-ai/sdk')
-  _client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-  return _client
-}
+const { getBedrockClient }     = require('../utils/bedrockClient')
 
 // ── Yahoo Finance direct fetch (avoids internal HTTP proxy) ──────────────────
 const YF_HEADERS = {
@@ -110,6 +105,179 @@ async function* streamGemini(model, systemPrompt, messages, signal) {
       } catch {}
     }
   }
+}
+
+// ── Bedrock helpers ───────────────────────────────────────────────────────────
+
+/** Convert our Anthropic-style tools array to Bedrock toolConfig format */
+function toBedrockTools(tools) {
+  return {
+    tools: tools.map(t => ({
+      toolSpec: {
+        name:        t.name,
+        description: t.description,
+        inputSchema: { json: t.input_schema },
+      },
+    })),
+  }
+}
+
+/**
+ * Convert our internal messages array (Anthropic format) to Bedrock Converse format.
+ * Handles: string content, text blocks, tool_use blocks, tool_result blocks.
+ */
+function toBedrockMessages(messages) {
+  return messages.map(m => {
+    if (typeof m.content === 'string') {
+      return { role: m.role, content: [{ text: m.content }] }
+    }
+    const content = m.content.map(block => {
+      if (block.type === 'text')     return { text: block.text }
+      if (block.type === 'tool_use') {
+        return { toolUse: { toolUseId: block.id, name: block.name, input: block.input } }
+      }
+      if (block.type === 'tool_result') {
+        let resultContent
+        try   { resultContent = [{ json: JSON.parse(block.content) }] }
+        catch { resultContent = [{ text: String(block.content) }] }
+        return {
+          toolResult: {
+            toolUseId: block.tool_use_id,
+            content:   resultContent,
+            ...(block.is_error ? { status: 'error' } : {}),
+          },
+        }
+      }
+      return { text: JSON.stringify(block) }
+    })
+    return { role: m.role, content }
+  })
+}
+
+/**
+ * Run the full Bedrock agentic loop with tool use.
+ * Streams text deltas via `send()`, ends the response on completion.
+ */
+async function runBedrockLoop(model, messages, send, res) {
+  const client = getBedrockClient()
+  const { ConverseStreamCommand } = require('@aws-sdk/client-bedrock-runtime')
+
+  let iteration = 0
+  const MAX_ITER = 6
+
+  while (iteration < MAX_ITER) {
+    iteration++
+
+    const command = new ConverseStreamCommand({
+      modelId:        model,
+      system:         [{ text: SYSTEM_PROMPT }],
+      toolConfig:     toBedrockTools(TOOLS),
+      messages:       toBedrockMessages(messages),
+      inferenceConfig: { maxTokens: 8192, temperature: 0.7 },
+    })
+
+    const response = await client.send(command)
+
+    let currentText    = ''
+    const toolBlocks   = {}   // contentBlockIndex → { id, name, inputJson }
+    let   stopReason   = null
+    let   usageMeta    = null
+
+    for await (const event of response.stream) {
+      if (event.contentBlockStart?.start?.toolUse) {
+        const { contentBlockIndex } = event.contentBlockStart
+        const tu = event.contentBlockStart.start.toolUse
+        toolBlocks[contentBlockIndex] = { id: tu.toolUseId, name: tu.name, inputJson: '' }
+      } else if (event.contentBlockDelta) {
+        const { contentBlockIndex, delta } = event.contentBlockDelta
+        if (delta?.text) {
+          currentText += delta.text
+          send('delta', { text: delta.text })
+        } else if (delta?.toolUse?.input) {
+          if (toolBlocks[contentBlockIndex]) {
+            toolBlocks[contentBlockIndex].inputJson += delta.toolUse.input
+          }
+        }
+      } else if (event.messageStop) {
+        stopReason = event.messageStop.stopReason
+      } else if (event.metadata?.usage) {
+        usageMeta = event.metadata.usage
+      }
+    }
+
+    const toolUses = Object.values(toolBlocks)
+
+    if (stopReason === 'end_turn' || toolUses.length === 0) {
+      send('done', {
+        usage: usageMeta
+          ? { input_tokens: usageMeta.inputTokens, output_tokens: usageMeta.outputTokens }
+          : undefined,
+      })
+      res.end()
+      return
+    }
+
+    if (stopReason === 'tool_use') {
+      // Build assistant message with text + tool_use blocks (Anthropic format for history)
+      const assistantContent = []
+      if (currentText) assistantContent.push({ type: 'text', text: currentText })
+      for (const tu of toolUses) {
+        let input = {}
+        try { input = JSON.parse(tu.inputJson) } catch {}
+        assistantContent.push({ type: 'tool_use', id: tu.id, name: tu.name, input })
+      }
+      messages.push({ role: 'assistant', content: assistantContent })
+
+      // Execute all tools in parallel
+      const toolResults = await Promise.all(
+        toolUses.map(async tu => {
+          let input = {}
+          try { input = JSON.parse(tu.inputJson) } catch {}
+
+          send('tool_start', { name: tu.name, input })
+          try {
+            let result
+            switch (tu.name) {
+              case 'get_technical_analysis':
+                result = await executeTechnicalAnalysis(input)
+                send('tool_end', { name: tu.name, symbol: input.symbol })
+                break
+              case 'get_fundamentals':
+                result = await executeGetFundamentals(input)
+                send('tool_end', { name: tu.name, symbol: input.symbol })
+                break
+              case 'compare_stocks':
+                result = await executeCompareStocks(input)
+                send('tool_end', { name: tu.name, symbols: input.symbols })
+                break
+              default:
+                result = { error: `Unknown tool: ${tu.name}` }
+            }
+            return { type: 'tool_result', tool_use_id: tu.id, content: JSON.stringify(result) }
+          } catch (err) {
+            send('tool_error', { name: tu.name, error: err.message })
+            return {
+              type:        'tool_result',
+              tool_use_id: tu.id,
+              content:     JSON.stringify({ error: err.message }),
+              is_error:    true,
+            }
+          }
+        })
+      )
+
+      messages.push({ role: 'user', content: toolResults })
+      continue
+    }
+
+    // Any other stop reason — just end
+    send('done', {})
+    res.end()
+    return
+  }
+
+  send('error', { message: 'Agent reached maximum iterations.' })
+  res.end()
 }
 
 // ── Tool definitions ──────────────────────────────────────────────────────────
@@ -385,7 +553,7 @@ router.post('/analyze', async (req, res) => {
   const { prompt, symbol, history = [], model: reqModel } = req.body || {}
   if (!prompt) return res.status(400).json({ error: 'prompt is required' })
 
-  const model    = reqModel || 'claude-opus-4-7'
+  const model    = reqModel || 'us.anthropic.claude-opus-4-6-v1:0'
   const isGemini = model.startsWith('gemini')
 
   // SSE headers
@@ -433,9 +601,9 @@ router.post('/analyze', async (req, res) => {
     return
   }
 
-  // ── Anthropic path ──────────────────────────────────────────────────────────
-  let client
-  try { client = getClient() }
+  // ── Bedrock path (all non-Gemini models) ───────────────────────────────────
+  // Validate AWS credentials are configured before sending SSE headers
+  try { getBedrockClient() }
   catch (err) { return res.status(503).json({ error: err.message, code: 'NO_API_KEY' }) }
 
   const userContent = symbol ? `Analyze ${symbol.toUpperCase()}. ${prompt}` : prompt
@@ -445,84 +613,10 @@ router.post('/analyze', async (req, res) => {
     { role: 'user', content: userContent },
   ]
 
-  let iteration = 0
-  const MAX_ITERATIONS = 6
-
   try {
-    while (iteration < MAX_ITERATIONS) {
-      iteration++
-
-      const streamParams = {
-        model,
-        max_tokens: 8192,
-        system:   SYSTEM_PROMPT,
-        tools:    TOOLS,
-        messages,
-      }
-      // Extended thinking only on opus-4-7
-      if (model === 'claude-opus-4-7') streamParams.thinking = { type: 'adaptive' }
-
-      const stream = client.messages.stream(streamParams)
-
-      let fullText = ''
-      stream.on('text', text => { fullText += text; send('delta', { text }) })
-
-      const message = await stream.finalMessage()
-
-      if (message.stop_reason === 'end_turn') {
-        send('done', { usage: { input_tokens: message.usage?.input_tokens, output_tokens: message.usage?.output_tokens } })
-        res.end()
-        return
-      }
-
-      if (message.stop_reason === 'tool_use') {
-        const toolUses = message.content.filter(b => b.type === 'tool_use')
-        if (!toolUses.length) { send('done', {}); res.end(); return }
-
-        messages.push({ role: 'assistant', content: message.content })
-
-        const toolResults = await Promise.all(
-          toolUses.map(async tu => {
-            send('tool_start', { name: tu.name, input: tu.input })
-            try {
-              let result
-              switch (tu.name) {
-                case 'get_technical_analysis':
-                  result = await executeTechnicalAnalysis(tu.input)
-                  send('tool_end', { name: tu.name, symbol: tu.input.symbol })
-                  break
-                case 'get_fundamentals':
-                  result = await executeGetFundamentals(tu.input)
-                  send('tool_end', { name: tu.name, symbol: tu.input.symbol })
-                  break
-                case 'compare_stocks':
-                  result = await executeCompareStocks(tu.input)
-                  send('tool_end', { name: tu.name, symbols: tu.input.symbols })
-                  break
-                default:
-                  result = { error: `Unknown tool: ${tu.name}` }
-              }
-              return { type: 'tool_result', tool_use_id: tu.id, content: JSON.stringify(result) }
-            } catch (err) {
-              send('tool_error', { name: tu.name, error: err.message })
-              return { type: 'tool_result', tool_use_id: tu.id, content: JSON.stringify({ error: err.message }), is_error: true }
-            }
-          })
-        )
-
-        messages.push({ role: 'user', content: toolResults })
-        continue
-      }
-
-      send('done', {})
-      res.end()
-      return
-    }
-
-    send('error', { message: 'Agent reached maximum iterations.' })
-    res.end()
+    await runBedrockLoop(model, messages, send, res)
   } catch (err) {
-    console.error('[Agent] Error:', err.message)
+    console.error('[Agent/Bedrock] Error:', err.message)
     if (!res.headersSent) return res.status(500).json({ error: err.message })
     send('error', { message: err.message })
     res.end()
@@ -532,14 +626,21 @@ router.post('/analyze', async (req, res) => {
 // ── GET /api/agent/health ─────────────────────────────────────────────────────
 
 router.get('/health', (_req, res) => {
+  const hasAWS = !!(
+    (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) ||
+    process.env.AWS_ROLE_ARN ||
+    process.env.AWS_CONTAINER_CREDENTIALS_RELATIVE_URI
+  )
   res.json({
-    ok:           true,
-    hasKey:       !!process.env.ANTHROPIC_API_KEY,
-    hasFMP:       !!process.env.FMP_API_KEY,
-    hasAV:        !!process.env.ALPHA_VANTAGE_API_KEY,
-    hasFinnhub:   !!process.env.FINNHUB_API_KEY,
-    hasGemini:    !!process.env.GEMINI_API_KEY,
-    tools:        TOOLS.map(t => t.name),
+    ok:         true,
+    hasKey:     hasAWS,       // frontend uses this to show/hide NoKeyBanner
+    hasBedrock: hasAWS,
+    awsRegion:  process.env.AWS_REGION || 'us-east-1',
+    hasFMP:     !!process.env.FMP_API_KEY,
+    hasAV:      !!process.env.ALPHA_VANTAGE_API_KEY,
+    hasFinnhub: !!process.env.FINNHUB_API_KEY,
+    hasGemini:  !!process.env.GEMINI_API_KEY,
+    tools:      TOOLS.map(t => t.name),
   })
 })
 
