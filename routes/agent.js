@@ -626,21 +626,24 @@ router.post('/analyze', async (req, res) => {
 // ── GET /api/agent/health ─────────────────────────────────────────────────────
 
 router.get('/health', (_req, res) => {
-  const hasAWS = !!(
-    (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) ||
-    process.env.AWS_ROLE_ARN ||
-    process.env.AWS_CONTAINER_CREDENTIALS_RELATIVE_URI
-  )
+  const accessKey    = process.env.AWS_ACCESS_KEY_ID    || ''
+  const secretKey    = process.env.AWS_SECRET_ACCESS_KEY || ''
+  const sessionToken = process.env.AWS_SESSION_TOKEN    || ''
+  const hasKeys      = !!(accessKey && secretKey)
+  const isTemp       = accessKey.startsWith('ASIA')
+  const hasAWS       = hasKeys && (!isTemp || !!sessionToken)
+
   res.json({
-    ok:         true,
-    hasKey:     hasAWS,       // frontend uses this to show/hide NoKeyBanner
-    hasBedrock: hasAWS,
-    awsRegion:  process.env.AWS_REGION || 'us-east-1',
-    hasFMP:     !!process.env.FMP_API_KEY,
-    hasAV:      !!process.env.ALPHA_VANTAGE_API_KEY,
-    hasFinnhub: !!process.env.FINNHUB_API_KEY,
-    hasGemini:  !!process.env.GEMINI_API_KEY,
-    tools:      TOOLS.map(t => t.name),
+    ok:           true,
+    hasKey:       hasAWS,          // frontend NoKeyBanner gate
+    hasBedrock:   hasAWS,
+    awsRegion:    process.env.AWS_REGION || 'us-east-1',
+    credType:     !hasKeys ? 'none' : isTemp ? (sessionToken ? 'temporary+token' : 'temporary-MISSING-TOKEN') : 'permanent',
+    hasFMP:       !!process.env.FMP_API_KEY,
+    hasAV:        !!process.env.ALPHA_VANTAGE_API_KEY,
+    hasFinnhub:   !!process.env.FINNHUB_API_KEY,
+    hasGemini:    !!process.env.GEMINI_API_KEY,
+    tools:        TOOLS.map(t => t.name),
   })
 })
 

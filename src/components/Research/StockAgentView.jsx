@@ -197,23 +197,44 @@ const QUICK_PROMPTS = [
 
 // ── No API key banner ─────────────────────────────────────────────────────────
 
-function NoKeyBanner() {
+function NoKeyBanner({ credType }) {
+  const missingToken = credType === 'temporary-MISSING-TOKEN'
   return (
     <div className="glass rounded-xl p-6 border border-amber-500/20 flex items-start gap-4">
       <Info className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
       <div>
-        <p className="text-sm font-semibold text-white mb-1">AWS Bedrock Credentials Required</p>
-        <p className="text-xs text-slate-400 leading-relaxed">
-          The AI Agent runs on AWS Bedrock. Add these to your Railway service variables and redeploy:
-        </p>
-        <ul className="text-xs text-slate-500 mt-2 space-y-0.5 font-mono">
-          <li><code className="text-mint-300 bg-white/5 px-1 rounded">AWS_ACCESS_KEY_ID</code></li>
-          <li><code className="text-mint-300 bg-white/5 px-1 rounded">AWS_SECRET_ACCESS_KEY</code></li>
-          <li><code className="text-mint-300 bg-white/5 px-1 rounded">AWS_REGION</code> <span className="text-slate-600 font-sans">(e.g. us-east-1)</span></li>
-        </ul>
-        <p className="text-xs text-slate-600 mt-2">
-          Ensure Claude model access is enabled in your AWS Bedrock console.
-        </p>
+        {missingToken ? (
+          <>
+            <p className="text-sm font-semibold text-white mb-1">AWS Session Token Missing</p>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              Your <code className="font-mono text-mint-300 bg-white/5 px-1 rounded">AWS_ACCESS_KEY_ID</code> starts
+              with <code className="font-mono text-amber-300 bg-white/5 px-1 rounded">ASIA</code> — these are
+              temporary STS credentials that also require a session token.
+            </p>
+            <p className="text-xs text-slate-500 mt-2">
+              Add <code className="font-mono text-mint-300 bg-white/5 px-1 rounded">AWS_SESSION_TOKEN</code> to
+              Railway, <strong className="text-white">or</strong> create a permanent IAM user key
+              (starts with <code className="font-mono text-mint-300 bg-white/5 px-1 rounded">AKIA</code>) in
+              the AWS IAM console — permanent keys don't need a session token.
+            </p>
+          </>
+        ) : (
+          <>
+            <p className="text-sm font-semibold text-white mb-1">AWS Bedrock Credentials Required</p>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              Add these to your Railway service variables and redeploy:
+            </p>
+            <ul className="text-xs text-slate-500 mt-2 space-y-0.5 font-mono">
+              <li><code className="text-mint-300 bg-white/5 px-1 rounded">AWS_ACCESS_KEY_ID</code></li>
+              <li><code className="text-mint-300 bg-white/5 px-1 rounded">AWS_SECRET_ACCESS_KEY</code></li>
+              <li><code className="text-mint-300 bg-white/5 px-1 rounded">AWS_REGION</code> <span className="text-slate-600 font-sans">(e.g. us-east-1)</span></li>
+              <li className="text-slate-700"><code className="bg-white/5 px-1 rounded">AWS_SESSION_TOKEN</code> <span className="font-sans">(only if using temporary/STS credentials)</span></li>
+            </ul>
+            <p className="text-xs text-slate-600 mt-2">
+              Ensure Bedrock model access is enabled in the AWS Bedrock console → Model access.
+            </p>
+          </>
+        )}
       </div>
     </div>
   )
@@ -250,7 +271,10 @@ export default function StockAgentView({ portfolio }) {
       .then(r => r.json())
       .then(d => {
         setHasKey(d.hasKey)
-        setAgentCaps({ hasFMP: d.hasFMP, hasAV: d.hasAV, hasFinnhub: d.hasFinnhub, hasGemini: d.hasGemini })
+        setAgentCaps({
+          hasFMP: d.hasFMP, hasAV: d.hasAV, hasFinnhub: d.hasFinnhub, hasGemini: d.hasGemini,
+          credType: d.credType,
+        })
       })
       .catch(() => setHasKey(false))
   }, [])
@@ -485,7 +509,7 @@ I'm your real-time stock analyst powered by Claude. I can:
           {/* No API key banner */}
           {hasKey === false && (
             <div className="shrink-0 py-4">
-              <NoKeyBanner />
+              <NoKeyBanner credType={agentCaps.credType} />
             </div>
           )}
 
