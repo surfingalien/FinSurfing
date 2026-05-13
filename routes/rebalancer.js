@@ -18,7 +18,7 @@ const { getBedrockClient } = require('../utils/bedrockClient')
 const router = express.Router()
 router.use(requireAuth)
 
-const DEFAULT_MODEL = 'us.anthropic.claude-opus-4-6-v1:0'
+const DEFAULT_MODEL = 'us.anthropic.claude-3-5-sonnet-20241022-v2:0'
 
 router.post('/suggest', async (req, res) => {
   const { holdings = [], targetAllocation = {}, riskProfile = 'moderate' } = req.body

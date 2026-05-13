@@ -553,7 +553,7 @@ router.post('/analyze', async (req, res) => {
   const { prompt, symbol, history = [], model: reqModel } = req.body || {}
   if (!prompt) return res.status(400).json({ error: 'prompt is required' })
 
-  const model    = reqModel || 'us.anthropic.claude-opus-4-6-v1:0'
+  const model    = reqModel || 'us.anthropic.claude-3-5-sonnet-20241022-v2:0'
   const isGemini = model.startsWith('gemini')
 
   // SSE headers
