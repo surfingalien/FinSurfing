@@ -337,7 +337,7 @@ app.get('/health', async (_req, res) => {
   if (!demoMode) {
     try { const { ping } = require('./db/db'); dbOk = await ping() } catch {}
   }
-  res.json({ ok: true, db: dbOk, demoMode, ts: Date.now() })
+  res.json({ ok: true, db: dbOk, demoMode, finnhub: !!process.env.FINNHUB_API_KEY, fmp: !!process.env.FMP_API_KEY, ts: Date.now() })
 })
 
 /* ── Quote (batch) ─────────────────────────────── */
@@ -412,17 +412,111 @@ app.get('/api/quote', async (req, res) => {
   }
 })
 
+/* ── Chart helpers: range → unix timestamps ────────────────────────────── */
+function rangeToFromTo(range) {
+  const now  = Math.floor(Date.now() / 1000)
+  const daysMap = {
+    '1d': 2, '5d': 7, '1mo': 35, '3mo': 95,
+    '6mo': 185, '1y': 370, '2y': 740, '5y': 1830, 'max': 7300,
+  }
+  return { from: now - (daysMap[range] || 370) * 86400, to: now }
+}
+function intervalToFinnhubRes(interval) {
+  const m = { '1m':'1','5m':'5','15m':'15','30m':'30','60m':'60','1h':'60','1d':'D','1wk':'W','1mo':'M' }
+  return m[interval] || 'D'
+}
+
+/* ── Finnhub candles (works from cloud IPs) ────────────────────────────── */
+async function getFinnhubCandles(symbol, interval, range) {
+  const key = process.env.FINNHUB_API_KEY
+  if (!key) return null
+  const { from, to } = rangeToFromTo(range)
+  const resolution   = intervalToFinnhubRes(interval)
+  try {
+    const r = await fetch(
+      `https://finnhub.io/api/v1/stock/candle?symbol=${encodeURIComponent(symbol)}&resolution=${resolution}&from=${from}&to=${to}&token=${key}`,
+      { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(12000) }
+    )
+    const d = await r.json()
+    if (d?.s !== 'ok' || !d.t?.length) return null
+    return {
+      chart: {
+        result: [{
+          meta:      { symbol, regularMarketPrice: d.c[d.c.length - 1] },
+          timestamp: d.t,
+          indicators: {
+            quote:    [{ open: d.o, high: d.h, low: d.l, close: d.c, volume: d.v }],
+            adjclose: [{ adjclose: d.c }],
+          },
+        }],
+        error: null,
+      },
+    }
+  } catch { return null }
+}
+
+/* ── FMP historical candles (works from cloud IPs) ─────────────────────── */
+async function getFMPCandles(symbol, interval, range) {
+  const key = process.env.FMP_API_KEY
+  if (!key) return null
+  // FMP free-tier only supports daily; skip intraday requests
+  if (!['1d', '1wk', '1mo'].includes(interval)) return null
+  const { from, to } = rangeToFromTo(range)
+  const fromDate = new Date(from * 1000).toISOString().split('T')[0]
+  const toDate   = new Date(to   * 1000).toISOString().split('T')[0]
+  try {
+    const r = await fetch(
+      `https://financialmodelingprep.com/api/v3/historical-price-full/${encodeURIComponent(symbol)}?from=${fromDate}&to=${toDate}&apikey=${key}`,
+      { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(12000) }
+    )
+    const d    = await r.json()
+    const hist = d?.historical
+    if (!Array.isArray(hist) || !hist.length) return null
+    const sorted = [...hist].reverse()  // FMP returns newest-first; reverse to oldest-first
+    return {
+      chart: {
+        result: [{
+          meta:      { symbol, regularMarketPrice: sorted[sorted.length - 1].close },
+          timestamp: sorted.map(h => Math.floor(new Date(h.date).getTime() / 1000)),
+          indicators: {
+            quote: [{
+              open:   sorted.map(h => h.open),
+              high:   sorted.map(h => h.high),
+              low:    sorted.map(h => h.low),
+              close:  sorted.map(h => h.close),
+              volume: sorted.map(h => h.volume),
+            }],
+            adjclose: [{ adjclose: sorted.map(h => h.adjClose ?? h.close) }],
+          },
+        }],
+        error: null,
+      },
+    }
+  } catch { return null }
+}
+
 /* ── Chart (OHLCV) ─────────────────────────────── */
 app.get('/api/chart', async (req, res) => {
   const { symbol, interval = '1d', range = '1y' } = req.query
   if (!symbol) return res.status(400).json({ error: 'symbol required' })
   try {
+    // 1st: Yahoo Finance v8 chart (query1 → query2)
     const url  = `${YF1}/v8/finance/chart/${encodeURIComponent(symbol)}?interval=${interval}&range=${range}&includePrePost=false`
     const data = await yfFetch(url, 15000)
-    if (data) return res.json(data)
+    if (data?.chart?.result?.[0]) return res.json(data)
     const url2 = url.replace(YF1, YF2)
     const d2   = await yfFetch(url2, 15000)
-    res.json(d2 || { chart: { result: null, error: { code: 'blocked', description: 'Rate limited' } } })
+    if (d2?.chart?.result?.[0]) return res.json(d2)
+
+    // 2nd: Finnhub candles — cloud-IP friendly
+    const fhChart = await getFinnhubCandles(symbol, interval, range).catch(() => null)
+    if (fhChart) { console.log('[chart] served via Finnhub:', symbol); return res.json(fhChart) }
+
+    // 3rd: FMP historical — cloud-IP friendly (daily only)
+    const fmpChart = await getFMPCandles(symbol, interval, range).catch(() => null)
+    if (fmpChart) { console.log('[chart] served via FMP:', symbol); return res.json(fmpChart) }
+
+    res.json({ chart: { result: null, error: { code: 'unavailable', description: 'No market data provider returned data' } } })
   } catch (e) {
     res.status(500).json({ error: e.message })
   }
