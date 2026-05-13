@@ -202,13 +202,17 @@ function NoKeyBanner() {
     <div className="glass rounded-xl p-6 border border-amber-500/20 flex items-start gap-4">
       <Info className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
       <div>
-        <p className="text-sm font-semibold text-white mb-1">Anthropic API Key Required</p>
+        <p className="text-sm font-semibold text-white mb-1">AWS Bedrock Credentials Required</p>
         <p className="text-xs text-slate-400 leading-relaxed">
-          The AI Agent requires an <code className="font-mono text-mint-300 bg-white/5 px-1 rounded">ANTHROPIC_API_KEY</code> environment variable.
-          Add it to your Railway service variables, then redeploy.
+          The AI Agent runs on AWS Bedrock. Add these to your Railway service variables and redeploy:
         </p>
-        <p className="text-xs text-slate-500 mt-2">
-          Get your key at <span className="text-mint-400">console.anthropic.com</span>
+        <ul className="text-xs text-slate-500 mt-2 space-y-0.5 font-mono">
+          <li><code className="text-mint-300 bg-white/5 px-1 rounded">AWS_ACCESS_KEY_ID</code></li>
+          <li><code className="text-mint-300 bg-white/5 px-1 rounded">AWS_SECRET_ACCESS_KEY</code></li>
+          <li><code className="text-mint-300 bg-white/5 px-1 rounded">AWS_REGION</code> <span className="text-slate-600 font-sans">(e.g. us-east-1)</span></li>
+        </ul>
+        <p className="text-xs text-slate-600 mt-2">
+          Ensure Claude model access is enabled in your AWS Bedrock console.
         </p>
       </div>
     </div>
@@ -218,11 +222,11 @@ function NoKeyBanner() {
 // ── Main StockAgentView ───────────────────────────────────────────────────────
 
 const MODELS = [
-  { id: 'claude-opus-4-7',    label: 'Opus 4.7',      provider: 'claude' },
-  { id: 'claude-sonnet-4-6',  label: 'Sonnet 4.6',    provider: 'claude' },
-  { id: 'claude-haiku-4-5',   label: 'Haiku 4.5',     provider: 'claude' },
-  { id: 'gemini-2.0-flash',   label: 'Gemini Flash',  provider: 'gemini' },
-  { id: 'gemini-1.5-pro',     label: 'Gemini 1.5 Pro',provider: 'gemini' },
+  { id: 'us.anthropic.claude-opus-4-6-v1:0',   label: 'Claude Opus 4.6',    provider: 'bedrock' },
+  { id: 'us.anthropic.claude-sonnet-4-6-v1:0', label: 'Claude Sonnet 4.6',  provider: 'bedrock' },
+  { id: 'us.anthropic.claude-haiku-4-5-v1:0',  label: 'Claude Haiku 4.5',   provider: 'bedrock' },
+  { id: 'gemini-2.0-flash',                     label: 'Gemini Flash',       provider: 'gemini'  },
+  { id: 'gemini-1.5-pro',                       label: 'Gemini 1.5 Pro',     provider: 'gemini'  },
 ]
 
 export default function StockAgentView({ portfolio }) {
@@ -230,7 +234,7 @@ export default function StockAgentView({ portfolio }) {
   const [messages,    setMessages]  = useState([])
   const [input,       setInput]     = useState('')
   const [symbol,      setSymbol]    = useState('')
-  const [model,       setModel]     = useState('claude-opus-4-7')
+  const [model,       setModel]     = useState('us.anthropic.claude-opus-4-6-v1:0')
   const [streaming,   setStreaming] = useState(false)
   const [hasKey,      setHasKey]    = useState(null)      // null = unknown, true/false
   const [agentCaps,   setAgentCaps] = useState({})        // { hasFMP, hasAV, hasGemini }
@@ -459,7 +463,7 @@ I'm your real-time stock analyst powered by Claude. I can:
                          text-slate-300 font-mono focus:outline-none focus:border-mint-500/40
                          disabled:opacity-50 cursor-pointer"
             >
-              {MODELS.filter(m => m.provider === 'claude' || agentCaps.hasGemini).map(m => (
+              {MODELS.filter(m => m.provider === 'bedrock' || agentCaps.hasGemini).map(m => (
                 <option key={m.id} value={m.id}>{m.label}</option>
               ))}
             </select>
@@ -600,7 +604,7 @@ I'm your real-time stock analyst powered by Claude. I can:
               </button>
             </div>
             <p className="text-[10px] text-slate-700 mt-1.5 px-1">
-              Not financial advice · Real-time data via Yahoo Finance · Model: {model}
+              Not financial advice · Yahoo Finance data · AWS Bedrock · Model: {model}
             </p>
           </div>
         </div>

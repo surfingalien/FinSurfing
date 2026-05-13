@@ -8,23 +8,17 @@
  *   targetAllocation — { 'Technology': 30, 'Healthcare': 20, ... } (% by sector)
  *   riskProfile      — 'conservative' | 'moderate' | 'aggressive'
  *
- * Streams Claude's rebalancing plan via SSE.
+ * Streams Claude's rebalancing plan via SSE — powered by AWS Bedrock.
  */
 
-const express         = require('express')
-const { requireAuth } = require('../middleware/auth')
+const express             = require('express')
+const { requireAuth }     = require('../middleware/auth')
+const { getBedrockClient } = require('../utils/bedrockClient')
 
 const router = express.Router()
 router.use(requireAuth)
 
-let _client = null
-function getClient() {
-  if (_client) return _client
-  if (!process.env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY not set')
-  const Anthropic = require('@anthropic-ai/sdk')
-  _client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-  return _client
-}
+const DEFAULT_MODEL = 'us.anthropic.claude-opus-4-6-v1:0'
 
 router.post('/suggest', async (req, res) => {
   const { holdings = [], targetAllocation = {}, riskProfile = 'moderate' } = req.body
@@ -84,20 +78,22 @@ Be direct and actionable. Use dollar amounts, share counts, and percentages thro
   res.setHeader('Content-Type', 'text/event-stream')
   res.setHeader('Cache-Control', 'no-cache')
   res.setHeader('Connection', 'keep-alive')
+  res.setHeader('X-Accel-Buffering', 'no')
   res.flushHeaders()
 
   try {
-    const client = getClient()
-    const stream = await client.messages.stream({
-      model:      'claude-opus-4-7',
-      max_tokens: 1500,
-      messages:   [{ role: 'user', content: prompt }],
+    const { ConverseStreamCommand } = require('@aws-sdk/client-bedrock-runtime')
+    const client  = getBedrockClient()
+    const command = new ConverseStreamCommand({
+      modelId:         DEFAULT_MODEL,
+      messages:        [{ role: 'user', content: [{ text: prompt }] }],
+      inferenceConfig: { maxTokens: 1500, temperature: 0.7 },
     })
 
-    for await (const chunk of stream) {
-      if (chunk.type === 'content_block_delta' && chunk.delta?.type === 'text_delta') {
-        res.write(`data: ${JSON.stringify({ text: chunk.delta.text })}\n\n`)
-      }
+    const response = await client.send(command)
+    for await (const event of response.stream) {
+      const text = event.contentBlockDelta?.delta?.text
+      if (text) res.write(`data: ${JSON.stringify({ text })}\n\n`)
     }
 
     res.write('data: [DONE]\n\n')
