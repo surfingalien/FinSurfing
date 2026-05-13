@@ -242,12 +242,14 @@ function NoKeyBanner({ credType }) {
 
 // ── Main StockAgentView ───────────────────────────────────────────────────────
 
+// Bedrock model IDs — format: {region-prefix}.anthropic.{model}-{date}-v{n}:{n}
+// Check your Bedrock console → Model access for what's enabled in your account.
 const MODELS = [
-  { id: 'us.anthropic.claude-opus-4-6-v1:0',   label: 'Claude Opus 4.6',    provider: 'bedrock' },
-  { id: 'us.anthropic.claude-sonnet-4-6-v1:0', label: 'Claude Sonnet 4.6',  provider: 'bedrock' },
-  { id: 'us.anthropic.claude-haiku-4-5-v1:0',  label: 'Claude Haiku 4.5',   provider: 'bedrock' },
-  { id: 'gemini-2.0-flash',                     label: 'Gemini Flash',       provider: 'gemini'  },
-  { id: 'gemini-1.5-pro',                       label: 'Gemini 1.5 Pro',     provider: 'gemini'  },
+  { id: 'us.anthropic.claude-3-5-sonnet-20241022-v2:0', label: 'Claude 3.5 Sonnet v2', provider: 'bedrock' },
+  { id: 'us.anthropic.claude-3-5-haiku-20241022-v1:0',  label: 'Claude 3.5 Haiku',     provider: 'bedrock' },
+  { id: 'us.anthropic.claude-3-opus-20240229-v1:0',     label: 'Claude 3 Opus',        provider: 'bedrock' },
+  { id: 'gemini-2.0-flash',                              label: 'Gemini Flash',         provider: 'gemini'  },
+  { id: 'gemini-1.5-pro',                                label: 'Gemini 1.5 Pro',       provider: 'gemini'  },
 ]
 
 export default function StockAgentView({ portfolio }) {
@@ -255,7 +257,7 @@ export default function StockAgentView({ portfolio }) {
   const [messages,    setMessages]  = useState([])
   const [input,       setInput]     = useState('')
   const [symbol,      setSymbol]    = useState('')
-  const [model,       setModel]     = useState('us.anthropic.claude-opus-4-6-v1:0')
+  const [model,       setModel]     = useState('us.anthropic.claude-3-5-sonnet-20241022-v2:0')
   const [streaming,   setStreaming] = useState(false)
   const [hasKey,      setHasKey]    = useState(null)      // null = unknown, true/false
   const [agentCaps,   setAgentCaps] = useState({})        // { hasFMP, hasAV, hasGemini }
