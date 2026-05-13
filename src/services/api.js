@@ -126,6 +126,20 @@ export async function searchSymbol(q) {
     .map(q => ({ symbol: q.symbol, name: q.shortname || q.longname || q.symbol, exchange: q.exchange || '', type: q.quoteType }))
 }
 
+/* ── Real-time quote stream (SSE) ─────────────────────────────────────────── */
+// Opens an EventSource to /api/stream/quotes and calls onUpdate for each price tick.
+// Returns a cleanup function — call it to close the connection.
+export function subscribeQuotes(symbols, onUpdate) {
+  if (!symbols.length || typeof EventSource === 'undefined') return () => {}
+  const url = `/api/stream/quotes?symbols=${encodeURIComponent(symbols.join(','))}`
+  const es  = new EventSource(url)
+  es.onmessage = (e) => {
+    try { onUpdate(JSON.parse(e.data)) } catch {}
+  }
+  // EventSource auto-reconnects on error — no manual retry needed
+  return () => es.close()
+}
+
 /* ── Technical indicators ───────────────────── */
 export function calcSMA(closes, period) {
   const result = new Array(closes.length).fill(null)

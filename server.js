@@ -416,6 +416,136 @@ async function finnhubHealthCheck() {
 // Run at startup (after 5 s) then every 30 minutes
 setTimeout(() => { finnhubHealthCheck(); setInterval(finnhubHealthCheck, 30 * 60_000) }, 5000)
 
+// ── Finnhub WebSocket — real-time trade stream ────────────────────────────────
+// Server-side WS connection to Finnhub; price updates pushed to browser clients
+// via the /api/stream/quotes SSE endpoint below.
+const WebSocket       = require('ws')
+let   _fhWs           = null
+let   _fhWsDelay      = 1000
+const _fhSubscribed   = new Set()   // symbols currently subscribed on Finnhub WS
+const _sseClients     = new Map()   // clientId → { res, symbols: Set<string> }
+
+function _fhSend(obj) {
+  if (_fhWs?.readyState === WebSocket.OPEN) _fhWs.send(JSON.stringify(obj))
+}
+
+function _fhEnsureSub(symbol) {
+  if (_fhSubscribed.has(symbol)) return
+  _fhSubscribed.add(symbol)
+  _fhSend({ type: 'subscribe', symbol })
+}
+
+function _fhUnsubIfUnused(symbol) {
+  const needed = [..._sseClients.values()].some(c => c.symbols.has(symbol))
+  if (!needed) {
+    _fhSubscribed.delete(symbol)
+    _fhSend({ type: 'unsubscribe', symbol })
+  }
+}
+
+function _sseBroadcast(symbol, payload) {
+  const line = `data: ${JSON.stringify(payload)}\n\n`
+  for (const [, c] of _sseClients) {
+    if (c.symbols.has(symbol)) {
+      try { c.res.write(line) } catch {}
+    }
+  }
+}
+
+function _connectFhWs() {
+  if (!FH_KEY()) return
+  _fhWs = new WebSocket(`wss://ws.finnhub.io?token=${FH_KEY()}`)
+
+  _fhWs.on('open', () => {
+    console.log('[Finnhub WS] connected')
+    _fhWsDelay = 1000
+    for (const sym of _fhSubscribed) _fhSend({ type: 'subscribe', symbol: sym })
+  })
+
+  _fhWs.on('message', raw => {
+    try {
+      const msg = JSON.parse(raw)
+      if (msg.type !== 'trade' || !Array.isArray(msg.data)) return
+      for (const t of msg.data) {
+        const sym = t.s, price = t.p
+        if (!sym || price == null) continue
+        const prev    = cacheGet(`fhq:${sym}`)
+        const pc      = prev?.regularMarketPreviousClose ?? null
+        const chg     = pc != null ? +(price - pc).toFixed(4) : null
+        const chgPct  = pc != null ? +((price - pc) / pc * 100).toFixed(4) : null
+        cacheSet(`fhq:${sym}`, {
+          ...(prev || { symbol: sym, shortName: sym }),
+          regularMarketPrice:         price,
+          regularMarketChange:        chg,
+          regularMarketChangePercent: chgPct,
+          regularMarketTime:          t.t ? Math.floor(t.t / 1000) : null,
+        })
+        _sseBroadcast(sym, { symbol: sym, price, change: chg, changePct: chgPct, ts: t.t })
+      }
+    } catch {}
+  })
+
+  _fhWs.on('close', () => {
+    console.warn('[Finnhub WS] closed — reconnect in', _fhWsDelay, 'ms')
+    setTimeout(() => { _fhWsDelay = Math.min(_fhWsDelay * 2, 30_000); _connectFhWs() }, _fhWsDelay)
+  })
+
+  _fhWs.on('error', e => console.warn('[Finnhub WS] error:', e.message))
+}
+
+// Delay 6 s so REST health check fires first (which warms the cache)
+setTimeout(() => { if (FH_KEY()) _connectFhWs() }, 6000)
+
+/* ── SSE: real-time quote stream ───────────────────────────────────────────── */
+// GET /api/stream/quotes?symbols=AAPL,MSFT
+// Sends: data: {"symbol":"AAPL","price":182.5,"change":1.2,"changePct":0.66,"ts":1234567890000}
+app.get('/api/stream/quotes', (req, res) => {
+  const symbols = (req.query.symbols || '')
+    .split(',')
+    .map(s => s.trim().toUpperCase().replace(/[^A-Z0-9.-]/g, ''))
+    .filter(Boolean)
+    .slice(0, 30)
+  if (!symbols.length) return res.status(400).end()
+
+  res.setHeader('Content-Type', 'text/event-stream')
+  res.setHeader('Cache-Control', 'no-cache')
+  res.setHeader('Connection', 'keep-alive')
+  res.setHeader('X-Accel-Buffering', 'no')   // prevent nginx from buffering the stream
+  res.flushHeaders()
+
+  const id     = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  const symSet = new Set(symbols)
+  _sseClients.set(id, { res, symbols: symSet })
+
+  // Subscribe these symbols on the Finnhub WS
+  for (const sym of symbols) _fhEnsureSub(sym)
+
+  // Immediately flush any cached price so the UI isn't blank while waiting for the next trade
+  for (const sym of symbols) {
+    const c = cacheGet(`fhq:${sym}`)
+    if (c?.regularMarketPrice != null) {
+      res.write(`data: ${JSON.stringify({
+        symbol: sym, price: c.regularMarketPrice,
+        change: c.regularMarketChange ?? null,
+        changePct: c.regularMarketChangePercent ?? null,
+        ts: c.regularMarketTime ? c.regularMarketTime * 1000 : null,
+      })}\n\n`)
+    }
+  }
+
+  // Keep-alive ping every 25 s (proxies drop idle SSE after ~30 s)
+  const hb = setInterval(() => {
+    try { res.write(': ping\n\n') } catch { close() }
+  }, 25_000)
+
+  function close() {
+    clearInterval(hb)
+    _sseClients.delete(id)
+    for (const sym of symbols) _fhUnsubIfUnused(sym)
+  }
+  req.on('close', close)
+})
+
 /* ── Health (includes DB status + demo mode) ───── */
 app.get('/health', async (_req, res) => {
   const demoMode = !process.env.DATABASE_URL
