@@ -522,9 +522,10 @@ router.post('/analyze', async (req, res) => {
     send('error', { message: 'Agent reached maximum iterations.' })
     res.end()
   } catch (err) {
-    console.error('[Agent] Error:', err.message)
-    if (!res.headersSent) return res.status(500).json({ error: err.message })
-    send('error', { message: err.message })
+    const message = err.error?.message || err.message || 'Agent failed'
+    console.error('[Agent] Error:', message)
+    if (!res.headersSent) return res.status(500).json({ error: message })
+    send('error', { message })
     res.end()
   }
 })

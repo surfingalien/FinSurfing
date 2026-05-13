@@ -108,8 +108,9 @@ Be direct and actionable. Use dollar amounts, share counts, and percentages thro
     res.write('data: [DONE]\n\n')
     res.end()
   } catch (err) {
-    console.error('[rebalancer]', err.message)
-    res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`)
+    const message = err.error?.message || err.message || 'Rebalancer failed'
+    console.error('[rebalancer]', message)
+    res.write(`data: ${JSON.stringify({ error: message })}\n\n`)
     res.end()
   }
 })
