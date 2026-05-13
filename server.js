@@ -6,15 +6,6 @@ const helmet       = require('helmet')
 const cookieParser = require('cookie-parser')
 const rateLimit    = require('express-rate-limit')
 
-// yahoo-finance2 handles crumb/cookie auth automatically — preferred over raw Yahoo API calls
-let yf2
-try {
-  yf2 = require('yahoo-finance2').default
-  yf2.setGlobalConfig({ validation: { logErrors: false, logWarnings: false } })
-} catch (e) {
-  console.warn('[YF2] yahoo-finance2 unavailable, using raw API only:', e.message)
-}
-
 const authRoutes        = require('./routes/auth')
 const portfolioRoutes   = require('./routes/portfolios')
 const publicRoutes      = require('./routes/public')
@@ -79,7 +70,7 @@ app.use(helmet({
       scriptSrc:   ["'self'", "'unsafe-inline'"],   // Vite needs inline scripts
       styleSrc:    ["'self'", "'unsafe-inline'"],
       imgSrc:      ["'self'", 'data:', 'https:'],
-      connectSrc:  ["'self'", 'https://query1.finance.yahoo.com', 'https://query2.finance.yahoo.com', 'https://ai4trade.ai'],
+      connectSrc:  ["'self'", 'https://finnhub.io', 'https://financialmodelingprep.com', 'https://ai4trade.ai'],
       fontSrc:     ["'self'", 'data:'],
       objectSrc:   ["'none'"],
       upgradeInsecureRequests: PROD ? [] : null,
@@ -147,188 +138,283 @@ app.use('/api/backtest',     backtestRoutes)
 app.use('/api/analytics',    analyticsRoutes)
 app.use('/api/rebalancer',   rebalancerRoutes)
 
-/* ── Safe fetch helpers ────────────────────────── */
-const YF1 = 'https://query1.finance.yahoo.com'
-const YF2 = 'https://query2.finance.yahoo.com'
+/* ── Market data helpers (Finnhub primary, FMP fallback) ─────────────────────
+   Yahoo Finance is completely removed — its IPs are blocked on Railway.
+   All live data comes from Finnhub (FINNHUB_API_KEY) and/or FMP (FMP_API_KEY).
+   ─────────────────────────────────────────────────────────────────────────── */
 
-const HEADERS = {
-  'User-Agent':      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-  'Accept':          'application/json, text/plain, */*',
-  'Accept-Language': 'en-US,en;q=0.9',
-  'Accept-Encoding': 'gzip, deflate, br',
-  'Referer':         'https://finance.yahoo.com/',
-  'Origin':          'https://finance.yahoo.com',
-  'sec-ch-ua':       '"Chromium";v="124"',
-  'sec-fetch-dest':  'empty',
-  'sec-fetch-mode':  'cors',
-  'sec-fetch-site':  'same-site',
+const JSON_HEADERS = { Accept: 'application/json' }
+
+async function apiFetch(url, timeoutMs = 10000) {
+  const r = await fetch(url, { headers: JSON_HEADERS, signal: AbortSignal.timeout(timeoutMs) })
+  if (!r.ok) throw new Error(`HTTP ${r.status}`)
+  return r.json()
 }
 
-// ── Yahoo Finance crumb/cookie cache ──────────────────────────────────────────
-// Yahoo's v7 API requires a crumb + session cookie from cloud IPs.
-// We fetch once per ~45 min and attach to all raw Yahoo Finance requests.
-const yfCrumb = { value: null, cookie: null, fetchedAt: 0 }
-const CRUMB_TTL = 45 * 60 * 1000
+// ── Server-side quote cache (30 s TTL) — reduces API calls per request ───────
+const _quoteCache = new Map()
+const QUOTE_TTL = 30_000
 
-async function getYFCrumb() {
-  if (yfCrumb.value && Date.now() - yfCrumb.fetchedAt < CRUMB_TTL) return yfCrumb
-  try {
-    const r1 = await fetch('https://finance.yahoo.com/', {
-      headers: { ...HEADERS, Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8' },
-      redirect: 'follow',
-      signal: AbortSignal.timeout(10000),
-    })
-    // Collect all Set-Cookie values into a single Cookie header string
-    const rawCookie = r1.headers.get('set-cookie') || ''
-    const cookie = rawCookie.split(',').map(c => c.trim().split(';')[0]).filter(Boolean).join('; ')
-    const r2 = await fetch('https://query1.finance.yahoo.com/v1/test/getcrumb', {
-      headers: { ...HEADERS, Cookie: cookie },
-      signal: AbortSignal.timeout(8000),
-    })
-    const crumb = (await r2.text()).trim()
-    if (crumb && crumb.length >= 3 && !crumb.startsWith('<')) {
-      Object.assign(yfCrumb, { value: crumb, cookie, fetchedAt: Date.now() })
-      console.log('[YF] Crumb refreshed')
-      return yfCrumb
-    }
-  } catch (e) {
-    console.warn('[YF] crumb fetch failed:', e.message)
-  }
-  return null
+function cacheSet(key, data) { _quoteCache.set(key, { data, ts: Date.now() }) }
+function cacheGet(key) {
+  const hit = _quoteCache.get(key)
+  return hit && Date.now() - hit.ts < QUOTE_TTL ? hit.data : null
 }
+// Evict stale entries every 2 minutes to prevent unbounded memory growth
+setInterval(() => {
+  const now = Date.now()
+  for (const [k, v] of _quoteCache) if (now - v.ts > QUOTE_TTL) _quoteCache.delete(k)
+}, 2 * 60_000)
 
-async function yfFetch(url, timeoutMs = 10000) {
-  const ctrl = new AbortController()
-  const timer = setTimeout(() => ctrl.abort(), timeoutMs)
-  try {
-    const auth = await getYFCrumb()
-    const headers = { ...HEADERS }
-    let authUrl = url
-    if (auth?.value) {
-      headers.Cookie = auth.cookie
-      authUrl += (url.includes('?') ? '&' : '?') + `crumb=${encodeURIComponent(auth.value)}`
-    }
-    const res  = await fetch(authUrl, { headers, signal: ctrl.signal })
-    const text = await res.text()
-    try {
-      return JSON.parse(text)
-    } catch {
-      // Yahoo returned non-JSON (rate limit / bot challenge) — invalidate crumb and try alt host
-      if (auth) { yfCrumb.value = null; yfCrumb.fetchedAt = 0 }
-      const altUrl = url.includes(YF1) ? url.replace(YF1, YF2) : url.replace(YF2, YF1)
-      const res2   = await fetch(altUrl, { headers: HEADERS, signal: AbortSignal.timeout(timeoutMs) })
-      const text2  = await res2.text()
-      try { return JSON.parse(text2) } catch { return null }
-    }
-  } finally {
-    clearTimeout(timer)
-  }
+// ── Finnhub helpers ───────────────────────────────────────────────────────────
+function fhUrl(path) {
+  const sep = path.includes('?') ? '&' : '?'
+  return `https://finnhub.io/api/v1${path}${sep}token=${process.env.FINNHUB_API_KEY}`
 }
+const FH_KEY = () => process.env.FINNHUB_API_KEY
 
-// Warm up the crumb cache at startup so the first quote request doesn't pay the cost
-setTimeout(() => getYFCrumb().catch(() => {}), 3000)
-
-/* ── Price via chart v8 (most reliable from cloud IPs) */
-async function getChartQuote(symbol) {
-  const url  = `${YF1}/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=2d`
-  const data = await yfFetch(url, 12000)
-  const r    = data?.chart?.result?.[0]
-  if (!r) return null
-  const m    = r.meta || {}
-
-  const price     = m.regularMarketPrice ?? null
-  // chart API returns chartPreviousClose (not previousClose) for change base
-  const prevClose = m.chartPreviousClose ?? m.previousClose ?? null
-  // Yahoo rarely includes regularMarketChange in chart meta — compute it
-  const change    = m.regularMarketChange
-    ?? (price != null && prevClose != null ? +((price - prevClose).toFixed(4)) : null)
-  const changePct = m.regularMarketChangePercent
-    ?? (change != null && prevClose != null ? +((change / prevClose * 100).toFixed(4)) : null)
-
-  return {
-    symbol:      m.symbol || symbol,
-    name:        m.symbol || symbol,
-    price,
-    change,
-    changePct,
-    volume:      m.regularMarketVolume  ?? null,
-    high52:      m.fiftyTwoWeekHigh     ?? null,
-    low52:       m.fiftyTwoWeekLow      ?? null,
-    dayHigh:     m.regularMarketDayHigh ?? null,
-    dayLow:      m.regularMarketDayLow  ?? null,
-    open:        m.regularMarketOpen    ?? null,
-    prevClose,
-    regularMarketTime: m.regularMarketTime ?? null,  // Unix seconds — used for daily P/L reset
-    marketCap:   null,
-    pe:          null,
-  }
-}
-
-/* ── Finnhub live quotes (works reliably from cloud IPs) ──────────────────── */
-// Finnhub /quote returns { c: price, d: change, dp: changePct, h, l, o, pc, t }
+// Quote (per-symbol, parallel)
 async function getFinnhubQuotes(symbols) {
-  const key = process.env.FINNHUB_API_KEY
-  if (!key) return null
+  if (!FH_KEY()) return null
   try {
-    const results = await Promise.all(
-      symbols.map(async sym => {
-        try {
-          const r = await fetch(
-            `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(sym)}&token=${key}`,
-            { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(8000) }
-          )
-          const d = await r.json()
-          if (d?.c == null || d.c === 0) return { symbol: sym, price: null }
-          return {
-            symbol,
-            shortName:                  sym,
-            regularMarketPrice:         d.c,
-            regularMarketChange:        d.d   ?? null,
-            regularMarketChangePercent: d.dp  ?? null,
-            regularMarketDayHigh:       d.h   ?? null,
-            regularMarketDayLow:        d.l   ?? null,
-            regularMarketOpen:          d.o   ?? null,
-            regularMarketPreviousClose: d.pc  ?? null,
-            regularMarketTime:          d.t   ?? null,
-          }
-        } catch { return { symbol: sym, price: null } }
-      })
-    )
+    const results = await Promise.all(symbols.map(async sym => {
+      const ck = `fhq:${sym}`
+      const cached = cacheGet(ck)
+      if (cached) return cached
+      try {
+        const d = await apiFetch(fhUrl(`/quote?symbol=${encodeURIComponent(sym)}`), 8000)
+        if (!d?.c) return { symbol: sym, regularMarketPrice: null }
+        const q = {
+          symbol:                     sym,
+          shortName:                  sym,
+          regularMarketPrice:         d.c,
+          regularMarketChange:        d.d   ?? null,
+          regularMarketChangePercent: d.dp  ?? null,
+          regularMarketDayHigh:       d.h   ?? null,
+          regularMarketDayLow:        d.l   ?? null,
+          regularMarketOpen:          d.o   ?? null,
+          regularMarketPreviousClose: d.pc  ?? null,
+          regularMarketTime:          d.t   ?? null,
+        }
+        cacheSet(ck, q)
+        return q
+      } catch { return { symbol: sym, regularMarketPrice: null } }
+    }))
     return results
   } catch { return null }
 }
 
-/* ── FMP live quotes (batch, works from cloud IPs) ─────────────────────────── */
-// FMP /quote/:symbols returns [{ symbol, price, change, changesPercentage, ... }]
-async function getFMPQuotes(symbols) {
-  const key = process.env.FMP_API_KEY
-  if (!key) return null
+// Chart OHLCV — returns data in Yahoo chart envelope (client expects this format)
+function toFhResolution(interval) {
+  return { '1m':'1','5m':'5','15m':'15','30m':'30','60m':'60','1h':'60','1d':'D','1wk':'W','1mo':'M' }[interval] || 'D'
+}
+function rangeToUnix(range) {
+  const to   = Math.floor(Date.now() / 1000)
+  const secs = { '1d':86400,'5d':432000,'1mo':2592000,'3mo':7776000,'6mo':15552000,'1y':31536000,'2y':63072000,'5y':157680000,'max':630720000 }
+  return { from: to - (secs[range] || 31536000), to }
+}
+async function getFinnhubChart(symbol, interval = '1d', range = '1y') {
+  if (!FH_KEY()) return null
   try {
-    const r = await fetch(
-      `https://financialmodelingprep.com/api/v3/quote/${symbols.join(',')}?apikey=${key}`,
-      { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(10000) }
+    const res = toFhResolution(interval)
+    const { from, to } = rangeToUnix(range)
+    const d = await apiFetch(
+      fhUrl(`/stock/candle?symbol=${encodeURIComponent(symbol)}&resolution=${res}&from=${from}&to=${to}`),
+      15000
     )
-    const data = await r.json()
+    if (d?.s !== 'ok' || !d.t?.length) return null
+    return {
+      chart: { result: [{
+        meta: { symbol, regularMarketPrice: d.c.at(-1) ?? null, chartPreviousClose: d.c.at(-2) ?? null, regularMarketTime: d.t.at(-1) ?? null },
+        timestamp: d.t,
+        indicators: {
+          quote:    [{ open: d.o, high: d.h, low: d.l, close: d.c, volume: d.v }],
+          adjclose: [{ adjclose: d.c }],
+        },
+      }], error: null }
+    }
+  } catch (e) { console.warn('[Finnhub] chart error:', e.message); return null }
+}
+
+// Symbol search
+async function getFinnhubSearch(q) {
+  if (!FH_KEY()) return null
+  try {
+    const d = await apiFetch(fhUrl(`/search?q=${encodeURIComponent(q)}`), 8000)
+    if (!d?.result?.length) return null
+    const typeMap = { 'Common Stock':'EQUITY', 'ETP':'ETF', 'Index':'INDEX', 'ADR':'EQUITY' }
+    return { quotes: d.result.slice(0, 10).map(r => ({
+      symbol: r.symbol, shortname: r.description, longname: r.description,
+      quoteType: typeMap[r.type] || 'EQUITY', exchange: r.displaySymbol,
+    })) }
+  } catch { return null }
+}
+
+// News
+async function getFinnhubNews(symbol) {
+  if (!FH_KEY()) return null
+  try {
+    const today = new Date().toISOString().slice(0, 10)
+    const from  = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10)
+    const path  = symbol
+      ? `/company-news?symbol=${encodeURIComponent(symbol)}&from=${from}&to=${today}`
+      : `/news?category=general&minId=0`
+    const data  = await apiFetch(fhUrl(path), 10000)
+    if (!Array.isArray(data)) return null
+    return { news: data.slice(0, 8).map(a => ({
+      title: a.headline, link: a.url, publisher: a.source,
+      providerPublishTime: a.datetime,
+      thumbnail: a.image ? { resolutions: [{ url: a.image }] } : null,
+    })) }
+  } catch { return null }
+}
+
+// ── FMP helpers ───────────────────────────────────────────────────────────────
+const FMP_KEY = () => process.env.FMP_API_KEY
+function fmpUrl(path) {
+  const sep = path.includes('?') ? '&' : '?'
+  return `https://financialmodelingprep.com/api/v3${path}${sep}apikey=${process.env.FMP_API_KEY}`
+}
+
+// Batch quote
+async function getFMPQuotes(symbols) {
+  if (!FMP_KEY()) return null
+  try {
+    const data = await apiFetch(fmpUrl(`/quote/${symbols.join(',')}`), 10000)
     if (!Array.isArray(data) || !data.length) return null
     return data.map(q => ({
       symbol:                     q.symbol,
-      shortName:                  q.name   || q.symbol,
-      regularMarketPrice:         q.price                ?? null,
-      regularMarketChange:        q.change               ?? null,
-      regularMarketChangePercent: q.changesPercentage    ?? null,
-      regularMarketVolume:        q.volume               ?? null,
-      regularMarketDayHigh:       q.dayHigh              ?? null,
-      regularMarketDayLow:        q.dayLow               ?? null,
-      regularMarketOpen:          q.open                 ?? null,
-      regularMarketPreviousClose: q.previousClose        ?? null,
-      regularMarketTime:          q.timestamp            ?? null,
-      fiftyTwoWeekHigh:           q.yearHigh             ?? null,
-      fiftyTwoWeekLow:            q.yearLow              ?? null,
-      marketCap:                  q.marketCap            ?? null,
-      trailingPE:                 q.pe                   ?? null,
+      shortName:                  q.name            || q.symbol,
+      regularMarketPrice:         q.price           ?? null,
+      regularMarketChange:        q.change          ?? null,
+      regularMarketChangePercent: q.changesPercentage ?? null,
+      regularMarketVolume:        q.volume          ?? null,
+      regularMarketDayHigh:       q.dayHigh         ?? null,
+      regularMarketDayLow:        q.dayLow          ?? null,
+      regularMarketOpen:          q.open            ?? null,
+      regularMarketPreviousClose: q.previousClose   ?? null,
+      regularMarketTime:          q.timestamp       ?? null,
+      fiftyTwoWeekHigh:           q.yearHigh        ?? null,
+      fiftyTwoWeekLow:            q.yearLow         ?? null,
+      marketCap:                  q.marketCap       ?? null,
+      trailingPE:                 q.pe              ?? null,
     }))
   } catch { return null }
 }
+
+// Chart OHLCV
+async function getFMPChart(symbol, interval = '1d', range = '1y') {
+  if (!FMP_KEY()) return null
+  try {
+    const today = new Date()
+    const to    = today.toISOString().slice(0, 10)
+    const days  = { '1d':1,'5d':5,'1mo':30,'3mo':90,'6mo':180,'1y':365,'2y':730,'5y':1825,'max':7300 }[range] || 365
+    const from  = new Date(today.getTime() - days * 86400000).toISOString().slice(0, 10)
+    const isDailyPlus = ['1d','1wk','1mo'].includes(interval)
+    let url, historical
+    if (isDailyPlus) {
+      const data = await apiFetch(fmpUrl(`/historical-price-full/${encodeURIComponent(symbol)}?from=${from}&to=${to}`), 15000)
+      historical = data?.historical
+    } else {
+      const intMap = { '1m':'1min','5m':'5min','15m':'15min','30m':'30min','60m':'1hour','1h':'1hour' }
+      const fi = intMap[interval] || '1hour'
+      historical = await apiFetch(fmpUrl(`/historical-chart/${fi}/${encodeURIComponent(symbol)}?from=${from}&to=${to}`), 15000)
+    }
+    if (!Array.isArray(historical) || !historical.length) return null
+    const hist = [...historical].reverse()  // FMP returns newest-first
+    const ts  = hist.map(d => Math.floor(new Date(d.date).getTime() / 1000))
+    const cls = hist.map(d => d.close ?? d.adjClose ?? null)
+    return {
+      chart: { result: [{
+        meta: { symbol, regularMarketPrice: cls.at(-1) ?? null, chartPreviousClose: cls.at(-2) ?? null },
+        timestamp: ts,
+        indicators: {
+          quote:    [{ open: hist.map(d => d.open), high: hist.map(d => d.high), low: hist.map(d => d.low), close: cls, volume: hist.map(d => d.volume) }],
+          adjclose: [{ adjclose: hist.map(d => d.adjClose || d.close) }],
+        },
+      }], error: null }
+    }
+  } catch (e) { console.warn('[FMP] chart error:', e.message); return null }
+}
+
+// Fundamentals summary — returns Yahoo quoteSummary-compatible envelope
+async function getFMPSummary(symbol) {
+  if (!FMP_KEY()) return null
+  try {
+    const [profileR, metricsR] = await Promise.allSettled([
+      apiFetch(fmpUrl(`/profile/${encodeURIComponent(symbol)}`), 10000),
+      apiFetch(fmpUrl(`/key-metrics-ttm/${encodeURIComponent(symbol)}`), 10000),
+    ])
+    const p = profileR.status  === 'fulfilled' ? (profileR.value?.[0]  || {}) : {}
+    const m = metricsR.status  === 'fulfilled' ? (metricsR.value?.[0]  || {}) : {}
+    if (!p.symbol) return null
+    return { quoteSummary: { result: [{
+      summaryDetail: {
+        trailingPE:      p.pe           ?? null,
+        marketCap:       p.mktCap       ?? null,
+        dividendYield:   p.lastDiv && p.price ? p.lastDiv / p.price : null,
+        beta:            p.beta          ?? null,
+        fiftyTwoWeekHigh: p['52WeekHigh'] ?? null,
+        fiftyTwoWeekLow:  p['52WeekLow']  ?? null,
+        averageVolume:   p.volAvg        ?? null,
+      },
+      financialData: {
+        returnOnEquity:   m.roeTTM                  ?? null,
+        debtToEquity:     m.debtToEquityTTM          ?? null,
+        currentRatio:     m.currentRatioTTM          ?? null,
+        revenueGrowth:    m.revenueGrowthTTM         ?? null,
+        profitMargins:    m.netProfitMarginTTM       ?? null,
+        grossMargins:     m.grossProfitMarginTTM     ?? null,
+        operatingMargins: m.operatingProfitMarginTTM ?? null,
+        targetMeanPrice:  p.dcf                      ?? null,
+        recommendationKey: p.dcfDiff > 0 ? 'buy' : p.dcfDiff < 0 ? 'sell' : null,
+      },
+      defaultKeyStatistics: {
+        trailingEps: m.epsTTM     ?? null,
+        priceToBook: m.pbRatioTTM ?? null,
+      },
+      assetProfile: {
+        sector:              p.sector           ?? null,
+        industry:            p.industry         ?? null,
+        longName:            p.companyName      ?? null,
+        longBusinessSummary: p.description      ?? null,
+        fullTimeEmployees:   p.fullTimeEmployees ?? null,
+        country:             p.country          ?? null,
+      },
+    }], error: null } }
+  } catch (e) { console.warn('[FMP] summary error:', e.message); return null }
+}
+
+// Symbol search
+async function getFMPSearch(q) {
+  if (!FMP_KEY()) return null
+  try {
+    const data = await apiFetch(fmpUrl(`/search?query=${encodeURIComponent(q)}&limit=10`), 8000)
+    if (!Array.isArray(data) || !data.length) return null
+    return { quotes: data.map(r => ({
+      symbol: r.symbol, shortname: r.name, longname: r.name,
+      quoteType: 'EQUITY', exchange: r.exchangeShortName,
+    })) }
+  } catch { return null }
+}
+
+// ── Finnhub 30-minute health check ───────────────────────────────────────────
+// Validates the key is still working; logs the status so it's visible in Railway logs.
+async function finnhubHealthCheck() {
+  if (!FH_KEY()) { console.log('[Finnhub] FINNHUB_API_KEY not set — using FMP only'); return }
+  try {
+    const d = await apiFetch(fhUrl('/quote?symbol=SPY'), 8000)
+    if (d?.c) {
+      console.log(`[Finnhub] health OK — SPY $${d.c}`)
+    } else {
+      console.warn('[Finnhub] health check: unexpected response', JSON.stringify(d).slice(0, 120))
+    }
+  } catch (e) {
+    console.warn('[Finnhub] health check failed:', e.message)
+  }
+}
+// Run at startup (after 5 s) then every 30 minutes
+setTimeout(() => { finnhubHealthCheck(); setInterval(finnhubHealthCheck, 30 * 60_000) }, 5000)
 
 /* ── Health (includes DB status + demo mode) ───── */
 app.get('/health', async (_req, res) => {
@@ -337,7 +423,7 @@ app.get('/health', async (_req, res) => {
   if (!demoMode) {
     try { const { ping } = require('./db/db'); dbOk = await ping() } catch {}
   }
-  res.json({ ok: true, db: dbOk, demoMode, ts: Date.now() })
+  res.json({ ok: true, db: dbOk, demoMode, finnhub: !!FH_KEY(), fmp: !!FMP_KEY(), ts: Date.now() })
 })
 
 /* ── Quote (batch) ─────────────────────────────── */
@@ -345,70 +431,17 @@ app.get('/api/quote', async (req, res) => {
   const symbols = (req.query.symbols || '').split(',').filter(Boolean)
   if (!symbols.length) return res.status(400).json({ error: 'symbols required' })
   try {
-    // 1st choice: Finnhub — works reliably from cloud IPs (no Yahoo IP block)
-    {
-      const fh = await getFinnhubQuotes(symbols).catch(() => null)
-      if (fh && fh.some(r => r.regularMarketPrice != null)) {
-        return res.json({ quoteResponse: { result: fh } })
-      }
-    }
+    const fh = await getFinnhubQuotes(symbols)
+    if (fh?.some(r => r.regularMarketPrice != null))
+      return res.json({ quoteResponse: { result: fh } })
 
-    // 2nd choice: FMP batch quote — also cloud-friendly
-    {
-      const fmp = await getFMPQuotes(symbols).catch(() => null)
-      if (fmp && fmp.some(r => r.regularMarketPrice != null)) {
-        return res.json({ quoteResponse: { result: fmp } })
-      }
-    }
+    const fmp = await getFMPQuotes(symbols)
+    if (fmp?.some(r => r.regularMarketPrice != null))
+      return res.json({ quoteResponse: { result: fmp } })
 
-    // 3rd choice: yahoo-finance2 (handles crumb internally — last resort for Yahoo)
-    if (yf2) {
-      try {
-        const raw     = await yf2.quote(symbols, {}, { validateResult: false })
-        const rawArr  = Array.isArray(raw) ? raw : [raw]
-        const results = rawArr.map(q => ({
-          symbol:                      q.symbol,
-          shortName:                   q.shortName  || q.longName || q.symbol,
-          longName:                    q.longName   || q.shortName || q.symbol,
-          regularMarketPrice:          q.regularMarketPrice          ?? null,
-          regularMarketChange:         q.regularMarketChange         ?? null,
-          regularMarketChangePercent:  q.regularMarketChangePercent  ?? null,
-          regularMarketVolume:         q.regularMarketVolume         ?? null,
-          regularMarketDayHigh:        q.regularMarketDayHigh        ?? null,
-          regularMarketDayLow:         q.regularMarketDayLow         ?? null,
-          regularMarketOpen:           q.regularMarketOpen           ?? null,
-          regularMarketPreviousClose:  q.regularMarketPreviousClose  ?? null,
-          regularMarketTime: q.regularMarketTime instanceof Date
-            ? Math.floor(q.regularMarketTime.getTime() / 1000)
-            : (q.regularMarketTime ?? null),
-          fiftyTwoWeekHigh:  q.fiftyTwoWeekHigh  ?? null,
-          fiftyTwoWeekLow:   q.fiftyTwoWeekLow   ?? null,
-          marketCap:         q.marketCap          ?? null,
-          trailingPE:        q.trailingPE         ?? null,
-        }))
-        if (results.some(r => r.regularMarketPrice != null)) {
-          return res.json({ quoteResponse: { result: results } })
-        }
-      } catch (e) {
-        console.warn('[YF2] quote error:', e.message)
-      }
-    }
-
-    // 4th choice: raw v7 endpoint with crumb
-    const url  = `${YF1}/v7/finance/quote?symbols=${symbols.join(',')}&fields=regularMarketPrice,regularMarketChange,regularMarketChangePercent,regularMarketVolume,marketCap,trailingPE,fiftyTwoWeekHigh,fiftyTwoWeekLow,shortName,longName,regularMarketDayHigh,regularMarketDayLow,regularMarketOpen,regularMarketPreviousClose,regularMarketTime`
-    const data = await yfFetch(url, 12000)
-    const results = data?.quoteResponse?.result
-    if (results && results.length && results.some(r => r.regularMarketPrice != null)) {
-      return res.json({ quoteResponse: { result: results } })
-    }
-
-    // 5th choice: per-symbol chart API (v8)
-    const quotes = await Promise.all(
-      symbols.map(s => getChartQuote(s).catch(() => ({ symbol: s, price: null })))
-    )
-    res.json({ quoteResponse: { result: quotes } })
+    res.json({ quoteResponse: { result: symbols.map(s => ({ symbol: s, regularMarketPrice: null })) } })
   } catch (e) {
-    res.json({ quoteResponse: { result: symbols.map(s => ({ symbol: s, price: null })) } })
+    res.json({ quoteResponse: { result: symbols.map(s => ({ symbol: s, regularMarketPrice: null })) } })
   }
 })
 
@@ -417,12 +450,13 @@ app.get('/api/chart', async (req, res) => {
   const { symbol, interval = '1d', range = '1y' } = req.query
   if (!symbol) return res.status(400).json({ error: 'symbol required' })
   try {
-    const url  = `${YF1}/v8/finance/chart/${encodeURIComponent(symbol)}?interval=${interval}&range=${range}&includePrePost=false`
-    const data = await yfFetch(url, 15000)
-    if (data) return res.json(data)
-    const url2 = url.replace(YF1, YF2)
-    const d2   = await yfFetch(url2, 15000)
-    res.json(d2 || { chart: { result: null, error: { code: 'blocked', description: 'Rate limited' } } })
+    const fh = await getFinnhubChart(symbol, interval, range)
+    if (fh) return res.json(fh)
+
+    const fmp = await getFMPChart(symbol, interval, range)
+    if (fmp) return res.json(fmp)
+
+    res.status(502).json({ chart: { result: null, error: { code: 'unavailable', description: 'No market data provider returned data' } } })
   } catch (e) {
     res.status(500).json({ error: e.message })
   }
@@ -430,26 +464,13 @@ app.get('/api/chart', async (req, res) => {
 
 /* ── Fundamentals ──────────────────────────────── */
 app.get('/api/summary', async (req, res) => {
-  const { symbol, modules = 'summaryDetail,financialData,defaultKeyStatistics,assetProfile' } = req.query
+  const { symbol } = req.query
   if (!symbol) return res.status(400).json({ error: 'symbol required' })
   try {
-    // 1st choice: yahoo-finance2
-    if (yf2) {
-      try {
-        const moduleList = modules.split(',')
-        const data = await yf2.quoteSummary(symbol, { modules: moduleList }, { validateResult: false })
-        // Wrap in the v10-compatible envelope the client expects
-        return res.json({ quoteSummary: { result: [data], error: null } })
-      } catch (e) {
-        console.warn('[YF2] quoteSummary error:', e.message)
-      }
-    }
-    // Fallback: raw v10 endpoint with crumb
-    const url  = `${YF1}/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=${modules}`
-    const data = await yfFetch(url, 15000)
-    if (data) return res.json(data)
-    const url2 = url.replace(YF1, YF2)
-    res.json(await yfFetch(url2, 15000) || {})
+    const fmp = await getFMPSummary(symbol)
+    if (fmp) return res.json(fmp)
+
+    res.json({ quoteSummary: { result: null, error: { code: 'unavailable' } } })
   } catch (e) {
     res.status(500).json({ error: e.message })
   }
@@ -460,17 +481,13 @@ app.get('/api/search', async (req, res) => {
   const { q } = req.query
   if (!q) return res.status(400).json({ error: 'q required' })
   try {
-    if (yf2) {
-      try {
-        const data = await yf2.search(q, { quotesCount: 10, newsCount: 0 }, { validateResult: false })
-        if (data?.quotes?.length) return res.json(data)
-      } catch (e) {
-        console.warn('[YF2] search error:', e.message)
-      }
-    }
-    const url  = `${YF2}/v1/finance/search?q=${encodeURIComponent(q)}&quotesCount=10&newsCount=0`
-    const data = await yfFetch(url, 10000)
-    res.json(data || { quotes: [] })
+    const fh = await getFinnhubSearch(q)
+    if (fh?.quotes?.length) return res.json(fh)
+
+    const fmp = await getFMPSearch(q)
+    if (fmp?.quotes?.length) return res.json(fmp)
+
+    res.json({ quotes: [] })
   } catch (e) {
     res.json({ quotes: [] })
   }
@@ -478,11 +495,11 @@ app.get('/api/search', async (req, res) => {
 
 /* ── News ──────────────────────────────────────── */
 app.get('/api/news', async (req, res) => {
-  const q   = req.query.symbol || 'stock market'
+  const symbol = req.query.symbol || null
   try {
-    const url  = `${YF1}/v1/finance/search?q=${encodeURIComponent(q)}&quotesCount=0&newsCount=8`
-    const data = await yfFetch(url, 10000)
-    res.json(data || { news: [] })
+    const fh = await getFinnhubNews(symbol)
+    if (fh) return res.json(fh)
+    res.json({ news: [] })
   } catch (e) {
     res.json({ news: [] })
   }
