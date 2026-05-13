@@ -189,11 +189,10 @@ export default function RebalancerView() {
           if (!line.startsWith('data: ')) continue
           const payload = line.slice(6)
           if (payload === '[DONE]') continue
-          try {
-            const obj = JSON.parse(payload)
-            if (obj.text) setPlan(prev => prev + obj.text)
-            if (obj.error) throw new Error(obj.error)
-          } catch {}
+          let obj
+          try { obj = JSON.parse(payload) } catch { continue } // skip malformed lines
+          if (obj.error) throw new Error(obj.error)            // propagate to outer catch
+          if (obj.text)  setPlan(prev => prev + obj.text)
         }
         if (planRef.current) planRef.current.scrollTop = planRef.current.scrollHeight
       }
