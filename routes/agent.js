@@ -40,30 +40,15 @@ function getClient() {
   return _client
 }
 
-// ── Yahoo Finance direct fetch (avoids internal HTTP proxy) ──────────────────
-const YF_HEADERS = {
-  'User-Agent':      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-  'Accept':          'application/json, text/plain, */*',
-  'Accept-Language': 'en-US,en;q=0.9',
-  'Referer':         'https://finance.yahoo.com/',
-  'Origin':          'https://finance.yahoo.com',
-  'sec-fetch-dest':  'empty',
-  'sec-fetch-mode':  'cors',
-  'sec-fetch-site':  'same-site',
-}
-
-async function yfDirect(path) {
-  const base = 'https://query1.finance.yahoo.com'
-  const fallback = 'https://query2.finance.yahoo.com'
-  let res
-  try {
-    res = await fetch(`${base}${path}`, { headers: YF_HEADERS, signal: AbortSignal.timeout(12000) })
-    if (!res.ok) throw new Error(`q1 HTTP ${res.status}`)
-  } catch {
-    res = await fetch(`${fallback}${path}`, { headers: YF_HEADERS, signal: AbortSignal.timeout(12000) })
-  }
-  const text = await res.text()
-  try { return JSON.parse(text) } catch { throw new Error('Yahoo Finance returned non-JSON') }
+// ── OHLCV via internal /api/chart proxy (Finnhub → FMP, no Yahoo) ────────────
+async function chartFetch(symbol, range = '1y') {
+  const port = process.env.PORT || 3001
+  const r    = await fetch(
+    `http://localhost:${port}/api/chart?symbol=${encodeURIComponent(symbol)}&interval=1d&range=${range}`,
+    { signal: AbortSignal.timeout(12000) }
+  )
+  if (!r.ok) throw new Error(`Chart proxy HTTP ${r.status}`)
+  return r.json()
 }
 
 // ── Gemini streaming helper ───────────────────────────────────────────────────
@@ -132,7 +117,7 @@ Fetches OHLCV price history and computes all technical indicators server-side:
 • Volume analysis — relative volume vs 20-day average, trend
 • Price action — trend direction, candle body ratio, short/long trend
 
-Data source: Yahoo Finance OHLCV (always available).
+Data source: Finnhub / FMP OHLCV (always available).
 Use this first for any technical or price-action question.`,
     input_schema: {
       type: 'object',
@@ -190,10 +175,8 @@ Use for relative strength, sector rotation, or head-to-head comparison questions
   },
 ]
 
-// ── Yahoo Finance OHLCV fetch ─────────────────────────────────────────────────
-
 async function fetchOHLCV(symbol, range = '1y') {
-  const data   = await yfDirect(`/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=${range}`)
+  const data   = await chartFetch(symbol, range)
   const result = data?.chart?.result?.[0]
   if (!result) throw new Error(`No chart data for ${symbol}`)
 

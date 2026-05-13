@@ -33,23 +33,14 @@ router.post('/', async (req, res) => {
   const sym     = symbol.toUpperCase().replace(/[^A-Z0-9.-]/g, '')
   const rangeMap = { '1y': '1y', '2y': '2y', '5y': '5y' }
 
-  // Fetch OHLCV from Yahoo Finance (reusing internal proxy logic)
+  // Fetch OHLCV via internal /api/chart proxy (Finnhub → FMP — no Yahoo)
   try {
-    const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?range=${rangeMap[range]}&interval=1d&events=div,splits`
-    const ctrl     = new AbortController()
-    const timer    = setTimeout(() => ctrl.abort(), 15_000)
-
-    let yahooData
-    try {
-      const r = await fetch(yahooUrl, {
-        signal: ctrl.signal,
-        headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' },
-      })
-      yahooData = await r.json()
-    } finally {
-      clearTimeout(timer)
-    }
-
+    const port    = process.env.PORT || 3001
+    const r       = await fetch(
+      `http://localhost:${port}/api/chart?symbol=${encodeURIComponent(sym)}&interval=1d&range=${rangeMap[range]}`,
+      { signal: AbortSignal.timeout(15_000) }
+    )
+    const yahooData = await r.json()
     const result    = yahooData?.chart?.result?.[0]
     const timestamps = result?.timestamp
     const ohlcv      = result?.indicators?.quote?.[0]
@@ -79,8 +70,8 @@ router.post('/', async (req, res) => {
       ...backtestResult,
     })
   } catch (err) {
-    if (err.name === 'AbortError')
-      return res.status(504).json({ error: 'Yahoo Finance request timed out' })
+    if (err.name === 'AbortError' || err.name === 'TimeoutError')
+      return res.status(504).json({ error: 'Market data request timed out' })
     console.error('[backtest]', err.message)
     return res.status(500).json({ error: 'Backtest failed: ' + err.message })
   }

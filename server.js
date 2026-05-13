@@ -70,7 +70,7 @@ app.use(helmet({
       scriptSrc:   ["'self'", "'unsafe-inline'"],   // Vite needs inline scripts
       styleSrc:    ["'self'", "'unsafe-inline'"],
       imgSrc:      ["'self'", 'data:', 'https:'],
-      connectSrc:  ["'self'", 'https://query1.finance.yahoo.com', 'https://query2.finance.yahoo.com', 'https://ai4trade.ai'],
+      connectSrc:  ["'self'", 'https://finnhub.io', 'https://financialmodelingprep.com', 'https://ai4trade.ai'],
       fontSrc:     ["'self'", 'data:'],
       objectSrc:   ["'none'"],
       upgradeInsecureRequests: PROD ? [] : null,
@@ -160,10 +160,16 @@ function cacheGet(key) {
   const hit = _quoteCache.get(key)
   return hit && Date.now() - hit.ts < QUOTE_TTL ? hit.data : null
 }
+// Evict stale entries every 2 minutes to prevent unbounded memory growth
+setInterval(() => {
+  const now = Date.now()
+  for (const [k, v] of _quoteCache) if (now - v.ts > QUOTE_TTL) _quoteCache.delete(k)
+}, 2 * 60_000)
 
 // ── Finnhub helpers ───────────────────────────────────────────────────────────
 function fhUrl(path) {
-  return `https://finnhub.io/api/v1${path}&token=${process.env.FINNHUB_API_KEY}`
+  const sep = path.includes('?') ? '&' : '?'
+  return `https://finnhub.io/api/v1${path}${sep}token=${process.env.FINNHUB_API_KEY}`
 }
 const FH_KEY = () => process.env.FINNHUB_API_KEY
 

@@ -19,13 +19,14 @@ router.use(optionalAuth)
 
 const DB_MODE = !!process.env.DATABASE_URL
 
-// ── Fetch daily closes from Yahoo Finance ─────────────────────────────────────
+// ── Fetch daily closes via internal /api/chart proxy (Finnhub → FMP) ──────────
 async function fetchCloses(symbol, range = '1y') {
-  const url  = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=${range}&interval=1d`
-  const ctrl = new AbortController()
-  const t    = setTimeout(() => ctrl.abort(), 12_000)
+  const port = process.env.PORT || 3001
   try {
-    const r    = await fetch(url, { signal: ctrl.signal, headers: { 'User-Agent': 'Mozilla/5.0' } })
+    const r    = await fetch(
+      `http://localhost:${port}/api/chart?symbol=${encodeURIComponent(symbol)}&interval=1d&range=${range}`,
+      { signal: AbortSignal.timeout(12_000) }
+    )
     const data = await r.json()
     const result = data?.chart?.result?.[0]
     const closes = result?.indicators?.quote?.[0]?.close ?? []
@@ -34,7 +35,6 @@ async function fetchCloses(symbol, range = '1y') {
       .map((ts, i) => ({ date: new Date(ts * 1000).toISOString().slice(0, 10), close: closes[i] }))
       .filter(p => p.close != null && !isNaN(p.close))
   } catch { return [] }
-  finally { clearTimeout(t) }
 }
 
 // ── Daily returns from close array ───────────────────────────────────────────
