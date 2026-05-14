@@ -25,6 +25,7 @@ import TradingNetworkView from './components/Trading/TradingNetworkView'
 import EarningsCalendarView from './components/EarningsCalendar/EarningsCalendarView'
 import BacktestView from './components/Backtest/BacktestView'
 import BuySignalsView from './components/Recommendations/BuySignalsView'
+import AIBrainView from './components/AIBrain/AIBrainView'
 import PortfolioAnalyticsView from './components/Analytics/PortfolioAnalyticsView'
 import RebalancerView from './components/Rebalancer/RebalancerView'
 import TraderProfileView from './components/Profile/TraderProfileView'
@@ -226,6 +227,9 @@ function MainApp({ onSignIn }) {
             )}
             {activeTab === 'buy-signals' && (
               <BuySignalsView portfolio={portfolio} onAnalyze={navigateToAnalyze} />
+            )}
+            {activeTab === 'ai-brain' && (
+              <AIBrainView portfolio={portfolio} onAnalyze={navigateToAnalyze} />
             )}
             {activeTab === 'analytics' && (
               <PortfolioAnalyticsView portfolio={portfolio} />
