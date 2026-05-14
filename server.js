@@ -138,9 +138,10 @@ app.use('/api/backtest',     backtestRoutes)
 app.use('/api/analytics',    analyticsRoutes)
 app.use('/api/rebalancer',   rebalancerRoutes)
 
-/* ── Market data helpers (Finnhub primary, FMP fallback) ─────────────────────
+/* ── Market data helpers (AISA primary → Finnhub → FMP fallback) ─────────────
    Yahoo Finance is completely removed — its IPs are blocked on Railway.
-   All live data comes from Finnhub (FINNHUB_API_KEY) and/or FMP (FMP_API_KEY).
+   AISA (api.aisa.one) is the primary source — cloud-friendly, pay-per-use.
+   Set AISA_API_KEY in Railway env vars: https://aisa.one
    ─────────────────────────────────────────────────────────────────────────── */
 
 const JSON_HEADERS = { Accept: 'application/json' }
@@ -165,6 +166,105 @@ setInterval(() => {
   const now = Date.now()
   for (const [k, v] of _quoteCache) if (now - v.ts > QUOTE_TTL) _quoteCache.delete(k)
 }, 2 * 60_000)
+
+// ── AISA helpers (api.aisa.one) ────────────────────────────────────────────────
+// Primary data source — works from Railway/cloud IPs, no IP blocking.
+// Get a key at https://aisa.one (~$0.001/request, pay-as-you-go)
+const AISA_KEY  = () => process.env.AISA_API_KEY
+const AISA_BASE = 'https://api.aisa.one/apis/v1'
+
+async function aisaFetch(path, timeoutMs = 12000) {
+  const key = AISA_KEY()
+  if (!key) return null
+  const r = await fetch(`${AISA_BASE}${path}`, {
+    headers: { Authorization: `Bearer ${key}`, Accept: 'application/json' },
+    signal:  AbortSignal.timeout(timeoutMs),
+  })
+  if (!r.ok) throw new Error(`AISA HTTP ${r.status}`)
+  return r.json()
+}
+
+// Convert range string to { start_date, end_date } (YYYY-MM-DD)
+function rangeToDateRange(range) {
+  const end   = new Date()
+  const start = new Date()
+  const days  = { '1d':2,'5d':7,'1mo':35,'3mo':95,'6mo':185,'1y':370,'2y':740,'5y':1830,'max':7300 }
+  start.setDate(end.getDate() - (days[range] || 370))
+  const fmt = d => d.toISOString().slice(0, 10)
+  return { start_date: fmt(start), end_date: fmt(end) }
+}
+
+// Convert interval to AISA interval + multiplier
+function intervalToAISA(interval) {
+  const map = { '1m':['minute',1],'5m':['minute',5],'15m':['minute',15],'30m':['minute',30],
+                '60m':['minute',60],'1h':['minute',60],'1d':['day',1],'1wk':['week',1],'1mo':['month',1] }
+  return map[interval] || ['day', 1]
+}
+
+// Historical OHLCV chart — returns Yahoo-envelope format the client expects
+async function getAISAChart(symbol, interval = '1d', range = '1y') {
+  if (!AISA_KEY()) return null
+  try {
+    const [ivl, mult] = intervalToAISA(interval)
+    const { start_date, end_date } = rangeToDateRange(range)
+    const data = await aisaFetch(
+      `/financial/prices?ticker=${encodeURIComponent(symbol)}&interval=${ivl}&interval_multiplier=${mult}&start_date=${start_date}&end_date=${end_date}`,
+      15000
+    )
+    if (!Array.isArray(data) || !data.length) return null
+    // AISA returns [{date|timestamp, open, high, low, close, volume}]
+    const sorted = [...data].sort((a, b) => new Date(a.date || a.timestamp) - new Date(b.date || b.timestamp))
+    const timestamps = sorted.map(d => Math.floor(new Date(d.date || d.timestamp).getTime() / 1000))
+    const opens  = sorted.map(d => d.open  ?? null)
+    const highs  = sorted.map(d => d.high  ?? null)
+    const lows   = sorted.map(d => d.low   ?? null)
+    const closes = sorted.map(d => d.close ?? null)
+    const vols   = sorted.map(d => d.volume ?? 0)
+    const lastClose = closes.filter(Boolean).at(-1) ?? null
+    return {
+      chart: { result: [{
+        meta:      { symbol, regularMarketPrice: lastClose, chartPreviousClose: closes.filter(Boolean).at(-2) ?? null },
+        timestamp: timestamps,
+        indicators: {
+          quote:    [{ open: opens, high: highs, low: lows, close: closes, volume: vols }],
+          adjclose: [{ adjclose: closes }],
+        },
+      }], error: null },
+    }
+  } catch (e) { console.warn('[AISA] chart error:', e.message); return null }
+}
+
+// Real-time quote via metrics snapshot
+async function getAISAQuotes(symbols) {
+  if (!AISA_KEY()) return null
+  try {
+    const results = await Promise.all(symbols.map(async sym => {
+      try {
+        const d = await aisaFetch(`/financial/financial-metrics/snapshot?ticker=${encodeURIComponent(sym)}`, 8000)
+        // snapshot returns { price, change, change_percent, market_cap, pe_ratio, ... }
+        const price = d?.price ?? d?.current_price ?? null
+        if (!price) return { symbol: sym, regularMarketPrice: null }
+        return {
+          symbol,
+          shortName:                  d.name || sym,
+          regularMarketPrice:         price,
+          regularMarketChange:        d.change              ?? d.price_change        ?? null,
+          regularMarketChangePercent: d.change_percent      ?? d.price_change_percent ?? null,
+          regularMarketVolume:        d.volume              ?? null,
+          regularMarketDayHigh:       d.day_high            ?? null,
+          regularMarketDayLow:        d.day_low             ?? null,
+          regularMarketOpen:          d.open                ?? null,
+          regularMarketPreviousClose: d.previous_close      ?? null,
+          fiftyTwoWeekHigh:           d.week_52_high        ?? null,
+          fiftyTwoWeekLow:            d.week_52_low         ?? null,
+          marketCap:                  d.market_cap          ?? null,
+          trailingPE:                 d.pe_ratio            ?? null,
+        }
+      } catch { return { symbol: sym, regularMarketPrice: null } }
+    }))
+    return results
+  } catch { return null }
+}
 
 // ── Finnhub helpers ───────────────────────────────────────────────────────────
 function fhUrl(path) {
@@ -589,7 +689,7 @@ app.get('/health', async (_req, res) => {
   if (!demoMode) {
     try { const { ping } = require('./db/db'); dbOk = await ping() } catch {}
   }
-  res.json({ ok: true, db: dbOk, demoMode, finnhub: !!FH_KEY(), fmp: !!FMP_KEY(), ts: Date.now() })
+  res.json({ ok: true, db: dbOk, demoMode, aisa: !!AISA_KEY(), finnhub: !!FH_KEY(), fmp: !!FMP_KEY(), ts: Date.now() })
 })
 
 /* ── Quote (batch) ─────────────────────────────── */
@@ -597,15 +697,22 @@ app.get('/api/quote', async (req, res) => {
   const symbols = (req.query.symbols || '').split(',').filter(Boolean)
   if (!symbols.length) return res.status(400).json({ error: 'symbols required' })
   try {
+    // 1st: AISA — cloud-friendly, Yahoo Finance data via proxy
+    const aisa = await getAISAQuotes(symbols).catch(() => null)
+    if (aisa?.some(r => r.regularMarketPrice != null))
+      return res.json({ quoteResponse: { result: aisa } })
+
+    // 2nd: Finnhub
     const fh = await getFinnhubQuotes(symbols)
     if (fh?.some(r => r.regularMarketPrice != null))
       return res.json({ quoteResponse: { result: fh } })
 
+    // 3rd: FMP
     const fmp = await getFMPQuotes(symbols)
     if (fmp?.some(r => r.regularMarketPrice != null))
       return res.json({ quoteResponse: { result: fmp } })
 
-    // 3rd: Alpha Vantage (free tier, 5 req/min — last resort)
+    // 4th: Alpha Vantage (free tier, 5 req/min — last resort)
     const av = await getAVQuotes(symbols)
     if (av?.some(r => r.regularMarketPrice != null))
       return res.json({ quoteResponse: { result: av } })
@@ -621,9 +728,15 @@ app.get('/api/chart', async (req, res) => {
   const { symbol, interval = '1d', range = '1y' } = req.query
   if (!symbol) return res.status(400).json({ error: 'symbol required' })
   try {
+    // 1st: AISA — cloud-friendly Yahoo Finance proxy
+    const aisa = await getAISAChart(symbol, interval, range).catch(() => null)
+    if (aisa) { console.log('[chart] AISA:', symbol); return res.json(aisa) }
+
+    // 2nd: Finnhub candles
     const fh = await getFinnhubChart(symbol, interval, range)
     if (fh) return res.json(fh)
 
+    // 3rd: FMP historical
     const fmp = await getFMPChart(symbol, interval, range)
     if (fmp) return res.json(fmp)
 
