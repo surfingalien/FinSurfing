@@ -13,6 +13,7 @@ const DEFAULTS = {
   aisa:     '',
   finnhub:  '',
   fmp:      '',
+  td:       '',
   av:       '',
 }
 
@@ -46,6 +47,7 @@ export function ApiKeysProvider({ children }) {
     if (keys.aisa)    h['x-aisa-key']    = keys.aisa.trim()
     if (keys.finnhub) h['x-finnhub-key'] = keys.finnhub.trim()
     if (keys.fmp)     h['x-fmp-key']     = keys.fmp.trim()
+    if (keys.td)      h['x-td-key']      = keys.td.trim()
     if (keys.av)      h['x-av-key']      = keys.av.trim()
     return h
   }, [keys])

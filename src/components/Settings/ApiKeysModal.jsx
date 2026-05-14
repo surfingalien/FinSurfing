@@ -50,16 +50,28 @@ const PROVIDERS = [
     color:    'amber',
   },
   {
+    id:       'td',
+    label:    'Twelve Data',
+    envVar:   'TWELVE_DATA_API_KEY',
+    url:      'https://twelvedata.com',
+    urlLabel: 'twelvedata.com',
+    desc:     'Historical charts + quotes. Free tier: 800 req/day, 8 req/min. Demo key built-in (covers major US tickers).',
+    test:     '/api/chart?symbol=AAPL&interval=1d&range=1mo',
+    check:    (d) => d?.chart?.result?.[0]?.timestamp?.length > 0,
+    badge:    'Free',
+    color:    'purple',
+  },
+  {
     id:       'av',
     label:    'Alpha Vantage',
     envVar:   'ALPHA_VANTAGE_API_KEY',
     url:      'https://www.alphavantage.co/support/#api-key',
     urlLabel: 'alphavantage.co',
-    desc:     'Fallback quotes. Free tier: 25 req/day, 5 req/min.',
+    desc:     'Last-resort fallback. Free tier: 25 req/day, 5 req/min.',
     test:     '/api/quote?symbols=AAPL',
     check:    (d) => d?.quoteResponse?.result?.[0]?.regularMarketPrice != null,
     badge:    'Free',
-    color:    'purple',
+    color:    'rose',
   },
 ]
 
@@ -68,6 +80,7 @@ const COLOR = {
   blue:   'text-blue-400 border-blue-500/30 bg-blue-500/10',
   amber:  'text-amber-400 border-amber-500/30 bg-amber-500/10',
   purple: 'text-purple-400 border-purple-500/30 bg-purple-500/10',
+  rose:   'text-rose-400 border-rose-500/30 bg-rose-500/10',
 }
 
 function KeyRow({ provider, value, onChange, onTest, testState }) {
@@ -174,6 +187,7 @@ export default function ApiKeysModal({ onClose }) {
         finnhub: 'x-finnhub-key',
         fmp:     'x-fmp-key',
         av:      'x-av-key',
+        td:      'x-td-key',
       }
       const res = await fetch(provider.test, {
         headers: { [headerMap[provider.id]]: val },
@@ -195,7 +209,7 @@ export default function ApiKeysModal({ onClose }) {
 
   const handleClear = () => {
     clear()
-    setDraft({ aisa: '', finnhub: '', fmp: '', av: '' })
+    setDraft({ aisa: '', finnhub: '', fmp: '', td: '', av: '' })
     setTestState({})
   }
 
@@ -230,7 +244,7 @@ export default function ApiKeysModal({ onClose }) {
         {!hasAny && (
           <div className="mx-5 mt-4 flex items-start gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs">
             <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-            <span>No API keys set. Charts, prices, and backtesting won't work until you add at least one key below.</span>
+            <span>No API keys set. Charts for major tickers (AAPL, MSFT, GOOGL, etc.) work via the built-in Twelve Data demo key. Add AISA or FMP keys below for full coverage.</span>
           </div>
         )}
 
