@@ -550,6 +550,19 @@ app.get('/api/stream/quotes', (req, res) => {
   req.on('close', close)
 })
 
+/* ── Debug: raw Finnhub + FMP response for a symbol ── */
+app.get('/api/debug/quote/:symbol', async (req, res) => {
+  const sym = req.params.symbol.toUpperCase()
+  const out = { symbol: sym, finnhub: null, fmp: null }
+  try {
+    out.finnhub = await apiFetch(fhUrl(`/quote?symbol=${encodeURIComponent(sym)}`), 8000).catch(e => ({ error: e.message }))
+  } catch (e) { out.finnhub = { error: e.message } }
+  try {
+    out.fmp = await apiFetch(fmpUrl(`/quote/${encodeURIComponent(sym)}`), 8000).catch(e => ({ error: e.message }))
+  } catch (e) { out.fmp = { error: e.message } }
+  res.json(out)
+})
+
 /* ── Health (includes DB status + demo mode) ───── */
 app.get('/health', async (_req, res) => {
   const demoMode = !process.env.DATABASE_URL
