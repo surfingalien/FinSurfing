@@ -624,7 +624,8 @@ async function getAVChart(symbol, interval = '1d', range = '1y', keys = {}) {
   if (!['1d','1wk','1mo'].includes(interval)) return null
   try {
     const needFull = ['2y','5y','max'].includes(range)
-    const url = `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY_ADJUSTED&symbol=${encodeURIComponent(symbol)}&outputsize=${needFull ? 'full' : 'compact'}&apikey=${key}`
+    // Use TIME_SERIES_DAILY (free tier) — DAILY_ADJUSTED is premium-only
+    const url = `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=${encodeURIComponent(symbol)}&outputsize=${needFull ? 'full' : 'compact'}&apikey=${key}`
     const data = await apiFetch(url, 20000)
     const series = data?.['Time Series (Daily)']
     if (!series) {
@@ -648,8 +649,8 @@ async function getAVChart(symbol, interval = '1d', range = '1y', keys = {}) {
     const highs  = entries.map(([,v]) => parseFloat(v['2. high']))
     const lows   = entries.map(([,v]) => parseFloat(v['3. low']))
     const closes = entries.map(([,v]) => parseFloat(v['4. close']))
-    const adjs   = entries.map(([,v]) => parseFloat(v['5. adjusted close']))
-    const vols   = entries.map(([,v]) => parseInt(v['6. volume']) || 0)
+    const vols   = entries.map(([,v]) => parseInt(v['5. volume']) || 0)
+    const adjs   = closes  // no adjusted close on free tier — use close
 
     const lastClose = closes.at(-1) ?? null
     console.log(`[AV] chart OK: ${symbol} (${entries.length} bars)`)
