@@ -523,7 +523,106 @@ async function getFMPSearch(q, keys = {}) {
   } catch { return null }
 }
 
-// ── Alpha Vantage fallback quotes (works from cloud IPs, free tier) ──────────
+// ── Alpha Vantage helpers ─────────────────────────────────────────────────────
+// Free tier: 25 req/day, 5 req/min. Used as final fallback for chart + summary.
+
+// Historical daily OHLCV chart
+async function getAVChart(symbol, interval = '1d', range = '1y', keys = {}) {
+  const key = keys.av || process.env.ALPHA_VANTAGE_API_KEY || process.env.AV_API_KEY
+  if (!key) return null
+  // AV intraday not on free tier — daily only
+  if (!['1d','1wk','1mo'].includes(interval)) return null
+  try {
+    const needFull = ['2y','5y','max'].includes(range)
+    const url = `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY_ADJUSTED&symbol=${encodeURIComponent(symbol)}&outputsize=${needFull ? 'full' : 'compact'}&apikey=${key}`
+    const data = await apiFetch(url, 20000)
+    const series = data?.['Time Series (Daily)']
+    if (!series) return null
+
+    const days = { '1d':2,'5d':8,'1mo':35,'3mo':95,'6mo':185,'1y':370,'2y':740,'5y':1830,'max':9999 }
+    const cutoff = new Date()
+    cutoff.setDate(cutoff.getDate() - (days[range] || 370))
+
+    const entries = Object.entries(series)
+      .filter(([date]) => new Date(date) >= cutoff)
+      .sort(([a],[b]) => a.localeCompare(b))
+
+    if (entries.length < 5) return null
+
+    const timestamps = entries.map(([date]) => Math.floor(new Date(date).getTime() / 1000))
+    const opens  = entries.map(([,v]) => parseFloat(v['1. open']))
+    const highs  = entries.map(([,v]) => parseFloat(v['2. high']))
+    const lows   = entries.map(([,v]) => parseFloat(v['3. low']))
+    const closes = entries.map(([,v]) => parseFloat(v['4. close']))
+    const adjs   = entries.map(([,v]) => parseFloat(v['5. adjusted close']))
+    const vols   = entries.map(([,v]) => parseInt(v['6. volume']) || 0)
+
+    const lastClose = closes.at(-1) ?? null
+    console.log(`[AV] chart OK: ${symbol} (${entries.length} bars)`)
+    return {
+      chart: { result: [{
+        meta: { symbol, regularMarketPrice: lastClose, chartPreviousClose: closes.at(-2) ?? null },
+        timestamp: timestamps,
+        indicators: {
+          quote:    [{ open: opens, high: highs, low: lows, close: closes, volume: vols }],
+          adjclose: [{ adjclose: adjs }],
+        },
+      }], error: null },
+    }
+  } catch (e) { console.warn('[AV] chart error:', e.message); return null }
+}
+
+// Company overview — fundamentals (P/E, margins, sector, etc.)
+async function getAVSummary(symbol, keys = {}) {
+  const key = keys.av || process.env.ALPHA_VANTAGE_API_KEY || process.env.AV_API_KEY
+  if (!key) return null
+  try {
+    const url = `https://www.alphavantage.co/query?function=OVERVIEW&symbol=${encodeURIComponent(symbol)}&apikey=${key}`
+    const d = await apiFetch(url, 12000)
+    if (!d?.Symbol) return null
+    const p = (field) => { const v = parseFloat(d[field]); return isNaN(v) ? null : v }
+    const i = (field) => { const v = parseInt(d[field]);   return isNaN(v) ? null : v }
+    console.log(`[AV] summary OK: ${symbol}`)
+    return { quoteSummary: { result: [{
+      summaryDetail: {
+        trailingPE:      p('TrailingPE'),
+        forwardPE:       p('ForwardPE'),
+        marketCap:       i('MarketCapitalization'),
+        dividendYield:   p('DividendYield'),
+        beta:            p('Beta'),
+        fiftyTwoWeekHigh: p('52WeekHigh'),
+        fiftyTwoWeekLow:  p('52WeekLow'),
+        averageVolume:   i('AverageVolume'),
+      },
+      financialData: {
+        returnOnEquity:   p('ReturnOnEquityTTM'),
+        profitMargins:    p('ProfitMargin'),
+        grossMargins:     null,
+        operatingMargins: p('OperatingMarginTTM'),
+        revenueGrowth:    p('QuarterlyRevenueGrowthYOY'),
+        earningsGrowth:   p('QuarterlyEarningsGrowthYOY'),
+        targetMeanPrice:  p('AnalystTargetPrice'),
+        recommendationKey: null,
+        totalRevenue:     i('RevenueTTM'),
+        freeCashflow:     null,
+      },
+      defaultKeyStatistics: {
+        trailingEps: p('EPS'),
+        priceToBook: p('PriceToBookRatio'),
+      },
+      assetProfile: {
+        sector:              d.Sector              || null,
+        industry:            d.Industry            || null,
+        longName:            d.Name                || null,
+        longBusinessSummary: d.Description         || null,
+        fullTimeEmployees:   i('FullTimeEmployees'),
+        country:             d.Country             || null,
+      },
+    }], error: null } }
+  } catch (e) { console.warn('[AV] summary error:', e.message); return null }
+}
+
+// Quote fallback — last resort, free tier only (25 req/day)
 async function getAVQuotes(symbols, keys = {}) {
   const key = keys.av || process.env.ALPHA_VANTAGE_API_KEY || process.env.AV_API_KEY
   if (!key) return null
@@ -711,7 +810,8 @@ app.get('/health', async (_req, res) => {
   if (!demoMode) {
     try { const { ping } = require('./db/db'); dbOk = await ping() } catch {}
   }
-  res.json({ ok: true, db: dbOk, demoMode, aisa: !!AISA_KEY(), finnhub: !!FH_KEY(), fmp: !!FMP_KEY(), ts: Date.now() })
+  const avKey = process.env.ALPHA_VANTAGE_API_KEY || process.env.AV_API_KEY
+  res.json({ ok: true, db: dbOk, demoMode, aisa: !!AISA_KEY(), finnhub: !!FH_KEY(), fmp: !!FMP_KEY(), av: !!avKey, ts: Date.now() })
 })
 
 /* ── Quote (batch) ─────────────────────────────── */
@@ -764,6 +864,10 @@ app.get('/api/chart', async (req, res) => {
     const fmp = await getFMPChart(symbol, interval, range, keys)
     if (fmp) return res.json(fmp)
 
+    // 4th: Alpha Vantage (daily only, 25 req/day free tier)
+    const av = await getAVChart(symbol, interval, range, keys)
+    if (av) return res.json(av)
+
     res.status(502).json({ chart: { result: null, error: { code: 'unavailable', description: 'No market data provider returned data' } } })
   } catch (e) {
     res.status(500).json({ error: e.message })
@@ -776,8 +880,13 @@ app.get('/api/summary', async (req, res) => {
   if (!symbol) return res.status(400).json({ error: 'symbol required' })
   const keys = extractKeys(req)
   try {
+    // 1st: FMP (most complete fundamentals)
     const fmp = await getFMPSummary(symbol, keys)
     if (fmp) return res.json(fmp)
+
+    // 2nd: Alpha Vantage OVERVIEW (free, cloud-friendly)
+    const av = await getAVSummary(symbol, keys)
+    if (av) return res.json(av)
 
     res.json({ quoteSummary: { result: null, error: { code: 'unavailable' } } })
   } catch (e) {
