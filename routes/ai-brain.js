@@ -5,8 +5,12 @@
  * POST /api/ai-brain/analyze
  * body: { symbols?, horizon?, holdings? }
  *
- * Runs a 5-agent Claude analysis (Fundamental, Technical, Sentiment, Macro, Risk)
- * and returns ranked buy recommendations with per-agent scores and supervisor synthesis.
+ * 1. Fetches live market data (price, change, volume, P/E, 52-week range)
+ *    for the universe via AISA → Finnhub → FMP cascade using the user's
+ *    x-aisa-key / x-finnhub-key headers.
+ * 2. Passes that real snapshot to Claude claude-sonnet-4-6 which runs as
+ *    5 specialized agents (Fundamental, Technical, Sentiment, Macro, Risk)
+ *    + a Supervisor, producing ranked buy recommendations.
  */
 
 const express   = require('express')
@@ -26,32 +30,43 @@ const DEFAULT_UNIVERSE = [
   'MELI', 'CRWD', 'ANET', 'AMD', 'PLTR', 'ORCL',
 ]
 
-// Lightweight key test — used by the settings modal
-router.get('/ping', async (req, res) => {
-  const apiKey = req.headers['x-anthropic-key'] || process.env.ANTHROPIC_API_KEY
-  if (!apiKey) return res.json({ ok: false, error: 'No key provided' })
-  try {
-    const client = new Anthropic({ apiKey })
-    await client.messages.create({
-      model: 'claude-haiku-4-5-20251001', max_tokens: 5,
-      messages: [{ role: 'user', content: 'Hi' }],
-    })
-    return res.json({ ok: true })
-  } catch (err) {
-    return res.json({ ok: false, error: err.message })
+// Extract AISA/Finnhub/FMP headers forwarded from the browser
+function fwdKeys(req) {
+  const h = {}
+  for (const k of ['x-aisa-key', 'x-finnhub-key', 'x-fmp-key', 'x-td-key', 'x-av-key']) {
+    if (req.headers[k]) h[k] = req.headers[k]
   }
-})
+  return h
+}
+
+// Format a quote object into a compact one-liner for the prompt
+function fmtQuote(q) {
+  const chg  = q.regularMarketChangePercent
+  const sign = chg >= 0 ? '+' : ''
+  const vol  = q.regularMarketVolume
+  const cap  = q.marketCap
+  const pe   = q.trailingPE
+  const hi   = q.fiftyTwoWeekHigh
+  const lo   = q.fiftyTwoWeekLow
+  const eps  = q.epsTrailingTwelveMonths
+  return (
+    `${q.symbol}: $${q.regularMarketPrice?.toFixed(2)} (${sign}${chg?.toFixed(2)}% today)` +
+    ` | Vol=${vol ? (vol / 1e6).toFixed(1) + 'M' : 'N/A'}` +
+    ` | MktCap=${cap ? '$' + (cap / 1e9).toFixed(1) + 'B' : 'N/A'}` +
+    ` | P/E=${pe ? pe.toFixed(1) : 'N/A'}` +
+    ` | EPS TTM=${eps ? '$' + eps.toFixed(2) : 'N/A'}` +
+    ` | 52w ${lo?.toFixed(0)}–${hi?.toFixed(0)}`
+  )
+}
 
 router.post('/analyze', brainLimit, async (req, res) => {
-  const apiKey = req.headers['x-anthropic-key'] || process.env.ANTHROPIC_API_KEY
-  if (!apiKey) return res.status(503).json({
-    error: 'Claude API key required. Add yours in Settings → API Keys (Anthropic), or set ANTHROPIC_API_KEY on the server.',
-  })
+  const apiKey = process.env.ANTHROPIC_API_KEY
+  if (!apiKey) return res.status(503).json({ error: 'AI service not configured (ANTHROPIC_API_KEY missing)' })
 
   const {
-    symbols   = DEFAULT_UNIVERSE,
-    horizon   = '6m',
-    holdings  = [],
+    symbols  = DEFAULT_UNIVERSE,
+    horizon  = '6m',
+    holdings = [],
   } = req.body
 
   if (!Array.isArray(symbols) || !symbols.length)
@@ -59,40 +74,67 @@ router.post('/analyze', brainLimit, async (req, res) => {
   if (!['3m', '6m', '12m'].includes(horizon))
     return res.status(400).json({ error: 'horizon must be 3m, 6m, or 12m' })
 
-  const symbolList  = symbols.slice(0, 25).join(', ')
+  const universe = symbols.slice(0, 20)
   const holdingStr  = holdings.length ? holdings.join(', ') : 'none'
-  const horizonMap  = { '3m': '3-month', '6m': '6-month', '12m': '12-month' }
-  const horizonLabel = horizonMap[horizon]
+  const horizonLabel = { '3m': '3-month', '6m': '6-month', '12m': '12-month' }[horizon]
 
+  // ── Step 1: fetch live market data via AISA / Finnhub ──────────────────────
+  let marketSnippet = ''
+  let liveQuotes    = []
+  try {
+    const port   = process.env.PORT || 3001
+    const r      = await fetch(
+      `http://localhost:${port}/api/quote?symbols=${universe.join(',')}`,
+      { headers: fwdKeys(req), signal: AbortSignal.timeout(30_000) }
+    )
+    const qd     = await r.json()
+    liveQuotes   = qd?.quoteResponse?.result ?? []
+  } catch (e) {
+    console.warn('[ai-brain] Quote fetch failed, falling back to knowledge-only:', e.message)
+  }
+
+  if (liveQuotes.length > 0) {
+    marketSnippet =
+      '\n\nLIVE MARKET SNAPSHOT — use this real data as primary input for each agent:\n' +
+      liveQuotes.map(fmtQuote).join('\n')
+  } else {
+    marketSnippet =
+      '\n\nNote: Live market data unavailable (AISA/Finnhub keys not configured). ' +
+      'Base your analysis on your training knowledge of these stocks as of today.'
+  }
+
+  // ── Step 2: build multi-agent Claude prompt ────────────────────────────────
   const prompt = `You are a collaborative AI investment analysis system composed of 5 specialized agents and a supervisor. Analyze the following stock universe and produce ranked buy recommendations for a ${horizonLabel} holding period. Today is mid-May 2026.
 
-Universe: ${symbolList}
+Universe: ${universe.join(', ')}
 Portfolio holdings to avoid: ${holdingStr}
+${marketSnippet}
 
-Each agent analyzes from their specialized lens:
+Each agent analyzes through their specialized lens:
 
 AGENT 1 — FUNDAMENTAL ANALYST
-Evaluate: earnings growth trajectory, revenue quality, PEG ratio, free cash flow, balance sheet, competitive moat, margin expansion.
+Use the live P/E, EPS, and market cap data above. Evaluate earnings growth trajectory, revenue quality, free cash flow, competitive moat, margin expansion, and balance sheet strength. Flag if any stock looks overvalued vs peers.
 
 AGENT 2 — TECHNICAL ANALYST
-Evaluate: price momentum, trend strength, RS vs market, moving average structure, breakout setups, volume confirmation.
+Use today's price change, volume, and 52-week range. Assess where each stock sits relative to its 52w high/low, momentum, trend strength, breakout setups, and volume confirmation. Stocks near 52w lows with high volume may be oversold; near 52w highs with strong volume may show momentum.
 
 AGENT 3 — SENTIMENT & NEWS ANALYST
-Evaluate: recent catalysts, earnings beats/misses, analyst revisions, institutional flows, retail/social sentiment, management credibility.
+Use recent earnings catalysts, analyst upgrades/downgrades, institutional flows, and short interest. Factor in how today's price movement compares to recent patterns for sentiment signals.
 
 AGENT 4 — MACRO ECONOMIST
-Evaluate: sector macro tailwinds/headwinds, interest rate sensitivity, AI/tech cycle positioning, geopolitical exposure, regulatory landscape.
+Assess sector macro tailwinds/headwinds, interest rate sensitivity, AI/tech cycle positioning, geopolitical exposure, and regulatory landscape for each stock's sector.
 
 AGENT 5 — RISK MANAGER
-Evaluate: downside scenarios, valuation risk, correlation to market, liquidity, beta, black swan exposures.
+Evaluate downside risk using the 52w range (proximity to lows = potential support), market cap (liquidity), P/E vs sector (valuation risk), and beta. Recommend stop-loss levels relative to current price.
 
-SUPERVISOR synthesizes all agents into final ranked picks.
+SUPERVISOR synthesizes all agents into final ranked picks with realistic return targets.
 
 Respond ONLY with this JSON (no markdown, no prose outside JSON):
 {
   "marketRegime": "string",
   "macroOutlook": "2-3 sentence macro outlook for this horizon",
   "agentConsensusTheme": "1 sentence — what all 5 agents agree on",
+  "dataSource": "live" or "knowledge",
   "rankedStocks": [
     {
       "rank": 1,
@@ -100,6 +142,7 @@ Respond ONLY with this JSON (no markdown, no prose outside JSON):
       "name": "string",
       "sector": "string",
       "type": "Stock",
+      "currentPrice": 0,
       "compositeScore": 0,
       "confidence": "High",
       "agentVerdict": "Strong Buy",
@@ -133,11 +176,13 @@ Rules:
 - Include 8 to 10 top picks; prefer symbols NOT already in holdings
 - compositeScore: weighted average (fundamental 25%, technical 20%, sentiment 15%, macro 20%, risk 20%)
 - All scores 0-100; riskScore: higher = safer (inverse of risk)
-- targetReturn and stopLoss: realistic positive numbers (percent)
+- targetReturn and stopLoss: realistic positive numbers (percent); base stop-loss on current price proximity to 52w low
 - agentVerdict: "Strong Buy" | "Buy" | "Moderate Buy"
 - confidence: "High" | "Medium" | "Low"
-- Be specific and data-aware`
+- currentPrice: fill from live snapshot if available, else 0
+- dataSource: set "live" if live snapshot was provided, else "knowledge"`
 
+  // ── Step 3: run Claude ─────────────────────────────────────────────────────
   try {
     const client = new Anthropic({ apiKey })
     const msg = await client.messages.create({
@@ -160,8 +205,9 @@ Rules:
     return res.json({
       ...data,
       horizon,
-      processedAt:       new Date().toISOString(),
-      universeAnalyzed:  symbols.slice(0, 25),
+      processedAt:      new Date().toISOString(),
+      universeAnalyzed: universe,
+      liveDataSymbols:  liveQuotes.map(q => q.symbol),
       agentsUsed: [
         'Fundamental Analyst', 'Technical Analyst',
         'Sentiment Agent', 'Macro Economist',

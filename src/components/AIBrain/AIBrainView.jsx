@@ -16,10 +16,11 @@ function getApiKeyHeaders() {
   try {
     const s = JSON.parse(localStorage.getItem('finsurf_api_keys') || '{}')
     const h = {}
-    if (s.anthropic?.trim()) h['x-anthropic-key'] = s.anthropic.trim()
-    if (s.aisa?.trim())      h['x-aisa-key']      = s.aisa.trim()
-    if (s.finnhub?.trim())   h['x-finnhub-key']   = s.finnhub.trim()
-    if (s.fmp?.trim())       h['x-fmp-key']       = s.fmp.trim()
+    if (s.aisa?.trim())    h['x-aisa-key']    = s.aisa.trim()
+    if (s.finnhub?.trim()) h['x-finnhub-key'] = s.finnhub.trim()
+    if (s.fmp?.trim())     h['x-fmp-key']     = s.fmp.trim()
+    if (s.td?.trim())      h['x-td-key']      = s.td.trim()
+    if (s.av?.trim())      h['x-av-key']      = s.av.trim()
     return h
   } catch { return {} }
 }
@@ -464,8 +465,12 @@ export default function AIBrainView({ portfolio, onAnalyze }) {
               <div className="flex items-center gap-2 mb-1">
                 <Activity className="w-3.5 h-3.5 text-indigo-400" />
                 <span className="text-xs font-semibold text-indigo-400">Market Regime</span>
-                <span className="ml-auto text-[10px] text-slate-500">
-                  {new Date(analysis.processedAt).toLocaleTimeString()}
+                <span className="ml-auto flex items-center gap-2">
+                  {analysis.dataSource === 'live'
+                    ? <span className="flex items-center gap-1 text-[10px] text-emerald-400"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />Live data</span>
+                    : <span className="flex items-center gap-1 text-[10px] text-amber-400"><span className="w-1.5 h-1.5 rounded-full bg-amber-400" />Knowledge only — add AISA/Finnhub key for live data</span>
+                  }
+                  <span className="text-[10px] text-slate-600">{new Date(analysis.processedAt).toLocaleTimeString()}</span>
                 </span>
               </div>
               <p className="text-sm font-bold text-white mb-1">{analysis.marketRegime}</p>
