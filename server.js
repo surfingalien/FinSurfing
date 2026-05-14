@@ -272,35 +272,55 @@ async function getAISAChart(symbol, interval = '1d', range = '1y', keys = {}) {
   } catch (e) { console.warn('[AISA] chart error:', e.message); return null }
 }
 
-// Real-time quote via metrics snapshot
+// Real-time quote via metrics snapshot (serialised in batches to avoid AISA rate limits)
 async function getAISAQuotes(symbols, keys = {}) {
   const key = keys.aisa || AISA_KEY()
   if (!key) return null
   try {
-    const results = await Promise.all(symbols.map(async sym => {
-      try {
-        const d = await aisaFetch(`/financial/financial-metrics/snapshot?ticker=${encodeURIComponent(sym)}`, 8000, key)
-        // snapshot returns { price, change, change_percent, market_cap, pe_ratio, ... }
-        const price = d?.price ?? d?.current_price ?? null
-        if (!price) return { symbol: sym, regularMarketPrice: null }
-        return {
-          symbol,
-          shortName:                  d.name || sym,
-          regularMarketPrice:         price,
-          regularMarketChange:        d.change              ?? d.price_change        ?? null,
-          regularMarketChangePercent: d.change_percent      ?? d.price_change_percent ?? null,
-          regularMarketVolume:        d.volume              ?? null,
-          regularMarketDayHigh:       d.day_high            ?? null,
-          regularMarketDayLow:        d.day_low             ?? null,
-          regularMarketOpen:          d.open                ?? null,
-          regularMarketPreviousClose: d.previous_close      ?? null,
-          fiftyTwoWeekHigh:           d.week_52_high        ?? null,
-          fiftyTwoWeekLow:            d.week_52_low         ?? null,
-          marketCap:                  d.market_cap          ?? null,
-          trailingPE:                 d.pe_ratio            ?? null,
+    const BATCH = 4    // max concurrent AISA calls per round
+    const DELAY = 120  // ms between rounds to stay within rate limits
+    const results = []
+
+    for (let i = 0; i < symbols.length; i += BATCH) {
+      if (i > 0) await new Promise(r => setTimeout(r, DELAY))
+      const batch = symbols.slice(i, i + BATCH)
+      const batchResults = await Promise.all(batch.map(async sym => {
+        const ck = `aisaq:${sym}`
+        const hit = cacheGet(ck)
+        if (hit) return hit
+        try {
+          const d = await aisaFetch(`/financial/financial-metrics/snapshot?ticker=${encodeURIComponent(sym)}`, 8000, key)
+          // Try multiple price field names (AISA response format varies by symbol type)
+          const price = d?.price ?? d?.current_price ?? d?.regularMarketPrice ?? d?.last_price ?? d?.lastPrice ?? null
+          if (!price) {
+            console.warn(`[AISA] null price for ${sym}:`, JSON.stringify(d)?.slice(0, 200))
+            return { symbol: sym, regularMarketPrice: null }
+          }
+          const q = {
+            symbol:                     sym,
+            shortName:                  d.name || sym,
+            regularMarketPrice:         price,
+            regularMarketChange:        d.change              ?? d.price_change        ?? null,
+            regularMarketChangePercent: d.change_percent      ?? d.price_change_percent ?? null,
+            regularMarketVolume:        d.volume              ?? null,
+            regularMarketDayHigh:       d.day_high            ?? null,
+            regularMarketDayLow:        d.day_low             ?? null,
+            regularMarketOpen:          d.open                ?? null,
+            regularMarketPreviousClose: d.previous_close      ?? null,
+            fiftyTwoWeekHigh:           d.week_52_high        ?? null,
+            fiftyTwoWeekLow:            d.week_52_low         ?? null,
+            marketCap:                  d.market_cap          ?? null,
+            trailingPE:                 d.pe_ratio            ?? null,
+          }
+          cacheSet(ck, q)
+          return q
+        } catch (e) {
+          console.warn(`[AISA] quote fetch error for ${sym}:`, e.message)
+          return { symbol: sym, regularMarketPrice: null }
         }
-      } catch { return { symbol: sym, regularMarketPrice: null } }
-    }))
+      }))
+      results.push(...batchResults)
+    }
     return results
   } catch { return null }
 }
