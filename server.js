@@ -70,7 +70,7 @@ app.use(helmet({
       scriptSrc:   ["'self'", "'unsafe-inline'"],   // Vite needs inline scripts
       styleSrc:    ["'self'", "'unsafe-inline'"],
       imgSrc:      ["'self'", 'data:', 'https:'],
-      connectSrc:  ["'self'", 'https://finnhub.io', 'https://financialmodelingprep.com', 'https://ai4trade.ai', 'https://api.aisa.one', 'https://stooq.com', 'https://www.alphavantage.co'],
+      connectSrc:  ["'self'", 'https://finnhub.io', 'https://financialmodelingprep.com', 'https://ai4trade.ai', 'https://api.aisa.one', 'https://www.alphavantage.co', 'https://api.twelvedata.com'],
       fontSrc:     ["'self'", 'data:'],
       objectSrc:   ["'none'"],
       upgradeInsecureRequests: PROD ? [] : null,
@@ -180,6 +180,7 @@ function extractKeys(req) {
     finnhub: (req.headers['x-finnhub-key'] || '').trim() || process.env.FINNHUB_API_KEY || null,
     fmp:     (req.headers['x-fmp-key']     || '').trim() || process.env.FMP_API_KEY     || null,
     av:      (req.headers['x-av-key']      || '').trim() || process.env.ALPHA_VANTAGE_API_KEY || process.env.AV_API_KEY || null,
+    td:      (req.headers['x-td-key']      || '').trim() || process.env.TWELVE_DATA_API_KEY  || null,
   }
 }
 
@@ -530,61 +531,69 @@ async function getFMPSearch(q, keys = {}) {
   } catch { return null }
 }
 
-// ── Stooq helpers ─────────────────────────────────────────────────────────────
-// Completely free, no API key required, works from cloud IPs.
-// Returns CSV OHLCV data for US and international equities.
-// Daily / weekly / monthly only (no intraday).
+// ── Twelve Data helpers ───────────────────────────────────────────────────────
+// Free tier: 800 req/day, 8 req/min. Demo key works for major US symbols.
+// Register at twelvedata.com for a free 800/day key (add as TWELVE_DATA_API_KEY).
+// Falls back to built-in 'demo' key for AAPL/MSFT/AMZN/GOOGL/etc.
 
-async function getStooqChart(symbol, interval = '1d', range = '1y') {
-  // Only daily+ intervals
-  if (!['1d','1wk','1mo'].includes(interval)) return null
+async function getTwelveDataChart(symbol, interval = '1d', range = '1y', keys = {}) {
+  const key     = keys.td || process.env.TWELVE_DATA_API_KEY || 'demo'
+  const ivlMap  = { '1m':'1min','5m':'5min','15m':'15min','30m':'30min','60m':'1h','1h':'1h','1d':'1day','1wk':'1week','1mo':'1month' }
+  const tdIvl   = ivlMap[interval]
+  if (!tdIvl) return null
   try {
-    // Stooq symbols: AAPL → AAPL.US (most US equities)
-    const sym = symbol.includes('.') ? symbol : `${symbol}.US`
-    const today = new Date()
-    const days  = { '1d':3,'5d':10,'1mo':38,'3mo':98,'6mo':190,'1y':375,'2y':745,'5y':1835,'max':9999 }
-    const fromD = new Date(today.getTime() - (days[range] || 375) * 86400000)
-    const fmt   = d => `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`
-    const ivlChar = { '1d':'d', '1wk':'w', '1mo':'m' }[interval] || 'd'
-    const url   = `https://stooq.com/q/d/l/?s=${encodeURIComponent(sym)}&d1=${fmt(fromD)}&d2=${fmt(today)}&i=${ivlChar}`
-
-    const r = await fetch(url, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; FinSurf/2.0)' },
-      signal:  AbortSignal.timeout(15000),
-    })
-    if (!r.ok) { console.warn(`[Stooq] HTTP ${r.status} for ${symbol}`); return null }
-    const csv = await r.text()
-    const lines = csv.trim().split('\n')
-    // Stooq returns "No data" page or just header when symbol unknown
-    if (lines.length < 3 || lines[1]?.toLowerCase().startsWith('no ')) {
-      console.warn(`[Stooq] no data for ${symbol}`)
+    const days       = { '1d':3,'5d':10,'1mo':38,'3mo':98,'6mo':190,'1y':375,'2y':745,'5y':1835,'max':5000 }
+    const outputsize = Math.min(days[range] || 375, 5000)
+    const url        = `https://api.twelvedata.com/time_series?symbol=${encodeURIComponent(symbol)}&interval=${tdIvl}&outputsize=${outputsize}&apikey=${key}`
+    const data       = await apiFetch(url, 15000)
+    if (data?.status !== 'ok' || !Array.isArray(data?.values) || !data.values.length) {
+      const errMsg = data?.message || data?.code || JSON.stringify(data)?.slice(0, 200)
+      console.warn(`[TwelveData] chart fail for ${symbol}: ${errMsg}`)
       return null
     }
-
-    const rows = lines.slice(1)  // skip header: Date,Open,High,Low,Close,Volume
-      .map(line => {
-        const [date, open, high, low, close, volume] = line.split(',')
-        return { date, open: +open, high: +high, low: +low, close: +close, volume: +(volume || 0) }
-      })
-      .filter(r => r.close && !isNaN(r.close))
-      .sort((a, b) => a.date.localeCompare(b.date))  // oldest-first
-
-    if (rows.length < 5) return null
-
-    const timestamps = rows.map(r => Math.floor(new Date(r.date).getTime() / 1000))
-    const lastClose  = rows.at(-1).close
-    console.log(`[Stooq] chart OK: ${symbol} (${rows.length} bars)`)
+    // Values are newest-first; reverse to oldest-first
+    const rows       = [...data.values].reverse()
+    const timestamps = rows.map(r => Math.floor(new Date(r.datetime + 'Z').getTime() / 1000))
+    const closes     = rows.map(r => parseFloat(r.close))
+    const lastClose  = closes.at(-1)
+    console.log(`[TwelveData] chart OK: ${symbol} (${rows.length} bars)`)
     return {
       chart: { result: [{
-        meta: { symbol, regularMarketPrice: lastClose, chartPreviousClose: rows.at(-2)?.close ?? null },
+        meta: { symbol, regularMarketPrice: lastClose, chartPreviousClose: closes.at(-2) ?? null },
         timestamp: timestamps,
         indicators: {
-          quote:    [{ open: rows.map(r=>r.open), high: rows.map(r=>r.high), low: rows.map(r=>r.low), close: rows.map(r=>r.close), volume: rows.map(r=>r.volume) }],
-          adjclose: [{ adjclose: rows.map(r=>r.close) }],
+          quote:    [{ open: rows.map(r=>parseFloat(r.open)), high: rows.map(r=>parseFloat(r.high)), low: rows.map(r=>parseFloat(r.low)), close: closes, volume: rows.map(r=>parseInt(r.volume)||0) }],
+          adjclose: [{ adjclose: closes }],
         },
       }], error: null },
     }
-  } catch (e) { console.warn('[Stooq] chart error:', e.message); return null }
+  } catch (e) { console.warn('[TwelveData] chart error:', e.message); return null }
+}
+
+// Quote via Twelve Data (single symbol, counts against quota)
+async function getTwelveDataQuote(symbol, keys = {}) {
+  const key  = keys.td || process.env.TWELVE_DATA_API_KEY || 'demo'
+  try {
+    const url  = `https://api.twelvedata.com/quote?symbol=${encodeURIComponent(symbol)}&apikey=${key}`
+    const d    = await apiFetch(url, 10000)
+    if (d?.status === 'error' || !d?.close) return null
+    const price = parseFloat(d.close)
+    if (!price) return null
+    return {
+      symbol,
+      shortName:                  d.name || symbol,
+      regularMarketPrice:         price,
+      regularMarketChange:        parseFloat(d.change)           || null,
+      regularMarketChangePercent: parseFloat(d.percent_change)   || null,
+      regularMarketVolume:        parseInt(d.volume)             || null,
+      regularMarketDayHigh:       parseFloat(d.high)             || null,
+      regularMarketDayLow:        parseFloat(d.low)              || null,
+      regularMarketOpen:          parseFloat(d.open)             || null,
+      regularMarketPreviousClose: parseFloat(d.previous_close)   || null,
+      fiftyTwoWeekHigh:           parseFloat(d['52_week']['high'])  || null,
+      fiftyTwoWeekLow:            parseFloat(d['52_week']['low'])   || null,
+    }
+  } catch { return null }
 }
 
 // ── Alpha Vantage helpers ─────────────────────────────────────────────────────
@@ -883,7 +892,8 @@ app.get('/health', async (_req, res) => {
     try { const { ping } = require('./db/db'); dbOk = await ping() } catch {}
   }
   const avKey = process.env.ALPHA_VANTAGE_API_KEY || process.env.AV_API_KEY
-  res.json({ ok: true, db: dbOk, demoMode, aisa: !!AISA_KEY(), finnhub: !!FH_KEY(), fmp: !!FMP_KEY(), av: !!avKey, ts: Date.now() })
+  const tdKey = process.env.TWELVE_DATA_API_KEY
+  res.json({ ok: true, db: dbOk, demoMode, aisa: !!AISA_KEY(), finnhub: !!FH_KEY(), fmp: !!FMP_KEY(), av: !!avKey, td: !!tdKey, tdDemo: !tdKey, ts: Date.now() })
 })
 
 /* ── Quote (batch) ─────────────────────────────── */
@@ -911,6 +921,11 @@ app.get('/api/quote', async (req, res) => {
     const av = await getAVQuotes(symbols, keys)
     if (av?.some(r => r.regularMarketPrice != null))
       return res.json({ quoteResponse: { result: av } })
+
+    // 5th: Twelve Data (single-symbol, demo key covers major US tickers)
+    const tdResults = await Promise.all(symbols.map(s => getTwelveDataQuote(s, keys).catch(() => null)))
+    if (tdResults.some(r => r?.regularMarketPrice != null))
+      return res.json({ quoteResponse: { result: tdResults.map((r, i) => r || { symbol: symbols[i], regularMarketPrice: null }) } })
 
     res.json({ quoteResponse: { result: symbols.map(s => ({ symbol: s, regularMarketPrice: null })) } })
   } catch (e) {
@@ -942,9 +957,9 @@ app.get('/api/chart', async (req, res) => {
     const fmp = await getFMPChart(symbol, interval, range, keys)
     if (fmp) { cacheSet(cacheKey, fmp); return res.json(fmp) }
 
-    // 4th: Stooq (free, no key, works from cloud — daily/weekly/monthly only)
-    const stooq = await getStooqChart(symbol, interval, range)
-    if (stooq) { cacheSet(cacheKey, stooq); return res.json(stooq) }
+    // 4th: Twelve Data (800 req/day free tier; demo key covers major US symbols)
+    const td = await getTwelveDataChart(symbol, interval, range, keys)
+    if (td) { cacheSet(cacheKey, td); return res.json(td) }
 
     // 5th: Alpha Vantage (25 req/day free tier — last resort)
     const av = await getAVChart(symbol, interval, range, keys)
@@ -955,6 +970,52 @@ app.get('/api/chart', async (req, res) => {
     res.status(500).json({ error: e.message })
   }
 })
+
+// Build a minimal quoteSummary from the AISA snapshot (P/E, market cap, 52w range etc.)
+async function getAISASummary(symbol, keys = {}) {
+  const key = keys.aisa || AISA_KEY()
+  if (!key) return null
+  try {
+    const d = await aisaFetch(`/financial/financial-metrics/snapshot?ticker=${encodeURIComponent(symbol)}`, 8000, key)
+    const price = d?.price ?? d?.current_price ?? null
+    if (!price) return null
+    console.log(`[AISA] summary OK: ${symbol}`)
+    return { quoteSummary: { result: [{
+      summaryDetail: {
+        trailingPE:       d.pe_ratio           ?? null,
+        forwardPE:        d.forward_pe         ?? null,
+        marketCap:        d.market_cap         ?? null,
+        dividendYield:    d.dividend_yield     ?? null,
+        beta:             d.beta               ?? null,
+        fiftyTwoWeekHigh: d.week_52_high       ?? null,
+        fiftyTwoWeekLow:  d.week_52_low        ?? null,
+        averageVolume:    d.avg_volume          ?? null,
+      },
+      financialData: {
+        returnOnEquity:   d.return_on_equity   ?? null,
+        profitMargins:    d.profit_margin      ?? null,
+        grossMargins:     d.gross_margin       ?? null,
+        targetMeanPrice:  d.target_price       ?? null,
+        recommendationKey: null,
+        totalRevenue:     d.revenue            ?? null,
+        earningsGrowth:   d.earnings_growth    ?? null,
+        revenueGrowth:    d.revenue_growth     ?? null,
+      },
+      defaultKeyStatistics: {
+        trailingEps: d.eps            ?? null,
+        priceToBook: d.price_to_book  ?? null,
+      },
+      assetProfile: {
+        sector:              d.sector           ?? null,
+        industry:            d.industry         ?? null,
+        longName:            d.name             ?? null,
+        longBusinessSummary: d.description      ?? null,
+        fullTimeEmployees:   d.employees        ?? null,
+        country:             d.country          ?? null,
+      },
+    }], error: null } }
+  } catch (e) { console.warn('[AISA] summary error:', e.message); return null }
+}
 
 /* ── Fundamentals ──────────────────────────────── */
 app.get('/api/summary', async (req, res) => {
@@ -969,6 +1030,10 @@ app.get('/api/summary', async (req, res) => {
     // 2nd: Alpha Vantage OVERVIEW (free, cloud-friendly)
     const av = await getAVSummary(symbol, keys)
     if (av) return res.json(av)
+
+    // 3rd: AISA snapshot (partial fundamentals — P/E, market cap, 52w range)
+    const aisa = await getAISASummary(symbol, keys)
+    if (aisa) return res.json(aisa)
 
     res.json({ quoteSummary: { result: null, error: { code: 'unavailable' } } })
   } catch (e) {
