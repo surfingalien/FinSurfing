@@ -21,8 +21,10 @@ const recLimit  = rateLimit({
 })
 
 router.post('/', recLimit, async (req, res) => {
-  const apiKey = process.env.ANTHROPIC_API_KEY
-  if (!apiKey) return res.status(503).json({ error: 'AI service not configured (ANTHROPIC_API_KEY missing)' })
+  const apiKey = req.headers['x-anthropic-key'] || process.env.ANTHROPIC_API_KEY
+  if (!apiKey) return res.status(503).json({
+    error: 'Claude API key required. Add yours in Settings → API Keys (Anthropic), or set ANTHROPIC_API_KEY on the server.',
+  })
 
   const { holdings = [], watchlist = [] } = req.body
   const holdingStr  = holdings.length  ? holdings.join(', ')  : 'none'

@@ -16,9 +16,10 @@ function getApiKeyHeaders() {
   try {
     const s = JSON.parse(localStorage.getItem('finsurf_api_keys') || '{}')
     const h = {}
-    if (s.aisa?.trim())    h['x-aisa-key']    = s.aisa.trim()
-    if (s.finnhub?.trim()) h['x-finnhub-key'] = s.finnhub.trim()
-    if (s.fmp?.trim())     h['x-fmp-key']     = s.fmp.trim()
+    if (s.anthropic?.trim()) h['x-anthropic-key'] = s.anthropic.trim()
+    if (s.aisa?.trim())      h['x-aisa-key']      = s.aisa.trim()
+    if (s.finnhub?.trim())   h['x-finnhub-key']   = s.finnhub.trim()
+    if (s.fmp?.trim())       h['x-fmp-key']       = s.fmp.trim()
     return h
   } catch { return {} }
 }
@@ -350,9 +351,16 @@ export default function AIBrainView({ portfolio, onAnalyze }) {
 
       {/* ── Error ── */}
       {error && (
-        <div className="flex items-center gap-3 p-4 rounded-xl bg-red-500/10 border border-red-500/25 text-red-400 text-sm">
-          <AlertTriangle className="w-4 h-4 shrink-0" />
-          {error}
+        <div className="flex items-start gap-3 p-4 rounded-xl bg-red-500/10 border border-red-500/25 text-red-400 text-sm">
+          <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+          <span>
+            {error}
+            {error.includes('Claude API key required') && (
+              <span className="block text-xs text-slate-500 mt-1">
+                Open <strong className="text-slate-400">Settings → API Keys</strong> and paste your Anthropic key to enable AI Brain.
+              </span>
+            )}
+          </span>
         </div>
       )}
 

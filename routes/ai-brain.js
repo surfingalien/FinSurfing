@@ -26,9 +26,27 @@ const DEFAULT_UNIVERSE = [
   'MELI', 'CRWD', 'ANET', 'AMD', 'PLTR', 'ORCL',
 ]
 
+// Lightweight key test — used by the settings modal
+router.get('/ping', async (req, res) => {
+  const apiKey = req.headers['x-anthropic-key'] || process.env.ANTHROPIC_API_KEY
+  if (!apiKey) return res.json({ ok: false, error: 'No key provided' })
+  try {
+    const client = new Anthropic({ apiKey })
+    await client.messages.create({
+      model: 'claude-haiku-4-5-20251001', max_tokens: 5,
+      messages: [{ role: 'user', content: 'Hi' }],
+    })
+    return res.json({ ok: true })
+  } catch (err) {
+    return res.json({ ok: false, error: err.message })
+  }
+})
+
 router.post('/analyze', brainLimit, async (req, res) => {
-  const apiKey = process.env.ANTHROPIC_API_KEY
-  if (!apiKey) return res.status(503).json({ error: 'AI service not configured (ANTHROPIC_API_KEY missing)' })
+  const apiKey = req.headers['x-anthropic-key'] || process.env.ANTHROPIC_API_KEY
+  if (!apiKey) return res.status(503).json({
+    error: 'Claude API key required. Add yours in Settings → API Keys (Anthropic), or set ANTHROPIC_API_KEY on the server.',
+  })
 
   const {
     symbols   = DEFAULT_UNIVERSE,

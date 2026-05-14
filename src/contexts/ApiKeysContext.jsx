@@ -10,11 +10,12 @@ import { createContext, useContext, useState, useCallback } from 'react'
 const STORAGE_KEY = 'finsurf_api_keys'
 
 const DEFAULTS = {
-  aisa:     '',
-  finnhub:  '',
-  fmp:      '',
-  td:       '',
-  av:       '',
+  anthropic: '',
+  aisa:      '',
+  finnhub:   '',
+  fmp:       '',
+  td:        '',
+  av:        '',
 }
 
 function load() {
@@ -44,18 +45,21 @@ export function ApiKeysProvider({ children }) {
   // Returns headers object to attach to every API request
   const getHeaders = useCallback(() => {
     const h = {}
-    if (keys.aisa)    h['x-aisa-key']    = keys.aisa.trim()
-    if (keys.finnhub) h['x-finnhub-key'] = keys.finnhub.trim()
-    if (keys.fmp)     h['x-fmp-key']     = keys.fmp.trim()
-    if (keys.td)      h['x-td-key']      = keys.td.trim()
-    if (keys.av)      h['x-av-key']      = keys.av.trim()
+    if (keys.anthropic) h['x-anthropic-key'] = keys.anthropic.trim()
+    if (keys.aisa)      h['x-aisa-key']      = keys.aisa.trim()
+    if (keys.finnhub)   h['x-finnhub-key']   = keys.finnhub.trim()
+    if (keys.fmp)       h['x-fmp-key']       = keys.fmp.trim()
+    if (keys.td)        h['x-td-key']        = keys.td.trim()
+    if (keys.av)        h['x-av-key']        = keys.av.trim()
     return h
   }, [keys])
 
-  const hasAnyKey = Object.values(keys).some(v => v.trim())
+  // Separate flags so sidebar badge only fires for market data keys
+  const hasAnyKey      = ['aisa','finnhub','fmp','td','av'].some(k => keys[k]?.trim())
+  const hasAnthropicKey = !!keys.anthropic?.trim()
 
   return (
-    <ApiKeysContext.Provider value={{ keys, save, clear, getHeaders, hasAnyKey }}>
+    <ApiKeysContext.Provider value={{ keys, save, clear, getHeaders, hasAnyKey, hasAnthropicKey }}>
       {children}
     </ApiKeysContext.Provider>
   )

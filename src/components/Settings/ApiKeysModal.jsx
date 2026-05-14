@@ -14,6 +14,18 @@ import {
 
 const PROVIDERS = [
   {
+    id:       'anthropic',
+    label:    'Anthropic (Claude AI)',
+    envVar:   'ANTHROPIC_API_KEY',
+    url:      'https://console.anthropic.com/settings/keys',
+    urlLabel: 'console.anthropic.com',
+    desc:     'Powers AI Brain and AI Buy Signals. Without this key those features are unavailable. Get a free key at console.anthropic.com.',
+    test:     '/api/ai-brain/ping',
+    check:    (d) => d?.ok === true,
+    badge:    'AI',
+    color:    'indigo',
+  },
+  {
     id:       'aisa',
     label:    'AISA (Recommended)',
     envVar:   'AISA_API_KEY',
@@ -76,6 +88,7 @@ const PROVIDERS = [
 ]
 
 const COLOR = {
+  indigo: 'text-indigo-400 border-indigo-500/30 bg-indigo-500/10',
   mint:   'text-mint-400 border-mint-500/30 bg-mint-500/10',
   blue:   'text-blue-400 border-blue-500/30 bg-blue-500/10',
   amber:  'text-amber-400 border-amber-500/30 bg-amber-500/10',
@@ -181,17 +194,17 @@ export default function ApiKeysModal({ onClose }) {
 
     setTestState(s => ({ ...s, [provider.id]: 'testing' }))
     try {
-      // Temporarily save draft key so the request header is attached
       const headerMap = {
-        aisa:    'x-aisa-key',
-        finnhub: 'x-finnhub-key',
-        fmp:     'x-fmp-key',
-        av:      'x-av-key',
-        td:      'x-td-key',
+        anthropic: 'x-anthropic-key',
+        aisa:      'x-aisa-key',
+        finnhub:   'x-finnhub-key',
+        fmp:       'x-fmp-key',
+        av:        'x-av-key',
+        td:        'x-td-key',
       }
       const res = await fetch(provider.test, {
         headers: { [headerMap[provider.id]]: val },
-        signal:  AbortSignal.timeout(12000),
+        signal:  AbortSignal.timeout(15000),
       })
       const data = await res.json()
       const ok = provider.check(data)
@@ -209,7 +222,7 @@ export default function ApiKeysModal({ onClose }) {
 
   const handleClear = () => {
     clear()
-    setDraft({ aisa: '', finnhub: '', fmp: '', td: '', av: '' })
+    setDraft({ anthropic: '', aisa: '', finnhub: '', fmp: '', td: '', av: '' })
     setTestState({})
   }
 
