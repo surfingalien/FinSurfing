@@ -33,12 +33,17 @@ router.post('/', async (req, res) => {
   const sym     = symbol.toUpperCase().replace(/[^A-Z0-9.-]/g, '')
   const rangeMap = { '1y': '1y', '2y': '2y', '5y': '5y' }
 
-  // Fetch OHLCV via internal /api/chart proxy (Finnhub → FMP — no Yahoo)
+  // Fetch OHLCV via internal /api/chart proxy (AISA → Finnhub → FMP cascade)
+  // Forward any API-key headers the browser sent so user keys are respected.
   try {
     const port    = process.env.PORT || 3001
+    const fwdHeaders = {}
+    for (const h of ['x-aisa-key','x-finnhub-key','x-fmp-key','x-td-key','x-av-key']) {
+      if (req.headers[h]) fwdHeaders[h] = req.headers[h]
+    }
     const r       = await fetch(
       `http://localhost:${port}/api/chart?symbol=${encodeURIComponent(sym)}&interval=1d&range=${rangeMap[range]}`,
-      { signal: AbortSignal.timeout(15_000) }
+      { headers: fwdHeaders, signal: AbortSignal.timeout(30_000) }
     )
     const yahooData = await r.json()
     const result    = yahooData?.chart?.result?.[0]

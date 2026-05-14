@@ -32,9 +32,10 @@ async function apiFetch(path) {
 }
 
 /* ── Quotes ────────────────────────────────── */
-export async function fetchQuotes(symbols) {
+export async function fetchQuotes(symbols, { force = false } = {}) {
   if (!symbols.length) return []
   const key = 'q:' + symbols.sort().join(',')
+  if (force) cache.delete(key)
   return cached(key, async () => {
     const data = await apiFetch(`/api/quote?symbols=${symbols.join(',')}`)
     return (data?.quoteResponse?.result || []).map(q => ({

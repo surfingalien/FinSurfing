@@ -24,7 +24,7 @@ export function useWatchlist() {
     if (!symbols.length) return
     setLoading(true)
     try {
-      const results = await fetchQuotes(symbols)
+      const results = await fetchQuotes(symbols, { force: true })
       setQuotes(results)
     } catch (e) {
       console.warn('Watchlist refresh failed:', e.message)
