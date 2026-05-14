@@ -70,7 +70,7 @@ app.use(helmet({
       scriptSrc:   ["'self'", "'unsafe-inline'"],   // Vite needs inline scripts
       styleSrc:    ["'self'", "'unsafe-inline'"],
       imgSrc:      ["'self'", 'data:', 'https:'],
-      connectSrc:  ["'self'", 'https://finnhub.io', 'https://financialmodelingprep.com', 'https://ai4trade.ai'],
+      connectSrc:  ["'self'", 'https://finnhub.io', 'https://financialmodelingprep.com', 'https://ai4trade.ai', 'https://api.aisa.one'],
       fontSrc:     ["'self'", 'data:'],
       objectSrc:   ["'none'"],
       upgradeInsecureRequests: PROD ? [] : null,
@@ -167,14 +167,25 @@ setInterval(() => {
   for (const [k, v] of _quoteCache) if (now - v.ts > QUOTE_TTL) _quoteCache.delete(k)
 }, 2 * 60_000)
 
+// ── Extract user-supplied API keys from request headers ───────────────────────
+// Browser stores keys in localStorage and attaches them as custom headers.
+// Header keys take precedence over server env vars so users can use their own.
+function extractKeys(req) {
+  return {
+    aisa:    (req.headers['x-aisa-key']    || '').trim() || process.env.AISA_API_KEY    || null,
+    finnhub: (req.headers['x-finnhub-key'] || '').trim() || process.env.FINNHUB_API_KEY || null,
+    fmp:     (req.headers['x-fmp-key']     || '').trim() || process.env.FMP_API_KEY     || null,
+    av:      (req.headers['x-av-key']      || '').trim() || process.env.ALPHA_VANTAGE_API_KEY || process.env.AV_API_KEY || null,
+  }
+}
+
 // ── AISA helpers (api.aisa.one) ────────────────────────────────────────────────
 // Primary data source — works from Railway/cloud IPs, no IP blocking.
 // Get a key at https://aisa.one (~$0.001/request, pay-as-you-go)
 const AISA_KEY  = () => process.env.AISA_API_KEY
 const AISA_BASE = 'https://api.aisa.one/apis/v1'
 
-async function aisaFetch(path, timeoutMs = 12000) {
-  const key = AISA_KEY()
+async function aisaFetch(path, timeoutMs = 12000, key = AISA_KEY()) {
   if (!key) return null
   const r = await fetch(`${AISA_BASE}${path}`, {
     headers: { Authorization: `Bearer ${key}`, Accept: 'application/json' },
@@ -202,14 +213,16 @@ function intervalToAISA(interval) {
 }
 
 // Historical OHLCV chart — returns Yahoo-envelope format the client expects
-async function getAISAChart(symbol, interval = '1d', range = '1y') {
-  if (!AISA_KEY()) return null
+async function getAISAChart(symbol, interval = '1d', range = '1y', keys = {}) {
+  const key = keys.aisa || AISA_KEY()
+  if (!key) return null
   try {
     const [ivl, mult] = intervalToAISA(interval)
     const { start_date, end_date } = rangeToDateRange(range)
     const data = await aisaFetch(
       `/financial/prices?ticker=${encodeURIComponent(symbol)}&interval=${ivl}&interval_multiplier=${mult}&start_date=${start_date}&end_date=${end_date}`,
-      15000
+      15000,
+      key
     )
     if (!Array.isArray(data) || !data.length) return null
     // AISA returns [{date|timestamp, open, high, low, close, volume}]
@@ -235,12 +248,13 @@ async function getAISAChart(symbol, interval = '1d', range = '1y') {
 }
 
 // Real-time quote via metrics snapshot
-async function getAISAQuotes(symbols) {
-  if (!AISA_KEY()) return null
+async function getAISAQuotes(symbols, keys = {}) {
+  const key = keys.aisa || AISA_KEY()
+  if (!key) return null
   try {
     const results = await Promise.all(symbols.map(async sym => {
       try {
-        const d = await aisaFetch(`/financial/financial-metrics/snapshot?ticker=${encodeURIComponent(sym)}`, 8000)
+        const d = await aisaFetch(`/financial/financial-metrics/snapshot?ticker=${encodeURIComponent(sym)}`, 8000, key)
         // snapshot returns { price, change, change_percent, market_cap, pe_ratio, ... }
         const price = d?.price ?? d?.current_price ?? null
         if (!price) return { symbol: sym, regularMarketPrice: null }
@@ -267,22 +281,23 @@ async function getAISAQuotes(symbols) {
 }
 
 // ── Finnhub helpers ───────────────────────────────────────────────────────────
-function fhUrl(path) {
+function fhUrl(path, key = FH_KEY()) {
   const sep = path.includes('?') ? '&' : '?'
-  return `https://finnhub.io/api/v1${path}${sep}token=${process.env.FINNHUB_API_KEY}`
+  return `https://finnhub.io/api/v1${path}${sep}token=${key}`
 }
 const FH_KEY = () => process.env.FINNHUB_API_KEY
 
 // Quote (per-symbol, parallel)
-async function getFinnhubQuotes(symbols) {
-  if (!FH_KEY()) return null
+async function getFinnhubQuotes(symbols, keys = {}) {
+  const key = keys.finnhub || FH_KEY()
+  if (!key) return null
   try {
     const results = await Promise.all(symbols.map(async sym => {
       const ck = `fhq:${sym}`
       const cached = cacheGet(ck)
       if (cached) return cached
       try {
-        const d = await apiFetch(fhUrl(`/quote?symbol=${encodeURIComponent(sym)}`), 8000)
+        const d = await apiFetch(fhUrl(`/quote?symbol=${encodeURIComponent(sym)}`, key), 8000)
         // d.c === 0 happens after market hours on the free tier — fall back to d.pc (previous close)
         const price = d?.c || d?.pc || null
         if (!price) return { symbol: sym, regularMarketPrice: null }
@@ -316,13 +331,14 @@ function rangeToUnix(range) {
   const secs = { '1d':86400,'5d':432000,'1mo':2592000,'3mo':7776000,'6mo':15552000,'1y':31536000,'2y':63072000,'5y':157680000,'max':630720000 }
   return { from: to - (secs[range] || 31536000), to }
 }
-async function getFinnhubChart(symbol, interval = '1d', range = '1y') {
-  if (!FH_KEY()) return null
+async function getFinnhubChart(symbol, interval = '1d', range = '1y', keys = {}) {
+  const key = keys.finnhub || FH_KEY()
+  if (!key) return null
   try {
     const res = toFhResolution(interval)
     const { from, to } = rangeToUnix(range)
     const d = await apiFetch(
-      fhUrl(`/stock/candle?symbol=${encodeURIComponent(symbol)}&resolution=${res}&from=${from}&to=${to}`),
+      fhUrl(`/stock/candle?symbol=${encodeURIComponent(symbol)}&resolution=${res}&from=${from}&to=${to}`, key),
       15000
     )
     if (d?.s !== 'ok' || !d.t?.length) return null
@@ -340,10 +356,11 @@ async function getFinnhubChart(symbol, interval = '1d', range = '1y') {
 }
 
 // Symbol search
-async function getFinnhubSearch(q) {
-  if (!FH_KEY()) return null
+async function getFinnhubSearch(q, keys = {}) {
+  const key = keys.finnhub || FH_KEY()
+  if (!key) return null
   try {
-    const d = await apiFetch(fhUrl(`/search?q=${encodeURIComponent(q)}`), 8000)
+    const d = await apiFetch(fhUrl(`/search?q=${encodeURIComponent(q)}`, key), 8000)
     if (!d?.result?.length) return null
     const typeMap = { 'Common Stock':'EQUITY', 'ETP':'ETF', 'Index':'INDEX', 'ADR':'EQUITY' }
     return { quotes: d.result.slice(0, 10).map(r => ({
@@ -354,15 +371,16 @@ async function getFinnhubSearch(q) {
 }
 
 // News
-async function getFinnhubNews(symbol) {
-  if (!FH_KEY()) return null
+async function getFinnhubNews(symbol, keys = {}) {
+  const key = keys.finnhub || FH_KEY()
+  if (!key) return null
   try {
     const today = new Date().toISOString().slice(0, 10)
     const from  = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10)
     const path  = symbol
       ? `/company-news?symbol=${encodeURIComponent(symbol)}&from=${from}&to=${today}`
       : `/news?category=general&minId=0`
-    const data  = await apiFetch(fhUrl(path), 10000)
+    const data  = await apiFetch(fhUrl(path, key), 10000)
     if (!Array.isArray(data)) return null
     return { news: data.slice(0, 8).map(a => ({
       title: a.headline, link: a.url, publisher: a.source,
@@ -374,16 +392,17 @@ async function getFinnhubNews(symbol) {
 
 // ── FMP helpers ───────────────────────────────────────────────────────────────
 const FMP_KEY = () => process.env.FMP_API_KEY
-function fmpUrl(path) {
+function fmpUrl(path, key = FMP_KEY()) {
   const sep = path.includes('?') ? '&' : '?'
-  return `https://financialmodelingprep.com/api/v3${path}${sep}apikey=${process.env.FMP_API_KEY}`
+  return `https://financialmodelingprep.com/api/v3${path}${sep}apikey=${key}`
 }
 
 // Batch quote
-async function getFMPQuotes(symbols) {
-  if (!FMP_KEY()) return null
+async function getFMPQuotes(symbols, keys = {}) {
+  const key = keys.fmp || FMP_KEY()
+  if (!key) return null
   try {
-    const data = await apiFetch(fmpUrl(`/quote/${symbols.join(',')}`), 10000)
+    const data = await apiFetch(fmpUrl(`/quote/${symbols.join(',')}`, key), 10000)
     if (!Array.isArray(data) || !data.length) return null
     return data.map(q => ({
       symbol:                     q.symbol,
@@ -406,8 +425,9 @@ async function getFMPQuotes(symbols) {
 }
 
 // Chart OHLCV
-async function getFMPChart(symbol, interval = '1d', range = '1y') {
-  if (!FMP_KEY()) return null
+async function getFMPChart(symbol, interval = '1d', range = '1y', keys = {}) {
+  const key = keys.fmp || FMP_KEY()
+  if (!key) return null
   try {
     const today = new Date()
     const to    = today.toISOString().slice(0, 10)
@@ -416,12 +436,12 @@ async function getFMPChart(symbol, interval = '1d', range = '1y') {
     const isDailyPlus = ['1d','1wk','1mo'].includes(interval)
     let url, historical
     if (isDailyPlus) {
-      const data = await apiFetch(fmpUrl(`/historical-price-full/${encodeURIComponent(symbol)}?from=${from}&to=${to}`), 15000)
+      const data = await apiFetch(fmpUrl(`/historical-price-full/${encodeURIComponent(symbol)}?from=${from}&to=${to}`, key), 15000)
       historical = data?.historical
     } else {
       const intMap = { '1m':'1min','5m':'5min','15m':'15min','30m':'30min','60m':'1hour','1h':'1hour' }
       const fi = intMap[interval] || '1hour'
-      historical = await apiFetch(fmpUrl(`/historical-chart/${fi}/${encodeURIComponent(symbol)}?from=${from}&to=${to}`), 15000)
+      historical = await apiFetch(fmpUrl(`/historical-chart/${fi}/${encodeURIComponent(symbol)}?from=${from}&to=${to}`, key), 15000)
     }
     if (!Array.isArray(historical) || !historical.length) return null
     const hist = [...historical].reverse()  // FMP returns newest-first
@@ -441,12 +461,13 @@ async function getFMPChart(symbol, interval = '1d', range = '1y') {
 }
 
 // Fundamentals summary — returns Yahoo quoteSummary-compatible envelope
-async function getFMPSummary(symbol) {
-  if (!FMP_KEY()) return null
+async function getFMPSummary(symbol, keys = {}) {
+  const key = keys.fmp || FMP_KEY()
+  if (!key) return null
   try {
     const [profileR, metricsR] = await Promise.allSettled([
-      apiFetch(fmpUrl(`/profile/${encodeURIComponent(symbol)}`), 10000),
-      apiFetch(fmpUrl(`/key-metrics-ttm/${encodeURIComponent(symbol)}`), 10000),
+      apiFetch(fmpUrl(`/profile/${encodeURIComponent(symbol)}`, key), 10000),
+      apiFetch(fmpUrl(`/key-metrics-ttm/${encodeURIComponent(symbol)}`, key), 10000),
     ])
     const p = profileR.status  === 'fulfilled' ? (profileR.value?.[0]  || {}) : {}
     const m = metricsR.status  === 'fulfilled' ? (metricsR.value?.[0]  || {}) : {}
@@ -489,10 +510,11 @@ async function getFMPSummary(symbol) {
 }
 
 // Symbol search
-async function getFMPSearch(q) {
-  if (!FMP_KEY()) return null
+async function getFMPSearch(q, keys = {}) {
+  const key = keys.fmp || FMP_KEY()
+  if (!key) return null
   try {
-    const data = await apiFetch(fmpUrl(`/search?query=${encodeURIComponent(q)}&limit=10`), 8000)
+    const data = await apiFetch(fmpUrl(`/search?query=${encodeURIComponent(q)}&limit=10`, key), 8000)
     if (!Array.isArray(data) || !data.length) return null
     return { quotes: data.map(r => ({
       symbol: r.symbol, shortname: r.name, longname: r.name,
@@ -502,8 +524,8 @@ async function getFMPSearch(q) {
 }
 
 // ── Alpha Vantage fallback quotes (works from cloud IPs, free tier) ──────────
-async function getAVQuotes(symbols) {
-  const key = process.env.ALPHA_VANTAGE_API_KEY || process.env.AV_API_KEY
+async function getAVQuotes(symbols, keys = {}) {
+  const key = keys.av || process.env.ALPHA_VANTAGE_API_KEY || process.env.AV_API_KEY
   if (!key) return null
   try {
     // AV free tier: 25 requests/day, 5/min — use only first symbol for quote
@@ -696,24 +718,25 @@ app.get('/health', async (_req, res) => {
 app.get('/api/quote', async (req, res) => {
   const symbols = (req.query.symbols || '').split(',').filter(Boolean)
   if (!symbols.length) return res.status(400).json({ error: 'symbols required' })
+  const keys = extractKeys(req)
   try {
     // 1st: AISA — cloud-friendly, Yahoo Finance data via proxy
-    const aisa = await getAISAQuotes(symbols).catch(() => null)
+    const aisa = await getAISAQuotes(symbols, keys).catch(() => null)
     if (aisa?.some(r => r.regularMarketPrice != null))
       return res.json({ quoteResponse: { result: aisa } })
 
     // 2nd: Finnhub
-    const fh = await getFinnhubQuotes(symbols)
+    const fh = await getFinnhubQuotes(symbols, keys)
     if (fh?.some(r => r.regularMarketPrice != null))
       return res.json({ quoteResponse: { result: fh } })
 
     // 3rd: FMP
-    const fmp = await getFMPQuotes(symbols)
+    const fmp = await getFMPQuotes(symbols, keys)
     if (fmp?.some(r => r.regularMarketPrice != null))
       return res.json({ quoteResponse: { result: fmp } })
 
     // 4th: Alpha Vantage (free tier, 5 req/min — last resort)
-    const av = await getAVQuotes(symbols)
+    const av = await getAVQuotes(symbols, keys)
     if (av?.some(r => r.regularMarketPrice != null))
       return res.json({ quoteResponse: { result: av } })
 
@@ -727,17 +750,18 @@ app.get('/api/quote', async (req, res) => {
 app.get('/api/chart', async (req, res) => {
   const { symbol, interval = '1d', range = '1y' } = req.query
   if (!symbol) return res.status(400).json({ error: 'symbol required' })
+  const keys = extractKeys(req)
   try {
     // 1st: AISA — cloud-friendly Yahoo Finance proxy
-    const aisa = await getAISAChart(symbol, interval, range).catch(() => null)
+    const aisa = await getAISAChart(symbol, interval, range, keys).catch(() => null)
     if (aisa) { console.log('[chart] AISA:', symbol); return res.json(aisa) }
 
     // 2nd: Finnhub candles
-    const fh = await getFinnhubChart(symbol, interval, range)
+    const fh = await getFinnhubChart(symbol, interval, range, keys)
     if (fh) return res.json(fh)
 
     // 3rd: FMP historical
-    const fmp = await getFMPChart(symbol, interval, range)
+    const fmp = await getFMPChart(symbol, interval, range, keys)
     if (fmp) return res.json(fmp)
 
     res.status(502).json({ chart: { result: null, error: { code: 'unavailable', description: 'No market data provider returned data' } } })
@@ -750,8 +774,9 @@ app.get('/api/chart', async (req, res) => {
 app.get('/api/summary', async (req, res) => {
   const { symbol } = req.query
   if (!symbol) return res.status(400).json({ error: 'symbol required' })
+  const keys = extractKeys(req)
   try {
-    const fmp = await getFMPSummary(symbol)
+    const fmp = await getFMPSummary(symbol, keys)
     if (fmp) return res.json(fmp)
 
     res.json({ quoteSummary: { result: null, error: { code: 'unavailable' } } })
@@ -764,11 +789,12 @@ app.get('/api/summary', async (req, res) => {
 app.get('/api/search', async (req, res) => {
   const { q } = req.query
   if (!q) return res.status(400).json({ error: 'q required' })
+  const keys = extractKeys(req)
   try {
-    const fh = await getFinnhubSearch(q)
+    const fh = await getFinnhubSearch(q, keys)
     if (fh?.quotes?.length) return res.json(fh)
 
-    const fmp = await getFMPSearch(q)
+    const fmp = await getFMPSearch(q, keys)
     if (fmp?.quotes?.length) return res.json(fmp)
 
     res.json({ quotes: [] })
@@ -780,8 +806,9 @@ app.get('/api/search', async (req, res) => {
 /* ── News ──────────────────────────────────────── */
 app.get('/api/news', async (req, res) => {
   const symbol = req.query.symbol || null
+  const keys = extractKeys(req)
   try {
-    const fh = await getFinnhubNews(symbol)
+    const fh = await getFinnhubNews(symbol, keys)
     if (fh) return res.json(fh)
     res.json({ news: [] })
   } catch (e) {

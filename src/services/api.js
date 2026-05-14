@@ -7,8 +7,25 @@ function cached(key, fn) {
   return fn().then(data => { cache.set(key, { data, ts: Date.now() }); return data })
 }
 
+// Read user-supplied API keys from localStorage and return them as request headers.
+// Keys are stored by ApiKeysContext under 'finsurf_api_keys'.
+function getApiKeyHeaders() {
+  try {
+    const stored = JSON.parse(localStorage.getItem('finsurf_api_keys') || '{}')
+    const h = {}
+    if (stored.aisa?.trim())    h['x-aisa-key']    = stored.aisa.trim()
+    if (stored.finnhub?.trim()) h['x-finnhub-key'] = stored.finnhub.trim()
+    if (stored.fmp?.trim())     h['x-fmp-key']     = stored.fmp.trim()
+    if (stored.av?.trim())      h['x-av-key']      = stored.av.trim()
+    return h
+  } catch { return {} }
+}
+
 async function apiFetch(path) {
-  const res = await fetch(path, { signal: AbortSignal.timeout(12000) })
+  const res = await fetch(path, {
+    headers: getApiKeyHeaders(),
+    signal:  AbortSignal.timeout(12000),
+  })
   if (!res.ok) throw new Error(`API ${res.status}`)
   return res.json()
 }

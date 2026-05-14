@@ -2,6 +2,7 @@ import { useState, useMemo, useRef, useCallback } from 'react'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { PortfolioProvider, usePortfolioContext } from './contexts/PortfolioContext'
 import { AITraderProvider } from './contexts/AITraderContext'
+import { ApiKeysProvider } from './contexts/ApiKeysContext'
 import { ToastProvider } from './components/shared/ToastNotifications'
 import LandingPage from './components/Landing/LandingPage'
 import AuthPage from './components/Auth/AuthPage'
@@ -254,10 +255,12 @@ function MainApp({ onSignIn }) {
 // ── Root export ───────────────────────────────────────────────────────────────
 export default function App() {
   return (
-    <ToastProvider>
-      <AuthProvider>
-        <AppInner />
-      </AuthProvider>
-    </ToastProvider>
+    <ApiKeysProvider>
+      <ToastProvider>
+        <AuthProvider>
+          <AppInner />
+        </AuthProvider>
+      </ToastProvider>
+    </ApiKeysProvider>
   )
 }
