@@ -55,7 +55,7 @@ const PROVIDERS = [
     envVar:   'TWELVE_DATA_API_KEY',
     url:      'https://twelvedata.com',
     urlLabel: 'twelvedata.com',
-    desc:     'Historical charts + quotes. Free tier: 800 req/day, 8 req/min. Demo key built-in (covers major US tickers).',
+    desc:     'Historical charts + quotes. Free tier: 800 req/day, 8 req/min. Register free at twelvedata.com for full US coverage.',
     test:     '/api/chart?symbol=AAPL&interval=1d&range=1mo',
     check:    (d) => d?.chart?.result?.[0]?.timestamp?.length > 0,
     badge:    'Free',
@@ -244,7 +244,7 @@ export default function ApiKeysModal({ onClose }) {
         {!hasAny && (
           <div className="mx-5 mt-4 flex items-start gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs">
             <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-            <span>No API keys set. Charts for major tickers (AAPL, MSFT, GOOGL, etc.) work via the built-in Twelve Data demo key. Add AISA or FMP keys below for full coverage.</span>
+            <span>No API keys set. Add AISA (recommended) or FMP for full chart/quote coverage, or register a free Twelve Data key (800 req/day) at twelvedata.com.</span>
           </div>
         )}
 

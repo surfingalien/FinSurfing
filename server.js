@@ -224,15 +224,32 @@ async function getAISAChart(symbol, interval = '1d', range = '1y', keys = {}) {
   try {
     const [ivl, mult] = intervalToAISA(interval)
     const { start_date, end_date } = rangeToDateRange(range)
-    const data = await aisaFetch(
-      `/financial/prices?ticker=${encodeURIComponent(symbol)}&interval=${ivl}&interval_multiplier=${mult}&start_date=${start_date}&end_date=${end_date}`,
-      15000,
-      key
-    )
-    if (!Array.isArray(data) || !data.length) {
-      console.warn(`[AISA] chart not-array for ${symbol}:`, JSON.stringify(data)?.slice(0, 200))
-      return null
+    const sym = encodeURIComponent(symbol)
+
+    // Try known endpoint paths in order — logs help identify the correct one
+    const candidatePaths = [
+      `/financial/prices?ticker=${sym}&interval=${ivl}&interval_multiplier=${mult}&start_date=${start_date}&end_date=${end_date}`,
+      `/financial/historical-prices?ticker=${sym}&start=${start_date}&end=${end_date}`,
+      `/market/prices?ticker=${sym}&start_date=${start_date}&end_date=${end_date}`,
+      `/financial/price-history?ticker=${sym}&from=${start_date}&to=${end_date}&interval=${ivl}`,
+    ]
+
+    let data = null
+    for (const path of candidatePaths) {
+      try {
+        const result = await aisaFetch(path, 12000, key)
+        if (Array.isArray(result) && result.length > 0) {
+          data = result
+          console.log(`[AISA] chart path OK: ${path.split('?')[0]} for ${symbol}`)
+          break
+        }
+        console.warn(`[AISA] chart path ${path.split('?')[0]} non-array:`, JSON.stringify(result)?.slice(0, 150))
+      } catch (e) {
+        console.warn(`[AISA] chart path ${path.split('?')[0]} error: ${e.message}`)
+      }
     }
+
+    if (!data) return null
     // AISA returns [{date|timestamp, open, high, low, close, volume}]
     const sorted = [...data].sort((a, b) => new Date(a.date || a.timestamp) - new Date(b.date || b.timestamp))
     const timestamps = sorted.map(d => Math.floor(new Date(d.date || d.timestamp).getTime() / 1000))
