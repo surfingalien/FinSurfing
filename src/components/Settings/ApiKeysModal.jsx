@@ -181,7 +181,6 @@ export default function ApiKeysModal({ onClose }) {
 
     setTestState(s => ({ ...s, [provider.id]: 'testing' }))
     try {
-      // Temporarily save draft key so the request header is attached
       const headerMap = {
         aisa:    'x-aisa-key',
         finnhub: 'x-finnhub-key',

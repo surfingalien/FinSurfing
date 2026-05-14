@@ -100,7 +100,7 @@ export function usePortfolio({ userId, activePortfolioId, authFetch } = {}) {
     setLoading(true)
     try {
       const symbols = positions.map(p => p.symbol)
-      const results = await fetchQuotes(symbols)
+      const results = await fetchQuotes(symbols, { force: true })
       const map = {}
       results.forEach(q => { if (q.symbol) map[q.symbol] = q })
       setQuotes(map)

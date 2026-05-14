@@ -10,11 +10,11 @@ import { createContext, useContext, useState, useCallback } from 'react'
 const STORAGE_KEY = 'finsurf_api_keys'
 
 const DEFAULTS = {
-  aisa:     '',
-  finnhub:  '',
-  fmp:      '',
-  td:       '',
-  av:       '',
+  aisa:    '',
+  finnhub: '',
+  fmp:     '',
+  td:      '',
+  av:      '',
 }
 
 function load() {

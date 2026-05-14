@@ -444,9 +444,10 @@ function QuickSignals({ scan, loading, onScan }) {
 
 /* ── Main DashboardView ──────────────────────── */
 export default function DashboardView({ portfolio, onAnalyze }) {
-  const [scan,     setScan]     = useState(null)
-  const [scanning, setScanning] = useState(false)
-  const [vixPrice, setVixPrice] = useState(null)
+  const [scan,       setScan]       = useState(null)
+  const [scanning,   setScanning]   = useState(false)
+  const [vixPrice,   setVixPrice]   = useState(null)
+  const [refreshing, setRefreshing] = useState(false)
 
   const positions = portfolio?.positions ?? []
   const quotes    = portfolio?.quotes    ?? {}
@@ -458,6 +459,22 @@ export default function DashboardView({ portfolio, onAnalyze }) {
       if (data?.[0]?.price) setVixPrice(data[0].price)
     }).catch(() => {})
   }, [])
+
+  /* Manual refresh — reloads quotes, VIX, and AI scan */
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true)
+    setScan(null)
+    try {
+      await Promise.all([
+        portfolio?.refresh?.(),
+        fetchQuotes(['^VIX'], { force: true }).then(data => {
+          if (data?.[0]?.price) setVixPrice(data[0].price)
+        }).catch(() => {}),
+      ])
+    } finally {
+      setRefreshing(false)
+    }
+  }, [portfolio])
 
   /* Derived data */
   const fg         = useMemo(() => calcFearGreed(quotesArr, vixPrice), [quotesArr, vixPrice])
@@ -515,6 +532,19 @@ export default function DashboardView({ portfolio, onAnalyze }) {
 
   return (
     <div className="space-y-5 animate-fade-in">
+
+      {/* ── Header row with refresh ── */}
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-bold text-white">Dashboard</h2>
+        <button
+          onClick={handleRefresh}
+          disabled={refreshing || portfolio?.loading}
+          className="btn-ghost flex items-center gap-1.5 text-xs py-1.5 disabled:opacity-50"
+        >
+          <RefreshCw className={`w-3.5 h-3.5 ${refreshing || portfolio?.loading ? 'animate-spin' : ''}`} />
+          {refreshing ? 'Refreshing…' : 'Refresh'}
+        </button>
+      </div>
 
       {/* ── Summary stats ── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

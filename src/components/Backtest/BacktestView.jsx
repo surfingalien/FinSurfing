@@ -189,6 +189,19 @@ export default function BacktestView() {
   const setParam = (key, val) =>
     setParamValues(prev => ({ ...prev, [`${strategyId}_${key}`]: val }))
 
+  function getApiKeyHeaders() {
+    try {
+      const stored = JSON.parse(localStorage.getItem('finsurf_api_keys') || '{}')
+      const h = {}
+      if (stored.aisa?.trim())    h['x-aisa-key']    = stored.aisa.trim()
+      if (stored.finnhub?.trim()) h['x-finnhub-key'] = stored.finnhub.trim()
+      if (stored.fmp?.trim())     h['x-fmp-key']     = stored.fmp.trim()
+      if (stored.td?.trim())      h['x-td-key']      = stored.td.trim()
+      if (stored.av?.trim())      h['x-av-key']      = stored.av.trim()
+      return h
+    } catch { return {} }
+  }
+
   const run = useCallback(async () => {
     const sym = symbol.trim().toUpperCase()
     if (!sym) return
@@ -200,7 +213,7 @@ export default function BacktestView() {
     try {
       const r = await fetch('/api/backtest', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getApiKeyHeaders() },
         body: JSON.stringify({ symbol: sym, strategy: strategyId, params, range, initialCapital }),
       })
       const data = await r.json()
