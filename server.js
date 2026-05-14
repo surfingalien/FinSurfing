@@ -401,6 +401,37 @@ async function getFMPSearch(q) {
   } catch { return null }
 }
 
+// ── Alpha Vantage fallback quotes (works from cloud IPs, free tier) ──────────
+async function getAVQuotes(symbols) {
+  const key = process.env.ALPHA_VANTAGE_API_KEY || process.env.AV_API_KEY
+  if (!key) return null
+  try {
+    // AV free tier: 25 requests/day, 5/min — use only first symbol for quote
+    const results = await Promise.all(symbols.slice(0, 5).map(async sym => {
+      try {
+        const url  = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${encodeURIComponent(sym)}&apikey=${key}`
+        const data = await apiFetch(url, 10000)
+        const q    = data?.['Global Quote']
+        const price = parseFloat(q?.['05. price'])
+        if (!price) return { symbol: sym, regularMarketPrice: null }
+        return {
+          symbol:                     sym,
+          shortName:                  sym,
+          regularMarketPrice:         price,
+          regularMarketChange:        parseFloat(q?.['09. change'])         || null,
+          regularMarketChangePercent: parseFloat(q?.['10. change percent']) || null,
+          regularMarketVolume:        parseInt(q?.['06. volume'])           || null,
+          regularMarketDayHigh:       parseFloat(q?.['03. high'])           || null,
+          regularMarketDayLow:        parseFloat(q?.['04. low'])            || null,
+          regularMarketOpen:          parseFloat(q?.['02. open'])           || null,
+          regularMarketPreviousClose: parseFloat(q?.['08. previous close']) || null,
+        }
+      } catch { return { symbol: sym, regularMarketPrice: null } }
+    }))
+    return results
+  } catch { return null }
+}
+
 // ── Finnhub 30-minute health check ───────────────────────────────────────────
 // Validates the key is still working; logs the status so it's visible in Railway logs.
 async function finnhubHealthCheck() {
@@ -550,18 +581,6 @@ app.get('/api/stream/quotes', (req, res) => {
   req.on('close', close)
 })
 
-/* ── Debug: raw Finnhub + FMP response for a symbol ── */
-app.get('/api/debug/quote/:symbol', async (req, res) => {
-  const sym = req.params.symbol.toUpperCase()
-  const out = { symbol: sym, finnhub: null, fmp: null }
-  try {
-    out.finnhub = await apiFetch(fhUrl(`/quote?symbol=${encodeURIComponent(sym)}`), 8000).catch(e => ({ error: e.message }))
-  } catch (e) { out.finnhub = { error: e.message } }
-  try {
-    out.fmp = await apiFetch(fmpUrl(`/quote/${encodeURIComponent(sym)}`), 8000).catch(e => ({ error: e.message }))
-  } catch (e) { out.fmp = { error: e.message } }
-  res.json(out)
-})
 
 /* ── Health (includes DB status + demo mode) ───── */
 app.get('/health', async (_req, res) => {
@@ -585,6 +604,11 @@ app.get('/api/quote', async (req, res) => {
     const fmp = await getFMPQuotes(symbols)
     if (fmp?.some(r => r.regularMarketPrice != null))
       return res.json({ quoteResponse: { result: fmp } })
+
+    // 3rd: Alpha Vantage (free tier, 5 req/min — last resort)
+    const av = await getAVQuotes(symbols)
+    if (av?.some(r => r.regularMarketPrice != null))
+      return res.json({ quoteResponse: { result: av } })
 
     res.json({ quoteResponse: { result: symbols.map(s => ({ symbol: s, regularMarketPrice: null })) } })
   } catch (e) {
