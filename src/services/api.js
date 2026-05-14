@@ -226,6 +226,275 @@ export function calcBollinger(closes, period = 20, stdDev = 2) {
   })
 }
 
+/* ── Advanced indicators (ported from institutional quant stack) ─────────────
+   All pure JS — no external dependencies, works in browser + server.
+   Input arrays are parallel: highs[i], lows[i], closes[i], volumes[i].
+   ─────────────────────────────────────────────────────────────────────────── */
+
+// Average True Range — volatility measure used by Supertrend, position sizing
+export function calcATR(highs, lows, closes, period = 14) {
+  const n = closes.length
+  const tr = closes.map((c, i) => {
+    if (i === 0) return highs[i] - lows[i]
+    return Math.max(highs[i] - lows[i], Math.abs(highs[i] - closes[i - 1]), Math.abs(lows[i] - closes[i - 1]))
+  })
+  // Wilder's smoothing (RMA)
+  const result = new Array(n).fill(null)
+  let atr = tr.slice(0, period).reduce((a, b) => a + b, 0) / period
+  result[period - 1] = +atr.toFixed(4)
+  for (let i = period; i < n; i++) {
+    atr = (atr * (period - 1) + tr[i]) / period
+    result[i] = +atr.toFixed(4)
+  }
+  return result
+}
+
+// Supertrend — trend-following signal, green = bullish, red = bearish
+// Returns: { supertrend[], direction[] (1 = bull, -1 = bear), upperBand[], lowerBand[] }
+export function calcSupertrend(highs, lows, closes, period = 10, multiplier = 3.0) {
+  const n = closes.length
+  const atr = calcATR(highs, lows, closes, period)
+  const upperBand = new Array(n).fill(null)
+  const lowerBand = new Array(n).fill(null)
+  const supertrend = new Array(n).fill(null)
+  const direction  = new Array(n).fill(null)
+
+  for (let i = period - 1; i < n; i++) {
+    if (atr[i] === null) continue
+    const hl2 = (highs[i] + lows[i]) / 2
+    const rawUpper = +(hl2 + multiplier * atr[i]).toFixed(4)
+    const rawLower = +(hl2 - multiplier * atr[i]).toFixed(4)
+
+    upperBand[i] = (i > 0 && upperBand[i - 1] !== null && rawUpper > upperBand[i - 1]) ? upperBand[i - 1] : rawUpper
+    lowerBand[i] = (i > 0 && lowerBand[i - 1] !== null && rawLower < lowerBand[i - 1]) ? lowerBand[i - 1] : rawLower
+
+    if (i === period - 1) {
+      direction[i]  = 1
+      supertrend[i] = lowerBand[i]
+    } else {
+      const prevDir = direction[i - 1]
+      if (prevDir === 1)       direction[i] = closes[i] < lowerBand[i] ? -1 : 1
+      else if (prevDir === -1) direction[i] = closes[i] > upperBand[i] ?  1 : -1
+      else                     direction[i] = 1
+      supertrend[i] = direction[i] === 1 ? lowerBand[i] : upperBand[i]
+    }
+  }
+  return { supertrend, direction, upperBand, lowerBand }
+}
+
+// Ichimoku Cloud — multi-timeframe support/resistance + trend system
+// Returns: { tenkan[], kijun[], senkouA[], senkouB[], chikou[] }
+export function calcIchimoku(highs, lows, closes) {
+  const n = closes.length
+  const rollMid = (period) => {
+    const r = new Array(n).fill(null)
+    for (let i = period - 1; i < n; i++) {
+      let hi = -Infinity, lo = Infinity
+      for (let j = i - period + 1; j <= i; j++) { hi = Math.max(hi, highs[j]); lo = Math.min(lo, lows[j]) }
+      r[i] = +((hi + lo) / 2).toFixed(4)
+    }
+    return r
+  }
+  const tenkan  = rollMid(9)
+  const kijun   = rollMid(26)
+  const senkou52 = rollMid(52)
+  const senkouA = new Array(n).fill(null)
+  const senkouB = new Array(n).fill(null)
+  const chikou  = new Array(n).fill(null)
+
+  for (let i = 0; i < n; i++) {
+    // Senkou spans are plotted 26 periods into the future
+    if (i + 26 < n) {
+      senkouA[i + 26] = tenkan[i] !== null && kijun[i] !== null
+        ? +((tenkan[i] + kijun[i]) / 2).toFixed(4) : null
+      senkouB[i + 26] = senkou52[i]
+    }
+    // Chikou is the current close plotted 26 periods back
+    if (i >= 26) chikou[i - 26] = closes[i]
+  }
+  return { tenkan, kijun, senkouA, senkouB, chikou }
+}
+
+// ADX + DMI — trend strength (ADX > 25 = strong trend) and direction (±DI)
+// Returns: { adx[], plusDI[], minusDI[] }
+export function calcADX(highs, lows, closes, period = 14) {
+  const n = closes.length
+  const tr  = new Array(n).fill(0)
+  const pdm = new Array(n).fill(0)
+  const ndm = new Array(n).fill(0)
+
+  for (let i = 1; i < n; i++) {
+    tr[i]  = Math.max(highs[i] - lows[i], Math.abs(highs[i] - closes[i-1]), Math.abs(lows[i] - closes[i-1]))
+    const up   = highs[i]  - highs[i-1]
+    const down = lows[i-1] - lows[i]
+    pdm[i] = up > down && up > 0 ? up : 0
+    ndm[i] = down > up && down > 0 ? down : 0
+  }
+
+  // Wilder's smoothed sums
+  const wilder = (arr) => {
+    const r = new Array(n).fill(null)
+    let s = arr.slice(1, period + 1).reduce((a, b) => a + b, 0)
+    r[period] = s
+    for (let i = period + 1; i < n; i++) { s = s - s / period + arr[i]; r[i] = s }
+    return r
+  }
+  const sTR = wilder(tr), sPDM = wilder(pdm), sNDM = wilder(ndm)
+
+  const plusDI  = new Array(n).fill(null)
+  const minusDI = new Array(n).fill(null)
+  const dx      = new Array(n).fill(null)
+  const adx     = new Array(n).fill(null)
+
+  for (let i = period; i < n; i++) {
+    if (!sTR[i]) continue
+    plusDI[i]  = +(100 * sPDM[i] / sTR[i]).toFixed(2)
+    minusDI[i] = +(100 * sNDM[i] / sTR[i]).toFixed(2)
+    const diSum = plusDI[i] + minusDI[i]
+    dx[i] = diSum === 0 ? 0 : +(100 * Math.abs(plusDI[i] - minusDI[i]) / diSum).toFixed(2)
+  }
+
+  // Smooth DX with Wilder's method to get ADX
+  const start = period * 2
+  if (start < n) {
+    let s = dx.slice(period, start).filter(v => v !== null).reduce((a, b) => a + b, 0)
+    adx[start - 1] = +(s / period).toFixed(2)
+    for (let i = start; i < n; i++) {
+      if (dx[i] === null || adx[i-1] === null) continue
+      adx[i] = +((adx[i-1] * (period - 1) + dx[i]) / period).toFixed(2)
+    }
+  }
+  return { adx, plusDI, minusDI }
+}
+
+// VWAP — Volume Weighted Average Price (intraday / session-level)
+export function calcVWAP(highs, lows, closes, volumes) {
+  const result = new Array(closes.length).fill(null)
+  let cumTPV = 0, cumVol = 0
+  for (let i = 0; i < closes.length; i++) {
+    const tp = (highs[i] + lows[i] + closes[i]) / 3
+    cumTPV += tp * (volumes[i] || 0)
+    cumVol += volumes[i] || 0
+    result[i] = cumVol > 0 ? +(cumTPV / cumVol).toFixed(4) : null
+  }
+  return result
+}
+
+// ── Signal generator — combines indicators into BUY / SELL / HOLD ─────────────
+// candles: [{ open, high, low, close, volume }]
+// Returns { action, confidence, stopLoss, takeProfit, rationale[], riskReward }
+export function generateSignal(candles) {
+  if (!candles || candles.length < 60) return { action: 'HOLD', confidence: 0, rationale: ['Insufficient data (need 60+ bars)'] }
+
+  const highs   = candles.map(c => c.high)
+  const lows    = candles.map(c => c.low)
+  const closes  = candles.map(c => c.close)
+  const volumes = candles.map(c => c.volume)
+  const n       = closes.length
+  const price   = closes[n - 1]
+
+  // Calculate all indicators
+  const atrArr  = calcATR(highs, lows, closes, 14)
+  const st      = calcSupertrend(highs, lows, closes, 10, 3)
+  const adx     = calcADX(highs, lows, closes, 14)
+  const rsi     = calcRSI(closes, 14)
+  const macd    = calcMACD(closes)
+  const { kijun, senkouA, senkouB } = calcIchimoku(highs, lows, closes)
+
+  const atr     = atrArr[n - 1] || price * 0.01
+  const stDir   = st.direction[n - 1]
+  const adxVal  = adx.adx[n - 1]
+  const rsiVal  = rsi[n - 1]
+  const macdNow = macd[n - 1]
+  const aboveCloud = senkouA[n - 1] && senkouB[n - 1]
+    ? price > Math.max(senkouA[n - 1], senkouB[n - 1])
+    : null
+  const belowCloud = senkouA[n - 1] && senkouB[n - 1]
+    ? price < Math.min(senkouA[n - 1], senkouB[n - 1])
+    : null
+  const aboveKijun = kijun[n - 1] ? price > kijun[n - 1] : null
+
+  const bull = [], bear = []
+
+  // Supertrend
+  if (stDir === 1)  bull.push('Supertrend bullish ↑')
+  if (stDir === -1) bear.push('Supertrend bearish ↓')
+
+  // ADX trend strength
+  if (adxVal > 25 && stDir === 1)  bull.push(`Strong trend (ADX ${adxVal?.toFixed(0)})`)
+  if (adxVal > 25 && stDir === -1) bear.push(`Strong trend (ADX ${adxVal?.toFixed(0)})`)
+
+  // RSI
+  if (rsiVal !== null && rsiVal < 35)       bull.push(`Oversold RSI ${rsiVal?.toFixed(0)}`)
+  else if (rsiVal !== null && rsiVal > 65)  bear.push(`Overbought RSI ${rsiVal?.toFixed(0)}`)
+  else if (rsiVal !== null && rsiVal > 45 && rsiVal < 60) bull.push(`Healthy RSI ${rsiVal?.toFixed(0)}`)
+
+  // MACD
+  if (macdNow?.hist !== null && macdNow.hist > 0 && macdNow.macd > 0) bull.push('MACD bullish crossover')
+  if (macdNow?.hist !== null && macdNow.hist < 0 && macdNow.macd < 0) bear.push('MACD bearish crossover')
+
+  // Ichimoku
+  if (aboveCloud === true)  bull.push('Price above Ichimoku cloud')
+  if (belowCloud === true)  bear.push('Price below Ichimoku cloud')
+  if (aboveKijun === true)  bull.push('Price above Kijun-sen')
+  if (aboveKijun === false) bear.push('Price below Kijun-sen')
+
+  const total = bull.length + bear.length || 1
+  const bullScore = bull.length / total
+  const bearScore = bear.length / total
+
+  let action, confidence, stopLoss, takeProfit
+  if (bullScore >= 0.55) {
+    action     = 'BUY'
+    confidence = Math.min(bullScore, 0.95)
+    stopLoss   = +(price - 2 * atr).toFixed(2)
+    takeProfit = +(price + 3 * atr).toFixed(2)
+  } else if (bearScore >= 0.55) {
+    action     = 'SELL'
+    confidence = Math.min(bearScore, 0.95)
+    stopLoss   = +(price + 2 * atr).toFixed(2)
+    takeProfit = +(price - 3 * atr).toFixed(2)
+  } else {
+    action     = 'HOLD'
+    confidence = 0
+    stopLoss   = price
+    takeProfit = price
+  }
+
+  const slDist = Math.abs(price - stopLoss) || 1
+  const tpDist = Math.abs(takeProfit - price)
+  return {
+    action,
+    confidence: +confidence.toFixed(2),
+    stopLoss,
+    takeProfit,
+    riskReward: +(tpDist / slDist).toFixed(2),
+    rationale:  action === 'BUY' ? bull : action === 'SELL' ? bear : ['Mixed signals — wait for clearer setup'],
+  }
+}
+
+// ── News sentiment scorer (finance-lexicon VADER-lite, offline) ───────────────
+// Scores an array of headline strings → { compound, label, pos, neg }
+const BULL_WORDS = /\b(surge|soar|rally|gain|beat|record|growth|profit|revenue|upgrade|buy|bullish|breakout|boost|outperform|strong|rise|climbs?|jumps?|wins?|positive|recovery|rebound)\b/gi
+const BEAR_WORDS = /\b(drop|fall|slump|loss|miss|decline|downgrade|sell|bearish|crash|weak|cut|layoff|lawsuit|debt|default|plunge|tumble|warn|negative|risk|concern|bankruptcy)\b/gi
+
+export function calcNewsSentiment(headlines = []) {
+  if (!headlines.length) return { compound: 0, label: 'neutral', pos: 0, neg: 0 }
+  let pos = 0, neg = 0
+  for (const h of headlines) {
+    pos += (h.match(BULL_WORDS) || []).length
+    neg += (h.match(BEAR_WORDS) || []).length
+  }
+  const total   = pos + neg || 1
+  const compound = +((pos - neg) / total).toFixed(3)
+  return {
+    compound,
+    label: compound >= 0.1 ? 'bullish' : compound <= -0.1 ? 'bearish' : 'neutral',
+    pos:   +(pos / total).toFixed(3),
+    neg:   +(neg / total).toFixed(3),
+  }
+}
+
 /* ── Format helpers ─────────────────────────── */
 export function fmt(n, digits = 2) {
   if (n == null || isNaN(n)) return '—'
