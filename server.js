@@ -1117,6 +1117,49 @@ app.get('/api/summary', async (req, res) => {
 })
 
 /* ── Search ────────────────────────────────────── */
+async function getAVSearch(query, keys = {}) {
+  const key = keys.av || process.env.ALPHA_VANTAGE_API_KEY || process.env.AV_API_KEY
+  if (!key) return null
+  try {
+    const url  = `https://www.alphavantage.co/query?function=SYMBOL_SEARCH&keywords=${encodeURIComponent(query)}&apikey=${key}`
+    const data = await apiFetch(url, 10000)
+    const matches = data?.bestMatches
+    if (!Array.isArray(matches) || !matches.length) return null
+    return { quotes: matches
+      .filter(m => m['4. region'] === 'United States' || m['1. symbol'].length <= 5)
+      .slice(0, 8)
+      .map(m => ({
+        symbol:    m['1. symbol'],
+        shortname: m['2. name'],
+        longname:  m['2. name'],
+        quoteType: m['3. type'] === 'Equity' ? 'EQUITY' : m['3. type']?.toUpperCase() || 'EQUITY',
+        exchange:  m['4. region'],
+      }))
+    }
+  } catch { return null }
+}
+
+async function getTwelveDataSearch(query, keys = {}) {
+  const key  = keys.td || process.env.TWELVE_DATA_API_KEY || 'demo'
+  try {
+    const url  = `https://api.twelvedata.com/symbol_search?symbol=${encodeURIComponent(query)}&apikey=${key}`
+    const data = await apiFetch(url, 8000)
+    const list = data?.data
+    if (!Array.isArray(list) || !list.length) return null
+    return { quotes: list
+      .filter(s => s.country === 'United States' || s.exchange?.startsWith('NASDAQ') || s.exchange?.startsWith('NYSE'))
+      .slice(0, 8)
+      .map(s => ({
+        symbol:    s.symbol,
+        shortname: s.instrument_name,
+        longname:  s.instrument_name,
+        quoteType: s.instrument_type?.toUpperCase() || 'EQUITY',
+        exchange:  s.exchange,
+      }))
+    }
+  } catch { return null }
+}
+
 app.get('/api/search', async (req, res) => {
   const { q } = req.query
   if (!q) return res.status(400).json({ error: 'q required' })
@@ -1127,6 +1170,12 @@ app.get('/api/search', async (req, res) => {
 
     const fmp = await getFMPSearch(q, keys)
     if (fmp?.quotes?.length) return res.json(fmp)
+
+    const td = await getTwelveDataSearch(q, keys)
+    if (td?.quotes?.length) return res.json(td)
+
+    const av = await getAVSearch(q, keys)
+    if (av?.quotes?.length) return res.json(av)
 
     res.json({ quotes: [] })
   } catch (e) {
