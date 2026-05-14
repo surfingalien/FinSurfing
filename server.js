@@ -70,7 +70,7 @@ app.use(helmet({
       scriptSrc:   ["'self'", "'unsafe-inline'"],   // Vite needs inline scripts
       styleSrc:    ["'self'", "'unsafe-inline'"],
       imgSrc:      ["'self'", 'data:', 'https:'],
-      connectSrc:  ["'self'", 'https://finnhub.io', 'https://financialmodelingprep.com', 'https://ai4trade.ai', 'https://api.aisa.one'],
+      connectSrc:  ["'self'", 'https://finnhub.io', 'https://financialmodelingprep.com', 'https://ai4trade.ai', 'https://api.aisa.one', 'https://stooq.com', 'https://www.alphavantage.co'],
       fontSrc:     ["'self'", 'data:'],
       objectSrc:   ["'none'"],
       upgradeInsecureRequests: PROD ? [] : null,
@@ -152,20 +152,24 @@ async function apiFetch(url, timeoutMs = 10000) {
   return r.json()
 }
 
-// ── Server-side quote cache (30 s TTL) — reduces API calls per request ───────
+// ── Server-side quote cache (30 s TTL for quotes, 15 min for charts) ─────────
 const _quoteCache = new Map()
 const QUOTE_TTL = 30_000
+const CHART_TTL = 15 * 60_000   // 15 minutes — chart data rarely changes intraday
 
 function cacheSet(key, data) { _quoteCache.set(key, { data, ts: Date.now() }) }
 function cacheGet(key) {
   const hit = _quoteCache.get(key)
   return hit && Date.now() - hit.ts < QUOTE_TTL ? hit.data : null
 }
-// Evict stale entries every 2 minutes to prevent unbounded memory growth
+// Evict stale entries every 5 minutes to prevent unbounded memory growth
 setInterval(() => {
   const now = Date.now()
-  for (const [k, v] of _quoteCache) if (now - v.ts > QUOTE_TTL) _quoteCache.delete(k)
-}, 2 * 60_000)
+  for (const [k, v] of _quoteCache) {
+    const ttl = k.startsWith('chart:') ? CHART_TTL : QUOTE_TTL
+    if (now - v.ts > ttl) _quoteCache.delete(k)
+  }
+}, 5 * 60_000)
 
 // ── Extract user-supplied API keys from request headers ───────────────────────
 // Browser stores keys in localStorage and attaches them as custom headers.
@@ -224,7 +228,10 @@ async function getAISAChart(symbol, interval = '1d', range = '1y', keys = {}) {
       15000,
       key
     )
-    if (!Array.isArray(data) || !data.length) return null
+    if (!Array.isArray(data) || !data.length) {
+      console.warn(`[AISA] chart not-array for ${symbol}:`, JSON.stringify(data)?.slice(0, 200))
+      return null
+    }
     // AISA returns [{date|timestamp, open, high, low, close, volume}]
     const sorted = [...data].sort((a, b) => new Date(a.date || a.timestamp) - new Date(b.date || b.timestamp))
     const timestamps = sorted.map(d => Math.floor(new Date(d.date || d.timestamp).getTime() / 1000))
@@ -523,6 +530,63 @@ async function getFMPSearch(q, keys = {}) {
   } catch { return null }
 }
 
+// ── Stooq helpers ─────────────────────────────────────────────────────────────
+// Completely free, no API key required, works from cloud IPs.
+// Returns CSV OHLCV data for US and international equities.
+// Daily / weekly / monthly only (no intraday).
+
+async function getStooqChart(symbol, interval = '1d', range = '1y') {
+  // Only daily+ intervals
+  if (!['1d','1wk','1mo'].includes(interval)) return null
+  try {
+    // Stooq symbols: AAPL → AAPL.US (most US equities)
+    const sym = symbol.includes('.') ? symbol : `${symbol}.US`
+    const today = new Date()
+    const days  = { '1d':3,'5d':10,'1mo':38,'3mo':98,'6mo':190,'1y':375,'2y':745,'5y':1835,'max':9999 }
+    const fromD = new Date(today.getTime() - (days[range] || 375) * 86400000)
+    const fmt   = d => `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`
+    const ivlChar = { '1d':'d', '1wk':'w', '1mo':'m' }[interval] || 'd'
+    const url   = `https://stooq.com/q/d/l/?s=${encodeURIComponent(sym)}&d1=${fmt(fromD)}&d2=${fmt(today)}&i=${ivlChar}`
+
+    const r = await fetch(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; FinSurf/2.0)' },
+      signal:  AbortSignal.timeout(15000),
+    })
+    if (!r.ok) { console.warn(`[Stooq] HTTP ${r.status} for ${symbol}`); return null }
+    const csv = await r.text()
+    const lines = csv.trim().split('\n')
+    // Stooq returns "No data" page or just header when symbol unknown
+    if (lines.length < 3 || lines[1]?.toLowerCase().startsWith('no ')) {
+      console.warn(`[Stooq] no data for ${symbol}`)
+      return null
+    }
+
+    const rows = lines.slice(1)  // skip header: Date,Open,High,Low,Close,Volume
+      .map(line => {
+        const [date, open, high, low, close, volume] = line.split(',')
+        return { date, open: +open, high: +high, low: +low, close: +close, volume: +(volume || 0) }
+      })
+      .filter(r => r.close && !isNaN(r.close))
+      .sort((a, b) => a.date.localeCompare(b.date))  // oldest-first
+
+    if (rows.length < 5) return null
+
+    const timestamps = rows.map(r => Math.floor(new Date(r.date).getTime() / 1000))
+    const lastClose  = rows.at(-1).close
+    console.log(`[Stooq] chart OK: ${symbol} (${rows.length} bars)`)
+    return {
+      chart: { result: [{
+        meta: { symbol, regularMarketPrice: lastClose, chartPreviousClose: rows.at(-2)?.close ?? null },
+        timestamp: timestamps,
+        indicators: {
+          quote:    [{ open: rows.map(r=>r.open), high: rows.map(r=>r.high), low: rows.map(r=>r.low), close: rows.map(r=>r.close), volume: rows.map(r=>r.volume) }],
+          adjclose: [{ adjclose: rows.map(r=>r.close) }],
+        },
+      }], error: null },
+    }
+  } catch (e) { console.warn('[Stooq] chart error:', e.message); return null }
+}
+
 // ── Alpha Vantage helpers ─────────────────────────────────────────────────────
 // Free tier: 25 req/day, 5 req/min. Used as final fallback for chart + summary.
 
@@ -537,7 +601,11 @@ async function getAVChart(symbol, interval = '1d', range = '1y', keys = {}) {
     const url = `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY_ADJUSTED&symbol=${encodeURIComponent(symbol)}&outputsize=${needFull ? 'full' : 'compact'}&apikey=${key}`
     const data = await apiFetch(url, 20000)
     const series = data?.['Time Series (Daily)']
-    if (!series) return null
+    if (!series) {
+      const note = data?.['Note'] || data?.['Information'] || data?.['Error Message'] || JSON.stringify(data)?.slice(0, 200)
+      console.warn(`[AV] chart no-series for ${symbol}:`, note)
+      return null
+    }
 
     const days = { '1d':2,'5d':8,'1mo':35,'3mo':95,'6mo':185,'1y':370,'2y':740,'5y':1830,'max':9999 }
     const cutoff = new Date()
@@ -579,7 +647,11 @@ async function getAVSummary(symbol, keys = {}) {
   try {
     const url = `https://www.alphavantage.co/query?function=OVERVIEW&symbol=${encodeURIComponent(symbol)}&apikey=${key}`
     const d = await apiFetch(url, 12000)
-    if (!d?.Symbol) return null
+    if (!d?.Symbol) {
+      const note = d?.['Note'] || d?.['Information'] || d?.['Error Message'] || JSON.stringify(d)?.slice(0, 200)
+      console.warn(`[AV] summary no-symbol for ${symbol}:`, note)
+      return null
+    }
     const p = (field) => { const v = parseFloat(d[field]); return isNaN(v) ? null : v }
     const i = (field) => { const v = parseInt(d[field]);   return isNaN(v) ? null : v }
     console.log(`[AV] summary OK: ${symbol}`)
@@ -851,22 +923,32 @@ app.get('/api/chart', async (req, res) => {
   const { symbol, interval = '1d', range = '1y' } = req.query
   if (!symbol) return res.status(400).json({ error: 'symbol required' })
   const keys = extractKeys(req)
+
+  // Serve from cache when available (15-min TTL)
+  const cacheKey = `chart:${symbol}:${interval}:${range}`
+  const cached = cacheGet(cacheKey)
+  if (cached) return res.json(cached)
+
   try {
     // 1st: AISA — cloud-friendly Yahoo Finance proxy
     const aisa = await getAISAChart(symbol, interval, range, keys).catch(() => null)
-    if (aisa) { console.log('[chart] AISA:', symbol); return res.json(aisa) }
+    if (aisa) { console.log('[chart] AISA:', symbol); cacheSet(cacheKey, aisa); return res.json(aisa) }
 
     // 2nd: Finnhub candles
     const fh = await getFinnhubChart(symbol, interval, range, keys)
-    if (fh) return res.json(fh)
+    if (fh) { cacheSet(cacheKey, fh); return res.json(fh) }
 
     // 3rd: FMP historical
     const fmp = await getFMPChart(symbol, interval, range, keys)
-    if (fmp) return res.json(fmp)
+    if (fmp) { cacheSet(cacheKey, fmp); return res.json(fmp) }
 
-    // 4th: Alpha Vantage (daily only, 25 req/day free tier)
+    // 4th: Stooq (free, no key, works from cloud — daily/weekly/monthly only)
+    const stooq = await getStooqChart(symbol, interval, range)
+    if (stooq) { cacheSet(cacheKey, stooq); return res.json(stooq) }
+
+    // 5th: Alpha Vantage (25 req/day free tier — last resort)
     const av = await getAVChart(symbol, interval, range, keys)
-    if (av) return res.json(av)
+    if (av) { cacheSet(cacheKey, av); return res.json(av) }
 
     res.status(502).json({ chart: { result: null, error: { code: 'unavailable', description: 'No market data provider returned data' } } })
   } catch (e) {
