@@ -932,13 +932,36 @@ app.get('/health', async (_req, res) => {
   res.json({ ok: true, db: dbOk, demoMode, aisa: !!AISA_KEY(), finnhub: !!FH_KEY(), fmp: !!FMP_KEY(), av: !!avKey, td: !!tdKey, tdDemo: !tdKey, ts: Date.now() })
 })
 
+// Extract last price from chart cache (populated by /api/chart calls — 15-min TTL)
+// Used as a fast quote source before hitting rate-limited external APIs
+function getPriceFromChartCache(symbol) {
+  for (const range of ['2d','5d','1mo','3mo','1y']) {
+    const chart = cacheGet(`chart:${symbol}:1d:${range}`)
+    const price = chart?.chart?.result?.[0]?.meta?.regularMarketPrice
+    if (price != null) return price
+  }
+  return null
+}
+
 /* ── Quote (batch) ─────────────────────────────── */
 app.get('/api/quote', async (req, res) => {
-  const symbols = (req.query.symbols || '').split(',').filter(Boolean)
+  const symbols = (req.query.symbols || '').split(',').map(s => s.trim().toUpperCase()).filter(Boolean)
   if (!symbols.length) return res.status(400).json({ error: 'symbols required' })
   const keys = extractKeys(req)
   try {
-    // 1st: AISA — cloud-friendly, Yahoo Finance data via proxy
+    // 0th: chart-price cache — free, instant, covers any symbol whose chart was recently loaded
+    const fromCache = symbols.map(sym => {
+      const p = getPriceFromChartCache(sym)
+      if (p == null) return null
+      const ck = cacheGet(`aisaq:${sym}`)  // use AISA quote if available (has more fields)
+      return ck || { symbol: sym, shortName: sym, regularMarketPrice: p }
+    })
+    if (fromCache.every(r => r !== null)) {
+      console.log('[quote] all from chart-price cache:', symbols.join(','))
+      return res.json({ quoteResponse: { result: fromCache } })
+    }
+
+    // 1st: AISA — serial requests, 200ms apart (respects ~5 req/s limit)
     const aisa = await getAISAQuotes(symbols, keys).catch(() => null)
     if (aisa?.some(r => r.regularMarketPrice != null))
       return res.json({ quoteResponse: { result: aisa } })
@@ -953,17 +976,22 @@ app.get('/api/quote', async (req, res) => {
     if (fmp?.some(r => r.regularMarketPrice != null))
       return res.json({ quoteResponse: { result: fmp } })
 
-    // 4th: Alpha Vantage (free tier, 5 req/min — last resort)
+    // 4th: Alpha Vantage (free tier, 25 req/day)
     const av = await getAVQuotes(symbols, keys)
     if (av?.some(r => r.regularMarketPrice != null))
       return res.json({ quoteResponse: { result: av } })
 
-    // 5th: Twelve Data (single-symbol, demo key covers major US tickers)
+    // 5th: Twelve Data (demo key or user key)
     const tdResults = await Promise.all(symbols.map(s => getTwelveDataQuote(s, keys).catch(() => null)))
     if (tdResults.some(r => r?.regularMarketPrice != null))
       return res.json({ quoteResponse: { result: tdResults.map((r, i) => r || { symbol: symbols[i], regularMarketPrice: null }) } })
 
-    res.json({ quoteResponse: { result: symbols.map(s => ({ symbol: s, regularMarketPrice: null })) } })
+    // Last: merge chart-cache prices for symbols we have, null for the rest
+    const merged = symbols.map((sym, i) => {
+      const p = getPriceFromChartCache(sym)
+      return p != null ? { symbol: sym, shortName: sym, regularMarketPrice: p } : { symbol: sym, regularMarketPrice: null }
+    })
+    return res.json({ quoteResponse: { result: merged } })
   } catch (e) {
     res.json({ quoteResponse: { result: symbols.map(s => ({ symbol: s, regularMarketPrice: null })) } })
   }
@@ -981,25 +1009,36 @@ app.get('/api/chart', async (req, res) => {
   if (cached) return res.json(cached)
 
   try {
+    // Helper: cache chart result + warm the per-symbol price cache for /api/quote
+    const saveChart = (data, provider) => {
+      cacheSet(cacheKey, data)
+      const price = data?.chart?.result?.[0]?.meta?.regularMarketPrice
+      if (price != null && !cacheGet(`aisaq:${symbol}`)) {
+        cacheSet(`aisaq:${symbol}`, { symbol, shortName: symbol, regularMarketPrice: price })
+      }
+      console.log(`[chart] ${provider}: ${symbol}`)
+      return data
+    }
+
     // 1st: AISA — cloud-friendly Yahoo Finance proxy
     const aisa = await getAISAChart(symbol, interval, range, keys).catch(() => null)
-    if (aisa) { console.log('[chart] AISA:', symbol); cacheSet(cacheKey, aisa); return res.json(aisa) }
+    if (aisa) return res.json(saveChart(aisa, 'AISA'))
 
     // 2nd: Finnhub candles
     const fh = await getFinnhubChart(symbol, interval, range, keys)
-    if (fh) { cacheSet(cacheKey, fh); return res.json(fh) }
+    if (fh) return res.json(saveChart(fh, 'Finnhub'))
 
     // 3rd: FMP historical
     const fmp = await getFMPChart(symbol, interval, range, keys)
-    if (fmp) { cacheSet(cacheKey, fmp); return res.json(fmp) }
+    if (fmp) return res.json(saveChart(fmp, 'FMP'))
 
     // 4th: Twelve Data (800 req/day free tier; demo key covers major US symbols)
     const td = await getTwelveDataChart(symbol, interval, range, keys)
-    if (td) { cacheSet(cacheKey, td); return res.json(td) }
+    if (td) return res.json(saveChart(td, 'TwelveData'))
 
     // 5th: Alpha Vantage (25 req/day free tier — last resort)
     const av = await getAVChart(symbol, interval, range, keys)
-    if (av) { cacheSet(cacheKey, av); return res.json(av) }
+    if (av) return res.json(saveChart(av, 'AV'))
 
     res.status(502).json({ chart: { result: null, error: { code: 'unavailable', description: 'No market data provider returned data' } } })
   } catch (e) {
