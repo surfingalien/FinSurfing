@@ -12,9 +12,21 @@ import {
   Sparkles, RefreshCw, ChevronDown, ChevronUp, AlertTriangle,
   Target, Zap, Activity, Clock, CheckCircle2, Search,
   Bookmark, BookmarkCheck, Download, X, DollarSign,
+  Cpu, HeartPulse, Zap as ZapEnergy, LineChart, Bitcoin,
 } from 'lucide-react'
 import { useAIWatchlist } from '../../hooks/useAIWatchlist'
 import { exportAnalysisToPDF } from '../../utils/pdfExport'
+
+/* ── scan mode definitions ────────────────────────────────── */
+const SCAN_MODES = [
+  { id: 'broad',      label: 'Broad Market',  icon: Globe,      color: 'text-mint-400',    bg: 'bg-mint-500/15',    border: 'border-mint-500/30'    },
+  { id: 'tech',       label: 'Tech & AI',     icon: Cpu,        color: 'text-blue-400',    bg: 'bg-blue-500/15',    border: 'border-blue-500/30'    },
+  { id: 'finance',    label: 'Finance',       icon: BarChart2,  color: 'text-amber-400',   bg: 'bg-amber-500/15',   border: 'border-amber-500/30'   },
+  { id: 'healthcare', label: 'Healthcare',    icon: HeartPulse, color: 'text-rose-400',    bg: 'bg-rose-500/15',    border: 'border-rose-500/30'    },
+  { id: 'energy',     label: 'Energy & Ind.', icon: ZapEnergy,  color: 'text-orange-400',  bg: 'bg-orange-500/15',  border: 'border-orange-500/30'  },
+  { id: 'etfs',       label: 'ETFs',          icon: LineChart,  color: 'text-purple-400',  bg: 'bg-purple-500/15',  border: 'border-purple-500/30'  },
+  { id: 'crypto',     label: 'Crypto',        icon: Bitcoin,    color: 'text-yellow-400',  bg: 'bg-yellow-500/15',  border: 'border-yellow-500/30'  },
+]
 
 /* ── helpers ──────────────────────────────────────────────── */
 function getApiKeyHeaders() {
@@ -332,11 +344,12 @@ function SymbolSearchInput({ value, onChange, disabled }) {
 
 /* ── Main view ────────────────────────────────────────────── */
 export default function AIBrainView({ portfolio, onAnalyze }) {
-  const [analysis,     setAnalysis]     = useState(null)
-  const [loading,      setLoading]      = useState(false)
-  const [error,        setError]        = useState(null)
-  const [horizon,      setHorizon]      = useState('6m')
-  const [activeAgent,  setActiveAgent]  = useState(-1)
+  const [analysis,      setAnalysis]      = useState(null)
+  const [loading,       setLoading]       = useState(false)
+  const [error,         setError]         = useState(null)
+  const [horizon,       setHorizon]       = useState('6m')
+  const [scanMode,      setScanMode]      = useState('broad')
+  const [activeAgent,   setActiveAgent]   = useState(-1)
   const [customSymbols, setCustomSymbols] = useState('')
 
   const holdings = portfolio?.positions?.map(p => p.symbol) ?? []
@@ -358,9 +371,10 @@ export default function AIBrainView({ portfolio, onAnalyze }) {
     }, 1800)
 
     try {
-      const body = { horizon, holdings }
+      const body = { horizon, holdings, scanMode }
       if (customSymbols.trim()) {
         body.symbols = parseSymbols(customSymbols)
+        delete body.scanMode  // custom symbols override scan mode
       }
       const res  = await fetch('/api/ai-brain/analyze', {
         method:  'POST',
@@ -377,7 +391,7 @@ export default function AIBrainView({ portfolio, onAnalyze }) {
       setActiveAgent(-1)
       setLoading(false)
     }
-  }, [horizon, holdings, customSymbols])
+  }, [horizon, holdings, customSymbols, scanMode])
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -435,6 +449,36 @@ export default function AIBrainView({ portfolio, onAnalyze }) {
           </button>
         </div>
       </div>
+
+      {/* ── Scan mode selector ── */}
+      {!customSymbols.trim() && (
+        <div className="flex gap-1.5 overflow-x-auto pb-0.5 scrollbar-hide">
+          {SCAN_MODES.map(m => {
+            const Icon = m.icon
+            const active = scanMode === m.id
+            return (
+              <button
+                key={m.id}
+                onClick={() => setScanMode(m.id)}
+                disabled={loading}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border whitespace-nowrap transition-all shrink-0 disabled:opacity-40 ${
+                  active
+                    ? `${m.bg} ${m.color} ${m.border}`
+                    : 'bg-white/[0.03] text-slate-400 border-white/[0.07] hover:text-white'
+                }`}
+              >
+                <Icon className="w-3 h-3" />
+                {m.label}
+              </button>
+            )
+          })}
+        </div>
+      )}
+      {customSymbols.trim() && (
+        <div className="text-[11px] text-slate-500 px-1">
+          <span className="text-amber-400 font-medium">Custom symbols active</span> — scan mode overridden. Clear the search to use scan modes.
+        </div>
+      )}
 
       {/* ── Symbol search ── */}
       <SymbolSearchInput value={customSymbols} onChange={setCustomSymbols} disabled={loading} />

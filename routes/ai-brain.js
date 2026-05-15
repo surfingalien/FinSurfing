@@ -3,14 +3,11 @@
  * routes/ai-brain.js
  *
  * POST /api/ai-brain/analyze
- * body: { symbols?, horizon?, holdings? }
+ * body: { symbols?, scanMode?, horizon?, holdings? }
  *
- * 1. Fetches live market data (price, change, volume, P/E, 52-week range)
- *    for the universe via AISA → Finnhub → FMP cascade using the user's
- *    x-aisa-key / x-finnhub-key headers.
- * 2. Passes that real snapshot to Claude claude-sonnet-4-6 which runs as
- *    5 specialized agents (Fundamental, Technical, Sentiment, Macro, Risk)
- *    + a Supervisor, producing ranked buy recommendations.
+ * scanMode selects from SCAN_UNIVERSES; custom symbols override it entirely.
+ * All per-stock analysis fields are hard-capped at 15 words to keep output
+ * well inside the 8 192-token limit and prevent JSON truncation.
  */
 
 const express   = require('express')
@@ -24,42 +21,60 @@ const brainLimit = rateLimit({
   message: { error: 'Too many AI Brain requests — wait a few minutes' },
 })
 
-const DEFAULT_UNIVERSE = [
-  // Stocks (12)
-  'NVDA', 'MSFT', 'AAPL', 'AMZN', 'GOOGL', 'META',
-  'TSLA', 'JPM', 'LLY', 'CRWD', 'PLTR', 'AVGO',
-  // ETFs (4)
-  'SPY', 'QQQ', 'GLD', 'ARKK',
-  // Crypto (4)
-  'BTC-USD', 'ETH-USD', 'SOL-USD', 'BNB-USD',
-]
+// ── Curated universe per scan mode (20 symbols each) ──────────────────────────
+const SCAN_UNIVERSES = {
+  broad: [
+    'NVDA','MSFT','AAPL','AMZN','GOOGL','META','TSLA','JPM','LLY','CRWD',
+    'PLTR','AVGO','SPY','QQQ','GLD','ARKK','BTC-USD','ETH-USD','SOL-USD','BNB-USD',
+  ],
+  tech: [
+    'NVDA','MSFT','AAPL','GOOGL','META','AMZN','AMD','AVGO','CRM','ADBE',
+    'SNOW','PLTR','CRWD','ANET','TSLA','SMCI','ARM','INTC','QCOM','MU',
+  ],
+  finance: [
+    'JPM','BAC','WFC','GS','MS','V','MA','BRK-B','SCHW','AXP',
+    'C','BLK','KKR','APO','SPGI','ICE','CME','PGR','CB','MET',
+  ],
+  healthcare: [
+    'LLY','UNH','JNJ','ABBV','MRK','PFE','AMGN','ISRG','VRTX','REGN',
+    'BMY','MRNA','CVS','CI','HUM','MDT','ABT','TMO','DHR','BSX',
+  ],
+  energy: [
+    'XOM','CVX','COP','SLB','CAT','DE','HON','RTX','GE','BA',
+    'UPS','LMT','NEE','DUK','AMT','WM','PLD','WELL','O','PSA',
+  ],
+  etfs: [
+    'SPY','QQQ','GLD','TLT','IWM','VTI','ARKK','XLK','XLE','XLF',
+    'XLV','XLI','XLY','AGG','HYG','EEM','EFA','VNQ','XLP','IBIT',
+  ],
+  crypto: [
+    'BTC-USD','ETH-USD','SOL-USD','BNB-USD','ADA-USD','DOGE-USD','XRP-USD',
+    'AVAX-USD','DOT-USD','LINK-USD','MATIC-USD','UNI-USD',
+  ],
+}
 
 // Extract AISA/Finnhub/FMP headers forwarded from the browser
 function fwdKeys(req) {
   const h = {}
-  for (const k of ['x-aisa-key', 'x-finnhub-key', 'x-fmp-key', 'x-td-key', 'x-av-key']) {
+  for (const k of ['x-aisa-key','x-finnhub-key','x-fmp-key','x-td-key','x-av-key']) {
     if (req.headers[k]) h[k] = req.headers[k]
   }
   return h
 }
 
-// Format a quote object into a compact one-liner for the prompt
+// Format a quote into a compact one-liner (kept short to save prompt tokens)
 function fmtQuote(q) {
   const chg  = q.regularMarketChangePercent
   const sign = chg >= 0 ? '+' : ''
-  const vol  = q.regularMarketVolume
-  const cap  = q.marketCap
   const pe   = q.trailingPE
   const hi   = q.fiftyTwoWeekHigh
   const lo   = q.fiftyTwoWeekLow
-  const eps  = q.epsTrailingTwelveMonths
+  const cap  = q.marketCap
   return (
-    `${q.symbol}: $${q.regularMarketPrice?.toFixed(2)} (${sign}${chg?.toFixed(2)}% today)` +
-    ` | Vol=${vol ? (vol / 1e6).toFixed(1) + 'M' : 'N/A'}` +
-    ` | MktCap=${cap ? '$' + (cap / 1e9).toFixed(1) + 'B' : 'N/A'}` +
-    ` | P/E=${pe ? pe.toFixed(1) : 'N/A'}` +
-    ` | EPS TTM=${eps ? '$' + eps.toFixed(2) : 'N/A'}` +
-    ` | 52w ${lo?.toFixed(0)}–${hi?.toFixed(0)}`
+    `${q.symbol}: $${q.regularMarketPrice?.toFixed(2)} (${sign}${chg?.toFixed(2)}%)` +
+    ` MktCap=${cap ? '$' + (cap / 1e9).toFixed(0) + 'B' : 'N/A'}` +
+    ` P/E=${pe ? pe.toFixed(1) : 'N/A'}` +
+    ` 52w ${lo?.toFixed(0)}-${hi?.toFixed(0)}`
   )
 }
 
@@ -68,129 +83,109 @@ router.post('/analyze', brainLimit, async (req, res) => {
   if (!apiKey) return res.status(503).json({ error: 'AI service not configured (ANTHROPIC_API_KEY missing)' })
 
   const {
-    symbols  = DEFAULT_UNIVERSE,
+    symbols,
+    scanMode = 'broad',
     horizon  = '6m',
     holdings = [],
   } = req.body
 
-  if (!Array.isArray(symbols) || !symbols.length)
-    return res.status(400).json({ error: 'symbols must be a non-empty array' })
-  if (!['3m', '6m', '12m'].includes(horizon))
+  if (!['3m','6m','12m'].includes(horizon))
     return res.status(400).json({ error: 'horizon must be 3m, 6m, or 12m' })
 
-  const universe = symbols.slice(0, 20)
+  // Custom symbols override scan mode; otherwise use the named universe
+  const baseList = (symbols?.length && Array.isArray(symbols))
+    ? symbols.map(s => String(s).toUpperCase().replace(/[^A-Z0-9.-]/g, '')).filter(Boolean)
+    : (SCAN_UNIVERSES[scanMode] || SCAN_UNIVERSES.broad)
+
+  const universe    = [...new Set(baseList)].slice(0, 20)
   const holdingStr  = holdings.length ? holdings.join(', ') : 'none'
   const horizonLabel = { '3m': '3-month', '6m': '6-month', '12m': '12-month' }[horizon]
 
-  // ── Step 1: fetch live market data via AISA / Finnhub ──────────────────────
+  // ── Step 1: fetch live quotes ──────────────────────────────────────────────
   let marketSnippet = ''
   let liveQuotes    = []
   try {
-    const port   = process.env.PORT || 3001
-    const r      = await fetch(
+    const port = process.env.PORT || 3001
+    const r    = await fetch(
       `http://127.0.0.1:${port}/api/quote?symbols=${universe.join(',')}`,
       { headers: fwdKeys(req), signal: AbortSignal.timeout(30_000) }
     )
-    const qd     = await r.json()
-    liveQuotes   = qd?.quoteResponse?.result ?? []
+    const qd = await r.json()
+    liveQuotes = qd?.quoteResponse?.result ?? []
   } catch (e) {
-    console.warn('[ai-brain] Quote fetch failed, falling back to knowledge-only:', e.message)
+    console.warn('[ai-brain] Quote fetch failed, knowledge-only mode:', e.message)
   }
 
-  if (liveQuotes.length > 0) {
-    marketSnippet =
-      '\n\nLIVE MARKET SNAPSHOT — use this real data as primary input for each agent:\n' +
-      liveQuotes.map(fmtQuote).join('\n')
-  } else {
-    marketSnippet =
-      '\n\nNote: Live market data unavailable (AISA/Finnhub keys not configured). ' +
-      'Base your analysis on your training knowledge of these stocks as of today.'
-  }
+  marketSnippet = liveQuotes.length > 0
+    ? '\n\nLIVE SNAPSHOT (use as primary data):\n' + liveQuotes.map(fmtQuote).join('\n')
+    : '\n\nNote: No live data available — use training knowledge.'
 
-  // ── Step 2: build multi-agent Claude prompt ────────────────────────────────
-  const prompt = `You are a collaborative AI investment analysis system composed of 5 specialized agents and a supervisor. Analyze the following stock universe and produce ranked buy recommendations for a ${horizonLabel} holding period. Today is mid-May 2026.
+  // ── Step 2: build prompt with STRICT length limits to avoid truncation ─────
+  const prompt = `You are a 5-agent investment AI (Fundamental, Technical, Sentiment, Macro, Risk + Supervisor).
+Analyze this universe for a ${horizonLabel} horizon. Today is mid-May 2026.
 
 Universe: ${universe.join(', ')}
-Portfolio holdings to avoid: ${holdingStr}
+Avoid holdings: ${holdingStr}
 ${marketSnippet}
 
-Each agent analyzes through their specialized lens:
+⚠️ STRICT TOKEN BUDGET — every text field must stay within the word limit shown or the response will be truncated and fail.
 
-AGENT 1 — FUNDAMENTAL ANALYST
-Use the live P/E, EPS, and market cap data above. Evaluate earnings growth trajectory, revenue quality, free cash flow, competitive moat, margin expansion, and balance sheet strength. Flag if any stock looks overvalued vs peers.
-
-AGENT 2 — TECHNICAL ANALYST
-Use today's price change, volume, and 52-week range. Assess where each stock sits relative to its 52w high/low, momentum, trend strength, breakout setups, and volume confirmation. Stocks near 52w lows with high volume may be oversold; near 52w highs with strong volume may show momentum.
-
-AGENT 3 — SENTIMENT & NEWS ANALYST
-Use recent earnings catalysts, analyst upgrades/downgrades, institutional flows, and short interest. Factor in how today's price movement compares to recent patterns for sentiment signals.
-
-AGENT 4 — MACRO ECONOMIST
-Assess sector macro tailwinds/headwinds, interest rate sensitivity, AI/tech cycle positioning, geopolitical exposure, and regulatory landscape for each stock's sector.
-
-AGENT 5 — RISK MANAGER
-Evaluate downside risk using the 52w range (proximity to lows = potential support), market cap (liquidity), P/E vs sector (valuation risk), and beta. Recommend stop-loss levels relative to current price.
-
-SUPERVISOR synthesizes all agents into final ranked picks with realistic return targets.
-
-Respond ONLY with this JSON (no markdown, no prose outside JSON):
+Respond ONLY with valid JSON (no markdown, no text outside the JSON object):
 {
-  "marketRegime": "string",
-  "macroOutlook": "2-3 sentence macro outlook for this horizon",
-  "agentConsensusTheme": "1 sentence — what all 5 agents agree on",
-  "dataSource": "live" or "knowledge",
+  "marketRegime": "≤6 words",
+  "macroOutlook": "≤25 words",
+  "agentConsensusTheme": "≤20 words",
+  "dataSource": "live|knowledge",
   "rankedStocks": [
     {
       "rank": 1,
-      "symbol": "string",
-      "name": "string",
-      "sector": "string",
+      "symbol": "TICKER",
+      "name": "Full company name",
+      "sector": "Sector",
       "type": "Stock|ETF|Crypto",
-      "currentPrice": 0,
+      "currentPrice": 0.0,
       "compositeScore": 0,
-      "confidence": "High",
-      "agentVerdict": "Strong Buy",
+      "confidence": "High|Medium|Low",
+      "agentVerdict": "Strong Buy|Buy|Moderate Buy",
       "targetReturn": 0,
       "stopLoss": 0,
-      "entryPrice": 0,
-      "takeProfitPrice": 0,
-      "stopLossPrice": 0,
+      "entryPrice": 0.0,
+      "takeProfitPrice": 0.0,
+      "stopLossPrice": 0.0,
       "fundamentalScore": 0,
       "technicalScore": 0,
       "sentimentScore": 0,
       "macroScore": 0,
       "riskScore": 0,
-      "fundamentalAnalysis": "string",
-      "technicalAnalysis": "string",
-      "sentimentAnalysis": "string",
-      "macroAnalysis": "string",
-      "riskNote": "string",
-      "supervisorSynthesis": "string",
-      "keyDrivers": ["string", "string", "string"],
-      "dissentingView": "string or null"
+      "fundamentalAnalysis": "≤15 words on valuation/earnings",
+      "technicalAnalysis": "≤15 words on price/momentum",
+      "sentimentAnalysis": "≤15 words on news/flow",
+      "macroAnalysis": "≤15 words on sector/macro",
+      "riskNote": "≤15 words on downside/risk",
+      "supervisorSynthesis": "≤25 words summary",
+      "keyDrivers": ["≤5 words","≤5 words","≤5 words"],
+      "dissentingView": "≤12 words or null"
     }
   ],
   "agentNotes": {
-    "fundamentalAnalyst": "string",
-    "technicalAnalyst": "string",
-    "sentimentAnalyst": "string",
-    "macroEconomist": "string",
-    "riskManager": "string"
+    "fundamentalAnalyst": "≤20 words market-wide fundamental view",
+    "technicalAnalyst": "≤20 words market-wide technical view",
+    "sentimentAnalyst": "≤20 words market-wide sentiment view",
+    "macroEconomist": "≤20 words macro outlook",
+    "riskManager": "≤20 words key risks"
   }
 }
 
 Rules:
-- Include exactly 6 top picks; prefer symbols NOT already in holdings
-- compositeScore: weighted average (fundamental 25%, technical 20%, sentiment 15%, macro 20%, risk 20%)
-- All scores 0-100; riskScore: higher = safer (inverse of risk)
-- targetReturn and stopLoss: realistic positive numbers (percent)
-- entryPrice: specific dollar price to enter (at or just below current price — a limit order level)
-- takeProfitPrice: specific dollar price to take profit (currentPrice × (1 + targetReturn/100))
-- stopLossPrice: specific dollar price for stop loss (currentPrice × (1 - stopLoss/100)); base on 52w low proximity
-- agentVerdict: "Strong Buy" | "Buy" | "Moderate Buy"
-- confidence: "High" | "Medium" | "Low"
-- currentPrice: fill from live snapshot if available, else 0
-- dataSource: set "live" if live snapshot was provided, else "knowledge"`
+- Include exactly 5 top picks; prefer symbols NOT already in holdings
+- compositeScore = weighted avg (fundamental 25%, technical 20%, sentiment 15%, macro 20%, risk 20%)
+- All scores 0-100; riskScore: higher = safer
+- entryPrice: limit order price at or slightly below current price
+- takeProfitPrice: entryPrice × (1 + targetReturn/100)
+- stopLossPrice: entryPrice × (1 - stopLoss/100)
+- currentPrice: from live snapshot if available, else estimate
+- dataSource: "live" if snapshot provided, else "knowledge"
+- STRICTLY respect the ≤N word limits — exceeding them causes JSON truncation`
 
   // ── Groq fallback helper ───────────────────────────────────────────────────
   async function callGroq(text) {
@@ -216,7 +211,7 @@ Rules:
 
   // ── Step 3: run Claude (Groq fallback on overloaded) ──────────────────────
   try {
-    let raw = ''
+    let raw     = ''
     let llmUsed = 'claude'
     try {
       const client = new Anthropic({ apiKey })
@@ -237,28 +232,36 @@ Rules:
       }
     }
 
-    const match = raw.match(/\{[\s\S]*\}/)
-    if (!match) {
-      console.error('[ai-brain] Non-JSON response:', raw.slice(0, 200))
-      return res.status(500).json({ error: 'Failed to parse AI Brain analysis' })
+    // Robust JSON extraction: try direct parse first, then regex match
+    let data
+    try {
+      data = JSON.parse(raw)
+    } catch {
+      const m = raw.match(/\{[\s\S]*\}/)
+      if (!m) {
+        console.error('[ai-brain] No JSON found in response. First 300 chars:', raw.slice(0, 300))
+        return res.status(500).json({ error: 'AI Brain returned no parseable JSON — try again' })
+      }
+      try {
+        data = JSON.parse(m[0])
+      } catch (parseErr) {
+        console.error('[ai-brain] JSON parse failed (likely truncated). raw length:', raw.length)
+        return res.status(500).json({ error: 'AI Brain response was truncated — reduce symbols or try again' })
+      }
     }
 
-    const data = JSON.parse(match[0])
     if (!Array.isArray(data.rankedStocks) || !data.rankedStocks.length)
-      return res.status(500).json({ error: 'Empty analysis from AI Brain' })
+      return res.status(500).json({ error: 'AI Brain returned no ranked stocks — try again' })
 
     return res.json({
       ...data,
       horizon,
+      scanMode,
       processedAt:      new Date().toISOString(),
       universeAnalyzed: universe,
       liveDataSymbols:  liveQuotes.map(q => q.symbol),
       llmUsed,
-      agentsUsed: [
-        'Fundamental Analyst', 'Technical Analyst',
-        'Sentiment Agent', 'Macro Economist',
-        'Risk Manager', 'Supervisor',
-      ],
+      agentsUsed: ['Fundamental Analyst','Technical Analyst','Sentiment Agent','Macro Economist','Risk Manager','Supervisor'],
     })
   } catch (err) {
     console.error('[ai-brain]', err.message)
