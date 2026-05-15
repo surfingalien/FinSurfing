@@ -69,18 +69,41 @@ Respond ONLY with a JSON object — no markdown, no explanation, just the JSON:
 }`
 
   try {
-    const client = new Anthropic({ apiKey })
-    const msg = await client.messages.create({
-      model:      'claude-sonnet-4-6',
-      max_tokens: 2500,
-      messages:   [{ role: 'user', content: prompt }],
-    })
+    let raw = ''
+    try {
+      const client = new Anthropic({ apiKey })
+      const msg = await client.messages.create({
+        model:      'claude-sonnet-4-6',
+        max_tokens: 2500,
+        messages:   [{ role: 'user', content: prompt }],
+      })
+      raw = msg.content?.[0]?.text || ''
+    } catch (claudeErr) {
+      const isOverloaded = claudeErr.status === 529 || claudeErr.message?.includes('overloaded')
+      if (isOverloaded && process.env.GROQ_API_KEY) {
+        console.warn('[recommendations] Claude overloaded, falling back to Groq')
+        const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.GROQ_API_KEY}` },
+          body:    JSON.stringify({
+            model:      'llama-3.3-70b-versatile',
+            max_tokens: 2500,
+            messages:   [{ role: 'user', content: prompt }],
+          }),
+          signal: AbortSignal.timeout(60_000),
+        })
+        if (!r.ok) throw new Error(`Groq API error ${r.status}`)
+        const d = await r.json()
+        raw = d.choices?.[0]?.message?.content || ''
+      } else {
+        throw claudeErr
+      }
+    }
 
-    const raw = msg.content?.[0]?.text || ''
-    // Extract JSON even if Claude wraps it in markdown fences
+    // Extract JSON even if model wraps it in markdown fences
     const match = raw.match(/\{[\s\S]*\}/)
     if (!match) {
-      console.error('[recommendations] Claude non-JSON response:', raw.slice(0, 200))
+      console.error('[recommendations] Non-JSON response:', raw.slice(0, 200))
       return res.status(500).json({ error: 'Failed to parse AI recommendations' })
     }
 

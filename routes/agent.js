@@ -101,6 +101,53 @@ async function* streamGemini(model, systemPrompt, messages, signal) {
   }
 }
 
+// ── Groq streaming helper (OpenAI-compatible SSE) ────────────────────────────
+async function* streamGroq(systemPrompt, messages, signal) {
+  const key = process.env.GROQ_API_KEY
+  if (!key) throw new Error('GROQ_API_KEY is not set')
+
+  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+    body: JSON.stringify({
+      model:      'llama-3.3-70b-versatile',
+      max_tokens: 4096,
+      temperature: 0.7,
+      stream:     true,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        ...messages,
+      ],
+    }),
+    signal,
+  })
+  if (!res.ok) {
+    const err = await res.text()
+    throw new Error(`Groq API error ${res.status}: ${err.slice(0, 200)}`)
+  }
+
+  const reader  = res.body.getReader()
+  const decoder = new TextDecoder()
+  let buf = ''
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buf += decoder.decode(value, { stream: true })
+    const lines = buf.split('\n')
+    buf = lines.pop()
+    for (const line of lines) {
+      if (!line.startsWith('data:')) continue
+      const payload = line.slice(5).trim()
+      if (!payload || payload === '[DONE]') continue
+      try {
+        const obj  = JSON.parse(payload)
+        const text = obj?.choices?.[0]?.delta?.content
+        if (text) yield text
+      } catch {}
+    }
+  }
+}
+
 // ── Tool definitions ──────────────────────────────────────────────────────────
 
 const TOOLS = [
@@ -505,6 +552,30 @@ router.post('/analyze', async (req, res) => {
     send('error', { message: 'Agent reached maximum iterations.' })
     res.end()
   } catch (err) {
+    const isOverloaded = err.status === 529 || err.message?.includes('overloaded')
+    if (isOverloaded && process.env.GROQ_API_KEY) {
+      console.warn('[Agent] Claude overloaded, falling back to Groq')
+      try {
+        send('delta', { text: '\n\n*[Claude is busy — switching to Groq Llama 3.3...]*\n\n' })
+        const abortCtrl = new AbortController()
+        req.on('close', () => abortCtrl.abort())
+        const msgs = [
+          ...history.slice(-10).map(m => ({ role: m.role, content: m.content })),
+          { role: 'user', content: symbol ? `Analyze ${symbol.toUpperCase()}. ${prompt}` : prompt },
+        ]
+        for await (const text of streamGroq(SYSTEM_PROMPT, msgs, abortCtrl.signal)) {
+          send('delta', { text })
+        }
+        send('done', {})
+        res.end()
+        return
+      } catch (groqErr) {
+        console.error('[Agent/Groq] Error:', groqErr.message)
+        send('error', { message: groqErr.message })
+        res.end()
+        return
+      }
+    }
     console.error('[Agent] Error:', err.message)
     if (!res.headersSent) return res.status(500).json({ error: err.message })
     send('error', { message: err.message })
@@ -522,6 +593,7 @@ router.get('/health', (_req, res) => {
     hasAV:      !!process.env.ALPHA_VANTAGE_API_KEY,
     hasFinnhub: !!process.env.FINNHUB_API_KEY,
     hasGemini:  !!process.env.GEMINI_API_KEY,
+    hasGroq:    !!process.env.GROQ_API_KEY,
     tools:      TOOLS.map(t => t.name),
   })
 })

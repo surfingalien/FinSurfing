@@ -20,12 +20,12 @@ router.use(optionalAuth)
 const DB_MODE = !!process.env.DATABASE_URL
 
 // ── Fetch daily closes via internal /api/chart proxy (Finnhub → FMP) ──────────
-async function fetchCloses(symbol, range = '1y') {
+async function fetchCloses(symbol, range = '1y', fwdHeaders = {}) {
   const port = process.env.PORT || 3001
   try {
     const r    = await fetch(
       `http://localhost:${port}/api/chart?symbol=${encodeURIComponent(symbol)}&interval=1d&range=${range}`,
-      { signal: AbortSignal.timeout(12_000) }
+      { headers: fwdHeaders, signal: AbortSignal.timeout(12_000) }
     )
     const data = await r.json()
     const result = data?.chart?.result?.[0]
@@ -80,6 +80,11 @@ function beta(stockRet, mktRet) {
 // Accepts optional ?symbols=AAPL,MSFT,GOOG query param for manual analysis
 // Falls back to reading from the authenticated user's active portfolio when no symbols provided
 router.get('/portfolio', async (req, res) => {
+  const fwdHeaders = {}
+  for (const h of ['x-aisa-key', 'x-finnhub-key', 'x-fmp-key', 'x-td-key', 'x-av-key']) {
+    if (req.headers[h]) fwdHeaders[h] = req.headers[h]
+  }
+
   const userId = req.user?.userId
 
   let symbols = []
@@ -127,8 +132,8 @@ router.get('/portfolio', async (req, res) => {
 
   // Fetch benchmark + all holdings in parallel
   const [spyData, ...holdingData] = await Promise.all([
-    fetchCloses('SPY', '1y'),
-    ...symsToFetch.map(s => fetchCloses(s, '1y')),
+    fetchCloses('SPY', '1y', fwdHeaders),
+    ...symsToFetch.map(s => fetchCloses(s, '1y', fwdHeaders)),
   ])
 
   const spyRet = dailyReturns(spyData.map(p => p.close))

@@ -173,7 +173,7 @@ Respond ONLY with this JSON (no markdown, no prose outside JSON):
 }
 
 Rules:
-- Include 8 to 10 top picks; prefer symbols NOT already in holdings
+- Include exactly 6 top picks; prefer symbols NOT already in holdings
 - compositeScore: weighted average (fundamental 25%, technical 20%, sentiment 15%, macro 20%, risk 20%)
 - All scores 0-100; riskScore: higher = safer (inverse of risk)
 - targetReturn and stopLoss: realistic positive numbers (percent); base stop-loss on current price proximity to 52w low
@@ -182,16 +182,51 @@ Rules:
 - currentPrice: fill from live snapshot if available, else 0
 - dataSource: set "live" if live snapshot was provided, else "knowledge"`
 
-  // ── Step 3: run Claude ─────────────────────────────────────────────────────
-  try {
-    const client = new Anthropic({ apiKey })
-    const msg = await client.messages.create({
-      model:      'claude-sonnet-4-6',
-      max_tokens: 5000,
-      messages:   [{ role: 'user', content: prompt }],
+  // ── Groq fallback helper ───────────────────────────────────────────────────
+  async function callGroq(text) {
+    const groqKey = process.env.GROQ_API_KEY
+    if (!groqKey) throw new Error('GROQ_API_KEY not configured')
+    const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${groqKey}` },
+      body:    JSON.stringify({
+        model:      'llama-3.3-70b-versatile',
+        max_tokens: 8192,
+        messages:   [{ role: 'user', content: text }],
+      }),
+      signal: AbortSignal.timeout(60_000),
     })
+    if (!r.ok) {
+      const e = await r.text()
+      throw new Error(`Groq API error ${r.status}: ${e.slice(0, 200)}`)
+    }
+    const d = await r.json()
+    return d.choices?.[0]?.message?.content || ''
+  }
 
-    const raw   = msg.content?.[0]?.text || ''
+  // ── Step 3: run Claude (Groq fallback on overloaded) ──────────────────────
+  try {
+    let raw = ''
+    let llmUsed = 'claude'
+    try {
+      const client = new Anthropic({ apiKey })
+      const msg = await client.messages.create({
+        model:      'claude-sonnet-4-6',
+        max_tokens: 8192,
+        messages:   [{ role: 'user', content: prompt }],
+      })
+      raw = msg.content?.[0]?.text || ''
+    } catch (claudeErr) {
+      const isOverloaded = claudeErr.status === 529 || claudeErr.message?.includes('overloaded')
+      if (isOverloaded && process.env.GROQ_API_KEY) {
+        console.warn('[ai-brain] Claude overloaded, falling back to Groq')
+        raw = await callGroq(prompt)
+        llmUsed = 'groq'
+      } else {
+        throw claudeErr
+      }
+    }
+
     const match = raw.match(/\{[\s\S]*\}/)
     if (!match) {
       console.error('[ai-brain] Non-JSON response:', raw.slice(0, 200))
@@ -208,6 +243,7 @@ Rules:
       processedAt:      new Date().toISOString(),
       universeAnalyzed: universe,
       liveDataSymbols:  liveQuotes.map(q => q.symbol),
+      llmUsed,
       agentsUsed: [
         'Fundamental Analyst', 'Technical Analyst',
         'Sentiment Agent', 'Macro Economist',
