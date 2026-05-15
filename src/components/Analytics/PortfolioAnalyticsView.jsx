@@ -204,12 +204,13 @@ export default function PortfolioAnalyticsView({ portfolio }) {
   const inputRef = useRef(null)
   const seededRef = useRef(false)
 
-  // Re-seed whenever portfolio changes (e.g. after initial load)
+  // Re-seed whenever portfolio changes (e.g. after initial load) and trigger analysis
   useEffect(() => {
     if (seededRef.current) return
     if (portfolioSymbols.length > 0) {
       seededRef.current = true
       setManualSymbols(portfolioSymbols)
+      load(portfolioSymbols)
     }
   }, [portfolioSymbols.join(',')])
 

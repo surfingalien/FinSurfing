@@ -42,7 +42,7 @@ const PERIOD_CONFIG = {
 }
 
 /* ── Single recommendation card ─────────────────── */
-function RecCard({ rec, onAnalyze }) {
+function RecCard({ rec, onAnalyze, liveQuote }) {
   const { addStock, removeStock, hasSymbol } = useAIWatchlist()
   const type     = TYPE_CONFIG[rec.type]    || TYPE_CONFIG.Stock
   const risk     = RISK_CONFIG[rec.risk]    || RISK_CONFIG.Medium
@@ -92,6 +92,21 @@ function RecCard({ rec, onAnalyze }) {
           </span>
         </div>
       </div>
+
+      {/* Live market price */}
+      {liveQuote?.price != null && (
+        <div className="flex items-center justify-between text-xs bg-white/[0.03] rounded-lg px-2.5 py-1.5 mb-3 border border-white/[0.05]">
+          <span className="text-slate-500 text-[10px]">Live Price</span>
+          <div className="flex items-center gap-2">
+            <span className="font-mono font-bold text-white text-[11px]">${liveQuote.price.toFixed(2)}</span>
+            {liveQuote.changePct != null && (
+              <span className={`text-[10px] font-mono font-semibold ${liveQuote.changePct >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                {liveQuote.changePct >= 0 ? '+' : ''}{liveQuote.changePct.toFixed(2)}%
+              </span>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Return targets */}
       <div className="grid grid-cols-2 gap-2 mb-3">
@@ -176,6 +191,7 @@ export default function BuySignalsView({ portfolio, onAnalyze }) {
   const [filter,        setFilter]        = useState('all')   // 'all' | 'Stock' | 'ETF' | 'Crypto'
   const [period,        setPeriod]        = useState('all')   // 'all' | '3m' | '6m'
   const [customSymbols, setCustomSymbols] = useState('')
+  const [liveQuotes,    setLiveQuotes]    = useState({})
 
   const holdings = portfolio?.positions?.map(p => p.symbol) ?? []
 
@@ -199,6 +215,23 @@ export default function BuySignalsView({ portfolio, onAnalyze }) {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Failed to get recommendations')
       setRecs(data)
+
+      // Fetch live market prices for all recommended symbols
+      try {
+        const syms = data.recommendations.map(r => r.symbol).join(',')
+        const qRes = await fetch(`/api/quote?symbols=${syms}`, { headers: getApiKeyHeaders() })
+        const qData = await qRes.json()
+        const qMap = {}
+        for (const q of qData?.quoteResponse?.result ?? []) {
+          if (q.regularMarketPrice != null) {
+            qMap[q.symbol] = {
+              price:     q.regularMarketPrice,
+              changePct: q.regularMarketChangePercent ?? null,
+            }
+          }
+        }
+        setLiveQuotes(qMap)
+      } catch { /* live prices are optional */ }
     } catch (e) {
       setError(e.message)
     } finally {
@@ -262,12 +295,21 @@ export default function BuySignalsView({ portfolio, onAnalyze }) {
           type="text"
           value={customSymbols}
           onChange={e => setCustomSymbols(e.target.value.toUpperCase())}
+          onKeyDown={e => e.key === 'Enter' && !loading && customSymbols.trim() && generate()}
           disabled={loading}
-          placeholder="Focus on specific symbols (e.g. NVDA,TSLA,ETH-USD) — leave blank for AI-selected picks"
+          placeholder="Focus on specific symbols (e.g. NVDA,TSLA,ETH-USD) — press Enter or leave blank for AI picks"
           className="flex-1 bg-transparent text-sm text-white placeholder-slate-600 focus:outline-none font-mono disabled:opacity-40"
         />
+        {customSymbols.trim() && !loading && (
+          <button
+            onClick={generate}
+            className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-lg bg-mint-500/20 text-mint-400 border border-mint-500/30 hover:bg-mint-500/30 transition-all font-medium shrink-0"
+          >
+            <Sparkles className="w-3 h-3" /> Analyze
+          </button>
+        )}
         {customSymbols && (
-          <button onClick={() => setCustomSymbols('')} className="text-slate-500 hover:text-slate-300">
+          <button onClick={() => setCustomSymbols('')} disabled={loading} className="text-slate-500 hover:text-slate-300 shrink-0">
             <X className="w-3.5 h-3.5" />
           </button>
         )}
@@ -403,7 +445,7 @@ export default function BuySignalsView({ portfolio, onAnalyze }) {
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
               {displayed.map((rec, i) => (
-                <RecCard key={`${rec.symbol}-${i}`} rec={rec} onAnalyze={onAnalyze} />
+                <RecCard key={`${rec.symbol}-${i}`} rec={rec} onAnalyze={onAnalyze} liveQuote={liveQuotes[rec.symbol]} />
               ))}
             </div>
           )}

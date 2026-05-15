@@ -26,20 +26,19 @@ export default function ScreenerView({ onSelectSymbol }) {
   const [maxPE, setMaxPE] = useState('')
   const [signal, setSignal] = useState('All')
 
-  useEffect(() => {
-    const load = async () => {
-      setLoading(true)
-      try {
-        const symbols = SCREENER_UNIVERSE.map(s => s.symbol)
-        const results = await fetchQuotes(symbols)
-        const map = {}
-        results.forEach(q => { map[q.symbol] = q })
-        setQuotes(map)
-      } catch (e) { console.warn(e) }
-      setLoading(false)
-    }
-    load()
-  }, [])
+  const loadQuotes = async (force = false) => {
+    setLoading(true)
+    try {
+      const symbols = SCREENER_UNIVERSE.map(s => s.symbol)
+      const results = await fetchQuotes(symbols, { force })
+      const map = {}
+      results.forEach(q => { map[q.symbol] = q })
+      setQuotes(map)
+    } catch (e) { console.warn(e) }
+    setLoading(false)
+  }
+
+  useEffect(() => { loadQuotes() }, [])
 
   const enriched = stocks.map(s => ({ ...s, ...(quotes[s.symbol] || {}) }))
 
@@ -74,7 +73,14 @@ export default function ScreenerView({ onSelectSymbol }) {
         <div className="flex items-center gap-2 mb-3">
           <Filter className="w-4 h-4 text-mint-400" />
           <h3 className="text-sm font-semibold text-white">Filters</h3>
-          {loading && <RefreshCw className="w-3.5 h-3.5 animate-spin text-slate-500 ml-auto" />}
+          <button
+            onClick={() => loadQuotes(true)}
+            disabled={loading}
+            className="ml-auto flex items-center gap-1 text-xs text-slate-400 hover:text-white transition-colors disabled:opacity-40"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+            {loading ? 'Loading…' : 'Refresh'}
+          </button>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
           <div>
