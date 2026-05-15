@@ -24,28 +24,37 @@ router.post('/', recLimit, async (req, res) => {
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) return res.status(503).json({ error: 'AI service not configured (ANTHROPIC_API_KEY missing)' })
 
-  const { holdings = [], watchlist = [] } = req.body
-  const holdingStr  = holdings.length  ? holdings.join(', ')  : 'none'
-  const watchStr    = watchlist.length ? watchlist.join(', ') : 'none'
+  const { holdings = [], watchlist = [], focusSymbols = [] } = req.body
+  const holdingStr = holdings.length    ? holdings.join(', ')    : 'none'
+  const focusStr   = focusSymbols.length ? focusSymbols.join(', ') : ''
 
-  const prompt = `You are a senior portfolio strategist. Provide specific actionable buy recommendations for a retail investor.
+  const focusInstructions = focusStr
+    ? `\nFOCUS MODE: Analyze ONLY these specific symbols: ${focusStr}. All recommendations must come from this list.`
+    : ''
 
-Current portfolio holdings: ${holdingStr}
-Watchlist symbols: ${watchStr}
-
-Generate exactly 10 recommendations split across asset classes and time horizons:
+  const countInstructions = focusStr
+    ? `Generate ${Math.min(focusSymbols.length, 10)} recommendations covering the focus symbols above.`
+    : `Generate exactly 10 recommendations split across asset classes and time horizons:
 - 3 Stocks for 3-month holding
 - 2 Stocks for 6-month holding
 - 2 ETFs (any time horizon — mix of 3m and 6m)
 - 2 Cryptocurrencies (any time horizon — mix of 3m and 6m)
-- 1 additional pick of any type you think is compelling
+- 1 additional pick of any type you think is compelling`
+
+  const prompt = `You are a senior portfolio strategist. Provide specific actionable buy recommendations for a retail investor. Today is mid-May 2026.
+
+Current portfolio holdings (avoid overlap): ${holdingStr}${focusInstructions}
+
+${countInstructions}
 
 Rules:
-- Prefer symbols NOT already in the portfolio holdings
 - Use standard tickers (BTC-USD for Bitcoin, ETH-USD for Ethereum, SOL-USD for Solana, etc.)
 - Be realistic: target returns 5–40%, stop-loss 5–15%
-- Diversify across sectors for stocks
+- Diversify across sectors for stocks; include both ETFs and crypto unless focus symbols override
 - Each thesis must be specific, not generic
+- entryPrice: current approximate price or recommended limit entry
+- takeProfitPrice: specific dollar price for profit target (entryPrice × (1 + targetReturn/100))
+- stopLossPrice: specific dollar price for stop loss (entryPrice × (1 - stopLoss/100))
 
 Respond ONLY with a JSON object — no markdown, no explanation, just the JSON:
 {
@@ -58,6 +67,9 @@ Respond ONLY with a JSON object — no markdown, no explanation, just the JSON:
       "sector": "string (for stocks/ETFs) or 'Digital Asset' for crypto",
       "targetReturn": number,
       "stopLoss": number,
+      "entryPrice": number,
+      "takeProfitPrice": number,
+      "stopLossPrice": number,
       "risk": "Low" | "Medium" | "High",
       "thesis": "2-3 sentence specific investment thesis",
       "catalyst": "Primary near-term catalyst",

@@ -25,9 +25,13 @@ const brainLimit = rateLimit({
 })
 
 const DEFAULT_UNIVERSE = [
-  'NVDA', 'MSFT', 'AAPL', 'AMZN', 'GOOGL', 'META', 'AVGO',
-  'TSLA', 'JPM', 'V', 'LLY', 'UNH', 'COST', 'NFLX',
-  'MELI', 'CRWD', 'ANET', 'AMD', 'PLTR', 'ORCL',
+  // Stocks (12)
+  'NVDA', 'MSFT', 'AAPL', 'AMZN', 'GOOGL', 'META',
+  'TSLA', 'JPM', 'LLY', 'CRWD', 'PLTR', 'AVGO',
+  // ETFs (4)
+  'SPY', 'QQQ', 'GLD', 'ARKK',
+  // Crypto (4)
+  'BTC-USD', 'ETH-USD', 'SOL-USD', 'BNB-USD',
 ]
 
 // Extract AISA/Finnhub/FMP headers forwarded from the browser
@@ -141,7 +145,7 @@ Respond ONLY with this JSON (no markdown, no prose outside JSON):
       "symbol": "string",
       "name": "string",
       "sector": "string",
-      "type": "Stock",
+      "type": "Stock|ETF|Crypto",
       "currentPrice": 0,
       "compositeScore": 0,
       "confidence": "High",

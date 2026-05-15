@@ -3,7 +3,8 @@
  * Props: { onAnalyze }  — called with symbol string when user clicks "Analyze"
  */
 
-import { Bookmark, X, TrendingUp, Target, Shield, Brain, Sparkles, Trash2 } from 'lucide-react'
+import { useState, useRef } from 'react'
+import { Bookmark, X, TrendingUp, Target, Shield, Brain, Sparkles, Trash2, Search, Plus } from 'lucide-react'
 import { useAIWatchlist } from '../../hooks/useAIWatchlist'
 
 /* ── helpers ─────────────────────────────────────────────── */
@@ -59,10 +60,18 @@ function SourceBadge({ source }) {
       </span>
     )
   }
+  if (source === 'buy-signals') {
+    return (
+      <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-mint-500/15 text-mint-400 border border-mint-500/25 shrink-0">
+        <Sparkles className="w-2.5 h-2.5" />
+        Buy Signals
+      </span>
+    )
+  }
   return (
-    <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-mint-500/15 text-mint-400 border border-mint-500/25 shrink-0">
-      <Sparkles className="w-2.5 h-2.5" />
-      Buy Signals
+    <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-slate-500/15 text-slate-400 border border-slate-500/25 shrink-0">
+      <Plus className="w-2.5 h-2.5" />
+      Manual
     </span>
   )
 }
@@ -242,9 +251,51 @@ function EmptyState() {
   )
 }
 
+/* ── AddStockRow ──────────────────────────────────────────── */
+function AddStockRow({ onAdd }) {
+  const [val, setVal] = useState('')
+  const inputRef = useRef(null)
+
+  const submit = () => {
+    const syms = val
+      .split(/[,\s]+/)
+      .map(s => s.trim().toUpperCase().replace(/[^A-Z0-9.-]/g, ''))
+      .filter(Boolean)
+    if (!syms.length) return
+    syms.forEach(sym => onAdd({ symbol: sym, addedFrom: 'manual', addedAt: new Date().toISOString() }))
+    setVal('')
+    inputRef.current?.focus()
+  }
+
+  return (
+    <div className="flex items-center gap-2 p-3 rounded-xl bg-white/[0.03] border border-white/[0.08]">
+      <Search className="w-4 h-4 text-slate-500 shrink-0" />
+      <input
+        ref={inputRef}
+        type="text"
+        value={val}
+        onChange={e => setVal(e.target.value.toUpperCase())}
+        onKeyDown={e => e.key === 'Enter' && submit()}
+        placeholder="Add any symbol — stock, ETF, or crypto (e.g. NVDA, SPY, BTC-USD)"
+        className="flex-1 bg-transparent text-sm text-white placeholder-slate-600 focus:outline-none font-mono"
+      />
+      {val && (
+        <button
+          onClick={submit}
+          className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-mint-500/20 text-mint-400 border border-mint-500/30 hover:bg-mint-500/30 transition-all"
+        >
+          <Plus className="w-3 h-3" /> Add
+        </button>
+      )}
+    </div>
+  )
+}
+
+/* ── SourceBadge — extend for manual ─────────────────────── */
+
 /* ── Main view ────────────────────────────────────────────── */
 export default function AIWatchlistView({ onAnalyze }) {
-  const { items, removeStock, clear } = useAIWatchlist()
+  const { items, addStock, removeStock, clear } = useAIWatchlist()
 
   // Sort by addedAt descending (newest first)
   const sorted = [...items].sort((a, b) => {
@@ -265,17 +316,17 @@ export default function AIWatchlistView({ onAnalyze }) {
           <div>
             <h1 className="text-xl font-bold text-white">AI Watchlist</h1>
             <p className="text-xs text-slate-500">
-              Stocks added from AI Brain &amp; Buy Signals recommendations
+              Stocks, ETFs &amp; Crypto from AI Brain, Buy Signals, or added manually
             </p>
           </div>
         </div>
 
         {items.length > 0 && (
           <div className="flex items-center gap-2 shrink-0">
-            <span className="text-xs text-slate-500">{items.length} stock{items.length !== 1 ? 's' : ''}</span>
+            <span className="text-xs text-slate-500">{items.length} item{items.length !== 1 ? 's' : ''}</span>
             <button
               onClick={() => {
-                if (window.confirm('Clear all stocks from your AI Watchlist?')) clear()
+                if (window.confirm('Clear all items from your AI Watchlist?')) clear()
               }}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 transition-all"
             >
@@ -285,6 +336,9 @@ export default function AIWatchlistView({ onAnalyze }) {
           </div>
         )}
       </div>
+
+      {/* ── Add stock row ── */}
+      <AddStockRow onAdd={addStock} />
 
       {/* ── Content ── */}
       {sorted.length === 0 ? (

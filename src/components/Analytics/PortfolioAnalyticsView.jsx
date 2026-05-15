@@ -10,6 +10,20 @@ import {
   Activity, BarChart3, PieChart, AlertTriangle, RefreshCw, Info, Plus, X,
 } from 'lucide-react'
 
+// ── API key headers from localStorage ────────────────────────────────────────
+function getApiKeyHeaders() {
+  try {
+    const s = JSON.parse(localStorage.getItem('finsurf_api_keys') || '{}')
+    const h = {}
+    if (s.aisa?.trim())    h['x-aisa-key']    = s.aisa.trim()
+    if (s.finnhub?.trim()) h['x-finnhub-key'] = s.finnhub.trim()
+    if (s.fmp?.trim())     h['x-fmp-key']     = s.fmp.trim()
+    if (s.td?.trim())      h['x-td-key']      = s.td.trim()
+    if (s.av?.trim())      h['x-av-key']      = s.av.trim()
+    return h
+  } catch { return {} }
+}
+
 // ── Colour helpers ────────────────────────────────────────────────────────────
 
 function corrColor(r) {
@@ -205,7 +219,7 @@ export default function PortfolioAnalyticsView({ portfolio }) {
       const url = syms?.length
         ? `/api/analytics/portfolio?symbols=${syms.join(',')}`
         : '/api/analytics/portfolio'
-      const r = await fetch(url, { credentials: 'include' })
+      const r = await fetch(url, { credentials: 'include', headers: getApiKeyHeaders() })
       const d = await r.json()
       if (!r.ok) throw new Error(d.error || 'Analytics failed')
       setData(d)

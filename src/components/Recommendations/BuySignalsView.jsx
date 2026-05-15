@@ -7,9 +7,10 @@ import { useState, useCallback } from 'react'
 import {
   Sparkles, RefreshCw, TrendingUp, Clock,
   AlertTriangle, Target, Shield, Zap, BarChart2,
-  Bookmark, BookmarkCheck, Search, X,
+  Bookmark, BookmarkCheck, Search, X, Download,
 } from 'lucide-react'
 import { useAIWatchlist } from '../../hooks/useAIWatchlist'
+import { exportBuySignalsToPDF } from '../../utils/pdfExport'
 
 /* ── Helpers ─────────────────────────────────── */
 function getApiKeyHeaders() {
@@ -108,6 +109,24 @@ function RecCard({ rec, onAnalyze }) {
         </div>
       </div>
 
+      {/* Price targets */}
+      {(rec.entryPrice || rec.takeProfitPrice || rec.stopLossPrice) && (
+        <div className="grid grid-cols-3 gap-1.5 mt-2 text-center">
+          <div className="bg-blue-500/10 rounded-lg p-1.5 border border-blue-500/20">
+            <div className="text-[9px] text-blue-400 font-medium mb-0.5">Entry</div>
+            <div className="text-[11px] font-mono font-bold text-white">{rec.entryPrice ? `$${rec.entryPrice.toFixed(2)}` : '—'}</div>
+          </div>
+          <div className="bg-emerald-500/10 rounded-lg p-1.5 border border-emerald-500/20">
+            <div className="text-[9px] text-emerald-400 font-medium mb-0.5">Take Profit</div>
+            <div className="text-[11px] font-mono font-bold text-emerald-400">{rec.takeProfitPrice ? `$${rec.takeProfitPrice.toFixed(2)}` : '—'}</div>
+          </div>
+          <div className="bg-red-500/10 rounded-lg p-1.5 border border-red-500/20">
+            <div className="text-[9px] text-red-400 font-medium mb-0.5">Stop Loss</div>
+            <div className="text-[11px] font-mono font-bold text-red-400">{rec.stopLossPrice ? `$${rec.stopLossPrice.toFixed(2)}` : '—'}</div>
+          </div>
+        </div>
+      )}
+
       {/* Thesis */}
       <p className="text-xs text-slate-400 leading-relaxed mb-2">{rec.thesis}</p>
 
@@ -171,7 +190,7 @@ export default function BuySignalsView({ portfolio, onAnalyze }) {
     setError(null)
     try {
       const body = { holdings }
-      if (customSymbols.trim()) body.watchlist = parseSymbols(customSymbols)
+      if (customSymbols.trim()) body.focusSymbols = parseSymbols(customSymbols)
       const res = await fetch('/api/recommendations', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json', ...getApiKeyHeaders() },
@@ -214,16 +233,26 @@ export default function BuySignalsView({ portfolio, onAnalyze }) {
           </div>
         </div>
 
-        <button
-          onClick={generate}
-          disabled={loading}
-          className="btn-primary flex items-center gap-2 shrink-0 disabled:opacity-50"
-        >
-          {loading
-            ? <><RefreshCw className="w-4 h-4 animate-spin" /> Analyzing…</>
-            : <><Sparkles className="w-4 h-4" /> {recs ? 'Regenerate' : 'Generate Picks'}</>
-          }
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          {recs && (
+            <button
+              onClick={() => exportBuySignalsToPDF(recs)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/[0.04] text-slate-400 hover:text-white border border-white/[0.07] hover:border-white/[0.15] transition-all"
+            >
+              <Download className="w-3.5 h-3.5" /> Export PDF
+            </button>
+          )}
+          <button
+            onClick={generate}
+            disabled={loading}
+            className="btn-primary flex items-center gap-2 disabled:opacity-50"
+          >
+            {loading
+              ? <><RefreshCw className="w-4 h-4 animate-spin" /> Analyzing…</>
+              : <><Sparkles className="w-4 h-4" /> {recs ? 'Regenerate' : 'Generate Picks'}</>
+            }
+          </button>
+        </div>
       </div>
 
       {/* ── Symbol search ── */}
