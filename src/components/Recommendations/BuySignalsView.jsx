@@ -5,9 +5,11 @@
 
 import { useState, useCallback } from 'react'
 import {
-  Sparkles, RefreshCw, TrendingUp, TrendingDown, Clock,
+  Sparkles, RefreshCw, TrendingUp, Clock,
   AlertTriangle, Target, Shield, Zap, BarChart2,
+  Bookmark, BookmarkCheck, Search, X,
 } from 'lucide-react'
+import { useAIWatchlist } from '../../hooks/useAIWatchlist'
 
 /* ── Helpers ─────────────────────────────────── */
 function getApiKeyHeaders() {
@@ -40,9 +42,28 @@ const PERIOD_CONFIG = {
 
 /* ── Single recommendation card ─────────────────── */
 function RecCard({ rec, onAnalyze }) {
-  const type   = TYPE_CONFIG[rec.type]   || TYPE_CONFIG.Stock
-  const risk   = RISK_CONFIG[rec.risk]   || RISK_CONFIG.Medium
-  const period = PERIOD_CONFIG[rec.period] || PERIOD_CONFIG['3m']
+  const { addStock, removeStock, hasSymbol } = useAIWatchlist()
+  const type     = TYPE_CONFIG[rec.type]    || TYPE_CONFIG.Stock
+  const risk     = RISK_CONFIG[rec.risk]    || RISK_CONFIG.Medium
+  const period   = PERIOD_CONFIG[rec.period] || PERIOD_CONFIG['3m']
+  const inWatchlist = hasSymbol(rec.symbol)
+
+  const toggleWatchlist = () => {
+    if (inWatchlist) {
+      removeStock(rec.symbol)
+    } else {
+      addStock({
+        symbol:       rec.symbol,
+        name:         rec.name,
+        sector:       rec.sector,
+        addedFrom:    'buy-signals',
+        targetReturn: rec.targetReturn,
+        stopLoss:     rec.stopLoss,
+        horizon:      rec.period,
+        verdict:      rec.risk + ' Risk',
+      })
+    }
+  }
 
   return (
     <div className={`glass rounded-2xl p-4 border ${type.border} hover:brightness-105 transition-all`}>
@@ -77,17 +98,13 @@ function RecCard({ rec, onAnalyze }) {
           <div className="text-[10px] text-slate-500 mb-0.5 flex items-center justify-center gap-1">
             <Target className="w-2.5 h-2.5" /> Target
           </div>
-          <div className="text-emerald-400 font-mono font-bold text-sm">
-            +{rec.targetReturn}%
-          </div>
+          <div className="text-emerald-400 font-mono font-bold text-sm">+{rec.targetReturn}%</div>
         </div>
         <div className="bg-white/[0.03] rounded-lg p-2 text-center">
           <div className="text-[10px] text-slate-500 mb-0.5 flex items-center justify-center gap-1">
             <Shield className="w-2.5 h-2.5" /> Stop Loss
           </div>
-          <div className="text-red-400 font-mono font-bold text-sm">
-            {rec.stopLoss}%
-          </div>
+          <div className="text-red-400 font-mono font-bold text-sm">{rec.stopLoss}%</div>
         </div>
       </div>
 
@@ -110,35 +127,55 @@ function RecCard({ rec, onAnalyze }) {
         )}
       </div>
 
-      {/* Sector tag */}
-      {rec.sector && (
-        <div className={`mt-3 inline-block text-[10px] px-2 py-0.5 rounded-full ${type.bg} ${type.color}`}>
-          {rec.sector}
-        </div>
-      )}
+      {/* Footer: sector + watchlist */}
+      <div className="flex items-center justify-between mt-3">
+        {rec.sector
+          ? <span className={`text-[10px] px-2 py-0.5 rounded-full ${type.bg} ${type.color}`}>{rec.sector}</span>
+          : <span />
+        }
+        <button
+          onClick={toggleWatchlist}
+          className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-medium border transition-all ${
+            inWatchlist
+              ? 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30'
+              : 'bg-white/[0.04] text-slate-500 border-white/[0.07] hover:text-indigo-400 hover:border-indigo-500/30'
+          }`}
+        >
+          {inWatchlist ? <BookmarkCheck className="w-3 h-3" /> : <Bookmark className="w-3 h-3" />}
+          {inWatchlist ? 'Saved' : 'Save'}
+        </button>
+      </div>
     </div>
   )
 }
 
 /* ── Main view ───────────────────────────────────── */
 export default function BuySignalsView({ portfolio, onAnalyze }) {
-  const [recs,     setRecs]     = useState(null)
-  const [loading,  setLoading]  = useState(false)
-  const [error,    setError]    = useState(null)
-  const [filter,   setFilter]   = useState('all')   // 'all' | 'Stock' | 'ETF' | 'Crypto'
-  const [period,   setPeriod]   = useState('all')   // 'all' | '3m' | '6m'
+  const [recs,          setRecs]          = useState(null)
+  const [loading,       setLoading]       = useState(false)
+  const [error,         setError]         = useState(null)
+  const [filter,        setFilter]        = useState('all')   // 'all' | 'Stock' | 'ETF' | 'Crypto'
+  const [period,        setPeriod]        = useState('all')   // 'all' | '3m' | '6m'
+  const [customSymbols, setCustomSymbols] = useState('')
 
-  const holdings  = portfolio?.positions?.map(p => p.symbol) ?? []
-  const watchlist = []   // could wire up watchlist prop if needed
+  const holdings = portfolio?.positions?.map(p => p.symbol) ?? []
+
+  const parseSymbols = (str) =>
+    str.split(/[,\s]+/)
+      .map(s => s.trim().toUpperCase().replace(/[^A-Z0-9.-]/g, ''))
+      .filter(Boolean)
+      .slice(0, 15)
 
   const generate = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
+      const body = { holdings }
+      if (customSymbols.trim()) body.watchlist = parseSymbols(customSymbols)
       const res = await fetch('/api/recommendations', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json', ...getApiKeyHeaders() },
-        body:    JSON.stringify({ holdings, watchlist }),
+        body:    JSON.stringify(body),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Failed to get recommendations')
@@ -148,7 +185,7 @@ export default function BuySignalsView({ portfolio, onAnalyze }) {
     } finally {
       setLoading(false)
     }
-  }, [holdings])
+  }, [holdings, customSymbols])
 
   const displayed = (recs?.recommendations ?? []).filter(r => {
     if (filter !== 'all' && r.type !== filter) return false
@@ -187,6 +224,24 @@ export default function BuySignalsView({ portfolio, onAnalyze }) {
             : <><Sparkles className="w-4 h-4" /> {recs ? 'Regenerate' : 'Generate Picks'}</>
           }
         </button>
+      </div>
+
+      {/* ── Symbol search ── */}
+      <div className="flex items-center gap-2 p-3 rounded-xl bg-white/[0.03] border border-white/[0.08]">
+        <Search className="w-4 h-4 text-slate-500 shrink-0" />
+        <input
+          type="text"
+          value={customSymbols}
+          onChange={e => setCustomSymbols(e.target.value.toUpperCase())}
+          disabled={loading}
+          placeholder="Focus on specific symbols (e.g. NVDA,TSLA,ETH-USD) — leave blank for AI-selected picks"
+          className="flex-1 bg-transparent text-sm text-white placeholder-slate-600 focus:outline-none font-mono disabled:opacity-40"
+        />
+        {customSymbols && (
+          <button onClick={() => setCustomSymbols('')} className="text-slate-500 hover:text-slate-300">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        )}
       </div>
 
       {/* ── Error ── */}

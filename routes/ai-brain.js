@@ -84,7 +84,7 @@ router.post('/analyze', brainLimit, async (req, res) => {
   try {
     const port   = process.env.PORT || 3001
     const r      = await fetch(
-      `http://localhost:${port}/api/quote?symbols=${universe.join(',')}`,
+      `http://127.0.0.1:${port}/api/quote?symbols=${universe.join(',')}`,
       { headers: fwdKeys(req), signal: AbortSignal.timeout(30_000) }
     )
     const qd     = await r.json()
@@ -148,6 +148,9 @@ Respond ONLY with this JSON (no markdown, no prose outside JSON):
       "agentVerdict": "Strong Buy",
       "targetReturn": 0,
       "stopLoss": 0,
+      "entryPrice": 0,
+      "takeProfitPrice": 0,
+      "stopLossPrice": 0,
       "fundamentalScore": 0,
       "technicalScore": 0,
       "sentimentScore": 0,
@@ -176,7 +179,10 @@ Rules:
 - Include exactly 6 top picks; prefer symbols NOT already in holdings
 - compositeScore: weighted average (fundamental 25%, technical 20%, sentiment 15%, macro 20%, risk 20%)
 - All scores 0-100; riskScore: higher = safer (inverse of risk)
-- targetReturn and stopLoss: realistic positive numbers (percent); base stop-loss on current price proximity to 52w low
+- targetReturn and stopLoss: realistic positive numbers (percent)
+- entryPrice: specific dollar price to enter (at or just below current price — a limit order level)
+- takeProfitPrice: specific dollar price to take profit (currentPrice × (1 + targetReturn/100))
+- stopLossPrice: specific dollar price for stop loss (currentPrice × (1 - stopLoss/100)); base on 52w low proximity
 - agentVerdict: "Strong Buy" | "Buy" | "Moderate Buy"
 - confidence: "High" | "Medium" | "Low"
 - currentPrice: fill from live snapshot if available, else 0

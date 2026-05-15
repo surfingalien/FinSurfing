@@ -74,7 +74,7 @@ Respond ONLY with a JSON object — no markdown, no explanation, just the JSON:
       const client = new Anthropic({ apiKey })
       const msg = await client.messages.create({
         model:      'claude-sonnet-4-6',
-        max_tokens: 2500,
+        max_tokens: 4096,
         messages:   [{ role: 'user', content: prompt }],
       })
       raw = msg.content?.[0]?.text || ''

@@ -1233,7 +1233,7 @@ if (process.env.DATABASE_URL) {
       const priceMap = {}
       for (const sym of uniqueSymbols) {
         try {
-          const url = `http://localhost:${process.env.PORT || 3001}/api/chart?symbol=${encodeURIComponent(sym)}&interval=1d&range=2d`
+          const url = `http://127.0.0.1:${process.env.PORT || 3001}/api/chart?symbol=${encodeURIComponent(sym)}&interval=1d&range=2d`
           const d   = await fetch(url, { signal: AbortSignal.timeout(8000) }).then(r => r.json())
           const price = d?.chart?.result?.[0]?.meta?.regularMarketPrice
           if (price) priceMap[sym] = price

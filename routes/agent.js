@@ -44,7 +44,7 @@ function getClient() {
 async function chartFetch(symbol, range = '1y') {
   const port = process.env.PORT || 3001
   const r    = await fetch(
-    `http://localhost:${port}/api/chart?symbol=${encodeURIComponent(symbol)}&interval=1d&range=${range}`,
+    `http://127.0.0.1:${port}/api/chart?symbol=${encodeURIComponent(symbol)}&interval=1d&range=${range}`,
     { signal: AbortSignal.timeout(12000) }
   )
   if (!r.ok) throw new Error(`Chart proxy HTTP ${r.status}`)

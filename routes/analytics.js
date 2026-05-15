@@ -24,7 +24,7 @@ async function fetchCloses(symbol, range = '1y', fwdHeaders = {}) {
   const port = process.env.PORT || 3001
   try {
     const r    = await fetch(
-      `http://localhost:${port}/api/chart?symbol=${encodeURIComponent(symbol)}&interval=1d&range=${range}`,
+      `http://127.0.0.1:${port}/api/chart?symbol=${encodeURIComponent(symbol)}&interval=1d&range=${range}`,
       { headers: fwdHeaders, signal: AbortSignal.timeout(12_000) }
     )
     const data = await r.json()

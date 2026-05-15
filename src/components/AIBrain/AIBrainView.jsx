@@ -2,14 +2,19 @@
  * AIBrainView — Multi-agent AI stock analysis.
  * 5 specialized agents (Fundamental, Technical, Sentiment, Macro, Risk)
  * collaborate through a supervisor to produce ranked buy recommendations.
+ *
+ * Features: custom symbol search, buy/sell price targets, AI watchlist, PDF export.
  */
 
 import { useState, useCallback } from 'react'
 import {
   Brain, BarChart2, TrendingUp, Eye, Globe, Shield,
   Sparkles, RefreshCw, ChevronDown, ChevronUp, AlertTriangle,
-  Target, Zap, Activity, Clock, CheckCircle2,
+  Target, Zap, Activity, Clock, CheckCircle2, Search,
+  Bookmark, BookmarkCheck, Download, X, DollarSign,
 } from 'lucide-react'
+import { useAIWatchlist } from '../../hooks/useAIWatchlist'
+import { exportAnalysisToPDF } from '../../utils/pdfExport'
 
 /* ── helpers ──────────────────────────────────────────────── */
 function getApiKeyHeaders() {
@@ -24,6 +29,8 @@ function getApiKeyHeaders() {
     return h
   } catch { return {} }
 }
+
+const DEFAULT_UNIVERSE_STR = 'NVDA,MSFT,AAPL,AMZN,GOOGL,META,AVGO,TSLA,JPM,V,LLY,UNH,COST,NFLX,MELI,CRWD,ANET,AMD,PLTR,ORCL'
 
 /* ── agent config ─────────────────────────────────────────── */
 const AGENTS = [
@@ -56,10 +63,7 @@ const HORIZON_OPTIONS = [
 function ScoreBar({ agent, score }) {
   const Icon = agent.icon
   const pct  = Math.min(100, Math.max(0, score))
-  const barColor =
-    pct >= 75 ? 'bg-emerald-400' :
-    pct >= 50 ? 'bg-amber-400'   :
-                'bg-red-400'
+  const barColor = pct >= 75 ? 'bg-emerald-400' : pct >= 50 ? 'bg-amber-400' : 'bg-red-400'
   return (
     <div className="flex items-center gap-2">
       <div className={`flex items-center gap-1 w-[82px] shrink-0 ${agent.color}`}>
@@ -76,7 +80,7 @@ function ScoreBar({ agent, score }) {
 
 /* ── CompositeRing ─────────────────────────────────────────── */
 function CompositeRing({ score }) {
-  const r   = 20
+  const r    = 20
   const circ = 2 * Math.PI * r
   const dash = (score / 100) * circ
   const color = score >= 75 ? '#34d399' : score >= 55 ? '#fbbf24' : '#f87171'
@@ -84,37 +88,73 @@ function CompositeRing({ score }) {
     <div className="relative w-14 h-14 shrink-0">
       <svg className="w-14 h-14 -rotate-90" viewBox="0 0 48 48">
         <circle cx="24" cy="24" r={r} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="4" />
-        <circle
-          cx="24" cy="24" r={r} fill="none"
-          stroke={color} strokeWidth="4" strokeLinecap="round"
-          strokeDasharray={`${dash} ${circ}`}
-        />
+        <circle cx="24" cy="24" r={r} fill="none" stroke={color} strokeWidth="4" strokeLinecap="round" strokeDasharray={`${dash} ${circ}`} />
       </svg>
-      <span className="absolute inset-0 flex items-center justify-center text-sm font-black text-white">
-        {score}
-      </span>
+      <span className="absolute inset-0 flex items-center justify-center text-sm font-black text-white">{score}</span>
+    </div>
+  )
+}
+
+/* ── PriceLevels ───────────────────────────────────────────── */
+function PriceLevels({ stock }) {
+  if (!stock.entryPrice && !stock.takeProfitPrice && !stock.stopLossPrice) return null
+  const fmt = (v) => v ? `$${v.toFixed(2)}` : '—'
+  return (
+    <div className="mt-3 grid grid-cols-3 gap-1.5 text-center">
+      <div className="bg-blue-500/10 rounded-lg p-1.5 border border-blue-500/20">
+        <div className="text-[9px] text-blue-400 font-medium mb-0.5">Entry</div>
+        <div className="text-[11px] font-mono font-bold text-white">{fmt(stock.entryPrice)}</div>
+      </div>
+      <div className="bg-emerald-500/10 rounded-lg p-1.5 border border-emerald-500/20">
+        <div className="text-[9px] text-emerald-400 font-medium mb-0.5">Take Profit</div>
+        <div className="text-[11px] font-mono font-bold text-emerald-400">{fmt(stock.takeProfitPrice)}</div>
+      </div>
+      <div className="bg-red-500/10 rounded-lg p-1.5 border border-red-500/20">
+        <div className="text-[9px] text-red-400 font-medium mb-0.5">Stop Loss</div>
+        <div className="text-[11px] font-mono font-bold text-red-400">{fmt(stock.stopLossPrice)}</div>
+      </div>
     </div>
   )
 }
 
 /* ── StockCard ─────────────────────────────────────────────── */
-function StockCard({ stock, onAnalyze }) {
+function StockCard({ stock, onAnalyze, horizon }) {
   const [expanded, setExpanded] = useState(false)
+  const { addStock, removeStock, hasSymbol } = useAIWatchlist()
   const verdict    = VERDICT_CONFIG[stock.agentVerdict]   || VERDICT_CONFIG['Buy']
   const confidence = CONFIDENCE_CONFIG[stock.confidence]  || CONFIDENCE_CONFIG['Medium']
+  const inWatchlist = hasSymbol(stock.symbol)
+
+  const toggleWatchlist = () => {
+    if (inWatchlist) {
+      removeStock(stock.symbol)
+    } else {
+      addStock({
+        symbol:          stock.symbol,
+        name:            stock.name,
+        sector:          stock.sector,
+        addedFrom:       'ai-brain',
+        entryPrice:      stock.entryPrice,
+        takeProfitPrice: stock.takeProfitPrice,
+        stopLossPrice:   stock.stopLossPrice,
+        targetReturn:    stock.targetReturn,
+        stopLoss:        stock.stopLoss,
+        horizon:         horizon || stock.horizon || '6m',
+        verdict:         stock.agentVerdict,
+        compositeScore:  stock.compositeScore,
+      })
+    }
+  }
 
   return (
     <div className="glass rounded-2xl border border-white/[0.07] overflow-hidden hover:border-white/[0.12] transition-all">
-      {/* Main row */}
       <div className="p-4">
         <div className="flex items-start gap-3">
-          {/* Rank + composite */}
           <div className="flex flex-col items-center gap-1 shrink-0">
             <span className="text-[10px] text-slate-600 font-mono">#{stock.rank}</span>
             <CompositeRing score={stock.compositeScore} />
           </div>
 
-          {/* Symbol + details */}
           <div className="flex-1 min-w-0">
             <div className="flex items-start justify-between gap-2 mb-2">
               <div>
@@ -137,7 +177,6 @@ function StockCard({ stock, onAnalyze }) {
               </div>
             </div>
 
-            {/* Returns row */}
             <div className="flex gap-3 mb-3">
               <div className="flex items-center gap-1 text-[11px]">
                 <Target className="w-3 h-3 text-emerald-400" />
@@ -152,36 +191,47 @@ function StockCard({ stock, onAnalyze }) {
               )}
             </div>
 
-            {/* Agent score bars */}
             <div className="space-y-1.5">
               {AGENTS.map(a => (
                 <ScoreBar key={a.key} agent={a} score={stock[a.scoreKey] ?? 0} />
               ))}
             </div>
 
-            {/* Key drivers */}
+            {/* Price levels */}
+            <PriceLevels stock={stock} />
+
             {stock.keyDrivers?.length > 0 && (
               <div className="flex flex-wrap gap-1 mt-3">
                 {stock.keyDrivers.map((d, i) => (
-                  <span key={i} className="text-[10px] px-1.5 py-0.5 rounded bg-white/[0.04] text-slate-400">
-                    {d}
-                  </span>
+                  <span key={i} className="text-[10px] px-1.5 py-0.5 rounded bg-white/[0.04] text-slate-400">{d}</span>
                 ))}
               </div>
             )}
           </div>
         </div>
 
-        {/* Expand toggle */}
-        <button
-          onClick={() => setExpanded(v => !v)}
-          className="mt-3 w-full flex items-center justify-center gap-1 text-[10px] text-slate-600 hover:text-slate-400 transition-colors py-1"
-        >
-          {expanded ? <><ChevronUp className="w-3 h-3" /> Less</> : <><ChevronDown className="w-3 h-3" /> Agent Analysis</>}
-        </button>
+        {/* Watchlist + expand row */}
+        <div className="flex items-center gap-2 mt-3">
+          <button
+            onClick={toggleWatchlist}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-medium border transition-all ${
+              inWatchlist
+                ? 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30'
+                : 'bg-white/[0.04] text-slate-500 border-white/[0.07] hover:text-indigo-400 hover:border-indigo-500/30'
+            }`}
+          >
+            {inWatchlist ? <BookmarkCheck className="w-3 h-3" /> : <Bookmark className="w-3 h-3" />}
+            {inWatchlist ? 'Saved' : 'Save'}
+          </button>
+          <button
+            onClick={() => setExpanded(v => !v)}
+            className="flex-1 flex items-center justify-center gap-1 text-[10px] text-slate-600 hover:text-slate-400 transition-colors py-1"
+          >
+            {expanded ? <><ChevronUp className="w-3 h-3" /> Less</> : <><ChevronDown className="w-3 h-3" /> Agent Analysis</>}
+          </button>
+        </div>
       </div>
 
-      {/* Expanded agent analysis */}
       {expanded && (
         <div className="border-t border-white/[0.06] px-4 pb-4 space-y-3 pt-3">
           {AGENTS.map(a => (
@@ -195,7 +245,6 @@ function StockCard({ stock, onAnalyze }) {
             </div>
           ))}
 
-          {/* Supervisor synthesis */}
           <div className="rounded-xl p-3 bg-mint-500/8 border border-mint-500/20">
             <div className="flex items-center gap-1.5 mb-1 text-[11px] font-semibold text-mint-400">
               <Brain className="w-3 h-3" />
@@ -204,7 +253,6 @@ function StockCard({ stock, onAnalyze }) {
             <p className="text-[11px] text-slate-300 leading-relaxed">{stock.supervisorSynthesis}</p>
           </div>
 
-          {/* Dissent */}
           {stock.dissentingView && (
             <div className="flex items-start gap-2 text-[11px] text-amber-400/80 bg-amber-500/8 rounded-lg px-3 py-2">
               <AlertTriangle className="w-3 h-3 shrink-0 mt-0.5" />
@@ -218,22 +266,20 @@ function StockCard({ stock, onAnalyze }) {
 }
 
 /* ── AgentOrb ─────────────────────────────────────────────── */
-function AgentOrb({ agent, active, done }) {
+function AgentOrb({ agent, active }) {
   const Icon = agent.icon
   return (
     <div className="flex flex-col items-center gap-1.5">
       <div className={`
         w-10 h-10 rounded-full flex items-center justify-center border transition-all duration-500
-        ${done
-          ? `${agent.bg} ${agent.border} ${agent.color}`
-          : active
-            ? `${agent.bg} ${agent.border} ${agent.color} animate-pulse ring-2 ring-offset-1 ring-offset-[#070b14]`
-            : 'bg-white/[0.03] border-white/[0.06] text-slate-600'
+        ${active
+          ? `${agent.bg} ${agent.border} ${agent.color} animate-pulse ring-2 ring-offset-1 ring-offset-[#070b14]`
+          : 'bg-white/[0.03] border-white/[0.06] text-slate-600'
         }
       `}>
-        {done ? <CheckCircle2 className="w-4 h-4" /> : <Icon className="w-4 h-4" />}
+        <Icon className="w-4 h-4" />
       </div>
-      <span className={`text-[9px] font-medium transition-colors ${done || active ? agent.color : 'text-slate-600'}`}>
+      <span className={`text-[9px] font-medium transition-colors ${active ? agent.color : 'text-slate-600'}`}>
         {agent.label}
       </span>
     </div>
@@ -262,15 +308,44 @@ function AgentNotesPanel({ notes }) {
   )
 }
 
+/* ── SymbolSearchInput ─────────────────────────────────────── */
+function SymbolSearchInput({ value, onChange, disabled }) {
+  return (
+    <div className="flex items-center gap-2 p-3 rounded-xl bg-white/[0.03] border border-white/[0.08]">
+      <Search className="w-4 h-4 text-slate-500 shrink-0" />
+      <input
+        type="text"
+        value={value}
+        onChange={e => onChange(e.target.value.toUpperCase())}
+        disabled={disabled}
+        placeholder={`Custom symbols (e.g. NVDA,TSLA,BTC-USD) — leave blank for default universe`}
+        className="flex-1 bg-transparent text-sm text-white placeholder-slate-600 focus:outline-none font-mono disabled:opacity-40"
+      />
+      {value && (
+        <button onClick={() => onChange('')} className="text-slate-500 hover:text-slate-300">
+          <X className="w-3.5 h-3.5" />
+        </button>
+      )}
+    </div>
+  )
+}
+
 /* ── Main view ────────────────────────────────────────────── */
 export default function AIBrainView({ portfolio, onAnalyze }) {
-  const [analysis,  setAnalysis]  = useState(null)
-  const [loading,   setLoading]   = useState(false)
-  const [error,     setError]     = useState(null)
-  const [horizon,   setHorizon]   = useState('6m')
-  const [activeAgent, setActiveAgent] = useState(-1)
+  const [analysis,     setAnalysis]     = useState(null)
+  const [loading,      setLoading]      = useState(false)
+  const [error,        setError]        = useState(null)
+  const [horizon,      setHorizon]      = useState('6m')
+  const [activeAgent,  setActiveAgent]  = useState(-1)
+  const [customSymbols, setCustomSymbols] = useState('')
 
   const holdings = portfolio?.positions?.map(p => p.symbol) ?? []
+
+  const parseSymbols = (str) =>
+    str.split(/[,\s]+/)
+      .map(s => s.trim().toUpperCase().replace(/[^A-Z0-9.-]/g, ''))
+      .filter(Boolean)
+      .slice(0, 20)
 
   const runAnalysis = useCallback(async () => {
     setLoading(true)
@@ -278,16 +353,19 @@ export default function AIBrainView({ portfolio, onAnalyze }) {
     setAnalysis(null)
     setActiveAgent(0)
 
-    // Cycle through agent orbs for visual feedback
     const cycle = setInterval(() => {
       setActiveAgent(prev => (prev + 1) % (AGENTS.length + 1))
     }, 1800)
 
     try {
+      const body = { horizon, holdings }
+      if (customSymbols.trim()) {
+        body.symbols = parseSymbols(customSymbols)
+      }
       const res  = await fetch('/api/ai-brain/analyze', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json', ...getApiKeyHeaders() },
-        body:    JSON.stringify({ horizon, holdings }),
+        body:    JSON.stringify(body),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Analysis failed')
@@ -299,7 +377,7 @@ export default function AIBrainView({ portfolio, onAnalyze }) {
       setActiveAgent(-1)
       setLoading(false)
     }
-  }, [horizon, holdings])
+  }, [horizon, holdings, customSymbols])
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -319,7 +397,15 @@ export default function AIBrainView({ portfolio, onAnalyze }) {
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
-          {/* Horizon picker */}
+          {analysis && (
+            <button
+              onClick={() => exportAnalysisToPDF(analysis, horizon)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/[0.04] text-slate-400 hover:text-white border border-white/[0.07] hover:border-white/[0.15] transition-all"
+            >
+              <Download className="w-3.5 h-3.5" /> Export PDF
+            </button>
+          )}
+
           <div className="flex gap-1">
             {HORIZON_OPTIONS.map(o => (
               <button
@@ -350,37 +436,26 @@ export default function AIBrainView({ portfolio, onAnalyze }) {
         </div>
       </div>
 
+      {/* ── Symbol search ── */}
+      <SymbolSearchInput value={customSymbols} onChange={setCustomSymbols} disabled={loading} />
+
       {/* ── Error ── */}
       {error && (
         <div className="flex items-start gap-3 p-4 rounded-xl bg-red-500/10 border border-red-500/25 text-red-400 text-sm">
           <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-          <span>
-            {error}
-            {error.includes('Claude API key required') && (
-              <span className="block text-xs text-slate-500 mt-1">
-                Open <strong className="text-slate-400">Settings → API Keys</strong> and paste your Anthropic key to enable AI Brain.
-              </span>
-            )}
-          </span>
+          <span>{error}</span>
         </div>
       )}
 
       {/* ── Loading state ── */}
       {loading && (
         <div className="glass rounded-2xl p-10 text-center space-y-6">
-          {/* Agent orbs */}
           <div className="flex items-center justify-center gap-6 flex-wrap">
             {AGENTS.map((a, i) => (
-              <AgentOrb
-                key={a.key}
-                agent={a}
-                active={activeAgent === i}
-                done={false}
-              />
+              <AgentOrb key={a.key} agent={a} active={activeAgent === i} />
             ))}
           </div>
 
-          {/* Supervisor */}
           <div className={`flex flex-col items-center gap-1.5 transition-all duration-500 ${
             activeAgent === AGENTS.length ? 'opacity-100' : 'opacity-30'
           }`}>
@@ -405,7 +480,6 @@ export default function AIBrainView({ portfolio, onAnalyze }) {
             </p>
           </div>
 
-          {/* Skeleton cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
             {Array.from({ length: 6 }).map((_, i) => (
               <div key={i} className="glass rounded-2xl p-4 space-y-3 animate-pulse">
@@ -418,9 +492,7 @@ export default function AIBrainView({ portfolio, onAnalyze }) {
                   </div>
                 </div>
                 <div className="space-y-1.5">
-                  {AGENTS.map(a => (
-                    <div key={a.key} className="h-2 bg-white/[0.04] rounded" />
-                  ))}
+                  {AGENTS.map(a => <div key={a.key} className="h-2 bg-white/[0.04] rounded" />)}
                 </div>
               </div>
             ))}
@@ -442,13 +514,8 @@ export default function AIBrainView({ portfolio, onAnalyze }) {
             <p className="text-white font-semibold">5 Specialized AI Agents, One Consensus</p>
             <p className="text-slate-500 text-sm mt-1 max-w-lg mx-auto">
               Fundamental, Technical, Sentiment, Macro, and Risk agents collaborate through a supervisor
-              to score and rank stocks for your selected horizon.
+              to score and rank stocks. Search custom symbols or use the default universe.
             </p>
-            {holdings.length > 0 && (
-              <p className="text-xs text-slate-600 mt-2">
-                Portfolio holdings ({holdings.length}) will be excluded to avoid overlap.
-              </p>
-            )}
           </div>
           <button onClick={runAnalysis} className="btn-primary flex items-center gap-2 mx-auto">
             <Brain className="w-4 h-4" /> Activate AI Brain
@@ -459,7 +526,6 @@ export default function AIBrainView({ portfolio, onAnalyze }) {
       {/* ── Results ── */}
       {!loading && analysis && (
         <>
-          {/* Market regime + consensus */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="glass rounded-xl p-4 border border-white/[0.06]">
               <div className="flex items-center gap-2 mb-1">
@@ -468,7 +534,7 @@ export default function AIBrainView({ portfolio, onAnalyze }) {
                 <span className="ml-auto flex items-center gap-2">
                   {analysis.dataSource === 'live'
                     ? <span className="flex items-center gap-1 text-[10px] text-emerald-400"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />Live data</span>
-                    : <span className="flex items-center gap-1 text-[10px] text-amber-400"><span className="w-1.5 h-1.5 rounded-full bg-amber-400" />Knowledge only — add AISA/Finnhub key for live data</span>
+                    : <span className="flex items-center gap-1 text-[10px] text-amber-400"><span className="w-1.5 h-1.5 rounded-full bg-amber-400" />Knowledge only</span>
                   }
                   <span className="text-[10px] text-slate-600">{new Date(analysis.processedAt).toLocaleTimeString()}</span>
                 </span>
@@ -482,34 +548,31 @@ export default function AIBrainView({ portfolio, onAnalyze }) {
                 <span className="text-xs font-semibold text-mint-400">Agent Consensus</span>
               </div>
               <p className="text-sm text-slate-200 leading-relaxed">{analysis.agentConsensusTheme}</p>
-              <p className="text-[10px] text-slate-600 mt-2">
-                Universe: {analysis.universeAnalyzed?.join(', ')}
-              </p>
+              <p className="text-[10px] text-slate-600 mt-2">Universe: {analysis.universeAnalyzed?.join(', ')}</p>
             </div>
           </div>
 
-          {/* Agent notes */}
           {analysis.agentNotes && <AgentNotesPanel notes={analysis.agentNotes} />}
 
-          {/* Ranked stock cards */}
           <div>
             <div className="flex items-center gap-2 mb-3">
               <Zap className="w-3.5 h-3.5 text-amber-400" />
               <span className="text-sm font-semibold text-white">
                 Ranked Picks — {HORIZON_OPTIONS.find(o => o.value === analysis.horizon)?.label} Horizon
               </span>
-              <span className="text-xs text-slate-500 ml-auto">
+              <span className="text-xs text-slate-500 ml-auto flex items-center gap-2">
+                <DollarSign className="w-3 h-3" /> Entry · Target · Stop shown on each card
+                <span className="text-slate-600">·</span>
                 {analysis.rankedStocks.length} recommendations
               </span>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {analysis.rankedStocks.map((stock, i) => (
-                <StockCard key={`${stock.symbol}-${i}`} stock={stock} onAnalyze={onAnalyze} />
+                <StockCard key={`${stock.symbol}-${i}`} stock={stock} onAnalyze={onAnalyze} horizon={horizon} />
               ))}
             </div>
           </div>
 
-          {/* Disclaimer */}
           <div className="text-center text-[11px] text-slate-600 border-t border-white/[0.04] pt-3">
             AI Brain analysis is for informational purposes only. Not financial advice.
             Multi-agent scoring does not guarantee future returns. Always conduct independent research.

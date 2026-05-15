@@ -42,7 +42,7 @@ router.post('/', async (req, res) => {
       if (req.headers[h]) fwdHeaders[h] = req.headers[h]
     }
     const r       = await fetch(
-      `http://localhost:${port}/api/chart?symbol=${encodeURIComponent(sym)}&interval=1d&range=${rangeMap[range]}`,
+      `http://127.0.0.1:${port}/api/chart?symbol=${encodeURIComponent(sym)}&interval=1d&range=${rangeMap[range]}`,
       { headers: fwdHeaders, signal: AbortSignal.timeout(30_000) }
     )
     const yahooData = await r.json()
