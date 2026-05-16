@@ -952,21 +952,27 @@ app.get('/api/quote', async (req, res) => {
   const symbols = (req.query.symbols || '').split(',').map(s => s.trim().toUpperCase()).filter(Boolean)
   if (!symbols.length) return res.status(400).json({ error: 'symbols required' })
   const keys = extractKeys(req)
+
+  // Subscribe symbols to Finnhub WS — warms fhq: cache for subsequent calls
+  for (const sym of symbols) _fhEnsureSub(sym)
+
   try {
-    // 0th: chart-price cache — free, instant, covers any symbol whose chart was recently loaded
-    const fromCache = symbols.map(sym => {
-      const p = getPriceFromChartCache(sym)
-      if (p == null) return null
-      const ck = cacheGet(`aisaq:${sym}`)  // use AISA quote if available (has more fields)
-      return ck || { symbol: sym, shortName: sym, regularMarketPrice: p }
-    })
+    // 0th: instant caches — WS-populated fhq, AISA quote, or chart-price (all zero-latency)
+    const fromCache = symbols.map(sym =>
+      cacheGet(`fhq:${sym}`)
+      || cacheGet(`aisaq:${sym}`)
+      || (() => { const p = getPriceFromChartCache(sym); return p != null ? { symbol: sym, shortName: sym, regularMarketPrice: p } : null })()
+    )
     if (fromCache.every(r => r !== null)) {
-      console.log('[quote] all from chart-price cache:', symbols.join(','))
+      console.log('[quote] all from cache:', symbols.join(','))
       return res.json({ quoteResponse: { result: fromCache } })
     }
 
-    // 1st: AISA — serial requests, 200ms apart (respects ~5 req/s limit)
-    const aisa = await getAISAQuotes(symbols, keys).catch(() => null)
+    // 1st: AISA — serial requests, 200ms apart (respects ~5 req/s limit); 6 s total budget
+    const aisa = await Promise.race([
+      getAISAQuotes(symbols, keys).catch(() => null),
+      new Promise(r => setTimeout(() => r(null), 6000)),
+    ])
     if (aisa?.some(r => r.regularMarketPrice != null))
       return res.json({ quoteResponse: { result: aisa } })
 
