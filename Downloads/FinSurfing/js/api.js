@@ -1,45 +1,37 @@
 /* ═══════════════════════════════════════════════
    FinSurf — Data API Layer
-   Routes through /api/proxy (Vercel serverless)
-   so Yahoo Finance is called server-side — no CORS
+   Routes through /api/proxy (Vercel serverless + yahoo-finance2)
+   so Yahoo Finance is called server-side — no CORS, no IP blocks
 ═══════════════════════════════════════════════ */
-
-const YF  = 'https://query1.finance.yahoo.com';
-const YF2 = 'https://query2.finance.yahoo.com';
 
 // In-browser cache — 5 min TTL
 const cache = new Map();
 const CACHE_TTL = 5 * 60 * 1000;
 
 /* ── Proxy fetch ──────────────────────────────── */
-async function fetchYF(url) {
-  const cacheKey = url;
+async function callProxy(params) {
+  const qs = new URLSearchParams(params).toString();
+  const cacheKey = qs;
   const cached = cache.get(cacheKey);
   if (cached && Date.now() - cached.ts < CACHE_TTL) return cached.data;
 
-  const proxyUrl = `/api/proxy?url=${encodeURIComponent(url)}`;
-
-  const res = await fetch(proxyUrl, {
-    signal: AbortSignal.timeout(12000)
+  const res = await fetch(`/api/proxy?${qs}`, {
+    signal: AbortSignal.timeout(15000)
   });
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(`Proxy error ${res.status}: ${err.error || 'unknown'}`);
+    throw new Error(`Proxy ${res.status}: ${err.error || 'unknown'}`);
   }
 
-  const text = await res.text();
-  if (!text || text.length < 10) throw new Error('Empty response from proxy');
-
-  const data = JSON.parse(text);
+  const data = await res.json();
   cache.set(cacheKey, { data, ts: Date.now() });
   return data;
 }
 
 /* ── Chart (OHLCV) ───────────────────────────── */
 async function fetchChart(symbol, interval = '1d', range = '1y') {
-  const url = `${YF}/v8/finance/chart/${encodeURIComponent(symbol)}?interval=${interval}&range=${range}&includePrePost=false`;
-  const data = await fetchYF(url);
+  const data = await callProxy({ type: 'chart', symbol, interval, range });
   return parseChartData(data, symbol);
 }
 
@@ -82,10 +74,12 @@ function parseChartData(raw, symbol) {
 
 /* ── Fundamentals summary ────────────────────── */
 async function fetchSummary(symbol) {
-  const modules = 'summaryDetail,financialData,defaultKeyStatistics,assetProfile';
-  const url = `${YF}/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=${modules}`;
   try {
-    const data = await fetchYF(url);
+    const data = await callProxy({
+      type: 'summary',
+      symbol,
+      modules: 'summaryDetail,financialData,defaultKeyStatistics,assetProfile'
+    });
     return parseSummary(data, symbol);
   } catch (e) {
     console.warn('fetchSummary failed:', e.message);
@@ -147,11 +141,8 @@ function parseSummary(raw, symbol) {
 
 /* ── Batch quote ─────────────────────────────── */
 async function fetchMultiQuote(symbols) {
-  // Yahoo Finance accepts up to ~100 symbols comma-separated
-  const sym = symbols.map(s => encodeURIComponent(s)).join('%2C');
-  const url = `${YF}/v8/finance/quote?symbols=${sym}`;
   try {
-    const data = await fetchYF(url);
+    const data = await callProxy({ type: 'quote', symbols: symbols.join(',') });
     const quotes = data?.quoteResponse?.result || [];
     return quotes.map(q => ({
       symbol:    q.symbol,
@@ -174,9 +165,8 @@ async function fetchMultiQuote(symbols) {
 
 /* ── Search / autocomplete ───────────────────── */
 async function searchTicker(query) {
-  const url = `${YF}/v1/finance/search?q=${encodeURIComponent(query)}&quotesCount=8&newsCount=0&enableFuzzyQuery=false&enableCb=false`;
   try {
-    const data = await fetchYF(url);
+    const data = await callProxy({ type: 'search', q: query });
     const quotes = data?.quotes || [];
     return quotes
       .filter(q => q.quoteType === 'EQUITY' || q.quoteType === 'ETF' || q.quoteType === 'INDEX')
