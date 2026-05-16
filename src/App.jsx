@@ -29,6 +29,7 @@ import AIBrainView from './components/AIBrain/AIBrainView'
 import AIWatchlistView from './components/AIWatchlist/AIWatchlistView'
 import PortfolioAnalyticsView from './components/Analytics/PortfolioAnalyticsView'
 import RebalancerView from './components/Rebalancer/RebalancerView'
+import TradingViewView from './components/TradingView/TradingViewView'
 import TraderProfileView from './components/Profile/TraderProfileView'
 import { usePortfolio } from './hooks/usePortfolio'
 import { useWatchlist } from './hooks/useWatchlist'
@@ -234,6 +235,9 @@ function MainApp({ onSignIn }) {
             )}
             {activeTab === 'ai-watchlist' && (
               <AIWatchlistView onAnalyze={navigateToAnalyze} />
+            )}
+            {activeTab === 'tradingview' && (
+              <TradingViewView />
             )}
             {activeTab === 'analytics' && (
               <PortfolioAnalyticsView portfolio={portfolio} />
