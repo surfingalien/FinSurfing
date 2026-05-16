@@ -218,11 +218,11 @@ function NoKeyBanner() {
 // ── Main StockAgentView ───────────────────────────────────────────────────────
 
 const MODELS = [
-  { id: 'claude-opus-4-7',    label: 'Opus 4.7',      provider: 'claude' },
-  { id: 'claude-sonnet-4-6',  label: 'Sonnet 4.6',    provider: 'claude' },
-  { id: 'claude-haiku-4-5',   label: 'Haiku 4.5',     provider: 'claude' },
-  { id: 'gemini-2.0-flash',   label: 'Gemini Flash',  provider: 'gemini' },
-  { id: 'gemini-1.5-pro',     label: 'Gemini 1.5 Pro',provider: 'gemini' },
+  { id: 'claude-opus-4-5',   label: 'Claude Opus 4',   provider: 'claude' },
+  { id: 'claude-sonnet-4-5', label: 'Claude Sonnet 4', provider: 'claude' },
+  { id: 'claude-haiku-4-5',  label: 'Claude Haiku 4',  provider: 'claude' },
+  { id: 'gemini-2.0-flash',  label: 'Gemini Flash',    provider: 'gemini' },
+  { id: 'gemini-1.5-pro',    label: 'Gemini 1.5 Pro',  provider: 'gemini' },
 ]
 
 export default function StockAgentView({ portfolio }) {
@@ -230,7 +230,7 @@ export default function StockAgentView({ portfolio }) {
   const [messages,    setMessages]  = useState([])
   const [input,       setInput]     = useState('')
   const [symbol,      setSymbol]    = useState('')
-  const [model,       setModel]     = useState('claude-opus-4-7')
+  const [model,       setModel]     = useState('claude-opus-4-5')
   const [streaming,   setStreaming] = useState(false)
   const [hasKey,      setHasKey]    = useState(null)      // null = unknown, true/false
   const [agentCaps,   setAgentCaps] = useState({})        // { hasFMP, hasAV, hasGemini }
@@ -244,10 +244,7 @@ export default function StockAgentView({ portfolio }) {
   useEffect(() => {
     fetch('/api/agent/health')
       .then(r => r.json())
-      .then(d => {
-        setHasKey(d.hasKey)
-        setAgentCaps({ hasFMP: d.hasFMP, hasAV: d.hasAV, hasFinnhub: d.hasFinnhub, hasGemini: d.hasGemini })
-      })
+      .then(d => { setHasKey(d.hasKey); setAgentCaps({ hasFMP: d.hasFMP, hasAV: d.hasAV, hasFinnhub: d.hasFinnhub, hasGemini: d.hasGemini }) })
       .catch(() => setHasKey(false))
   }, [])
 

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { fetchQuotes } from '../services/api'
+import { fetchQuotes, subscribeQuotes } from '../services/api'
 
 const LS_KEY = 'finsurf_watchlist'
 const DEFAULT_WATCHLIST = ['SPY', 'QQQ', 'AMZN', 'META', 'NFLX', 'LLY', 'PLTR', 'ARM']
@@ -24,7 +24,7 @@ export function useWatchlist() {
     if (!symbols.length) return
     setLoading(true)
     try {
-      const results = await fetchQuotes(symbols)
+      const results = await fetchQuotes(symbols, { force: true })
       setQuotes(results)
     } catch (e) {
       console.warn('Watchlist refresh failed:', e.message)
@@ -34,10 +34,18 @@ export function useWatchlist() {
   }, [symbols])
 
   useEffect(() => {
+    if (!symbols.length) return
+    // Full fetch on mount and every 5 min
     refresh()
-    const interval = setInterval(refresh, 60000)
-    return () => clearInterval(interval)
-  }, [refresh])
+    const fullRefresh = setInterval(refresh, 5 * 60_000)
+
+    // Real-time stream — merges price/change/changePct ticks into the quotes array
+    const unsub = subscribeQuotes(symbols, ({ symbol: sym, price, change, changePct }) => {
+      setQuotes(prev => prev.map(q => q.symbol === sym ? { ...q, price, change, changePct } : q))
+    })
+
+    return () => { clearInterval(fullRefresh); unsub() }
+  }, [refresh]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const addSymbol = useCallback((sym) => {
     setSymbols(prev => prev.includes(sym) ? prev : [...prev, sym.toUpperCase()])

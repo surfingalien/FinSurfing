@@ -11,19 +11,23 @@
  *   • Risk Manager       — Claude synthesises all reports into a trade plan
  *
  * Data sources (each optional — degrades gracefully):
- *   Yahoo Finance  → always available (our existing /api/chart proxy)
+ *   Yahoo Finance  → always available (direct fetch, no proxy)
  *   Alpha Vantage  → ALPHA_VANTAGE_API_KEY env var
  *   FMP            → FMP_API_KEY env var
  *
+ * AI backends:
+ *   Anthropic Claude → ANTHROPIC_API_KEY
+ *   Google Gemini    → GEMINI_API_KEY (streaming REST)
+ *
  * POST /api/agent/analyze   — SSE streaming chat
- * GET  /api/agent/health    — key status check
+ * GET  /api/agent/health    — credential status check
  */
 
 'use strict'
 
 const express  = require('express')
 const router   = express.Router()
-const { computeAll } = require('../utils/technicals')
+const { computeAll }           = require('../utils/technicals')
 const { fetchAllFundamentals } = require('../utils/dataProviders')
 
 // ── Lazy-load Anthropic SDK ───────────────────────────────────────────────────
@@ -36,30 +40,15 @@ function getClient() {
   return _client
 }
 
-// ── Yahoo Finance direct fetch (avoids internal HTTP proxy) ──────────────────
-const YF_HEADERS = {
-  'User-Agent':      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-  'Accept':          'application/json, text/plain, */*',
-  'Accept-Language': 'en-US,en;q=0.9',
-  'Referer':         'https://finance.yahoo.com/',
-  'Origin':          'https://finance.yahoo.com',
-  'sec-fetch-dest':  'empty',
-  'sec-fetch-mode':  'cors',
-  'sec-fetch-site':  'same-site',
-}
-
-async function yfDirect(path) {
-  const base = 'https://query1.finance.yahoo.com'
-  const fallback = 'https://query2.finance.yahoo.com'
-  let res
-  try {
-    res = await fetch(`${base}${path}`, { headers: YF_HEADERS, signal: AbortSignal.timeout(12000) })
-    if (!res.ok) throw new Error(`q1 HTTP ${res.status}`)
-  } catch {
-    res = await fetch(`${fallback}${path}`, { headers: YF_HEADERS, signal: AbortSignal.timeout(12000) })
-  }
-  const text = await res.text()
-  try { return JSON.parse(text) } catch { throw new Error('Yahoo Finance returned non-JSON') }
+// ── OHLCV via internal /api/chart proxy (Finnhub → FMP, no Yahoo) ────────────
+async function chartFetch(symbol, range = '1y') {
+  const port = process.env.PORT || 3001
+  const r    = await fetch(
+    `http://127.0.0.1:${port}/api/chart?symbol=${encodeURIComponent(symbol)}&interval=1d&range=${range}`,
+    { signal: AbortSignal.timeout(12000) }
+  )
+  if (!r.ok) throw new Error(`Chart proxy HTTP ${r.status}`)
+  return r.json()
 }
 
 // ── Gemini streaming helper ───────────────────────────────────────────────────
@@ -112,6 +101,53 @@ async function* streamGemini(model, systemPrompt, messages, signal) {
   }
 }
 
+// ── Groq streaming helper (OpenAI-compatible SSE) ────────────────────────────
+async function* streamGroq(systemPrompt, messages, signal) {
+  const key = process.env.GROQ_API_KEY
+  if (!key) throw new Error('GROQ_API_KEY is not set')
+
+  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+    body: JSON.stringify({
+      model:      'llama-3.3-70b-versatile',
+      max_tokens: 4096,
+      temperature: 0.7,
+      stream:     true,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        ...messages,
+      ],
+    }),
+    signal,
+  })
+  if (!res.ok) {
+    const err = await res.text()
+    throw new Error(`Groq API error ${res.status}: ${err.slice(0, 200)}`)
+  }
+
+  const reader  = res.body.getReader()
+  const decoder = new TextDecoder()
+  let buf = ''
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buf += decoder.decode(value, { stream: true })
+    const lines = buf.split('\n')
+    buf = lines.pop()
+    for (const line of lines) {
+      if (!line.startsWith('data:')) continue
+      const payload = line.slice(5).trim()
+      if (!payload || payload === '[DONE]') continue
+      try {
+        const obj  = JSON.parse(payload)
+        const text = obj?.choices?.[0]?.delta?.content
+        if (text) yield text
+      } catch {}
+    }
+  }
+}
+
 // ── Tool definitions ──────────────────────────────────────────────────────────
 
 const TOOLS = [
@@ -128,7 +164,7 @@ Fetches OHLCV price history and computes all technical indicators server-side:
 • Volume analysis — relative volume vs 20-day average, trend
 • Price action — trend direction, candle body ratio, short/long trend
 
-Data source: Yahoo Finance OHLCV (always available).
+Data source: Finnhub / FMP OHLCV (always available).
 Use this first for any technical or price-action question.`,
     input_schema: {
       type: 'object',
@@ -186,10 +222,8 @@ Use for relative strength, sector rotation, or head-to-head comparison questions
   },
 ]
 
-// ── Yahoo Finance OHLCV fetch ─────────────────────────────────────────────────
-
 async function fetchOHLCV(symbol, range = '1y') {
-  const data   = await yfDirect(`/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=${range}`)
+  const data   = await chartFetch(symbol, range)
   const result = data?.chart?.result?.[0]
   if (!result) throw new Error(`No chart data for ${symbol}`)
 
@@ -385,7 +419,7 @@ router.post('/analyze', async (req, res) => {
   const { prompt, symbol, history = [], model: reqModel } = req.body || {}
   if (!prompt) return res.status(400).json({ error: 'prompt is required' })
 
-  const model    = reqModel || 'claude-opus-4-7'
+  const model    = reqModel || 'claude-opus-4-5'
   const isGemini = model.startsWith('gemini')
 
   // SSE headers
@@ -433,7 +467,7 @@ router.post('/analyze', async (req, res) => {
     return
   }
 
-  // ── Anthropic path ──────────────────────────────────────────────────────────
+  // ── Anthropic path (all non-Gemini models) ─────────────────────────────────
   let client
   try { client = getClient() }
   catch (err) { return res.status(503).json({ error: err.message, code: 'NO_API_KEY' }) }
@@ -452,17 +486,13 @@ router.post('/analyze', async (req, res) => {
     while (iteration < MAX_ITERATIONS) {
       iteration++
 
-      const streamParams = {
+      const stream = client.messages.stream({
         model,
         max_tokens: 8192,
-        system:   SYSTEM_PROMPT,
-        tools:    TOOLS,
+        system:     SYSTEM_PROMPT,
+        tools:      TOOLS,
         messages,
-      }
-      // Extended thinking only on opus-4-7
-      if (model === 'claude-opus-4-7') streamParams.thinking = { type: 'adaptive' }
-
-      const stream = client.messages.stream(streamParams)
+      })
 
       let fullText = ''
       stream.on('text', text => { fullText += text; send('delta', { text }) })
@@ -522,6 +552,30 @@ router.post('/analyze', async (req, res) => {
     send('error', { message: 'Agent reached maximum iterations.' })
     res.end()
   } catch (err) {
+    const isOverloaded = err.status === 529 || err.message?.includes('overloaded')
+    if (isOverloaded && process.env.GROQ_API_KEY) {
+      console.warn('[Agent] Claude overloaded, falling back to Groq')
+      try {
+        send('delta', { text: '\n\n*[Claude is busy — switching to Groq Llama 3.3...]*\n\n' })
+        const abortCtrl = new AbortController()
+        req.on('close', () => abortCtrl.abort())
+        const msgs = [
+          ...history.slice(-10).map(m => ({ role: m.role, content: m.content })),
+          { role: 'user', content: symbol ? `Analyze ${symbol.toUpperCase()}. ${prompt}` : prompt },
+        ]
+        for await (const text of streamGroq(SYSTEM_PROMPT, msgs, abortCtrl.signal)) {
+          send('delta', { text })
+        }
+        send('done', {})
+        res.end()
+        return
+      } catch (groqErr) {
+        console.error('[Agent/Groq] Error:', groqErr.message)
+        send('error', { message: groqErr.message })
+        res.end()
+        return
+      }
+    }
     console.error('[Agent] Error:', err.message)
     if (!res.headersSent) return res.status(500).json({ error: err.message })
     send('error', { message: err.message })
@@ -533,13 +587,14 @@ router.post('/analyze', async (req, res) => {
 
 router.get('/health', (_req, res) => {
   res.json({
-    ok:           true,
-    hasKey:       !!process.env.ANTHROPIC_API_KEY,
-    hasFMP:       !!process.env.FMP_API_KEY,
-    hasAV:        !!process.env.ALPHA_VANTAGE_API_KEY,
-    hasFinnhub:   !!process.env.FINNHUB_API_KEY,
-    hasGemini:    !!process.env.GEMINI_API_KEY,
-    tools:        TOOLS.map(t => t.name),
+    ok:         true,
+    hasKey:     !!process.env.ANTHROPIC_API_KEY,
+    hasFMP:     !!process.env.FMP_API_KEY,
+    hasAV:      !!process.env.ALPHA_VANTAGE_API_KEY,
+    hasFinnhub: !!process.env.FINNHUB_API_KEY,
+    hasGemini:  !!process.env.GEMINI_API_KEY,
+    hasGroq:    !!process.env.GROQ_API_KEY,
+    tools:      TOOLS.map(t => t.name),
   })
 })
 

@@ -2,6 +2,7 @@ import { useState, useMemo, useRef, useCallback } from 'react'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { PortfolioProvider, usePortfolioContext } from './contexts/PortfolioContext'
 import { AITraderProvider } from './contexts/AITraderContext'
+import { ApiKeysProvider } from './contexts/ApiKeysContext'
 import { ToastProvider } from './components/shared/ToastNotifications'
 import LandingPage from './components/Landing/LandingPage'
 import AuthPage from './components/Auth/AuthPage'
@@ -23,8 +24,12 @@ import StockAgentView from './components/Research/StockAgentView'
 import TradingNetworkView from './components/Trading/TradingNetworkView'
 import EarningsCalendarView from './components/EarningsCalendar/EarningsCalendarView'
 import BacktestView from './components/Backtest/BacktestView'
+import BuySignalsView from './components/Recommendations/BuySignalsView'
+import AIBrainView from './components/AIBrain/AIBrainView'
+import AIWatchlistView from './components/AIWatchlist/AIWatchlistView'
 import PortfolioAnalyticsView from './components/Analytics/PortfolioAnalyticsView'
 import RebalancerView from './components/Rebalancer/RebalancerView'
+import TradingViewView from './components/TradingView/TradingViewView'
 import TraderProfileView from './components/Profile/TraderProfileView'
 import { usePortfolio } from './hooks/usePortfolio'
 import { useWatchlist } from './hooks/useWatchlist'
@@ -222,6 +227,18 @@ function MainApp({ onSignIn }) {
             {activeTab === 'backtest' && (
               <BacktestView />
             )}
+            {activeTab === 'buy-signals' && (
+              <BuySignalsView portfolio={portfolio} onAnalyze={navigateToAnalyze} />
+            )}
+            {activeTab === 'ai-brain' && (
+              <AIBrainView portfolio={portfolio} onAnalyze={navigateToAnalyze} />
+            )}
+            {activeTab === 'ai-watchlist' && (
+              <AIWatchlistView onAnalyze={navigateToAnalyze} />
+            )}
+            {activeTab === 'tradingview' && (
+              <TradingViewView />
+            )}
             {activeTab === 'analytics' && (
               <PortfolioAnalyticsView portfolio={portfolio} />
             )}
@@ -254,10 +271,12 @@ function MainApp({ onSignIn }) {
 // ── Root export ───────────────────────────────────────────────────────────────
 export default function App() {
   return (
-    <ToastProvider>
-      <AuthProvider>
-        <AppInner />
-      </AuthProvider>
-    </ToastProvider>
+    <ApiKeysProvider>
+      <ToastProvider>
+        <AuthProvider>
+          <AppInner />
+        </AuthProvider>
+      </ToastProvider>
+    </ApiKeysProvider>
   )
 }

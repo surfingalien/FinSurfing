@@ -12,7 +12,7 @@
  */
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { INITIAL_PORTFOLIO } from '../data/portfolio'
-import { fetchQuotes } from '../services/api'
+import { fetchQuotes, subscribeQuotes } from '../services/api'
 
 // ── Guest localStorage helpers ────────────────────────────────────────────────
 const DATA_VERSION = '3'
@@ -100,7 +100,7 @@ export function usePortfolio({ userId, activePortfolioId, authFetch } = {}) {
     setLoading(true)
     try {
       const symbols = positions.map(p => p.symbol)
-      const results = await fetchQuotes(symbols)
+      const results = await fetchQuotes(symbols, { force: true })
       const map = {}
       results.forEach(q => { if (q.symbol) map[q.symbol] = q })
       setQuotes(map)
@@ -113,10 +113,32 @@ export function usePortfolio({ userId, activePortfolioId, authFetch } = {}) {
   }, [positions])
 
   useEffect(() => {
+    if (!positions.length) return
+    // Full fetch on mount and every 5 min (prevClose, dayHigh, etc.)
     refresh()
-    const t = setInterval(refresh, 60000)
-    return () => clearInterval(t)
-  }, [refresh])
+    const fullRefresh = setInterval(refresh, 5 * 60_000)
+
+    // Real-time price stream — merges only price/change/changePct into existing quote data
+    const symbols = positions.map(p => p.symbol)
+    const unsub = subscribeQuotes(symbols, ({ symbol, price, change, changePct, ts }) => {
+      setQuotes(prev => {
+        const existing = prev[symbol] || {}
+        return {
+          ...prev,
+          [symbol]: {
+            ...existing,
+            price,
+            change,
+            changePct,
+            marketTime: ts ? Math.floor(ts / 1000) : existing.marketTime,
+          },
+        }
+      })
+      setLastUpdated(new Date())
+    })
+
+    return () => { clearInterval(fullRefresh); unsub() }
+  }, [refresh]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Mutations ──────────────────────────────────────────────────────────────
 

@@ -7,12 +7,13 @@ import {
 import {
   fetchChart, fetchSummary, searchSymbol,
   calcSMA, calcEMA, calcRSI, calcMACD, calcBollinger,
+  calcATR, calcSupertrend, calcADX, generateSignal,
   fmt, fmtPct, fmtLarge, fmtVol
 } from '../../services/api'
 import { StatRow, SectionCard, LoadingPulse } from '../shared/StockCard'
 
 const RANGES = ['1mo','3mo','6mo','1y','2y','5y']
-const INDICATORS = ['SMA20','SMA50','EMA12','EMA26','BB','RSI','MACD']
+const INDICATORS = ['SMA20','SMA50','EMA12','EMA26','BB','RSI','MACD','Supertrend','ADX']
 
 function SignalBadge({ signal }) {
   const cfg = {
@@ -89,6 +90,7 @@ export default function AnalysisView({ defaultSymbol }) {
   const [summary, setSummary] = useState(null)
   const [signals, setSignals] = useState([])
   const [overallSignal, setOverallSignal] = useState('Hold')
+  const [aiSignal,     setAiSignal]     = useState(null)
   const [loading, setLoading] = useState(false)
   const [searchResults, setSearchResults] = useState([])
   const [showResults, setShowResults] = useState(false)
@@ -101,7 +103,12 @@ export default function AnalysisView({ defaultSymbol }) {
       fetchSummary(symbol)
     ]).then(([chartRes, sumRes]) => {
       const candles = chartRes.candles
-      const closes = candles.map(c => c.close)
+      const closes  = candles.map(c => c.close)
+      const highs   = candles.map(c => c.high)
+      const lows    = candles.map(c => c.low)
+      const volumes = candles.map(c => c.volume)
+
+      // Standard indicators
       const sma20 = calcSMA(closes, 20)
       const sma50 = calcSMA(closes, 50)
       const ema12 = calcEMA(closes, 12)
@@ -110,28 +117,45 @@ export default function AnalysisView({ defaultSymbol }) {
       const macd  = calcMACD(closes)
       const bb    = calcBollinger(closes)
 
+      // Advanced indicators
+      const atr  = calcATR(highs, lows, closes, 14)
+      const st   = calcSupertrend(highs, lows, closes, 10, 3)
+      const adxR = calcADX(highs, lows, closes, 14)
+
       const enriched = candles.map((c, i) => ({
-        date:   new Date(c.time).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-        close:  c.close,
-        volume: c.volume,
-        sma20:  sma20[i],
-        sma50:  sma50[i],
-        ema12:  ema12[i],
-        ema26:  ema26[i],
-        rsi:    rsi[i],
-        macd:   macd[i]?.macd,
-        macdSig:macd[i]?.signal,
-        macdHist:macd[i]?.hist,
-        bbUpper:bb[i]?.upper,
-        bbMid:  bb[i]?.middle,
-        bbLower:bb[i]?.lower,
+        date:        new Date(c.time).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        close:       c.close,
+        volume:      c.volume,
+        sma20:       sma20[i],
+        sma50:       sma50[i],
+        ema12:       ema12[i],
+        ema26:       ema26[i],
+        rsi:         rsi[i],
+        macd:        macd[i]?.macd,
+        macdSig:     macd[i]?.signal,
+        macdHist:    macd[i]?.hist,
+        bbUpper:     bb[i]?.upper,
+        bbMid:       bb[i]?.middle,
+        bbLower:     bb[i]?.lower,
+        supertrend:  st.supertrend[i],
+        stBull:      st.direction[i] === 1  ? st.supertrend[i] : null,
+        stBear:      st.direction[i] === -1 ? st.supertrend[i] : null,
+        atr:         atr[i],
+        adx:         adxR.adx[i],
+        plusDI:      adxR.plusDI[i],
+        minusDI:     adxR.minusDI[i],
       }))
 
       setChartData(enriched)
       setSummary(sumRes)
+
+      // Basic signal rows for the side panel
       const sigs = deriveSignals(candles, activeIndicators)
       setSignals(sigs)
       setOverallSignal(aggregateSignal(sigs))
+
+      // Advanced multi-indicator signal
+      if (candles.length >= 60) setAiSignal(generateSignal(candles))
     }).catch(e => console.warn('Analysis load failed:', e))
     .finally(() => setLoading(false))
   }, [symbol, range])
@@ -155,9 +179,11 @@ export default function AnalysisView({ defaultSymbol }) {
     setActiveIndicators(prev => prev.includes(ind) ? prev.filter(x => x !== ind) : [...prev, ind])
   }
 
-  const showRSI  = activeIndicators.includes('RSI')
-  const showMACD = activeIndicators.includes('MACD')
-  const showBB   = activeIndicators.includes('BB')
+  const showRSI        = activeIndicators.includes('RSI')
+  const showMACD       = activeIndicators.includes('MACD')
+  const showBB         = activeIndicators.includes('BB')
+  const showSupertrend = activeIndicators.includes('Supertrend')
+  const showADX        = activeIndicators.includes('ADX')
 
   const CustomTooltip = ({ active, payload, label }) => {
     if (!active || !payload?.length) return null
@@ -248,6 +274,8 @@ export default function AnalysisView({ defaultSymbol }) {
                   {activeIndicators.includes('EMA12') && <Line dataKey="ema12" stroke="#ec4899" strokeWidth={1} dot={false} strokeDasharray="4 2" name="EMA12" />}
                   {activeIndicators.includes('EMA26') && <Line dataKey="ema26" stroke="#8b5cf6" strokeWidth={1} dot={false} strokeDasharray="4 2" name="EMA26" />}
                   {showBB && <Line dataKey="bbMid" stroke="rgba(99,102,241,0.5)" strokeWidth={1} dot={false} name="BB Mid" strokeDasharray="2 2" />}
+                  {showSupertrend && <Line dataKey="stBull" stroke="#10b981" strokeWidth={1.5} dot={false} name="ST Bull" connectNulls={false} />}
+                  {showSupertrend && <Line dataKey="stBear" stroke="#ef4444" strokeWidth={1.5} dot={false} name="ST Bear" connectNulls={false} />}
                 </ComposedChart>
               </ResponsiveContainer>
             </div>
@@ -282,6 +310,25 @@ export default function AnalysisView({ defaultSymbol }) {
               </div>
             )}
 
+            {/* ADX */}
+            {showADX && (
+              <div className="glass rounded-xl p-4">
+                <h3 className="text-xs font-semibold text-slate-400 mb-2">ADX / DMI (14) — trend strength · &gt;25 = strong</h3>
+                <ResponsiveContainer width="100%" height={100}>
+                  <ComposedChart data={chartData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
+                    <XAxis dataKey="date" tick={{ fill: '#64748b', fontSize: 10 }} tickLine={false} interval="preserveStartEnd" />
+                    <YAxis domain={[0, 60]} tick={{ fill: '#64748b', fontSize: 10 }} tickLine={false} ticks={[20, 25, 40]} width={30} />
+                    <Tooltip content={<CustomTooltip />} />
+                    <ReferenceLine y={25} stroke="rgba(255,255,255,0.15)" strokeDasharray="4 2" label={{ value: '25', fill: '#64748b', fontSize: 9 }} />
+                    <Line dataKey="adx"     stroke="#f59e0b" strokeWidth={2}   dot={false} name="ADX" />
+                    <Line dataKey="plusDI"  stroke="#10b981" strokeWidth={1}   dot={false} name="+DI" strokeDasharray="4 2" />
+                    <Line dataKey="minusDI" stroke="#ef4444" strokeWidth={1}   dot={false} name="-DI" strokeDasharray="4 2" />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+
             {/* MACD */}
             {showMACD && (
               <div className="glass rounded-xl p-4">
@@ -304,6 +351,51 @@ export default function AnalysisView({ defaultSymbol }) {
 
           {/* Side panel */}
           <div className="space-y-3">
+
+            {/* AI Signal — Supertrend + RSI + MACD + ADX + Ichimoku combined */}
+            {aiSignal && (
+              <SectionCard title="AI Signal">
+                <div className="flex items-center justify-between mb-3">
+                  <span className={`text-lg font-black tracking-tight
+                    ${aiSignal.action === 'BUY'  ? 'text-emerald-400' :
+                      aiSignal.action === 'SELL' ? 'text-red-400' : 'text-amber-400'}`}>
+                    {aiSignal.action}
+                  </span>
+                  <div className="text-right">
+                    <div className="text-xs text-slate-500">Confidence</div>
+                    <div className="text-sm font-bold text-white">{(aiSignal.confidence * 100).toFixed(0)}%</div>
+                  </div>
+                </div>
+                {aiSignal.action !== 'HOLD' && (
+                  <div className="grid grid-cols-2 gap-2 mb-3">
+                    <div className="p-2 rounded-lg bg-red-500/10 border border-red-500/20">
+                      <div className="text-[10px] text-red-400 font-medium">Stop Loss</div>
+                      <div className="text-xs font-mono text-white">${fmt(aiSignal.stopLoss)}</div>
+                    </div>
+                    <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                      <div className="text-[10px] text-emerald-400 font-medium">Take Profit</div>
+                      <div className="text-xs font-mono text-white">${fmt(aiSignal.takeProfit)}</div>
+                    </div>
+                    <div className="col-span-2 p-2 rounded-lg bg-white/[0.04] border border-white/[0.06]">
+                      <div className="text-[10px] text-slate-500 font-medium">Risk / Reward</div>
+                      <div className="text-xs font-mono text-white">1 : {aiSignal.riskReward}</div>
+                    </div>
+                  </div>
+                )}
+                <div className="space-y-1">
+                  {aiSignal.rationale.map((r, i) => (
+                    <div key={i} className="flex items-center gap-1.5 text-[11px] text-slate-400">
+                      <span className={`w-1 h-1 rounded-full shrink-0
+                        ${aiSignal.action === 'BUY' ? 'bg-emerald-400' :
+                          aiSignal.action === 'SELL' ? 'bg-red-400' : 'bg-amber-400'}`} />
+                      {r}
+                    </div>
+                  ))}
+                </div>
+                <p className="text-[9px] text-slate-600 mt-2">Supertrend + RSI + MACD + ADX + Ichimoku · Not financial advice</p>
+              </SectionCard>
+            )}
+
             {/* Signal summary */}
             <SectionCard title="Technical Signal">
               <div className="flex justify-center py-3">

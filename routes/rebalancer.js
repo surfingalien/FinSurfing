@@ -32,7 +32,6 @@ router.post('/suggest', async (req, res) => {
   if (!Array.isArray(holdings) || holdings.length === 0)
     return res.status(400).json({ error: 'holdings array is required' })
 
-  // Compute current portfolio value + sector weights
   const totalValue = holdings.reduce((s, h) => s + (h.shares * h.currentPrice || 0), 0)
   if (totalValue <= 0)
     return res.status(400).json({ error: 'Portfolio value is zero — provide currentPrice for holdings' })
@@ -84,19 +83,25 @@ Be direct and actionable. Use dollar amounts, share counts, and percentages thro
   res.setHeader('Content-Type', 'text/event-stream')
   res.setHeader('Cache-Control', 'no-cache')
   res.setHeader('Connection', 'keep-alive')
+  res.setHeader('X-Accel-Buffering', 'no')
   res.flushHeaders()
 
   try {
     const client = getClient()
-    const stream = await client.messages.stream({
-      model:      'claude-opus-4-7',
+
+    // Use messages.create({ stream: true }) — returns a proper async iterable.
+    // Do NOT await messages.stream() — its .then() resolves to the final message,
+    // leaving nothing to iterate.
+    const stream = await client.messages.create({
+      model:      'claude-opus-4-5',
       max_tokens: 1500,
+      stream:     true,
       messages:   [{ role: 'user', content: prompt }],
     })
 
-    for await (const chunk of stream) {
-      if (chunk.type === 'content_block_delta' && chunk.delta?.type === 'text_delta') {
-        res.write(`data: ${JSON.stringify({ text: chunk.delta.text })}\n\n`)
+    for await (const event of stream) {
+      if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
+        res.write(`data: ${JSON.stringify({ text: event.delta.text })}\n\n`)
       }
     }
 

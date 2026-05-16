@@ -6,15 +6,6 @@ const helmet       = require('helmet')
 const cookieParser = require('cookie-parser')
 const rateLimit    = require('express-rate-limit')
 
-// yahoo-finance2 handles crumb/cookie auth automatically — preferred over raw Yahoo API calls
-let yf2
-try {
-  yf2 = require('yahoo-finance2').default
-  yf2.setGlobalConfig({ validation: { logErrors: false, logWarnings: false } })
-} catch (e) {
-  console.warn('[YF2] yahoo-finance2 unavailable, using raw API only:', e.message)
-}
-
 const authRoutes        = require('./routes/auth')
 const portfolioRoutes   = require('./routes/portfolios')
 const publicRoutes      = require('./routes/public')
@@ -25,7 +16,9 @@ const copyTradingRoutes = require('./routes/copy-trading')
 const earningsRoutes    = require('./routes/earnings')
 const backtestRoutes    = require('./routes/backtest')
 const analyticsRoutes   = require('./routes/analytics')
-const rebalancerRoutes  = require('./routes/rebalancer')
+const rebalancerRoutes      = require('./routes/rebalancer')
+const recommendationsRoutes = require('./routes/recommendations')
+const aiBrainRoutes         = require('./routes/ai-brain')
 
 const { seedAdminDB } = require('./db/adminSeed')
 
@@ -79,7 +72,7 @@ app.use(helmet({
       scriptSrc:   ["'self'", "'unsafe-inline'"],   // Vite needs inline scripts
       styleSrc:    ["'self'", "'unsafe-inline'"],
       imgSrc:      ["'self'", 'data:', 'https:'],
-      connectSrc:  ["'self'", 'https://query1.finance.yahoo.com', 'https://query2.finance.yahoo.com', 'https://ai4trade.ai'],
+      connectSrc:  ["'self'", 'https://finnhub.io', 'https://financialmodelingprep.com', 'https://ai4trade.ai', 'https://api.aisa.one', 'https://www.alphavantage.co', 'https://api.twelvedata.com'],
       fontSrc:     ["'self'", 'data:'],
       objectSrc:   ["'none'"],
       upgradeInsecureRequests: PROD ? [] : null,
@@ -145,124 +138,791 @@ app.use('/api/copy-trading', copyTradingRoutes)
 app.use('/api/earnings',     earningsRoutes)
 app.use('/api/backtest',     backtestRoutes)
 app.use('/api/analytics',    analyticsRoutes)
-app.use('/api/rebalancer',   rebalancerRoutes)
+app.use('/api/rebalancer',        rebalancerRoutes)
+app.use('/api/recommendations',   recommendationsRoutes)
+app.use('/api/ai-brain',          aiBrainRoutes)
 
-/* ── Safe fetch helpers ────────────────────────── */
-const YF1 = 'https://query1.finance.yahoo.com'
-const YF2 = 'https://query2.finance.yahoo.com'
+/* ── Market data helpers (AISA primary → Finnhub → FMP fallback) ─────────────
+   Yahoo Finance is completely removed — its IPs are blocked on Railway.
+   AISA (api.aisa.one) is the primary source — cloud-friendly, pay-per-use.
+   Set AISA_API_KEY in Railway env vars: https://aisa.one
+   ─────────────────────────────────────────────────────────────────────────── */
 
-const HEADERS = {
-  'User-Agent':      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-  'Accept':          'application/json, text/plain, */*',
-  'Accept-Language': 'en-US,en;q=0.9',
-  'Accept-Encoding': 'gzip, deflate, br',
-  'Referer':         'https://finance.yahoo.com/',
-  'Origin':          'https://finance.yahoo.com',
-  'sec-ch-ua':       '"Chromium";v="124"',
-  'sec-fetch-dest':  'empty',
-  'sec-fetch-mode':  'cors',
-  'sec-fetch-site':  'same-site',
+const JSON_HEADERS = { Accept: 'application/json' }
+
+async function apiFetch(url, timeoutMs = 10000) {
+  const r = await fetch(url, { headers: JSON_HEADERS, signal: AbortSignal.timeout(timeoutMs) })
+  if (!r.ok) throw new Error(`HTTP ${r.status}`)
+  return r.json()
 }
 
-// ── Yahoo Finance crumb/cookie cache ──────────────────────────────────────────
-// Yahoo's v7 API requires a crumb + session cookie from cloud IPs.
-// We fetch once per ~45 min and attach to all raw Yahoo Finance requests.
-const yfCrumb = { value: null, cookie: null, fetchedAt: 0 }
-const CRUMB_TTL = 45 * 60 * 1000
+// ── Server-side quote cache (30 s TTL for quotes, 15 min for charts) ─────────
+const _quoteCache = new Map()
+const QUOTE_TTL = 30_000
+const CHART_TTL = 15 * 60_000   // 15 minutes — chart data rarely changes intraday
 
-async function getYFCrumb() {
-  if (yfCrumb.value && Date.now() - yfCrumb.fetchedAt < CRUMB_TTL) return yfCrumb
+function cacheSet(key, data) { _quoteCache.set(key, { data, ts: Date.now() }) }
+function cacheGet(key) {
+  const hit = _quoteCache.get(key)
+  if (!hit) return null
+  const ttl = key.startsWith('chart:') ? CHART_TTL : QUOTE_TTL
+  return Date.now() - hit.ts < ttl ? hit.data : null
+}
+// Evict stale entries every 5 minutes to prevent unbounded memory growth
+setInterval(() => {
+  const now = Date.now()
+  for (const [k, v] of _quoteCache) {
+    const ttl = k.startsWith('chart:') ? CHART_TTL : QUOTE_TTL
+    if (now - v.ts > ttl) _quoteCache.delete(k)
+  }
+}, 5 * 60_000)
+
+// ── Extract user-supplied API keys from request headers ───────────────────────
+// Browser stores keys in localStorage and attaches them as custom headers.
+// Header keys take precedence over server env vars so users can use their own.
+function extractKeys(req) {
+  return {
+    aisa:    (req.headers['x-aisa-key']    || '').trim() || process.env.AISA_API_KEY    || null,
+    finnhub: (req.headers['x-finnhub-key'] || '').trim() || process.env.FINNHUB_API_KEY || null,
+    fmp:     (req.headers['x-fmp-key']     || '').trim() || process.env.FMP_API_KEY     || null,
+    av:      (req.headers['x-av-key']      || '').trim() || process.env.ALPHA_VANTAGE_API_KEY || process.env.AV_API_KEY || null,
+    td:      (req.headers['x-td-key']      || '').trim() || process.env.TWELVE_DATA_API_KEY  || null,
+  }
+}
+
+// ── AISA helpers (api.aisa.one) ────────────────────────────────────────────────
+// Primary data source — works from Railway/cloud IPs, no IP blocking.
+// Get a key at https://aisa.one (~$0.001/request, pay-as-you-go)
+const AISA_KEY  = () => process.env.AISA_API_KEY
+const AISA_BASE = 'https://api.aisa.one/apis/v1'
+
+async function aisaFetch(path, timeoutMs = 12000, key = AISA_KEY()) {
+  if (!key) return null
+  const r = await fetch(`${AISA_BASE}${path}`, {
+    headers: { Authorization: `Bearer ${key}`, Accept: 'application/json' },
+    signal:  AbortSignal.timeout(timeoutMs),
+  })
+  if (!r.ok) throw new Error(`AISA HTTP ${r.status}`)
+  return r.json()
+}
+
+// Convert range string to { start_date, end_date } (YYYY-MM-DD)
+function rangeToDateRange(range) {
+  const end   = new Date()
+  const start = new Date()
+  const days  = { '1d':2,'5d':7,'1mo':35,'3mo':95,'6mo':185,'1y':370,'2y':740,'5y':1830,'max':7300 }
+  start.setDate(end.getDate() - (days[range] || 370))
+  const fmt = d => d.toISOString().slice(0, 10)
+  return { start_date: fmt(start), end_date: fmt(end) }
+}
+
+// Convert interval to AISA interval + multiplier
+function intervalToAISA(interval) {
+  const map = { '1m':['minute',1],'5m':['minute',5],'15m':['minute',15],'30m':['minute',30],
+                '60m':['minute',60],'1h':['minute',60],'1d':['day',1],'1wk':['week',1],'1mo':['month',1] }
+  return map[interval] || ['day', 1]
+}
+
+// Historical OHLCV chart — returns Yahoo-envelope format the client expects
+async function getAISAChart(symbol, interval = '1d', range = '1y', keys = {}) {
+  const key = keys.aisa || AISA_KEY()
+  if (!key) return null
   try {
-    const r1 = await fetch('https://finance.yahoo.com/', {
-      headers: { ...HEADERS, Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8' },
-      redirect: 'follow',
-      signal: AbortSignal.timeout(10000),
-    })
-    // Collect all Set-Cookie values into a single Cookie header string
-    const rawCookie = r1.headers.get('set-cookie') || ''
-    const cookie = rawCookie.split(',').map(c => c.trim().split(';')[0]).filter(Boolean).join('; ')
-    const r2 = await fetch('https://query1.finance.yahoo.com/v1/test/getcrumb', {
-      headers: { ...HEADERS, Cookie: cookie },
-      signal: AbortSignal.timeout(8000),
-    })
-    const crumb = (await r2.text()).trim()
-    if (crumb && crumb.length >= 3 && !crumb.startsWith('<')) {
-      Object.assign(yfCrumb, { value: crumb, cookie, fetchedAt: Date.now() })
-      console.log('[YF] Crumb refreshed')
-      return yfCrumb
+    const [ivl, mult] = intervalToAISA(interval)
+    const { start_date, end_date } = rangeToDateRange(range)
+    const sym = encodeURIComponent(symbol)
+
+    // Try known endpoint paths in order — logs help identify the correct one
+    const candidatePaths = [
+      `/financial/prices?ticker=${sym}&interval=${ivl}&interval_multiplier=${mult}&start_date=${start_date}&end_date=${end_date}`,
+      `/financial/historical-prices?ticker=${sym}&start=${start_date}&end=${end_date}`,
+      `/market/prices?ticker=${sym}&start_date=${start_date}&end_date=${end_date}`,
+      `/financial/price-history?ticker=${sym}&from=${start_date}&to=${end_date}&interval=${ivl}`,
+    ]
+
+    let data = null
+    for (const path of candidatePaths) {
+      try {
+        const result = await aisaFetch(path, 12000, key)
+        if (Array.isArray(result) && result.length > 0) {
+          data = result
+          console.log(`[AISA] chart path OK: ${path.split('?')[0]} for ${symbol}`)
+          break
+        }
+        console.warn(`[AISA] chart path ${path.split('?')[0]} non-array:`, JSON.stringify(result)?.slice(0, 150))
+      } catch (e) {
+        console.warn(`[AISA] chart path ${path.split('?')[0]} error: ${e.message}`)
+      }
+    }
+
+    if (!data) return null
+    // AISA returns [{date|timestamp, open, high, low, close, volume}]
+    const sorted = [...data].sort((a, b) => new Date(a.date || a.timestamp) - new Date(b.date || b.timestamp))
+    const timestamps = sorted.map(d => Math.floor(new Date(d.date || d.timestamp).getTime() / 1000))
+    const opens  = sorted.map(d => d.open  ?? null)
+    const highs  = sorted.map(d => d.high  ?? null)
+    const lows   = sorted.map(d => d.low   ?? null)
+    const closes = sorted.map(d => d.close ?? null)
+    const vols   = sorted.map(d => d.volume ?? 0)
+    const lastClose = closes.filter(Boolean).at(-1) ?? null
+    return {
+      chart: { result: [{
+        meta:      { symbol, regularMarketPrice: lastClose, chartPreviousClose: closes.filter(Boolean).at(-2) ?? null },
+        timestamp: timestamps,
+        indicators: {
+          quote:    [{ open: opens, high: highs, low: lows, close: closes, volume: vols }],
+          adjclose: [{ adjclose: closes }],
+        },
+      }], error: null },
+    }
+  } catch (e) { console.warn('[AISA] chart error:', e.message); return null }
+}
+
+// Real-time quote via metrics snapshot (fully serial to respect AISA rate limits ~2 req/s)
+async function getAISAQuotes(symbols, keys = {}) {
+  const key = keys.aisa || AISA_KEY()
+  if (!key) return null
+  try {
+    const results = []
+    for (let i = 0; i < symbols.length; i++) {
+      const sym = symbols[i]
+      const ck  = `aisaq:${sym}`
+      const hit = cacheGet(ck)
+      if (hit) { results.push(hit); continue }
+
+      try {
+        if (i > 0) await new Promise(r => setTimeout(r, 200))  // 200ms between calls = max 5/s
+        const d = await aisaFetch(`/financial/financial-metrics/snapshot?ticker=${encodeURIComponent(sym)}`, 8000, key)
+        // Try multiple price field names (format varies by symbol type)
+        const price = d?.price ?? d?.current_price ?? d?.regularMarketPrice ?? d?.last_price ?? d?.lastPrice ?? null
+        if (!price) {
+          console.warn(`[AISA] null price for ${sym}:`, JSON.stringify(d)?.slice(0, 200))
+          results.push({ symbol: sym, regularMarketPrice: null })
+          continue
+        }
+        const q = {
+          symbol:                     sym,
+          shortName:                  d.name || sym,
+          regularMarketPrice:         price,
+          regularMarketChange:        d.change              ?? d.price_change        ?? null,
+          regularMarketChangePercent: d.change_percent      ?? d.price_change_percent ?? null,
+          regularMarketVolume:        d.volume              ?? null,
+          regularMarketDayHigh:       d.day_high            ?? null,
+          regularMarketDayLow:        d.day_low             ?? null,
+          regularMarketOpen:          d.open                ?? null,
+          regularMarketPreviousClose: d.previous_close      ?? null,
+          fiftyTwoWeekHigh:           d.week_52_high        ?? null,
+          fiftyTwoWeekLow:            d.week_52_low         ?? null,
+          marketCap:                  d.market_cap          ?? null,
+          trailingPE:                 d.pe_ratio            ?? null,
+        }
+        cacheSet(ck, q)
+        results.push(q)
+      } catch (e) {
+        console.warn(`[AISA] quote error for ${sym}:`, e.message)
+        results.push({ symbol: sym, regularMarketPrice: null })
+      }
+    }
+    return results
+  } catch { return null }
+}
+
+// ── Finnhub helpers ───────────────────────────────────────────────────────────
+function fhUrl(path, key = FH_KEY()) {
+  const sep = path.includes('?') ? '&' : '?'
+  return `https://finnhub.io/api/v1${path}${sep}token=${key}`
+}
+const FH_KEY = () => process.env.FINNHUB_API_KEY
+
+// Quote (per-symbol, parallel)
+async function getFinnhubQuotes(symbols, keys = {}) {
+  const key = keys.finnhub || FH_KEY()
+  if (!key) return null
+  try {
+    const results = await Promise.all(symbols.map(async sym => {
+      const ck = `fhq:${sym}`
+      const cached = cacheGet(ck)
+      if (cached) return cached
+      try {
+        const d = await apiFetch(fhUrl(`/quote?symbol=${encodeURIComponent(sym)}`, key), 8000)
+        // d.c === 0 happens after market hours on the free tier — fall back to d.pc (previous close)
+        const price = d?.c || d?.pc || null
+        if (!price) return { symbol: sym, regularMarketPrice: null }
+        const isStale = !d.c && !!d.pc  // using prev close when market is closed
+        const q = {
+          symbol:                     sym,
+          shortName:                  sym,
+          regularMarketPrice:         price,
+          regularMarketChange:        isStale ? 0 : (d.d   ?? null),
+          regularMarketChangePercent: isStale ? 0 : (d.dp  ?? null),
+          regularMarketDayHigh:       d.h   ?? null,
+          regularMarketDayLow:        d.l   ?? null,
+          regularMarketOpen:          d.o   ?? null,
+          regularMarketPreviousClose: d.pc  ?? null,
+          regularMarketTime:          d.t   ?? null,
+        }
+        cacheSet(ck, q)
+        return q
+      } catch { return { symbol: sym, regularMarketPrice: null } }
+    }))
+    return results
+  } catch { return null }
+}
+
+// Chart OHLCV — returns data in Yahoo chart envelope (client expects this format)
+function toFhResolution(interval) {
+  return { '1m':'1','5m':'5','15m':'15','30m':'30','60m':'60','1h':'60','1d':'D','1wk':'W','1mo':'M' }[interval] || 'D'
+}
+function rangeToUnix(range) {
+  const to   = Math.floor(Date.now() / 1000)
+  const secs = { '1d':86400,'5d':432000,'1mo':2592000,'3mo':7776000,'6mo':15552000,'1y':31536000,'2y':63072000,'5y':157680000,'max':630720000 }
+  return { from: to - (secs[range] || 31536000), to }
+}
+async function getFinnhubChart(symbol, interval = '1d', range = '1y', keys = {}) {
+  const key = keys.finnhub || FH_KEY()
+  if (!key) return null
+  try {
+    const res = toFhResolution(interval)
+    const { from, to } = rangeToUnix(range)
+    const d = await apiFetch(
+      fhUrl(`/stock/candle?symbol=${encodeURIComponent(symbol)}&resolution=${res}&from=${from}&to=${to}`, key),
+      15000
+    )
+    if (d?.s !== 'ok' || !d.t?.length) return null
+    return {
+      chart: { result: [{
+        meta: { symbol, regularMarketPrice: d.c.at(-1) ?? null, chartPreviousClose: d.c.at(-2) ?? null, regularMarketTime: d.t.at(-1) ?? null },
+        timestamp: d.t,
+        indicators: {
+          quote:    [{ open: d.o, high: d.h, low: d.l, close: d.c, volume: d.v }],
+          adjclose: [{ adjclose: d.c }],
+        },
+      }], error: null }
+    }
+  } catch (e) { console.warn('[Finnhub] chart error:', e.message); return null }
+}
+
+// Symbol search
+async function getFinnhubSearch(q, keys = {}) {
+  const key = keys.finnhub || FH_KEY()
+  if (!key) return null
+  try {
+    const d = await apiFetch(fhUrl(`/search?q=${encodeURIComponent(q)}`, key), 8000)
+    if (!d?.result?.length) return null
+    const typeMap = { 'Common Stock':'EQUITY', 'ETP':'ETF', 'Index':'INDEX', 'ADR':'EQUITY' }
+    return { quotes: d.result.slice(0, 10).map(r => ({
+      symbol: r.symbol, shortname: r.description, longname: r.description,
+      quoteType: typeMap[r.type] || 'EQUITY', exchange: r.displaySymbol,
+    })) }
+  } catch { return null }
+}
+
+// News
+async function getFinnhubNews(symbol, keys = {}) {
+  const key = keys.finnhub || FH_KEY()
+  if (!key) return null
+  try {
+    const today = new Date().toISOString().slice(0, 10)
+    const from  = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10)
+    const path  = symbol
+      ? `/company-news?symbol=${encodeURIComponent(symbol)}&from=${from}&to=${today}`
+      : `/news?category=general&minId=0`
+    const data  = await apiFetch(fhUrl(path, key), 10000)
+    if (!Array.isArray(data)) return null
+    return { news: data.slice(0, 8).map(a => ({
+      title: a.headline, link: a.url, publisher: a.source,
+      providerPublishTime: a.datetime,
+      thumbnail: a.image ? { resolutions: [{ url: a.image }] } : null,
+    })) }
+  } catch { return null }
+}
+
+// ── FMP helpers ───────────────────────────────────────────────────────────────
+const FMP_KEY = () => process.env.FMP_API_KEY
+function fmpUrl(path, key = FMP_KEY()) {
+  const sep = path.includes('?') ? '&' : '?'
+  return `https://financialmodelingprep.com/api/v3${path}${sep}apikey=${key}`
+}
+
+// Batch quote
+async function getFMPQuotes(symbols, keys = {}) {
+  const key = keys.fmp || FMP_KEY()
+  if (!key) return null
+  try {
+    const data = await apiFetch(fmpUrl(`/quote/${symbols.join(',')}`, key), 10000)
+    if (!Array.isArray(data) || !data.length) return null
+    return data.map(q => ({
+      symbol:                     q.symbol,
+      shortName:                  q.name            || q.symbol,
+      regularMarketPrice:         q.price           ?? null,
+      regularMarketChange:        q.change          ?? null,
+      regularMarketChangePercent: q.changesPercentage ?? null,
+      regularMarketVolume:        q.volume          ?? null,
+      regularMarketDayHigh:       q.dayHigh         ?? null,
+      regularMarketDayLow:        q.dayLow          ?? null,
+      regularMarketOpen:          q.open            ?? null,
+      regularMarketPreviousClose: q.previousClose   ?? null,
+      regularMarketTime:          q.timestamp       ?? null,
+      fiftyTwoWeekHigh:           q.yearHigh        ?? null,
+      fiftyTwoWeekLow:            q.yearLow         ?? null,
+      marketCap:                  q.marketCap       ?? null,
+      trailingPE:                 q.pe              ?? null,
+    }))
+  } catch { return null }
+}
+
+// Chart OHLCV
+async function getFMPChart(symbol, interval = '1d', range = '1y', keys = {}) {
+  const key = keys.fmp || FMP_KEY()
+  if (!key) return null
+  try {
+    const today = new Date()
+    const to    = today.toISOString().slice(0, 10)
+    const days  = { '1d':1,'5d':5,'1mo':30,'3mo':90,'6mo':180,'1y':365,'2y':730,'5y':1825,'max':7300 }[range] || 365
+    const from  = new Date(today.getTime() - days * 86400000).toISOString().slice(0, 10)
+    const isDailyPlus = ['1d','1wk','1mo'].includes(interval)
+    let url, historical
+    if (isDailyPlus) {
+      const data = await apiFetch(fmpUrl(`/historical-price-full/${encodeURIComponent(symbol)}?from=${from}&to=${to}`, key), 15000)
+      historical = data?.historical
+    } else {
+      const intMap = { '1m':'1min','5m':'5min','15m':'15min','30m':'30min','60m':'1hour','1h':'1hour' }
+      const fi = intMap[interval] || '1hour'
+      historical = await apiFetch(fmpUrl(`/historical-chart/${fi}/${encodeURIComponent(symbol)}?from=${from}&to=${to}`, key), 15000)
+    }
+    if (!Array.isArray(historical) || !historical.length) return null
+    const hist = [...historical].reverse()  // FMP returns newest-first
+    const ts  = hist.map(d => Math.floor(new Date(d.date).getTime() / 1000))
+    const cls = hist.map(d => d.close ?? d.adjClose ?? null)
+    return {
+      chart: { result: [{
+        meta: { symbol, regularMarketPrice: cls.at(-1) ?? null, chartPreviousClose: cls.at(-2) ?? null },
+        timestamp: ts,
+        indicators: {
+          quote:    [{ open: hist.map(d => d.open), high: hist.map(d => d.high), low: hist.map(d => d.low), close: cls, volume: hist.map(d => d.volume) }],
+          adjclose: [{ adjclose: hist.map(d => d.adjClose || d.close) }],
+        },
+      }], error: null }
+    }
+  } catch (e) { console.warn('[FMP] chart error:', e.message); return null }
+}
+
+// Fundamentals summary — returns Yahoo quoteSummary-compatible envelope
+async function getFMPSummary(symbol, keys = {}) {
+  const key = keys.fmp || FMP_KEY()
+  if (!key) return null
+  try {
+    const [profileR, metricsR] = await Promise.allSettled([
+      apiFetch(fmpUrl(`/profile/${encodeURIComponent(symbol)}`, key), 10000),
+      apiFetch(fmpUrl(`/key-metrics-ttm/${encodeURIComponent(symbol)}`, key), 10000),
+    ])
+    const p = profileR.status  === 'fulfilled' ? (profileR.value?.[0]  || {}) : {}
+    const m = metricsR.status  === 'fulfilled' ? (metricsR.value?.[0]  || {}) : {}
+    if (!p.symbol) return null
+    return { quoteSummary: { result: [{
+      summaryDetail: {
+        trailingPE:      p.pe           ?? null,
+        marketCap:       p.mktCap       ?? null,
+        dividendYield:   p.lastDiv && p.price ? p.lastDiv / p.price : null,
+        beta:            p.beta          ?? null,
+        fiftyTwoWeekHigh: p['52WeekHigh'] ?? null,
+        fiftyTwoWeekLow:  p['52WeekLow']  ?? null,
+        averageVolume:   p.volAvg        ?? null,
+      },
+      financialData: {
+        returnOnEquity:   m.roeTTM                  ?? null,
+        debtToEquity:     m.debtToEquityTTM          ?? null,
+        currentRatio:     m.currentRatioTTM          ?? null,
+        revenueGrowth:    m.revenueGrowthTTM         ?? null,
+        profitMargins:    m.netProfitMarginTTM       ?? null,
+        grossMargins:     m.grossProfitMarginTTM     ?? null,
+        operatingMargins: m.operatingProfitMarginTTM ?? null,
+        targetMeanPrice:  p.dcf                      ?? null,
+        recommendationKey: p.dcfDiff > 0 ? 'buy' : p.dcfDiff < 0 ? 'sell' : null,
+      },
+      defaultKeyStatistics: {
+        trailingEps: m.epsTTM     ?? null,
+        priceToBook: m.pbRatioTTM ?? null,
+      },
+      assetProfile: {
+        sector:              p.sector           ?? null,
+        industry:            p.industry         ?? null,
+        longName:            p.companyName      ?? null,
+        longBusinessSummary: p.description      ?? null,
+        fullTimeEmployees:   p.fullTimeEmployees ?? null,
+        country:             p.country          ?? null,
+      },
+    }], error: null } }
+  } catch (e) { console.warn('[FMP] summary error:', e.message); return null }
+}
+
+// Symbol search
+async function getFMPSearch(q, keys = {}) {
+  const key = keys.fmp || FMP_KEY()
+  if (!key) return null
+  try {
+    const data = await apiFetch(fmpUrl(`/search?query=${encodeURIComponent(q)}&limit=10`, key), 8000)
+    if (!Array.isArray(data) || !data.length) return null
+    return { quotes: data.map(r => ({
+      symbol: r.symbol, shortname: r.name, longname: r.name,
+      quoteType: 'EQUITY', exchange: r.exchangeShortName,
+    })) }
+  } catch { return null }
+}
+
+// ── Twelve Data helpers ───────────────────────────────────────────────────────
+// Free tier: 800 req/day, 8 req/min. Demo key works for major US symbols.
+// Register at twelvedata.com for a free 800/day key (add as TWELVE_DATA_API_KEY).
+// Falls back to built-in 'demo' key for AAPL/MSFT/AMZN/GOOGL/etc.
+
+async function getTwelveDataChart(symbol, interval = '1d', range = '1y', keys = {}) {
+  const key     = keys.td || process.env.TWELVE_DATA_API_KEY || 'demo'
+  const ivlMap  = { '1m':'1min','5m':'5min','15m':'15min','30m':'30min','60m':'1h','1h':'1h','1d':'1day','1wk':'1week','1mo':'1month' }
+  const tdIvl   = ivlMap[interval]
+  if (!tdIvl) return null
+  try {
+    const days       = { '1d':3,'5d':10,'1mo':38,'3mo':98,'6mo':190,'1y':375,'2y':745,'5y':1835,'max':5000 }
+    const outputsize = Math.min(days[range] || 375, 5000)
+    const url        = `https://api.twelvedata.com/time_series?symbol=${encodeURIComponent(symbol)}&interval=${tdIvl}&outputsize=${outputsize}&apikey=${key}`
+    const data       = await apiFetch(url, 15000)
+    if (data?.status !== 'ok' || !Array.isArray(data?.values) || !data.values.length) {
+      const errMsg = data?.message || data?.code || JSON.stringify(data)?.slice(0, 200)
+      console.warn(`[TwelveData] chart fail for ${symbol}: ${errMsg}`)
+      return null
+    }
+    // Values are newest-first; reverse to oldest-first
+    const rows       = [...data.values].reverse()
+    const timestamps = rows.map(r => Math.floor(new Date(r.datetime + 'Z').getTime() / 1000))
+    const closes     = rows.map(r => parseFloat(r.close))
+    const lastClose  = closes.at(-1)
+    console.log(`[TwelveData] chart OK: ${symbol} (${rows.length} bars)`)
+    return {
+      chart: { result: [{
+        meta: { symbol, regularMarketPrice: lastClose, chartPreviousClose: closes.at(-2) ?? null },
+        timestamp: timestamps,
+        indicators: {
+          quote:    [{ open: rows.map(r=>parseFloat(r.open)), high: rows.map(r=>parseFloat(r.high)), low: rows.map(r=>parseFloat(r.low)), close: closes, volume: rows.map(r=>parseInt(r.volume)||0) }],
+          adjclose: [{ adjclose: closes }],
+        },
+      }], error: null },
+    }
+  } catch (e) { console.warn('[TwelveData] chart error:', e.message); return null }
+}
+
+// Quote via Twelve Data (single symbol, counts against quota)
+async function getTwelveDataQuote(symbol, keys = {}) {
+  const key  = keys.td || process.env.TWELVE_DATA_API_KEY || 'demo'
+  try {
+    const url  = `https://api.twelvedata.com/quote?symbol=${encodeURIComponent(symbol)}&apikey=${key}`
+    const d    = await apiFetch(url, 10000)
+    if (d?.status === 'error' || !d?.close) return null
+    const price = parseFloat(d.close)
+    if (!price) return null
+    return {
+      symbol,
+      shortName:                  d.name || symbol,
+      regularMarketPrice:         price,
+      regularMarketChange:        parseFloat(d.change)           || null,
+      regularMarketChangePercent: parseFloat(d.percent_change)   || null,
+      regularMarketVolume:        parseInt(d.volume)             || null,
+      regularMarketDayHigh:       parseFloat(d.high)             || null,
+      regularMarketDayLow:        parseFloat(d.low)              || null,
+      regularMarketOpen:          parseFloat(d.open)             || null,
+      regularMarketPreviousClose: parseFloat(d.previous_close)   || null,
+      fiftyTwoWeekHigh:           parseFloat(d['52_week']['high'])  || null,
+      fiftyTwoWeekLow:            parseFloat(d['52_week']['low'])   || null,
+    }
+  } catch { return null }
+}
+
+// ── Alpha Vantage helpers ─────────────────────────────────────────────────────
+// Free tier: 25 req/day, 5 req/min. Used as final fallback for chart + summary.
+
+// Historical daily OHLCV chart
+async function getAVChart(symbol, interval = '1d', range = '1y', keys = {}) {
+  const key = keys.av || process.env.ALPHA_VANTAGE_API_KEY || process.env.AV_API_KEY
+  if (!key) return null
+  // AV intraday not on free tier — daily only
+  if (!['1d','1wk','1mo'].includes(interval)) return null
+  try {
+    const needFull = ['2y','5y','max'].includes(range)
+    // Use TIME_SERIES_DAILY (free tier) — DAILY_ADJUSTED is premium-only
+    const url = `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=${encodeURIComponent(symbol)}&outputsize=${needFull ? 'full' : 'compact'}&apikey=${key}`
+    const data = await apiFetch(url, 20000)
+    const series = data?.['Time Series (Daily)']
+    if (!series) {
+      const note = data?.['Note'] || data?.['Information'] || data?.['Error Message'] || JSON.stringify(data)?.slice(0, 200)
+      console.warn(`[AV] chart no-series for ${symbol}:`, note)
+      return null
+    }
+
+    const days = { '1d':2,'5d':8,'1mo':35,'3mo':95,'6mo':185,'1y':370,'2y':740,'5y':1830,'max':9999 }
+    const cutoff = new Date()
+    cutoff.setDate(cutoff.getDate() - (days[range] || 370))
+
+    const entries = Object.entries(series)
+      .filter(([date]) => new Date(date) >= cutoff)
+      .sort(([a],[b]) => a.localeCompare(b))
+
+    if (entries.length < 5) return null
+
+    const timestamps = entries.map(([date]) => Math.floor(new Date(date).getTime() / 1000))
+    const opens  = entries.map(([,v]) => parseFloat(v['1. open']))
+    const highs  = entries.map(([,v]) => parseFloat(v['2. high']))
+    const lows   = entries.map(([,v]) => parseFloat(v['3. low']))
+    const closes = entries.map(([,v]) => parseFloat(v['4. close']))
+    const vols   = entries.map(([,v]) => parseInt(v['5. volume']) || 0)
+    const adjs   = closes  // no adjusted close on free tier — use close
+
+    const lastClose = closes.at(-1) ?? null
+    console.log(`[AV] chart OK: ${symbol} (${entries.length} bars)`)
+    return {
+      chart: { result: [{
+        meta: { symbol, regularMarketPrice: lastClose, chartPreviousClose: closes.at(-2) ?? null },
+        timestamp: timestamps,
+        indicators: {
+          quote:    [{ open: opens, high: highs, low: lows, close: closes, volume: vols }],
+          adjclose: [{ adjclose: adjs }],
+        },
+      }], error: null },
+    }
+  } catch (e) { console.warn('[AV] chart error:', e.message); return null }
+}
+
+// Company overview — fundamentals (P/E, margins, sector, etc.)
+async function getAVSummary(symbol, keys = {}) {
+  const key = keys.av || process.env.ALPHA_VANTAGE_API_KEY || process.env.AV_API_KEY
+  if (!key) return null
+  try {
+    const url = `https://www.alphavantage.co/query?function=OVERVIEW&symbol=${encodeURIComponent(symbol)}&apikey=${key}`
+    const d = await apiFetch(url, 12000)
+    if (!d?.Symbol) {
+      const note = d?.['Note'] || d?.['Information'] || d?.['Error Message'] || JSON.stringify(d)?.slice(0, 200)
+      console.warn(`[AV] summary no-symbol for ${symbol}:`, note)
+      return null
+    }
+    const p = (field) => { const v = parseFloat(d[field]); return isNaN(v) ? null : v }
+    const i = (field) => { const v = parseInt(d[field]);   return isNaN(v) ? null : v }
+    console.log(`[AV] summary OK: ${symbol}`)
+    return { quoteSummary: { result: [{
+      summaryDetail: {
+        trailingPE:      p('TrailingPE'),
+        forwardPE:       p('ForwardPE'),
+        marketCap:       i('MarketCapitalization'),
+        dividendYield:   p('DividendYield'),
+        beta:            p('Beta'),
+        fiftyTwoWeekHigh: p('52WeekHigh'),
+        fiftyTwoWeekLow:  p('52WeekLow'),
+        averageVolume:   i('AverageVolume'),
+      },
+      financialData: {
+        returnOnEquity:   p('ReturnOnEquityTTM'),
+        profitMargins:    p('ProfitMargin'),
+        grossMargins:     null,
+        operatingMargins: p('OperatingMarginTTM'),
+        revenueGrowth:    p('QuarterlyRevenueGrowthYOY'),
+        earningsGrowth:   p('QuarterlyEarningsGrowthYOY'),
+        targetMeanPrice:  p('AnalystTargetPrice'),
+        recommendationKey: null,
+        totalRevenue:     i('RevenueTTM'),
+        freeCashflow:     null,
+      },
+      defaultKeyStatistics: {
+        trailingEps: p('EPS'),
+        priceToBook: p('PriceToBookRatio'),
+      },
+      assetProfile: {
+        sector:              d.Sector              || null,
+        industry:            d.Industry            || null,
+        longName:            d.Name                || null,
+        longBusinessSummary: d.Description         || null,
+        fullTimeEmployees:   i('FullTimeEmployees'),
+        country:             d.Country             || null,
+      },
+    }], error: null } }
+  } catch (e) { console.warn('[AV] summary error:', e.message); return null }
+}
+
+// Quote fallback — last resort, free tier only (25 req/day)
+async function getAVQuotes(symbols, keys = {}) {
+  const key = keys.av || process.env.ALPHA_VANTAGE_API_KEY || process.env.AV_API_KEY
+  if (!key) return null
+  try {
+    // AV free tier: 25 requests/day, 5/min — use only first symbol for quote
+    const results = await Promise.all(symbols.slice(0, 5).map(async sym => {
+      try {
+        const url  = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${encodeURIComponent(sym)}&apikey=${key}`
+        const data = await apiFetch(url, 10000)
+        const q    = data?.['Global Quote']
+        const price = parseFloat(q?.['05. price'])
+        if (!price) return { symbol: sym, regularMarketPrice: null }
+        return {
+          symbol:                     sym,
+          shortName:                  sym,
+          regularMarketPrice:         price,
+          regularMarketChange:        parseFloat(q?.['09. change'])         || null,
+          regularMarketChangePercent: parseFloat(q?.['10. change percent']) || null,
+          regularMarketVolume:        parseInt(q?.['06. volume'])           || null,
+          regularMarketDayHigh:       parseFloat(q?.['03. high'])           || null,
+          regularMarketDayLow:        parseFloat(q?.['04. low'])            || null,
+          regularMarketOpen:          parseFloat(q?.['02. open'])           || null,
+          regularMarketPreviousClose: parseFloat(q?.['08. previous close']) || null,
+        }
+      } catch { return { symbol: sym, regularMarketPrice: null } }
+    }))
+    return results
+  } catch { return null }
+}
+
+// ── Finnhub 30-minute health check ───────────────────────────────────────────
+// Validates the key is still working; logs the status so it's visible in Railway logs.
+async function finnhubHealthCheck() {
+  if (!FH_KEY()) { console.log('[Finnhub] FINNHUB_API_KEY not set — using FMP only'); return }
+  try {
+    const d = await apiFetch(fhUrl('/quote?symbol=SPY'), 8000)
+    const price = d?.c || d?.pc
+    if (price) {
+      console.log(`[Finnhub] health OK — SPY $${price}${!d.c ? ' (prev close)' : ''}`)
+    } else {
+      console.warn('[Finnhub] health check: unexpected response', JSON.stringify(d).slice(0, 120))
     }
   } catch (e) {
-    console.warn('[YF] crumb fetch failed:', e.message)
+    console.warn('[Finnhub] health check failed:', e.message)
   }
-  return null
+}
+// Run at startup (after 5 s) then every 30 minutes
+setTimeout(() => { finnhubHealthCheck(); setInterval(finnhubHealthCheck, 30 * 60_000) }, 5000)
+
+// ── Finnhub WebSocket — real-time trade stream ────────────────────────────────
+// Server-side WS connection to Finnhub; price updates pushed to browser clients
+// via the /api/stream/quotes SSE endpoint below.
+const WebSocket       = require('ws')
+let   _fhWs           = null
+let   _fhWsDelay      = 1000
+const _fhSubscribed   = new Set()   // symbols currently subscribed on Finnhub WS
+const _sseClients     = new Map()   // clientId → { res, symbols: Set<string> }
+
+function _fhSend(obj) {
+  if (_fhWs?.readyState === WebSocket.OPEN) _fhWs.send(JSON.stringify(obj))
 }
 
-async function yfFetch(url, timeoutMs = 10000) {
-  const ctrl = new AbortController()
-  const timer = setTimeout(() => ctrl.abort(), timeoutMs)
-  try {
-    const auth = await getYFCrumb()
-    const headers = { ...HEADERS }
-    let authUrl = url
-    if (auth?.value) {
-      headers.Cookie = auth.cookie
-      authUrl += (url.includes('?') ? '&' : '?') + `crumb=${encodeURIComponent(auth.value)}`
+function _fhEnsureSub(symbol) {
+  if (_fhSubscribed.has(symbol)) return
+  _fhSubscribed.add(symbol)
+  _fhSend({ type: 'subscribe', symbol })
+}
+
+function _fhUnsubIfUnused(symbol) {
+  const needed = [..._sseClients.values()].some(c => c.symbols.has(symbol))
+  if (!needed) {
+    _fhSubscribed.delete(symbol)
+    _fhSend({ type: 'unsubscribe', symbol })
+  }
+}
+
+function _sseBroadcast(symbol, payload) {
+  const line = `data: ${JSON.stringify(payload)}\n\n`
+  for (const [, c] of _sseClients) {
+    if (c.symbols.has(symbol)) {
+      try { c.res.write(line) } catch {}
     }
-    const res  = await fetch(authUrl, { headers, signal: ctrl.signal })
-    const text = await res.text()
+  }
+}
+
+function _connectFhWs() {
+  if (!FH_KEY()) return
+  _fhWs = new WebSocket(`wss://ws.finnhub.io?token=${FH_KEY()}`)
+
+  _fhWs.on('open', () => {
+    console.log('[Finnhub WS] connected')
+    _fhWsDelay = 1000
+    for (const sym of _fhSubscribed) _fhSend({ type: 'subscribe', symbol: sym })
+  })
+
+  _fhWs.on('message', raw => {
     try {
-      return JSON.parse(text)
-    } catch {
-      // Yahoo returned non-JSON (rate limit / bot challenge) — invalidate crumb and try alt host
-      if (auth) { yfCrumb.value = null; yfCrumb.fetchedAt = 0 }
-      const altUrl = url.includes(YF1) ? url.replace(YF1, YF2) : url.replace(YF2, YF1)
-      const res2   = await fetch(altUrl, { headers: HEADERS, signal: AbortSignal.timeout(timeoutMs) })
-      const text2  = await res2.text()
-      try { return JSON.parse(text2) } catch { return null }
+      const msg = JSON.parse(raw)
+      if (msg.type !== 'trade' || !Array.isArray(msg.data)) return
+      for (const t of msg.data) {
+        const sym = t.s, price = t.p
+        if (!sym || price == null) continue
+        const prev    = cacheGet(`fhq:${sym}`)
+        const pc      = prev?.regularMarketPreviousClose ?? null
+        const chg     = pc != null ? +(price - pc).toFixed(4) : null
+        const chgPct  = pc != null ? +((price - pc) / pc * 100).toFixed(4) : null
+        cacheSet(`fhq:${sym}`, {
+          ...(prev || { symbol: sym, shortName: sym }),
+          regularMarketPrice:         price,
+          regularMarketChange:        chg,
+          regularMarketChangePercent: chgPct,
+          regularMarketTime:          t.t ? Math.floor(t.t / 1000) : null,
+        })
+        _sseBroadcast(sym, { symbol: sym, price, change: chg, changePct: chgPct, ts: t.t })
+      }
+    } catch {}
+  })
+
+  _fhWs.on('close', () => {
+    console.warn('[Finnhub WS] closed — reconnect in', _fhWsDelay, 'ms')
+    setTimeout(() => { _fhWsDelay = Math.min(_fhWsDelay * 2, 30_000); _connectFhWs() }, _fhWsDelay)
+  })
+
+  _fhWs.on('error', e => console.warn('[Finnhub WS] error:', e.message))
+}
+
+// Delay 6 s so REST health check fires first (which warms the cache)
+setTimeout(() => { if (FH_KEY()) _connectFhWs() }, 6000)
+
+/* ── SSE: real-time quote stream ───────────────────────────────────────────── */
+// GET /api/stream/quotes?symbols=AAPL,MSFT
+// Sends: data: {"symbol":"AAPL","price":182.5,"change":1.2,"changePct":0.66,"ts":1234567890000}
+app.get('/api/stream/quotes', (req, res) => {
+  const symbols = (req.query.symbols || '')
+    .split(',')
+    .map(s => s.trim().toUpperCase().replace(/[^A-Z0-9.-]/g, ''))
+    .filter(Boolean)
+    .slice(0, 30)
+  if (!symbols.length) return res.status(400).end()
+
+  res.setHeader('Content-Type', 'text/event-stream')
+  res.setHeader('Cache-Control', 'no-cache')
+  res.setHeader('Connection', 'keep-alive')
+  res.setHeader('X-Accel-Buffering', 'no')   // prevent nginx from buffering the stream
+  res.flushHeaders()
+
+  const id     = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  const symSet = new Set(symbols)
+  _sseClients.set(id, { res, symbols: symSet })
+
+  // Subscribe these symbols on the Finnhub WS
+  for (const sym of symbols) _fhEnsureSub(sym)
+
+  // Immediately flush any cached price so the UI isn't blank while waiting for the next trade
+  for (const sym of symbols) {
+    const c = cacheGet(`fhq:${sym}`)
+    if (c?.regularMarketPrice != null) {
+      res.write(`data: ${JSON.stringify({
+        symbol: sym, price: c.regularMarketPrice,
+        change: c.regularMarketChange ?? null,
+        changePct: c.regularMarketChangePercent ?? null,
+        ts: c.regularMarketTime ? c.regularMarketTime * 1000 : null,
+      })}\n\n`)
     }
-  } finally {
-    clearTimeout(timer)
   }
-}
 
-// Warm up the crumb cache at startup so the first quote request doesn't pay the cost
-setTimeout(() => getYFCrumb().catch(() => {}), 3000)
+  // Keep-alive ping every 25 s (proxies drop idle SSE after ~30 s)
+  const hb = setInterval(() => {
+    try { res.write(': ping\n\n') } catch { close() }
+  }, 25_000)
 
-/* ── Price via chart v8 (most reliable from cloud IPs) */
-async function getChartQuote(symbol) {
-  const url  = `${YF1}/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=2d`
-  const data = await yfFetch(url, 12000)
-  const r    = data?.chart?.result?.[0]
-  if (!r) return null
-  const m    = r.meta || {}
-
-  const price     = m.regularMarketPrice ?? null
-  // chart API returns chartPreviousClose (not previousClose) for change base
-  const prevClose = m.chartPreviousClose ?? m.previousClose ?? null
-  // Yahoo rarely includes regularMarketChange in chart meta — compute it
-  const change    = m.regularMarketChange
-    ?? (price != null && prevClose != null ? +((price - prevClose).toFixed(4)) : null)
-  const changePct = m.regularMarketChangePercent
-    ?? (change != null && prevClose != null ? +((change / prevClose * 100).toFixed(4)) : null)
-
-  return {
-    symbol:      m.symbol || symbol,
-    name:        m.symbol || symbol,
-    price,
-    change,
-    changePct,
-    volume:      m.regularMarketVolume  ?? null,
-    high52:      m.fiftyTwoWeekHigh     ?? null,
-    low52:       m.fiftyTwoWeekLow      ?? null,
-    dayHigh:     m.regularMarketDayHigh ?? null,
-    dayLow:      m.regularMarketDayLow  ?? null,
-    open:        m.regularMarketOpen    ?? null,
-    prevClose,
-    regularMarketTime: m.regularMarketTime ?? null,  // Unix seconds — used for daily P/L reset
-    marketCap:   null,
-    pe:          null,
+  function close() {
+    clearInterval(hb)
+    _sseClients.delete(id)
+    for (const sym of symbols) _fhUnsubIfUnused(sym)
   }
-}
+  req.on('close', close)
+})
+
 
 /* ── Health (includes DB status + demo mode) ───── */
 app.get('/health', async (_req, res) => {
@@ -271,63 +931,73 @@ app.get('/health', async (_req, res) => {
   if (!demoMode) {
     try { const { ping } = require('./db/db'); dbOk = await ping() } catch {}
   }
-  res.json({ ok: true, db: dbOk, demoMode, ts: Date.now() })
+  const avKey = process.env.ALPHA_VANTAGE_API_KEY || process.env.AV_API_KEY
+  const tdKey = process.env.TWELVE_DATA_API_KEY
+  res.json({ ok: true, db: dbOk, demoMode, aisa: !!AISA_KEY(), finnhub: !!FH_KEY(), fmp: !!FMP_KEY(), av: !!avKey, td: !!tdKey, tdDemo: !tdKey, ts: Date.now() })
 })
+
+// Extract last price from chart cache (populated by /api/chart calls — 15-min TTL)
+// Used as a fast quote source before hitting rate-limited external APIs
+function getPriceFromChartCache(symbol) {
+  for (const range of ['2d','5d','1mo','3mo','1y']) {
+    const chart = cacheGet(`chart:${symbol}:1d:${range}`)
+    const price = chart?.chart?.result?.[0]?.meta?.regularMarketPrice
+    if (price != null) return price
+  }
+  return null
+}
 
 /* ── Quote (batch) ─────────────────────────────── */
 app.get('/api/quote', async (req, res) => {
-  const symbols = (req.query.symbols || '').split(',').filter(Boolean)
+  const symbols = (req.query.symbols || '').split(',').map(s => s.trim().toUpperCase()).filter(Boolean)
   if (!symbols.length) return res.status(400).json({ error: 'symbols required' })
+  const keys = extractKeys(req)
   try {
-    // 1st choice: yahoo-finance2 (manages crumb/cookie automatically)
-    if (yf2) {
-      try {
-        const raw     = await yf2.quote(symbols, {}, { validateResult: false })
-        const rawArr  = Array.isArray(raw) ? raw : [raw]
-        const results = rawArr.map(q => ({
-          symbol:                      q.symbol,
-          shortName:                   q.shortName  || q.longName || q.symbol,
-          longName:                    q.longName   || q.shortName || q.symbol,
-          regularMarketPrice:          q.regularMarketPrice          ?? null,
-          regularMarketChange:         q.regularMarketChange         ?? null,
-          regularMarketChangePercent:  q.regularMarketChangePercent  ?? null,
-          regularMarketVolume:         q.regularMarketVolume         ?? null,
-          regularMarketDayHigh:        q.regularMarketDayHigh        ?? null,
-          regularMarketDayLow:         q.regularMarketDayLow         ?? null,
-          regularMarketOpen:           q.regularMarketOpen           ?? null,
-          regularMarketPreviousClose:  q.regularMarketPreviousClose  ?? null,
-          // yahoo-finance2 returns regularMarketTime as a Date object
-          regularMarketTime: q.regularMarketTime instanceof Date
-            ? Math.floor(q.regularMarketTime.getTime() / 1000)
-            : (q.regularMarketTime ?? null),
-          fiftyTwoWeekHigh:  q.fiftyTwoWeekHigh  ?? null,
-          fiftyTwoWeekLow:   q.fiftyTwoWeekLow   ?? null,
-          marketCap:         q.marketCap          ?? null,
-          trailingPE:        q.trailingPE         ?? null,
-        }))
-        if (results.some(r => r.regularMarketPrice != null)) {
-          return res.json({ quoteResponse: { result: results } })
-        }
-      } catch (e) {
-        console.warn('[YF2] quote error:', e.message)
-      }
+    // 0th: chart-price cache — free, instant, covers any symbol whose chart was recently loaded
+    const fromCache = symbols.map(sym => {
+      const p = getPriceFromChartCache(sym)
+      if (p == null) return null
+      const ck = cacheGet(`aisaq:${sym}`)  // use AISA quote if available (has more fields)
+      return ck || { symbol: sym, shortName: sym, regularMarketPrice: p }
+    })
+    if (fromCache.every(r => r !== null)) {
+      console.log('[quote] all from chart-price cache:', symbols.join(','))
+      return res.json({ quoteResponse: { result: fromCache } })
     }
 
-    // 2nd choice: raw v7 endpoint with crumb
-    const url  = `${YF1}/v7/finance/quote?symbols=${symbols.join(',')}&fields=regularMarketPrice,regularMarketChange,regularMarketChangePercent,regularMarketVolume,marketCap,trailingPE,fiftyTwoWeekHigh,fiftyTwoWeekLow,shortName,longName,regularMarketDayHigh,regularMarketDayLow,regularMarketOpen,regularMarketPreviousClose,regularMarketTime`
-    const data = await yfFetch(url, 12000)
-    const results = data?.quoteResponse?.result
-    if (results && results.length && results.some(r => r.regularMarketPrice != null)) {
-      return res.json({ quoteResponse: { result: results } })
-    }
+    // 1st: AISA — serial requests, 200ms apart (respects ~5 req/s limit)
+    const aisa = await getAISAQuotes(symbols, keys).catch(() => null)
+    if (aisa?.some(r => r.regularMarketPrice != null))
+      return res.json({ quoteResponse: { result: aisa } })
 
-    // 3rd choice: per-symbol chart API (v8 — most resilient from cloud IPs)
-    const quotes = await Promise.all(
-      symbols.map(s => getChartQuote(s).catch(() => ({ symbol: s, price: null })))
-    )
-    res.json({ quoteResponse: { result: quotes } })
+    // 2nd: Finnhub
+    const fh = await getFinnhubQuotes(symbols, keys)
+    if (fh?.some(r => r.regularMarketPrice != null))
+      return res.json({ quoteResponse: { result: fh } })
+
+    // 3rd: FMP
+    const fmp = await getFMPQuotes(symbols, keys)
+    if (fmp?.some(r => r.regularMarketPrice != null))
+      return res.json({ quoteResponse: { result: fmp } })
+
+    // 4th: Alpha Vantage (free tier, 25 req/day)
+    const av = await getAVQuotes(symbols, keys)
+    if (av?.some(r => r.regularMarketPrice != null))
+      return res.json({ quoteResponse: { result: av } })
+
+    // 5th: Twelve Data (demo key or user key)
+    const tdResults = await Promise.all(symbols.map(s => getTwelveDataQuote(s, keys).catch(() => null)))
+    if (tdResults.some(r => r?.regularMarketPrice != null))
+      return res.json({ quoteResponse: { result: tdResults.map((r, i) => r || { symbol: symbols[i], regularMarketPrice: null }) } })
+
+    // Last: merge chart-cache prices for symbols we have, null for the rest
+    const merged = symbols.map((sym, i) => {
+      const p = getPriceFromChartCache(sym)
+      return p != null ? { symbol: sym, shortName: sym, regularMarketPrice: p } : { symbol: sym, regularMarketPrice: null }
+    })
+    return res.json({ quoteResponse: { result: merged } })
   } catch (e) {
-    res.json({ quoteResponse: { result: symbols.map(s => ({ symbol: s, price: null })) } })
+    res.json({ quoteResponse: { result: symbols.map(s => ({ symbol: s, regularMarketPrice: null })) } })
   }
 })
 
@@ -335,61 +1005,183 @@ app.get('/api/quote', async (req, res) => {
 app.get('/api/chart', async (req, res) => {
   const { symbol, interval = '1d', range = '1y' } = req.query
   if (!symbol) return res.status(400).json({ error: 'symbol required' })
+  const keys = extractKeys(req)
+
+  // Serve from cache when available (15-min TTL)
+  const cacheKey = `chart:${symbol}:${interval}:${range}`
+  const cached = cacheGet(cacheKey)
+  if (cached) return res.json(cached)
+
   try {
-    const url  = `${YF1}/v8/finance/chart/${encodeURIComponent(symbol)}?interval=${interval}&range=${range}&includePrePost=false`
-    const data = await yfFetch(url, 15000)
-    if (data) return res.json(data)
-    const url2 = url.replace(YF1, YF2)
-    const d2   = await yfFetch(url2, 15000)
-    res.json(d2 || { chart: { result: null, error: { code: 'blocked', description: 'Rate limited' } } })
+    // Helper: cache chart result + warm the per-symbol price cache for /api/quote
+    const saveChart = (data, provider) => {
+      cacheSet(cacheKey, data)
+      const price = data?.chart?.result?.[0]?.meta?.regularMarketPrice
+      if (price != null && !cacheGet(`aisaq:${symbol}`)) {
+        cacheSet(`aisaq:${symbol}`, { symbol, shortName: symbol, regularMarketPrice: price })
+      }
+      console.log(`[chart] ${provider}: ${symbol}`)
+      return data
+    }
+
+    // 1st: AISA — cloud-friendly Yahoo Finance proxy
+    const aisa = await getAISAChart(symbol, interval, range, keys).catch(() => null)
+    if (aisa) return res.json(saveChart(aisa, 'AISA'))
+
+    // 2nd: Finnhub candles
+    const fh = await getFinnhubChart(symbol, interval, range, keys)
+    if (fh) return res.json(saveChart(fh, 'Finnhub'))
+
+    // 3rd: FMP historical
+    const fmp = await getFMPChart(symbol, interval, range, keys)
+    if (fmp) return res.json(saveChart(fmp, 'FMP'))
+
+    // 4th: Twelve Data (800 req/day free tier; demo key covers major US symbols)
+    const td = await getTwelveDataChart(symbol, interval, range, keys)
+    if (td) return res.json(saveChart(td, 'TwelveData'))
+
+    // 5th: Alpha Vantage (25 req/day free tier — last resort)
+    const av = await getAVChart(symbol, interval, range, keys)
+    if (av) return res.json(saveChart(av, 'AV'))
+
+    res.status(502).json({ chart: { result: null, error: { code: 'unavailable', description: 'No market data provider returned data' } } })
   } catch (e) {
     res.status(500).json({ error: e.message })
   }
 })
 
+// Build a minimal quoteSummary from the AISA snapshot (P/E, market cap, 52w range etc.)
+async function getAISASummary(symbol, keys = {}) {
+  const key = keys.aisa || AISA_KEY()
+  if (!key) return null
+  try {
+    const d = await aisaFetch(`/financial/financial-metrics/snapshot?ticker=${encodeURIComponent(symbol)}`, 8000, key)
+    const price = d?.price ?? d?.current_price ?? null
+    if (!price) return null
+    console.log(`[AISA] summary OK: ${symbol}`)
+    return { quoteSummary: { result: [{
+      summaryDetail: {
+        trailingPE:       d.pe_ratio           ?? null,
+        forwardPE:        d.forward_pe         ?? null,
+        marketCap:        d.market_cap         ?? null,
+        dividendYield:    d.dividend_yield     ?? null,
+        beta:             d.beta               ?? null,
+        fiftyTwoWeekHigh: d.week_52_high       ?? null,
+        fiftyTwoWeekLow:  d.week_52_low        ?? null,
+        averageVolume:    d.avg_volume          ?? null,
+      },
+      financialData: {
+        returnOnEquity:   d.return_on_equity   ?? null,
+        profitMargins:    d.profit_margin      ?? null,
+        grossMargins:     d.gross_margin       ?? null,
+        targetMeanPrice:  d.target_price       ?? null,
+        recommendationKey: null,
+        totalRevenue:     d.revenue            ?? null,
+        earningsGrowth:   d.earnings_growth    ?? null,
+        revenueGrowth:    d.revenue_growth     ?? null,
+      },
+      defaultKeyStatistics: {
+        trailingEps: d.eps            ?? null,
+        priceToBook: d.price_to_book  ?? null,
+      },
+      assetProfile: {
+        sector:              d.sector           ?? null,
+        industry:            d.industry         ?? null,
+        longName:            d.name             ?? null,
+        longBusinessSummary: d.description      ?? null,
+        fullTimeEmployees:   d.employees        ?? null,
+        country:             d.country          ?? null,
+      },
+    }], error: null } }
+  } catch (e) { console.warn('[AISA] summary error:', e.message); return null }
+}
+
 /* ── Fundamentals ──────────────────────────────── */
 app.get('/api/summary', async (req, res) => {
-  const { symbol, modules = 'summaryDetail,financialData,defaultKeyStatistics,assetProfile' } = req.query
+  const { symbol } = req.query
   if (!symbol) return res.status(400).json({ error: 'symbol required' })
+  const keys = extractKeys(req)
   try {
-    // 1st choice: yahoo-finance2
-    if (yf2) {
-      try {
-        const moduleList = modules.split(',')
-        const data = await yf2.quoteSummary(symbol, { modules: moduleList }, { validateResult: false })
-        // Wrap in the v10-compatible envelope the client expects
-        return res.json({ quoteSummary: { result: [data], error: null } })
-      } catch (e) {
-        console.warn('[YF2] quoteSummary error:', e.message)
-      }
-    }
-    // Fallback: raw v10 endpoint with crumb
-    const url  = `${YF1}/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=${modules}`
-    const data = await yfFetch(url, 15000)
-    if (data) return res.json(data)
-    const url2 = url.replace(YF1, YF2)
-    res.json(await yfFetch(url2, 15000) || {})
+    // 1st: FMP (most complete fundamentals)
+    const fmp = await getFMPSummary(symbol, keys)
+    if (fmp) return res.json(fmp)
+
+    // 2nd: Alpha Vantage OVERVIEW (free, cloud-friendly)
+    const av = await getAVSummary(symbol, keys)
+    if (av) return res.json(av)
+
+    // 3rd: AISA snapshot (partial fundamentals — P/E, market cap, 52w range)
+    const aisa = await getAISASummary(symbol, keys)
+    if (aisa) return res.json(aisa)
+
+    res.json({ quoteSummary: { result: null, error: { code: 'unavailable' } } })
   } catch (e) {
     res.status(500).json({ error: e.message })
   }
 })
 
 /* ── Search ────────────────────────────────────── */
+async function getAVSearch(query, keys = {}) {
+  const key = keys.av || process.env.ALPHA_VANTAGE_API_KEY || process.env.AV_API_KEY
+  if (!key) return null
+  try {
+    const url  = `https://www.alphavantage.co/query?function=SYMBOL_SEARCH&keywords=${encodeURIComponent(query)}&apikey=${key}`
+    const data = await apiFetch(url, 10000)
+    const matches = data?.bestMatches
+    if (!Array.isArray(matches) || !matches.length) return null
+    return { quotes: matches
+      .filter(m => m['4. region'] === 'United States' || m['1. symbol'].length <= 5)
+      .slice(0, 8)
+      .map(m => ({
+        symbol:    m['1. symbol'],
+        shortname: m['2. name'],
+        longname:  m['2. name'],
+        quoteType: m['3. type'] === 'Equity' ? 'EQUITY' : m['3. type']?.toUpperCase() || 'EQUITY',
+        exchange:  m['4. region'],
+      }))
+    }
+  } catch { return null }
+}
+
+async function getTwelveDataSearch(query, keys = {}) {
+  const key  = keys.td || process.env.TWELVE_DATA_API_KEY || 'demo'
+  try {
+    const url  = `https://api.twelvedata.com/symbol_search?symbol=${encodeURIComponent(query)}&apikey=${key}`
+    const data = await apiFetch(url, 8000)
+    const list = data?.data
+    if (!Array.isArray(list) || !list.length) return null
+    return { quotes: list
+      .filter(s => s.country === 'United States' || s.exchange?.startsWith('NASDAQ') || s.exchange?.startsWith('NYSE'))
+      .slice(0, 8)
+      .map(s => ({
+        symbol:    s.symbol,
+        shortname: s.instrument_name,
+        longname:  s.instrument_name,
+        quoteType: s.instrument_type?.toUpperCase() || 'EQUITY',
+        exchange:  s.exchange,
+      }))
+    }
+  } catch { return null }
+}
+
 app.get('/api/search', async (req, res) => {
   const { q } = req.query
   if (!q) return res.status(400).json({ error: 'q required' })
+  const keys = extractKeys(req)
   try {
-    if (yf2) {
-      try {
-        const data = await yf2.search(q, { quotesCount: 10, newsCount: 0 }, { validateResult: false })
-        if (data?.quotes?.length) return res.json(data)
-      } catch (e) {
-        console.warn('[YF2] search error:', e.message)
-      }
-    }
-    const url  = `${YF2}/v1/finance/search?q=${encodeURIComponent(q)}&quotesCount=10&newsCount=0`
-    const data = await yfFetch(url, 10000)
-    res.json(data || { quotes: [] })
+    const fh = await getFinnhubSearch(q, keys)
+    if (fh?.quotes?.length) return res.json(fh)
+
+    const fmp = await getFMPSearch(q, keys)
+    if (fmp?.quotes?.length) return res.json(fmp)
+
+    const td = await getTwelveDataSearch(q, keys)
+    if (td?.quotes?.length) return res.json(td)
+
+    const av = await getAVSearch(q, keys)
+    if (av?.quotes?.length) return res.json(av)
+
+    res.json({ quotes: [] })
   } catch (e) {
     res.json({ quotes: [] })
   }
@@ -397,11 +1189,12 @@ app.get('/api/search', async (req, res) => {
 
 /* ── News ──────────────────────────────────────── */
 app.get('/api/news', async (req, res) => {
-  const q   = req.query.symbol || 'stock market'
+  const symbol = req.query.symbol || null
+  const keys = extractKeys(req)
   try {
-    const url  = `${YF1}/v1/finance/search?q=${encodeURIComponent(q)}&quotesCount=0&newsCount=8`
-    const data = await yfFetch(url, 10000)
-    res.json(data || { news: [] })
+    const fh = await getFinnhubNews(symbol, keys)
+    if (fh) return res.json(fh)
+    res.json({ news: [] })
   } catch (e) {
     res.json({ news: [] })
   }
@@ -440,7 +1233,7 @@ if (process.env.DATABASE_URL) {
       const priceMap = {}
       for (const sym of uniqueSymbols) {
         try {
-          const url = `http://localhost:${process.env.PORT || 3001}/api/chart?symbol=${encodeURIComponent(sym)}&interval=1d&range=2d`
+          const url = `http://127.0.0.1:${process.env.PORT || 3001}/api/chart?symbol=${encodeURIComponent(sym)}&interval=1d&range=2d`
           const d   = await fetch(url, { signal: AbortSignal.timeout(8000) }).then(r => r.json())
           const price = d?.chart?.result?.[0]?.meta?.regularMarketPrice
           if (price) priceMap[sym] = price

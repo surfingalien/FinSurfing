@@ -19,13 +19,14 @@ router.use(optionalAuth)
 
 const DB_MODE = !!process.env.DATABASE_URL
 
-// ── Fetch daily closes from Yahoo Finance ─────────────────────────────────────
-async function fetchCloses(symbol, range = '1y') {
-  const url  = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=${range}&interval=1d`
-  const ctrl = new AbortController()
-  const t    = setTimeout(() => ctrl.abort(), 12_000)
+// ── Fetch daily closes via internal /api/chart proxy (Finnhub → FMP) ──────────
+async function fetchCloses(symbol, range = '1y', fwdHeaders = {}) {
+  const port = process.env.PORT || 3001
   try {
-    const r    = await fetch(url, { signal: ctrl.signal, headers: { 'User-Agent': 'Mozilla/5.0' } })
+    const r    = await fetch(
+      `http://127.0.0.1:${port}/api/chart?symbol=${encodeURIComponent(symbol)}&interval=1d&range=${range}`,
+      { headers: fwdHeaders, signal: AbortSignal.timeout(12_000) }
+    )
     const data = await r.json()
     const result = data?.chart?.result?.[0]
     const closes = result?.indicators?.quote?.[0]?.close ?? []
@@ -34,7 +35,6 @@ async function fetchCloses(symbol, range = '1y') {
       .map((ts, i) => ({ date: new Date(ts * 1000).toISOString().slice(0, 10), close: closes[i] }))
       .filter(p => p.close != null && !isNaN(p.close))
   } catch { return [] }
-  finally { clearTimeout(t) }
 }
 
 // ── Daily returns from close array ───────────────────────────────────────────
@@ -80,6 +80,11 @@ function beta(stockRet, mktRet) {
 // Accepts optional ?symbols=AAPL,MSFT,GOOG query param for manual analysis
 // Falls back to reading from the authenticated user's active portfolio when no symbols provided
 router.get('/portfolio', async (req, res) => {
+  const fwdHeaders = {}
+  for (const h of ['x-aisa-key', 'x-finnhub-key', 'x-fmp-key', 'x-td-key', 'x-av-key']) {
+    if (req.headers[h]) fwdHeaders[h] = req.headers[h]
+  }
+
   const userId = req.user?.userId
 
   let symbols = []
@@ -127,8 +132,8 @@ router.get('/portfolio', async (req, res) => {
 
   // Fetch benchmark + all holdings in parallel
   const [spyData, ...holdingData] = await Promise.all([
-    fetchCloses('SPY', '1y'),
-    ...symsToFetch.map(s => fetchCloses(s, '1y')),
+    fetchCloses('SPY', '1y', fwdHeaders),
+    ...symsToFetch.map(s => fetchCloses(s, '1y', fwdHeaders)),
   ])
 
   const spyRet = dailyReturns(spyData.map(p => p.close))

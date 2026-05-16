@@ -14,13 +14,15 @@ import {
   TrendingUp, SlidersHorizontal, GitBranch, Bell, Bot,
   ShieldCheck, ChevronLeft, ChevronRight, LogIn, LogOut,
   User, KeyRound, Activity, X, Menu, FolderOpen, Users, Calendar,
-  FlaskConical, BarChart3,
+  FlaskConical, BarChart3, Settings, Sparkles, Brain, Bookmark, Monitor,
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useAITrader } from '../../contexts/AITraderContext'
+import { useApiKeys } from '../../contexts/ApiKeysContext'
 import AccountSwitcher from '../Portfolio/AccountSwitcher'
 import CreatePortfolioModal from '../Portfolio/CreatePortfolioModal'
 import ChangePasswordModal from '../Auth/ChangePasswordModal'
+import ApiKeysModal from '../Settings/ApiKeysModal'
 
 // ── Nav item definitions ──────────────────────────────────────────────────────
 
@@ -39,6 +41,10 @@ function buildTabs(user, triggeredCount, tradingUnread) {
     { id: 'trading',         label: 'Trader Network', icon: Users,         badge: tradingUnread },
     { id: 'earnings',        label: 'Earnings',       icon: Calendar },
     { id: 'backtest',        label: 'Backtester',     icon: FlaskConical },
+    { id: 'buy-signals',    label: 'AI Buy Signals',  icon: Sparkles },
+    { id: 'ai-brain',      label: 'AI Brain',        icon: Brain },
+    { id: 'ai-watchlist',  label: 'AI Watchlist',    icon: Bookmark },
+    { id: 'tradingview',   label: 'TradingView',     icon: Monitor  },
     { id: 'analytics',       label: 'Risk Analytics', icon: Activity },
     { id: 'rebalancer',      label: 'AI Rebalancer',  icon: BarChart3 },
     ...(user?.role === 'admin'
@@ -184,11 +190,13 @@ export default function Sidebar({
 }) {
   const { user, isAuthenticated } = useAuth()
   const { unreadCount: tradingUnread = 0 } = useAITrader()
+  const { hasAnyKey } = useApiKeys()
 
-  const [collapsed,   setCollapsed]   = useState(() => {
+  const [collapsed,      setCollapsed]      = useState(() => {
     try { return localStorage.getItem('finsurf_sidebar_collapsed') === '1' } catch { return false }
   })
-  const [showCreate, setShowCreate]   = useState(false)
+  const [showCreate,     setShowCreate]     = useState(false)
+  const [showApiKeys,    setShowApiKeys]    = useState(false)
 
   const tabs = buildTabs(user, triggeredCount, tradingUnread)
 
@@ -258,8 +266,45 @@ export default function Sidebar({
         ))}
       </nav>
 
-      {/* Bottom: user + collapse toggle */}
+      {/* Bottom: API keys + user + collapse toggle */}
       <div className="shrink-0 border-t border-white/[0.06] px-2 py-3 space-y-1">
+
+        {/* API Keys button */}
+        {collapsed
+          ? (
+            <Tooltip label="API Keys">
+              <button onClick={() => setShowApiKeys(true)}
+                className={`relative flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm font-medium
+                            border border-transparent transition-all
+                            ${hasAnyKey
+                              ? 'text-slate-400 hover:text-white hover:bg-white/[0.05]'
+                              : 'text-amber-400 hover:text-amber-300 hover:bg-amber-500/10 border-amber-500/20'
+                            }`}>
+                <Settings className="w-4 h-4 shrink-0" />
+                {!hasAnyKey && (
+                  <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                )}
+              </button>
+            </Tooltip>
+          ) : (
+            <button onClick={() => setShowApiKeys(true)}
+              className={`flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm font-medium
+                          border transition-all
+                          ${hasAnyKey
+                            ? 'text-slate-400 hover:text-white hover:bg-white/[0.05] border-transparent'
+                            : 'text-amber-400 hover:text-amber-300 hover:bg-amber-500/10 border-amber-500/20'
+                          }`}>
+              <Settings className="w-4 h-4 shrink-0 opacity-70" />
+              <span className="truncate">API Keys</span>
+              {!hasAnyKey && (
+                <span className="ml-auto text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400">
+                  Required
+                </span>
+              )}
+            </button>
+          )
+        }
+
         <UserSection collapsed={collapsed} onNavigate={handleTabChange} onSignIn={onSignIn} />
 
         {/* Collapse toggle — desktop only */}
@@ -329,8 +374,23 @@ export default function Sidebar({
                 ))}
               </nav>
 
-              {/* User */}
-              <div className="shrink-0 border-t border-white/[0.06] px-2 py-3">
+              {/* User + API Keys */}
+              <div className="shrink-0 border-t border-white/[0.06] px-2 py-3 space-y-1">
+                <button onClick={() => { setShowApiKeys(true); onMobileClose?.() }}
+                  className={`flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm font-medium
+                              border transition-all
+                              ${hasAnyKey
+                                ? 'text-slate-400 hover:text-white hover:bg-white/[0.05] border-transparent'
+                                : 'text-amber-400 hover:text-amber-300 hover:bg-amber-500/10 border-amber-500/20'
+                              }`}>
+                  <Settings className="w-4 h-4 shrink-0 opacity-70" />
+                  <span>API Keys</span>
+                  {!hasAnyKey && (
+                    <span className="ml-auto text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400">
+                      Required
+                    </span>
+                  )}
+                </button>
                 <UserSection collapsed={false} onNavigate={handleTabChange} onSignIn={onSignIn} />
               </div>
             </div>
@@ -338,7 +398,8 @@ export default function Sidebar({
         </>
       )}
 
-      {showCreate && <CreatePortfolioModal onClose={() => setShowCreate(false)} />}
+      {showCreate   && <CreatePortfolioModal onClose={() => setShowCreate(false)} />}
+      {showApiKeys  && <ApiKeysModal onClose={() => setShowApiKeys(false)} />}
     </>
   )
 }
