@@ -69,10 +69,11 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc:  ["'self'"],
-      scriptSrc:   ["'self'", "'unsafe-inline'"],   // Vite needs inline scripts
+      scriptSrc:   ["'self'", "'unsafe-inline'", 'https://s3.tradingview.com', 'https://*.tradingview.com'],
       styleSrc:    ["'self'", "'unsafe-inline'"],
       imgSrc:      ["'self'", 'data:', 'https:'],
-      connectSrc:  ["'self'", 'https://finnhub.io', 'https://financialmodelingprep.com', 'https://ai4trade.ai', 'https://api.aisa.one', 'https://www.alphavantage.co', 'https://api.twelvedata.com'],
+      frameSrc:    ["'self'", 'https://*.tradingview.com', 'https://www.tradingview.com'],
+      connectSrc:  ["'self'", 'https://finnhub.io', 'https://financialmodelingprep.com', 'https://ai4trade.ai', 'https://api.aisa.one', 'https://www.alphavantage.co', 'https://api.twelvedata.com', 'https://*.tradingview.com', 'wss://*.tradingview.com'],
       fontSrc:     ["'self'", 'data:'],
       objectSrc:   ["'none'"],
       upgradeInsecureRequests: PROD ? [] : null,
