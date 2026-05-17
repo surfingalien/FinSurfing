@@ -127,7 +127,7 @@ function TVChart({ symbol, interval, uid }) {
     }
   }, [symbol, interval, uid])
 
-  return <div id={idRef.current} style={{ height: '100%', width: '100%' }} />
+  return <div id={idRef.current} style={{ height: '100%', width: '100%', minHeight: 560 }} />
 }
 
 // ── Session banner ────────────────────────────────────────────────────────────
@@ -283,8 +283,8 @@ export default function TradingViewView() {
 
       {/* ── Chart ── */}
       <div
-        className="flex-1 rounded-2xl overflow-hidden border border-white/[0.07]"
-        style={{ minHeight: 540 }}
+        className="rounded-2xl overflow-hidden border border-white/[0.07]"
+        style={{ height: 600 }}
       >
         <TVChart symbol={symbol} interval={interval} uid={uid} />
       </div>
