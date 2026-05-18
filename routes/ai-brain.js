@@ -64,17 +64,20 @@ function fwdKeys(req) {
 
 // Format a quote into a compact one-liner (kept short to save prompt tokens)
 function fmtQuote(q) {
-  const chg  = q.regularMarketChangePercent
-  const sign = chg >= 0 ? '+' : ''
-  const pe   = q.trailingPE
-  const hi   = q.fiftyTwoWeekHigh
-  const lo   = q.fiftyTwoWeekLow
-  const cap  = q.marketCap
+  if (!q?.regularMarketPrice) return null
+  const price = q.regularMarketPrice
+  const chg   = q.regularMarketChangePercent
+  const sign  = (chg ?? 0) >= 0 ? '+' : ''
+  const pe    = q.trailingPE
+  const hi    = q.fiftyTwoWeekHigh
+  const lo    = q.fiftyTwoWeekLow
+  const cap   = q.marketCap
+  const chgStr = chg != null ? ` (${sign}${chg.toFixed(2)}%)` : ''
   return (
-    `${q.symbol}: $${q.regularMarketPrice?.toFixed(2)} (${sign}${chg?.toFixed(2)}%)` +
+    `${q.symbol}: $${price.toFixed(price >= 1 ? 2 : 6)}${chgStr}` +
     ` MktCap=${cap ? '$' + (cap / 1e9).toFixed(0) + 'B' : 'N/A'}` +
     ` P/E=${pe ? pe.toFixed(1) : 'N/A'}` +
-    ` 52w ${lo?.toFixed(0)}-${hi?.toFixed(0)}`
+    ` 52w=${lo != null && hi != null ? `$${lo.toFixed(0)}-$${hi.toFixed(0)}` : 'N/A'}`
   )
 }
 
@@ -116,9 +119,18 @@ router.post('/analyze', brainLimit, async (req, res) => {
     console.warn('[ai-brain] Quote fetch failed, knowledge-only mode:', e.message)
   }
 
-  marketSnippet = liveQuotes.length > 0
-    ? '\n\nLIVE SNAPSHOT (use as primary data):\n' + liveQuotes.map(fmtQuote).join('\n')
-    : '\n\nNote: No live data available — use training knowledge.'
+  // Only include quotes that have an actual price value
+  const validQuotes = liveQuotes.filter(q => q?.regularMarketPrice != null && q.regularMarketPrice > 0)
+  const missingSyms = universe.filter(s => !validQuotes.find(q => q.symbol === s))
+
+  if (validQuotes.length > 0) {
+    marketSnippet = '\n\nLIVE SNAPSHOT (use these prices as primary data — do not override with training knowledge):\n'
+      + validQuotes.map(fmtQuote).join('\n')
+    if (missingSyms.length)
+      marketSnippet += `\n\nNo live price for: ${missingSyms.join(', ')} — use your best knowledge for those.`
+  } else {
+    marketSnippet = '\n\nNote: No live market data available — use training knowledge for prices.'
+  }
 
   // ── Step 2: build prompt with STRICT length limits to avoid truncation ─────
   const prompt = `You are a 5-agent investment AI (Fundamental, Technical, Sentiment, Macro, Risk + Supervisor).

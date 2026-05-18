@@ -19,6 +19,7 @@ const analyticsRoutes   = require('./routes/analytics')
 const rebalancerRoutes      = require('./routes/rebalancer')
 const recommendationsRoutes = require('./routes/recommendations')
 const aiBrainRoutes         = require('./routes/ai-brain')
+const tradingAnalysisRoutes = require('./routes/trading-analysis')
 
 const { seedAdminDB } = require('./db/adminSeed')
 
@@ -69,10 +70,11 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc:  ["'self'"],
-      scriptSrc:   ["'self'", "'unsafe-inline'"],   // Vite needs inline scripts
+      scriptSrc:   ["'self'", "'unsafe-inline'", 'https://s3.tradingview.com', 'https://*.tradingview.com'],
       styleSrc:    ["'self'", "'unsafe-inline'"],
       imgSrc:      ["'self'", 'data:', 'https:'],
-      connectSrc:  ["'self'", 'https://finnhub.io', 'https://financialmodelingprep.com', 'https://ai4trade.ai', 'https://api.aisa.one', 'https://www.alphavantage.co', 'https://api.twelvedata.com'],
+      frameSrc:    ["'self'", 'https://*.tradingview.com', 'https://www.tradingview.com'],
+      connectSrc:  ["'self'", 'https://finnhub.io', 'https://financialmodelingprep.com', 'https://ai4trade.ai', 'https://api.aisa.one', 'https://www.alphavantage.co', 'https://api.twelvedata.com', 'https://*.tradingview.com', 'wss://*.tradingview.com'],
       fontSrc:     ["'self'", 'data:'],
       objectSrc:   ["'none'"],
       upgradeInsecureRequests: PROD ? [] : null,
@@ -141,6 +143,7 @@ app.use('/api/analytics',    analyticsRoutes)
 app.use('/api/rebalancer',        rebalancerRoutes)
 app.use('/api/recommendations',   recommendationsRoutes)
 app.use('/api/ai-brain',          aiBrainRoutes)
+app.use('/api/trading-analysis',  tradingAnalysisRoutes)
 
 /* ── Market data helpers (AISA primary → Finnhub → FMP fallback) ─────────────
    Yahoo Finance is completely removed — its IPs are blocked on Railway.
@@ -581,8 +584,11 @@ async function getTwelveDataChart(symbol, interval = '1d', range = '1y', keys = 
   const tdIvl   = ivlMap[interval]
   if (!tdIvl) return null
   try {
-    const days       = { '1d':3,'5d':10,'1mo':38,'3mo':98,'6mo':190,'1y':375,'2y':745,'5y':1835,'max':5000 }
-    const outputsize = Math.min(days[range] || 375, 5000)
+    // outputsize = number of data points (not calendar days). For intraday intervals
+    // we need far more bars than calendar days, so calculate per-interval.
+    const calDays = { '1d':2,'5d':7,'1mo':30,'3mo':92,'6mo':184,'1y':366,'2y':732,'5y':1827,'max':5000 }[range] || 366
+    const barsPerTradingDay = { '1min':390,'5min':78,'15min':26,'30min':13,'1h':7,'1day':1,'1week':0.2,'1month':0.05 }[tdIvl] || 1
+    const outputsize = Math.min(Math.ceil(calDays * barsPerTradingDay * 5 / 7), 5000)
     const url        = `https://api.twelvedata.com/time_series?symbol=${encodeURIComponent(symbol)}&interval=${tdIvl}&outputsize=${outputsize}&apikey=${key}`
     const data       = await apiFetch(url, 15000)
     if (data?.status !== 'ok' || !Array.isArray(data?.values) || !data.values.length) {
@@ -687,6 +693,337 @@ async function getAVChart(symbol, interval = '1d', range = '1y', keys = {}) {
       }], error: null },
     }
   } catch (e) { console.warn('[AV] chart error:', e.message); return null }
+}
+
+// ── Stooq helpers (free, no API key required) ─────────────────────────────────
+// stooq.com provides free historical OHLCV CSV data for US equities.
+// Used as the no-key fallback so ARM/lesser-known symbols always work.
+
+async function apiFetchText(url, timeoutMs = 15000) {
+  const r = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) })
+  if (!r.ok) throw new Error(`HTTP ${r.status}`)
+  return r.text()
+}
+
+async function getStooqChart(symbol, interval = '1d', range = '1y') {
+  // Only daily/weekly — Stooq intraday requires login
+  if (!['1d', '1wk'].includes(interval)) return null
+  // Never try Stooq for crypto — bare tickers (SOL, BTC, ETH) match unrelated US stocks
+  if (isCryptoSymbol(symbol)) return null
+  // Skip forex, futures
+  if (/[=!]/.test(symbol) || symbol.endsWith('-USD') || symbol.endsWith('-GBP') || symbol.endsWith('-EUR')) return null
+
+  const stooqInterval = interval === '1wk' ? 'w' : 'd'
+  const stooqSymbol   = symbol.toLowerCase().replace(/[^a-z0-9]/g, '') + '.us'
+
+  const rangeDays = { '1d':2,'5d':8,'1mo':35,'3mo':95,'6mo':185,'1y':370,'2y':740,'5y':1830,'max':9999 }
+  const daysBack  = rangeDays[range] || 370
+  const d2 = new Date()
+  const d1 = new Date()
+  d1.setDate(d1.getDate() - daysBack)
+  const fmt = d => d.toISOString().slice(0, 10).replace(/-/g, '')
+
+  const url = `https://stooq.com/q/d/l/?s=${stooqSymbol}&d1=${fmt(d1)}&d2=${fmt(d2)}&i=${stooqInterval}`
+  try {
+    const text  = await apiFetchText(url, 20000)
+    const lines = text.trim().split('\n')
+    // Stooq returns "No data" page or empty body when symbol unknown
+    if (lines.length < 2 || !lines[0].toLowerCase().includes('date')) return null
+
+    const header   = lines[0].toLowerCase().split(',')
+    const dateIdx  = header.indexOf('date')
+    const openIdx  = header.indexOf('open')
+    const highIdx  = header.indexOf('high')
+    const lowIdx   = header.indexOf('low')
+    const closeIdx = header.indexOf('close')
+    const volIdx   = header.indexOf('volume')
+    if (dateIdx < 0 || closeIdx < 0) return null
+
+    // Stooq returns newest-first; sort ascending
+    const rows = lines.slice(1)
+      .map(l => l.split(','))
+      .filter(c => c.length > closeIdx && parseFloat(c[closeIdx]) > 0)
+      .sort((a, b) => a[dateIdx].localeCompare(b[dateIdx]))
+
+    if (rows.length < 5) return null
+
+    const timestamps = rows.map(r => Math.floor(new Date(r[dateIdx]).getTime() / 1000))
+    const opens      = rows.map(r => parseFloat(r[openIdx])  || 0)
+    const highs      = rows.map(r => parseFloat(r[highIdx])  || 0)
+    const lows       = rows.map(r => parseFloat(r[lowIdx])   || 0)
+    const closes     = rows.map(r => parseFloat(r[closeIdx]))
+    const vols       = rows.map(r => volIdx >= 0 ? parseInt(r[volIdx]) || 0 : 0)
+    const lastClose  = closes.at(-1) ?? null
+
+    console.log(`[Stooq] chart OK: ${symbol} → ${stooqSymbol} (${rows.length} bars)`)
+    return {
+      chart: { result: [{
+        meta: { symbol, regularMarketPrice: lastClose, chartPreviousClose: closes.at(-2) ?? null },
+        timestamp: timestamps,
+        indicators: {
+          quote:    [{ open: opens, high: highs, low: lows, close: closes, volume: vols }],
+          adjclose: [{ adjclose: closes }],
+        },
+      }], error: null },
+    }
+  } catch (e) { console.warn('[Stooq] chart error:', e.message); return null }
+}
+
+// ── Binance helpers (free, no API key, crypto only) ───────────────────────────
+// api.binance.com is a public REST API — no auth needed for market data.
+// Covers every crypto asset TradingView lists (BTC, ETH, SOL, DOGE, etc.).
+
+// Well-known crypto base tickers (bare symbols without -USD suffix)
+const KNOWN_CRYPTO = new Set([
+  'BTC','ETH','SOL','BNB','XRP','ADA','DOGE','AVAX','DOT','MATIC','LINK',
+  'UNI','LTC','BCH','TRX','NEAR','SHIB','APT','ARB','OP','SUI','SEI','INJ',
+  'TIA','JUP','WIF','BONK','PEPE','TON','ATOM','FIL','ICP','XLM','XMR','DASH',
+  'ZEC','ETC','GRT','CAKE','FTM','ONE','WAVES','DYDX','BLUR','ORDI','SATS',
+  'HBAR','FLOW','EOS','XTZ','THETA','ALGO','VET','MANA','SAND','AXS','CRV',
+  'AAVE','MKR','COMP','SNX','YFI','SUSHI','BAT','ZETA','PYTH','JTO','MEME',
+  'OP','ARB','LDO','RPL','STX','CFX','OCEAN','IMX','GALA','GMT','STEPN',
+  'APE','LUNC','LUNA','USTC','FTT','HNT','RAY','SRM','MNGO','STEP',
+])
+
+function isCryptoSymbol(symbol) {
+  if (!symbol) return false
+  const s = symbol.toUpperCase()
+  // Yahoo Finance format: BTC-USD, ETH-USD, SOL-USD (dash + 3-4 letter currency)
+  if (/^[A-Z0-9.]+-[A-Z]{3,4}$/.test(s)) return true
+  // Bare ticker known to be crypto (e.g. SOL, BTC from COINBASE:SOL)
+  if (KNOWN_CRYPTO.has(s)) return true
+  return false
+}
+
+function toBinancePair(symbol) {
+  const s = symbol.toUpperCase()
+  // Yahoo dash format: BTC-USD → BTCUSDT, ETH-BTC → ETHBTC
+  if (s.includes('-')) {
+    const base = s.replace(/-(USD|USDT|USDC|BUSD|BTC|ETH|EUR|GBP|BNB)$/, '')
+    const quote = s.includes('-BTC') ? 'BTC' : s.includes('-ETH') ? 'ETH' : 'USDT'
+    return base + quote
+  }
+  // Composite without dash: SOLUSDT stays, SOLUSD → SOLUSDT
+  if (s.endsWith('USD') && !s.endsWith('USDT')) return s.slice(0, -3) + 'USDT'
+  if (s.endsWith('USDT') || s.endsWith('BTC') || s.endsWith('ETH')) return s
+  // Bare ticker: SOL → SOLUSDT
+  return s + 'USDT'
+}
+
+async function getBinanceChart(symbol, interval = '1d', range = '1y') {
+  if (!isCryptoSymbol(symbol)) return null
+  const binSym = toBinancePair(symbol)
+
+  const ivlMap = { '1m':'1m','5m':'5m','15m':'15m','30m':'30m','60m':'1h','1h':'1h','1d':'1d','1wk':'1w','1mo':'1M' }
+  const bInterval = ivlMap[interval]
+  if (!bInterval) return null
+
+  const days   = { '1d':2,'5d':7,'1mo':30,'3mo':92,'6mo':184,'1y':365,'2y':730,'5y':1825,'max':1000 }[range] || 365
+  const perDay = { '1m':1440,'5m':288,'15m':96,'30m':48,'60m':24,'1h':24,'1d':1,'1wk':1/7,'1mo':1/30 }
+  const limit  = Math.min(Math.ceil(days * (perDay[interval] ?? 1)), 1000)
+
+  const url = `https://api.binance.com/api/v3/klines?symbol=${binSym}&interval=${bInterval}&limit=${limit}`
+  try {
+    const r = await fetch(url, { signal: AbortSignal.timeout(15000) })
+    if (!r.ok) throw new Error(`HTTP ${r.status}`)
+    const d = await r.json()
+    if (!Array.isArray(d) || d.length < 5) return null
+
+    const timestamps = d.map(k => Math.floor(k[0] / 1000))
+    const opens  = d.map(k => parseFloat(k[1]))
+    const highs  = d.map(k => parseFloat(k[2]))
+    const lows   = d.map(k => parseFloat(k[3]))
+    const closes = d.map(k => parseFloat(k[4]))
+    const vols   = d.map(k => parseFloat(k[5]))
+    const lastClose = closes.at(-1)
+
+    console.log(`[Binance] chart OK: ${symbol} → ${binSym} (${d.length} bars)`)
+    return {
+      chart: { result: [{
+        meta: { symbol, regularMarketPrice: lastClose, chartPreviousClose: closes.at(-2) ?? null },
+        timestamp: timestamps,
+        indicators: {
+          quote:    [{ open: opens, high: highs, low: lows, close: closes, volume: vols }],
+          adjclose: [{ adjclose: closes }],
+        },
+      }], error: null },
+    }
+  } catch (e) { console.warn('[Binance] chart error:', e.message); return null }
+}
+
+// Real-time quote for a single crypto symbol via Binance 24hr ticker.
+async function getBinanceSingleQuote(symbol) {
+  if (!isCryptoSymbol(symbol)) return null
+  const binSym = toBinancePair(symbol)
+  try {
+    const d = await apiFetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${binSym}`, 8000)
+    const price = parseFloat(d?.lastPrice)
+    if (!price) return null
+    const prev  = parseFloat(d.prevClosePrice) || price
+    const chg   = +(price - prev).toFixed(6)
+    console.log(`[Binance] quote OK: ${symbol} → ${binSym} $${price}`)
+    return {
+      symbol,
+      shortName:                  base,
+      regularMarketPrice:         price,
+      regularMarketChange:        chg,
+      regularMarketChangePercent: +(chg / prev * 100).toFixed(4),
+      regularMarketVolume:        parseFloat(d.volume)    || null,
+      regularMarketDayHigh:       parseFloat(d.highPrice) || null,
+      regularMarketDayLow:        parseFloat(d.lowPrice)  || null,
+      regularMarketOpen:          parseFloat(d.openPrice) || null,
+      regularMarketPreviousClose: prev,
+    }
+  } catch (e) { console.warn('[Binance] quote error:', e.message); return null }
+}
+
+// ── CoinGecko helpers (free, no key, crypto fallback when Binance is blocked) ──
+// api.coingecko.com is a public REST API with generous rate limits.
+// Used only when Binance fails (e.g. Railway IP block). Covers 10 000+ coins.
+
+const COINGECKO_IDS = {
+  'BTC':'bitcoin','ETH':'ethereum','SOL':'solana','BNB':'binancecoin',
+  'XRP':'ripple','ADA':'cardano','DOGE':'dogecoin','AVAX':'avalanche-2',
+  'DOT':'polkadot','MATIC':'matic-network','LINK':'chainlink','UNI':'uniswap',
+  'LTC':'litecoin','BCH':'bitcoin-cash','ATOM':'cosmos','NEAR':'near',
+  'FIL':'filecoin','TRX':'tron','XLM':'stellar','SHIB':'shiba-inu',
+  'APT':'aptos','ARB':'arbitrum','OP':'optimism','SUI':'sui','INJ':'injective-protocol',
+  'TON':'the-open-network','PEPE':'pepe','WIF':'dogwifcoin','JUP':'jupiter-exchange-solana',
+  'ICP':'internet-computer','HBAR':'hedera-hashgraph','AAVE':'aave','SAND':'the-sandbox',
+  'MANA':'decentraland','GRT':'the-graph','CRV':'curve-dao-token','DYDX':'dydx',
+  'LDO':'lido-dao','STX':'blockstack','THETA':'theta-token','FTM':'fantom',
+  'ALGO':'algorand','VET':'vechain','EOS':'eos','ZEC':'zcash','XMR':'monero',
+}
+
+function cgId(symbol) {
+  const base = symbol.toUpperCase().replace(/-(USD|USDT|USDC|BTC|ETH|EUR|GBP)$/, '')
+  return COINGECKO_IDS[base] || null
+}
+
+async function getCoinGeckoChart(symbol, interval = '1d', range = '1y') {
+  if (!isCryptoSymbol(symbol)) return null
+  const id = cgId(symbol)
+  if (!id) return null
+
+  // CoinGecko OHLC endpoint — days param
+  const daysMap = { '1d':1,'5d':7,'1mo':30,'3mo':90,'6mo':180,'1y':365,'2y':730,'5y':1825,'max':1825 }
+  const days = daysMap[range] || 365
+
+  // CoinGecko only provides daily OHLC for all ranges; for short ranges (<2d) use hourly
+  const url = `https://api.coingecko.com/api/v3/coins/${id}/ohlc?vs_currency=usd&days=${days}`
+  try {
+    const r = await fetch(url, { signal: AbortSignal.timeout(20000) })
+    if (!r.ok) throw new Error(`HTTP ${r.status}`)
+    const d = await r.json()
+    if (!Array.isArray(d) || d.length < 5) return null
+
+    const timestamps = d.map(k => Math.floor(k[0] / 1000))
+    const opens  = d.map(k => k[1])
+    const highs  = d.map(k => k[2])
+    const lows   = d.map(k => k[3])
+    const closes = d.map(k => k[4])
+    const lastClose = closes.at(-1)
+
+    console.log(`[CoinGecko] chart OK: ${symbol} → ${id} (${d.length} bars)`)
+    return {
+      chart: { result: [{
+        meta: { symbol, regularMarketPrice: lastClose, chartPreviousClose: closes.at(-2) ?? null },
+        timestamp: timestamps,
+        indicators: {
+          quote:    [{ open: opens, high: highs, low: lows, close: closes, volume: closes.map(() => 0) }],
+          adjclose: [{ adjclose: closes }],
+        },
+      }], error: null },
+    }
+  } catch (e) { console.warn('[CoinGecko] chart error:', e.message); return null }
+}
+
+async function getCoinGeckoQuote(symbol) {
+  if (!isCryptoSymbol(symbol)) return null
+  const id = cgId(symbol)
+  if (!id) return null
+  try {
+    const url = `https://api.coingecko.com/api/v3/simple/price?ids=${id}&vs_currencies=usd&include_24hr_change=true&include_24hr_vol=true`
+    const d = await apiFetch(url, 10000)
+    const c = d?.[id]
+    const price = c?.usd
+    if (!price) return null
+    const chgPct = c?.usd_24h_change ?? null
+    const chg    = chgPct != null ? +(price * chgPct / 100).toFixed(6) : null
+    console.log(`[CoinGecko] quote OK: ${symbol} → ${id} $${price}`)
+    return {
+      symbol,
+      shortName:                  id,
+      regularMarketPrice:         price,
+      regularMarketChange:        chg,
+      regularMarketChangePercent: chgPct != null ? +chgPct.toFixed(4) : null,
+      regularMarketVolume:        c?.usd_24h_vol ?? null,
+    }
+  } catch (e) { console.warn('[CoinGecko] quote error:', e.message); return null }
+}
+
+// ── Nasdaq.com Historical API (free, no API key, US stocks + ETFs) ────────────
+// api.nasdaq.com provides daily OHLCV for all US-listed equities (NYSE, NASDAQ,
+// AMEX). Covers small-caps, recent IPOs, SPACs (SOUN, PLTR, etc.) that the
+// Twelve Data demo key misses. No auth required.
+
+async function getNasdaqChart(symbol, interval = '1d', range = '1y') {
+  if (!['1d', '1wk'].includes(interval)) return null
+  if (isCryptoSymbol(symbol) || /[=!]/.test(symbol)) return null
+
+  const days    = { '1d':2,'5d':8,'1mo':35,'3mo':95,'6mo':185,'1y':370,'2y':740,'5y':1830,'max':9999 }
+  const daysBack = Math.min(days[range] || 370, 1825)
+  const todate  = new Date().toISOString().slice(0, 10)
+  const fromdate = new Date(Date.now() - daysBack * 86400000).toISOString().slice(0, 10)
+
+  for (const assetclass of ['stocks', 'etf']) {
+    const url = `https://api.nasdaq.com/api/quote/${encodeURIComponent(symbol)}/historical?assetclass=${assetclass}&fromdate=${fromdate}&limit=1825&todate=${todate}&type=1`
+    try {
+      const r = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+          'Accept':          'application/json, text/plain, */*',
+          'Accept-Language': 'en-US,en;q=0.9',
+          'Referer':         'https://www.nasdaq.com/',
+          'Origin':          'https://www.nasdaq.com',
+        },
+        signal: AbortSignal.timeout(18000),
+      })
+      if (!r.ok) continue
+      const d = await r.json()
+      const rows = d?.data?.tradesTable?.rows
+      if (!rows?.length) continue
+
+      const parseNum = s => parseFloat((s ?? '').replace(/[$,]/g, '')) || 0
+      const parseVol = s => parseInt((s ?? '').replace(/,/g, ''))     || 0
+
+      const sorted = [...rows]
+        .filter(row => row.close && parseNum(row.close) > 0)
+        .sort((a, b) => new Date(a.date) - new Date(b.date))
+      if (sorted.length < 5) continue
+
+      const timestamps = sorted.map(r => Math.floor(new Date(r.date).getTime() / 1000))
+      const opens  = sorted.map(r => parseNum(r.open))
+      const highs  = sorted.map(r => parseNum(r.high))
+      const lows   = sorted.map(r => parseNum(r.low))
+      const closes = sorted.map(r => parseNum(r.close))
+      const vols   = sorted.map(r => parseVol(r.volume))
+      const lastClose = closes.at(-1)
+
+      console.log(`[Nasdaq] chart OK: ${symbol} as ${assetclass} (${sorted.length} bars)`)
+      return {
+        chart: { result: [{
+          meta: { symbol, regularMarketPrice: lastClose, chartPreviousClose: closes.at(-2) ?? null },
+          timestamp: timestamps,
+          indicators: {
+            quote:    [{ open: opens, high: highs, low: lows, close: closes, volume: vols }],
+            adjclose: [{ adjclose: closes }],
+          },
+        }], error: null },
+      }
+    } catch (e) { console.warn(`[Nasdaq] ${assetclass} for ${symbol}:`, e.message) }
+  }
+  return null
 }
 
 // Company overview — fundamentals (P/E, margins, sector, etc.)
@@ -985,7 +1322,28 @@ app.get('/api/quote', async (req, res) => {
     if (av?.some(r => r.regularMarketPrice != null))
       return res.json({ quoteResponse: { result: av } })
 
-    // 5th: Twelve Data (demo key or user key)
+    // 5th: Binance → CoinGecko for crypto (free, real-time, no key).
+    // Must run BEFORE Twelve Data — TD demo returns stale crypto prices (months old).
+    // CoinGecko is the fallback when Binance is blocked on Railway's IPs.
+    if (symbols.some(isCryptoSymbol)) {
+      const binResults = await Promise.all(symbols.map(s => getBinanceSingleQuote(s).catch(() => null)))
+      // Fill any Binance misses with CoinGecko
+      const cgResults  = await Promise.all(symbols.map((s, i) =>
+        binResults[i]?.regularMarketPrice != null ? Promise.resolve(null) : getCoinGeckoQuote(s).catch(() => null)
+      ))
+      const cryptoResults = symbols.map((s, i) => binResults[i] || cgResults[i] || null)
+
+      const allCrypto = symbols.every(isCryptoSymbol)
+      if (allCrypto && cryptoResults.some(r => r?.regularMarketPrice != null)) {
+        return res.json({ quoteResponse: { result: cryptoResults.map((r, i) => r || { symbol: symbols[i], regularMarketPrice: null }) } })
+      }
+      // Mixed batch: cache prices so the chart-price fallback below picks them up.
+      cryptoResults.forEach((r, i) => {
+        if (r?.regularMarketPrice != null) cacheSet(`aisaq:${symbols[i]}`, r)
+      })
+    }
+
+    // 6th: Twelve Data (demo key or user key) — US stocks/ETFs
     const tdResults = await Promise.all(symbols.map(s => getTwelveDataQuote(s, keys).catch(() => null)))
     if (tdResults.some(r => r?.regularMarketPrice != null))
       return res.json({ quoteResponse: { result: tdResults.map((r, i) => r || { symbol: symbols[i], regularMarketPrice: null }) } })
@@ -1036,13 +1394,47 @@ app.get('/api/chart', async (req, res) => {
     const fmp = await getFMPChart(symbol, interval, range, keys)
     if (fmp) return res.json(saveChart(fmp, 'FMP'))
 
+    // 3.5: Crypto fast-path — Binance then CoinGecko (free, real-time, no key)
+    // Must run BEFORE Twelve Data: TD demo key returns stale crypto prices.
+    // CoinGecko is the fallback if Binance is blocked on Railway's IPs.
+    if (isCryptoSymbol(symbol)) {
+      const binanceFast = await getBinanceChart(symbol, interval, range)
+      if (binanceFast) return res.json(saveChart(binanceFast, 'Binance'))
+      const cgFast = await getCoinGeckoChart(symbol, interval, range)
+      if (cgFast) return res.json(saveChart(cgFast, 'CoinGecko'))
+    }
+
     // 4th: Twelve Data (800 req/day free tier; demo key covers major US symbols)
     const td = await getTwelveDataChart(symbol, interval, range, keys)
     if (td) return res.json(saveChart(td, 'TwelveData'))
 
-    // 5th: Alpha Vantage (25 req/day free tier — last resort)
+    // 5th: Alpha Vantage (25 req/day free tier)
     const av = await getAVChart(symbol, interval, range, keys)
     if (av) return res.json(saveChart(av, 'AV'))
+
+    // 6th: Binance fallback for crypto that slipped past the fast-path
+    const binance = await getBinanceChart(symbol, interval, range)
+    if (binance) return res.json(saveChart(binance, 'Binance'))
+
+    // 7th: Nasdaq.com (free, no key — all US stocks + ETFs, daily/weekly only)
+    const nasdaq = await getNasdaqChart(symbol, interval, range)
+    if (nasdaq) return res.json(saveChart(nasdaq, 'Nasdaq'))
+
+    // 8th: Stooq (free, no key — additional US equity coverage)
+    const stooq = await getStooqChart(symbol, interval, range)
+    if (stooq) return res.json(saveChart(stooq, 'Stooq'))
+
+    // Fallbacks for intraday when all intraday providers failed — try daily data
+    if (!['1d', '1wk'].includes(interval)) {
+      const nasdaqD = await getNasdaqChart(symbol, '1d', range === '1d' || range === '5d' ? '1mo' : range)
+      if (nasdaqD) return res.json(saveChart(nasdaqD, 'Nasdaq-daily'))
+
+      const binanceD = await getBinanceChart(symbol, '1d', range)
+      if (binanceD) return res.json(saveChart(binanceD, 'Binance-daily'))
+
+      const stooqD = await getStooqChart(symbol, '1d', '1y')
+      if (stooqD) return res.json(saveChart(stooqD, 'Stooq-daily'))
+    }
 
     res.status(502).json({ chart: { result: null, error: { code: 'unavailable', description: 'No market data provider returned data' } } })
   } catch (e) {

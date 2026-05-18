@@ -5,7 +5,8 @@
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { Monitor, Search, RefreshCw, ExternalLink, Clock } from 'lucide-react'
+import { Monitor, Search, RefreshCw, ExternalLink, Clock, Brain } from 'lucide-react'
+import TradingAIPanel from './TradingAIPanel'
 
 // ── Timeframes ────────────────────────────────────────────────────────────────
 const TIMEFRAMES = [
@@ -53,15 +54,39 @@ function normalise(raw) {
   if (s.includes(':')) return s
   // Crypto Yahoo-style: BTC-USD → BITSTAMP:BTCUSD
   const cryptoMap = {
-    'BTC-USD': 'BITSTAMP:BTCUSD', 'ETH-USD': 'BITSTAMP:ETHUSD',
-    'SOL-USD': 'BINANCE:SOLUSDT', 'BNB-USD': 'BINANCE:BNBUSDT',
-    'ADA-USD': 'BINANCE:ADAUSDT', 'DOGE-USD':'BINANCE:DOGEUSDT',
-    'XRP-USD': 'BITSTAMP:XRPUSD', 'AVAX-USD':'BINANCE:AVAXUSDT',
+    // Dash format (Yahoo-style)
+    'BTC-USD':  'BITSTAMP:BTCUSD',  'ETH-USD':  'BITSTAMP:ETHUSD',
+    'SOL-USD':  'BINANCE:SOLUSDT',  'BNB-USD':  'BINANCE:BNBUSDT',
+    'ADA-USD':  'BINANCE:ADAUSDT',  'DOGE-USD': 'BINANCE:DOGEUSDT',
+    'XRP-USD':  'BITSTAMP:XRPUSD',  'AVAX-USD': 'BINANCE:AVAXUSDT',
+    'MATIC-USD':'BINANCE:MATICUSDT','LINK-USD':  'BINANCE:LINKUSDT',
+    'DOT-USD':  'BINANCE:DOTUSDT',  'SHIB-USD': 'BINANCE:SHIBUSDT',
+    'UNI-USD':  'BINANCE:UNIUSDT',  'LTC-USD':  'BITSTAMP:LTCUSD',
+    'NEAR-USD': 'BINANCE:NEARUSDT', 'APT-USD':  'BINANCE:APTUSDT',
+    'ARB-USD':  'BINANCE:ARBUSD',   'OP-USD':   'BINANCE:OPUSDT',
+    'SUI-USD':  'BINANCE:SUIUSDT',  'INJ-USD':  'BINANCE:INJUSDT',
+    'PEPE-USD': 'BINANCE:PEPEUSDT', 'WIF-USD':  'BINANCE:WIFUSDT',
+    'TON-USD':  'BINANCE:TONUSDT',  'XLM-USD':  'BINANCE:XLMUSDT',
+    // Bare ticker — map to explicit price chart (avoids CRYPTOCAP: market-cap resolution)
+    'BTC':  'BITSTAMP:BTCUSD',  'ETH':  'BITSTAMP:ETHUSD',
+    'SOL':  'BINANCE:SOLUSDT',  'BNB':  'BINANCE:BNBUSDT',
+    'XRP':  'BITSTAMP:XRPUSD',  'ADA':  'BINANCE:ADAUSDT',
+    'DOGE': 'BINANCE:DOGEUSDT', 'AVAX': 'BINANCE:AVAXUSDT',
+    'MATIC':'BINANCE:MATICUSDT','LINK': 'BINANCE:LINKUSDT',
+    'DOT':  'BINANCE:DOTUSDT',  'SHIB': 'BINANCE:SHIBUSDT',
+    'UNI':  'BINANCE:UNIUSDT',  'LTC':  'BITSTAMP:LTCUSD',
+    'NEAR': 'BINANCE:NEARUSDT', 'APT':  'BINANCE:APTUSDT',
+    'ARB':  'BINANCE:ARBUSD',   'OP':   'BINANCE:OPUSDT',
+    'SUI':  'BINANCE:SUIUSDT',  'INJ':  'BINANCE:INJUSDT',
+    'PEPE': 'BINANCE:PEPEUSDT', 'WIF':  'BINANCE:WIFUSDT',
+    'TON':  'BINANCE:TONUSDT',  'XLM':  'BINANCE:XLMUSDT',
+    'ATOM': 'BINANCE:ATOMUSDT', 'FIL':  'BINANCE:FILUSDT',
+    'TRX':  'BINANCE:TRXUSDT',  'ICP':  'BINANCE:ICPUSDT',
   }
   if (cryptoMap[s]) return cryptoMap[s]
-  // Strip -USD suffix
+  // Generic -USD suffix → Binance USDT pair
   if (s.endsWith('-USD')) return 'BINANCE:' + s.replace('-USD', 'USDT')
-  return s  // bare ticker — TradingView resolves to primary exchange
+  return s  // bare stock ticker — TradingView resolves to primary exchange
 }
 
 // ── Load tv.js once, then resolve the promise on subsequent calls ─────────────
@@ -127,7 +152,7 @@ function TVChart({ symbol, interval, uid }) {
     }
   }, [symbol, interval, uid])
 
-  return <div id={idRef.current} style={{ height: '100%', width: '100%' }} />
+  return <div id={idRef.current} style={{ height: '100%', width: '100%', minHeight: 560 }} />
 }
 
 // ── Session banner ────────────────────────────────────────────────────────────
@@ -169,6 +194,8 @@ export default function TradingViewView() {
   const [inputVal, setInputVal] = useState('SPY')
   const [interval, setInterval] = useState('60')
   const [uid,      setUid]      = useState(0)
+  const [showAI,   setShowAI]   = useState(false)
+  const [livePrice, setLivePrice] = useState(null)
 
   const apply = useCallback(() => {
     const s = normalise(inputVal)
@@ -252,6 +279,20 @@ export default function TradingViewView() {
           >
             <RefreshCw className="w-3.5 h-3.5" />
           </button>
+
+          {/* AI Panel toggle */}
+          <button
+            onClick={() => setShowAI(v => !v)}
+            title="Toggle AI Analysis"
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+              showAI
+                ? 'bg-violet-500/20 text-violet-400 border-violet-500/30'
+                : 'bg-white/[0.03] text-slate-400 border-white/[0.06] hover:text-white'
+            }`}
+          >
+            <Brain className="w-3.5 h-3.5" />
+            AI
+          </button>
         </div>
       </div>
 
@@ -281,12 +322,19 @@ export default function TradingViewView() {
         </a>
       </div>
 
-      {/* ── Chart ── */}
-      <div
-        className="flex-1 rounded-2xl overflow-hidden border border-white/[0.07]"
-        style={{ minHeight: 540 }}
-      >
-        <TVChart symbol={symbol} interval={interval} uid={uid} />
+      {/* ── Chart + AI Panel ── */}
+      <div className="flex gap-4" style={{ height: 660 }}>
+        {/* Chart */}
+        <div className="flex-1 min-w-0 rounded-2xl overflow-hidden border border-white/[0.07]">
+          <TVChart symbol={symbol} interval={interval} uid={uid} />
+        </div>
+
+        {/* AI Panel */}
+        {showAI && (
+          <div className="w-[380px] shrink-0 rounded-2xl border border-white/[0.07] bg-[#0a0e1a] overflow-hidden">
+            <TradingAIPanel symbol={symbol} interval={interval} price={livePrice} />
+          </div>
+        )}
       </div>
 
       <p className="text-center text-[10px] text-slate-700 shrink-0 pb-1">
