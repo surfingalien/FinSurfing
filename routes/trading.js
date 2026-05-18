@@ -19,6 +19,13 @@ const router     = express.Router()
 const { requireAuth } = require('../middleware/auth')
 const at         = require('../services/aiTraderClient')
 
+// ── In-memory fallback (used when DATABASE_URL is absent) ─────────────────────
+// Keyed by userId. Lost on server restart but allows full functionality
+// without a database configured.
+const memAgents  = new Map()   // userId → { token, agentId, registeredAt }
+const memSignals = new Map()   // userId → [{ id, symbol, action, price, ... }]
+const memNotifs  = new Map()   // userId → [{ id, type, data, is_read, created_at }]
+
 // ── DB helpers (gracefully no-op when DATABASE_URL is absent) ─────────────────
 
 function getDB() {
@@ -35,18 +42,27 @@ async function dbQuery(text, params) {
 // ── Ensure a user has a registered AI-Trader agent ────────────────────────────
 
 async function ensureAgent(userId, email, displayName) {
-  // Check if already registered
-  const { rows } = await dbQuery(
-    'SELECT ai_trader_token, ai_trader_agent_id FROM users WHERE id = $1',
-    [userId]
-  )
-
-  if (rows[0]?.ai_trader_token) {
-    return { token: rows[0].ai_trader_token, agentId: rows[0].ai_trader_agent_id }
+  // 1. Check DB
+  const db = getDB()
+  if (db) {
+    const { rows } = await db.query(
+      'SELECT ai_trader_token, ai_trader_agent_id FROM users WHERE id = $1',
+      [userId]
+    )
+    if (rows[0]?.ai_trader_token) {
+      // Warm the in-memory cache too
+      memAgents.set(userId, { token: rows[0].ai_trader_token, agentId: rows[0].ai_trader_agent_id })
+      return { token: rows[0].ai_trader_token, agentId: rows[0].ai_trader_agent_id }
+    }
   }
 
-  // Generate a deterministic-ish agent name and a secure password
-  const agentName = `FinSurf-${(displayName || email.split('@')[0]).replace(/[^a-zA-Z0-9]/g, '').slice(0, 20)}`
+  // 2. Check in-memory cache
+  if (memAgents.has(userId)) {
+    return memAgents.get(userId)
+  }
+
+  // 3. Register with AI-Trader API
+  const agentName  = `FinSurf-${(displayName || email.split('@')[0]).replace(/[^a-zA-Z0-9]/g, '').slice(0, 20)}`
   const agentEmail = `finsurf+${userId.replace(/-/g, '').slice(0, 12)}@ai-trader.finsurf.app`
   const agentPass  = crypto.randomBytes(24).toString('base64url')
 
@@ -57,7 +73,6 @@ async function ensureAgent(userId, email, displayName) {
     token   = reg.token || reg.access_token || reg.data?.token
     agentId = reg.agent?.id || reg.data?.id || reg.id
   } catch (err) {
-    // Agent may already exist — try login
     if (err.status === 409 || err.status === 400) {
       const login = await at.loginAgent({ email: agentEmail, password: agentPass })
       token   = login.token || login.access_token || login.data?.token
@@ -69,14 +84,20 @@ async function ensureAgent(userId, email, displayName) {
 
   if (!token) throw new Error('AI-Trader registration did not return a token')
 
-  await dbQuery(
-    `UPDATE users
-       SET ai_trader_token = $1, ai_trader_agent_id = $2, ai_trader_registered_at = NOW()
-     WHERE id = $3`,
-    [token, agentId ?? null, userId]
-  )
+  const agent = { token, agentId: agentId ?? null, registeredAt: new Date().toISOString() }
 
-  return { token, agentId }
+  // 4. Persist — DB if available, always in-memory
+  if (db) {
+    await db.query(
+      `UPDATE users
+         SET ai_trader_token = $1, ai_trader_agent_id = $2, ai_trader_registered_at = NOW()
+       WHERE id = $3`,
+      [token, agentId ?? null, userId]
+    ).catch(() => {})
+  }
+  memAgents.set(userId, agent)
+
+  return agent
 }
 
 // ── POST /api/trading/register-agent ─────────────────────────────────────────
@@ -124,14 +145,22 @@ router.post('/publish-signal', requireAuth, async (req, res) => {
 
     const signalId = result?.signal?.id || result?.data?.id || result?.id || null
 
-    // Persist locally for history
+    // Persist locally — DB if available, always in-memory
+    const sigRecord = {
+      id: `mem-${Date.now()}`, at_signal_id: signalId ? String(signalId) : null,
+      symbol: symbol.toUpperCase(), action: action.toLowerCase(),
+      price: price ? parseFloat(price) : null, quantity: quantity ? parseInt(quantity) : null,
+      analysis: analysis || null, followers: 0, published_at: new Date().toISOString(),
+    }
     await dbQuery(
       `INSERT INTO ai_trader_signals
          (user_id, at_signal_id, symbol, action, price, quantity, analysis)
        VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [userId, signalId ? String(signalId) : null, symbol.toUpperCase(), action.toLowerCase(),
-       price ? parseFloat(price) : null, quantity ? parseInt(quantity) : null, analysis || null]
-    )
+      [userId, sigRecord.at_signal_id, sigRecord.symbol, sigRecord.action,
+       sigRecord.price, sigRecord.quantity, sigRecord.analysis]
+    ).catch(() => {})
+    const existing = memSignals.get(userId) || []
+    memSignals.set(userId, [sigRecord, ...existing].slice(0, 50))
 
     res.json({ ok: true, signalId, result })
   } catch (err) {
@@ -144,15 +173,18 @@ router.post('/publish-signal', requireAuth, async (req, res) => {
 
 router.get('/my-signals', requireAuth, async (req, res) => {
   try {
+    const { userId } = req.user
     const { rows } = await dbQuery(
       `SELECT id, at_signal_id, symbol, action, price, quantity, analysis, followers, published_at
          FROM ai_trader_signals
         WHERE user_id = $1
         ORDER BY published_at DESC
         LIMIT 50`,
-      [req.user.userId]
+      [userId]
     )
-    res.json({ signals: rows })
+    // If DB returned rows use them, otherwise fall back to in-memory
+    const signals = rows.length > 0 ? rows : (memSignals.get(userId) || [])
+    res.json({ signals })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -227,20 +259,43 @@ router.post('/notifications/read', requireAuth, async (req, res) => {
 
 router.get('/status', requireAuth, async (req, res) => {
   try {
-    const { rows } = await dbQuery(
-      `SELECT ai_trader_agent_id, ai_trader_registered_at,
-              (SELECT COUNT(*) FROM ai_trader_signals WHERE user_id = $1) AS signal_count,
-              (SELECT COUNT(*) FROM ai_trader_notifications WHERE user_id = $1 AND is_read = FALSE) AS unread_count
-         FROM users WHERE id = $1`,
-      [req.user.userId]
-    )
-    const r = rows[0] || {}
+    const { userId } = req.user
+    const db = getDB()
+
+    if (db) {
+      const { rows } = await db.query(
+        `SELECT ai_trader_agent_id, ai_trader_registered_at,
+                (SELECT COUNT(*) FROM ai_trader_signals WHERE user_id = $1) AS signal_count,
+                (SELECT COUNT(*) FROM ai_trader_notifications WHERE user_id = $1 AND is_read = FALSE) AS unread_count
+           FROM users WHERE id = $1`,
+        [userId]
+      )
+      if (rows[0]) {
+        const r = rows[0]
+        // Warm in-memory cache so re-registration is skipped next time
+        if (r.ai_trader_agent_id && !memAgents.has(userId)) {
+          memAgents.set(userId, { token: null, agentId: r.ai_trader_agent_id })
+        }
+        return res.json({
+          registered:   !!r.ai_trader_agent_id,
+          agentId:      r.ai_trader_agent_id,
+          registeredAt: r.ai_trader_registered_at,
+          signalCount:  parseInt(r.signal_count || 0),
+          unreadCount:  parseInt(r.unread_count || 0),
+        })
+      }
+    }
+
+    // No DB or no DB row — fall back to in-memory store
+    const agent   = memAgents.get(userId)
+    const signals = memSignals.get(userId) || []
+    const notifs  = memNotifs.get(userId)  || []
     res.json({
-      registered:   !!r.ai_trader_agent_id,
-      agentId:      r.ai_trader_agent_id,
-      registeredAt: r.ai_trader_registered_at,
-      signalCount:  parseInt(r.signal_count || 0),
-      unreadCount:  parseInt(r.unread_count || 0),
+      registered:   !!agent?.agentId,
+      agentId:      agent?.agentId      || null,
+      registeredAt: agent?.registeredAt || null,
+      signalCount:  signals.length,
+      unreadCount:  notifs.filter(n => !n.is_read).length,
     })
   } catch (err) {
     res.status(500).json({ error: err.message })
