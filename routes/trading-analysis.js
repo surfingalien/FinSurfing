@@ -17,11 +17,72 @@ const router = express.Router()
 const CRYPTO_MAP = {
   'BTCUSD':  'BTC-USD',
   'ETHUSD':  'ETH-USD',
+  'SOLUSD':  'SOL-USD',
   'SOLUSDT': 'SOL-USD',
   'BTCUSDT': 'BTC-USD',
   'ETHUSDT': 'ETH-USD',
   'XRPUSD':  'XRP-USD',
+  'XRPUSDT': 'XRP-USD',
+  'BNBUSD':  'BNB-USD',
+  'BNBUSDT': 'BNB-USD',
+  'ADAUSD':  'ADA-USD',
+  'ADAUSDT': 'ADA-USD',
+  'DOGEUSD': 'DOGE-USD',
+  'DOGEUSDT':'DOGE-USD',
+  'AVAXUSD': 'AVAX-USD',
+  'AVAXUSDT':'AVAX-USD',
+  'LINKUSD': 'LINK-USD',
+  'LINKUSDT':'LINK-USD',
+  'MATICUSD':'MATIC-USD',
+  'MATICUSDT':'MATIC-USD',
+  'DOTUSD':  'DOT-USD',
+  'DOTUSDT': 'DOT-USD',
+  'LTCUSD':  'LTC-USD',
+  'LTCUSDT': 'LTC-USD',
+  'ATOMUSD': 'ATOM-USD',
+  'ATOMUSDT':'ATOM-USD',
+  'UNIUSD':  'UNI-USD',
+  'UNIUSDT': 'UNI-USD',
+  'SHIBUSD': 'SHIB-USD',
+  'SHIBUSDT':'SHIB-USD',
+  'PEPEUSD': 'PEPE-USD',
+  'PEPEUSDT':'PEPE-USD',
+  'NEARUSD': 'NEAR-USD',
+  'NEARUSDT':'NEAR-USD',
+  'APTUSDT': 'APT-USD',
+  'ARBUSD':  'ARB-USD',
+  'ARBUSDT': 'ARB-USD',
+  'OPUSD':   'OP-USD',
+  'OPUSDT':  'OP-USD',
+  'SUIUSD':  'SUI-USD',
+  'SUIUSDT': 'SUI-USD',
+  'INJUSD':  'INJ-USD',
+  'INJUSDT': 'INJ-USD',
+  'TONUSD':  'TON-USD',
+  'TONUSDT': 'TON-USD',
+  'FILUSD':  'FIL-USD',
+  'FILUSDT': 'FIL-USD',
+  'ICPUSD':  'ICP-USD',
+  'ICPUSDT': 'ICP-USD',
+  'TRXUSD':  'TRX-USD',
+  'TRXUSDT': 'TRX-USD',
+  'XLMUSD':  'XLM-USD',
+  'XLMUSDT': 'XLM-USD',
+  'XMRUSD':  'XMR-USD',
+  'ZETAUSD': 'ZETA-USD',
+  'WIFUSD':  'WIF-USD',
+  'WIFUSDT': 'WIF-USD',
+  'JUPUSD':  'JUP-USD',
+  'JUPUSDT': 'JUP-USD',
 }
+
+// Crypto exchanges: any symbol from these gets treated as crypto
+const CRYPTO_EXCHANGES = new Set([
+  'BINANCE', 'BINANCEUS', 'BINANCEUSDM', 'COINBASE', 'BITSTAMP',
+  'KRAKEN', 'GEMINI', 'KUCOIN', 'OKX', 'BYBIT', 'HUOBI', 'GATE',
+  'CRYPTO', 'BITMEX', 'BITFINEX', 'BITTREX', 'MEXC', 'PHEMEX',
+  'DERIBIT', 'HYPERLIQUID',
+])
 
 const FUTURES_MAP = {
   'ES1!': 'ES=F',
@@ -46,9 +107,25 @@ function tvToYahoo(tvSymbol) {
   // Futures
   if (FUTURES_MAP[sym]) return FUTURES_MAP[sym]
 
-  // Crypto (Bitstamp, Binance, etc.)
+  // Crypto — check static map first
   const symUpper = sym.toUpperCase()
   if (CRYPTO_MAP[symUpper]) return CRYPTO_MAP[symUpper]
+
+  // Crypto exchange — dynamically parse composite symbol (SOLUSDT, SOLUSD, SOL…)
+  if (CRYPTO_EXCHANGES.has(exchange)) {
+    // Try to strip known quote currencies (longest match first to avoid false splits)
+    const quotes = ['USDT', 'USDC', 'BUSD', 'USD', 'BTC', 'ETH', 'EUR', 'GBP', 'BNB']
+    for (const q of quotes) {
+      if (symUpper.endsWith(q) && symUpper.length > q.length + 1) {
+        const base = symUpper.slice(0, symUpper.length - q.length)
+        // Stablecoins/USD variants → normalize to -USD
+        const yahooQ = ['USDT', 'USDC', 'BUSD'].includes(q) ? 'USD' : q
+        return `${base}-${yahooQ}`
+      }
+    }
+    // Bare ticker like COINBASE:SOL → SOL-USD
+    return `${symUpper}-USD`
+  }
 
   // Forex
   if (exchange === 'FX_IDC' || exchange === 'OANDA') return symUpper + '=X'

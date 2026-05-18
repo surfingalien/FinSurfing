@@ -771,17 +771,46 @@ async function getStooqChart(symbol, interval = '1d', range = '1y') {
 // api.binance.com is a public REST API — no auth needed for market data.
 // Covers every crypto asset TradingView lists (BTC, ETH, SOL, DOGE, etc.).
 
+// Well-known crypto base tickers (bare symbols without -USD suffix)
+const KNOWN_CRYPTO = new Set([
+  'BTC','ETH','SOL','BNB','XRP','ADA','DOGE','AVAX','DOT','MATIC','LINK',
+  'UNI','LTC','BCH','TRX','NEAR','SHIB','APT','ARB','OP','SUI','SEI','INJ',
+  'TIA','JUP','WIF','BONK','PEPE','TON','ATOM','FIL','ICP','XLM','XMR','DASH',
+  'ZEC','ETC','GRT','CAKE','FTM','ONE','WAVES','DYDX','BLUR','ORDI','SATS',
+  'HBAR','FLOW','EOS','XTZ','THETA','ALGO','VET','MANA','SAND','AXS','CRV',
+  'AAVE','MKR','COMP','SNX','YFI','SUSHI','BAT','ZETA','PYTH','JTO','MEME',
+  'OP','ARB','LDO','RPL','STX','CFX','OCEAN','IMX','GALA','GMT','STEPN',
+  'APE','LUNC','LUNA','USTC','FTT','HNT','RAY','SRM','MNGO','STEP',
+])
+
 function isCryptoSymbol(symbol) {
-  // Yahoo Finance format: crypto = TICKER-CURRENCY (BTC-USD, ETH-USD, SOL1-USD)
-  // Forex uses =X suffix (EURUSD=X), futures use =F (GC=F) — excluded here.
-  return /^[A-Z0-9.]+-[A-Z]{3,4}$/.test(symbol)
+  if (!symbol) return false
+  const s = symbol.toUpperCase()
+  // Yahoo Finance format: BTC-USD, ETH-USD, SOL-USD (dash + 3-4 letter currency)
+  if (/^[A-Z0-9.]+-[A-Z]{3,4}$/.test(s)) return true
+  // Bare ticker known to be crypto (e.g. SOL, BTC from COINBASE:SOL)
+  if (KNOWN_CRYPTO.has(s)) return true
+  return false
+}
+
+function toBinancePair(symbol) {
+  const s = symbol.toUpperCase()
+  // Yahoo dash format: BTC-USD → BTCUSDT, ETH-BTC → ETHBTC
+  if (s.includes('-')) {
+    const base = s.replace(/-(USD|USDT|USDC|BUSD|BTC|ETH|EUR|GBP|BNB)$/, '')
+    const quote = s.includes('-BTC') ? 'BTC' : s.includes('-ETH') ? 'ETH' : 'USDT'
+    return base + quote
+  }
+  // Composite without dash: SOLUSDT stays, SOLUSD → SOLUSDT
+  if (s.endsWith('USD') && !s.endsWith('USDT')) return s.slice(0, -3) + 'USDT'
+  if (s.endsWith('USDT') || s.endsWith('BTC') || s.endsWith('ETH')) return s
+  // Bare ticker: SOL → SOLUSDT
+  return s + 'USDT'
 }
 
 async function getBinanceChart(symbol, interval = '1d', range = '1y') {
   if (!isCryptoSymbol(symbol)) return null
-  // Convert Yahoo format (BTC-USD) → Binance pair (BTCUSDT)
-  const base    = symbol.replace(/-(USD|USDT|BTC|ETH|EUR|GBP|BUSD)$/, '')
-  const binSym  = base + 'USDT'
+  const binSym = toBinancePair(symbol)
 
   const ivlMap = { '1m':'1m','5m':'5m','15m':'15m','30m':'30m','60m':'1h','1h':'1h','1d':'1d','1wk':'1w','1mo':'1M' }
   const bInterval = ivlMap[interval]
@@ -823,8 +852,7 @@ async function getBinanceChart(symbol, interval = '1d', range = '1y') {
 // Real-time quote for a single crypto symbol via Binance 24hr ticker.
 async function getBinanceSingleQuote(symbol) {
   if (!isCryptoSymbol(symbol)) return null
-  const base   = symbol.replace(/-(USD|USDT|BTC|ETH|EUR|GBP|BUSD)$/, '')
-  const binSym = base + 'USDT'
+  const binSym = toBinancePair(symbol)
   try {
     const d = await apiFetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${binSym}`, 8000)
     const price = parseFloat(d?.lastPrice)
