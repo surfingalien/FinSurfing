@@ -695,6 +695,78 @@ async function getAVChart(symbol, interval = '1d', range = '1y', keys = {}) {
   } catch (e) { console.warn('[AV] chart error:', e.message); return null }
 }
 
+// ── Stooq helpers (free, no API key required) ─────────────────────────────────
+// stooq.com provides free historical OHLCV CSV data for US equities.
+// Used as the no-key fallback so ARM/lesser-known symbols always work.
+
+async function apiFetchText(url, timeoutMs = 15000) {
+  const r = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) })
+  if (!r.ok) throw new Error(`HTTP ${r.status}`)
+  return r.text()
+}
+
+async function getStooqChart(symbol, interval = '1d', range = '1y') {
+  // Only daily/weekly — Stooq intraday requires login
+  if (!['1d', '1wk'].includes(interval)) return null
+  // Skip crypto, forex, futures (contain special chars in Yahoo format)
+  if (/[=!]/.test(symbol) || symbol.endsWith('-USD') || symbol.endsWith('-GBP') || symbol.endsWith('-EUR')) return null
+
+  const stooqInterval = interval === '1wk' ? 'w' : 'd'
+  const stooqSymbol   = symbol.toLowerCase().replace(/[^a-z0-9]/g, '') + '.us'
+
+  const rangeDays = { '1d':2,'5d':8,'1mo':35,'3mo':95,'6mo':185,'1y':370,'2y':740,'5y':1830,'max':9999 }
+  const daysBack  = rangeDays[range] || 370
+  const d2 = new Date()
+  const d1 = new Date()
+  d1.setDate(d1.getDate() - daysBack)
+  const fmt = d => d.toISOString().slice(0, 10).replace(/-/g, '')
+
+  const url = `https://stooq.com/q/d/l/?s=${stooqSymbol}&d1=${fmt(d1)}&d2=${fmt(d2)}&i=${stooqInterval}`
+  try {
+    const text  = await apiFetchText(url, 20000)
+    const lines = text.trim().split('\n')
+    // Stooq returns "No data" page or empty body when symbol unknown
+    if (lines.length < 2 || !lines[0].toLowerCase().includes('date')) return null
+
+    const header   = lines[0].toLowerCase().split(',')
+    const dateIdx  = header.indexOf('date')
+    const openIdx  = header.indexOf('open')
+    const highIdx  = header.indexOf('high')
+    const lowIdx   = header.indexOf('low')
+    const closeIdx = header.indexOf('close')
+    const volIdx   = header.indexOf('volume')
+    if (dateIdx < 0 || closeIdx < 0) return null
+
+    // Stooq returns newest-first; sort ascending
+    const rows = lines.slice(1)
+      .map(l => l.split(','))
+      .filter(c => c.length > closeIdx && parseFloat(c[closeIdx]) > 0)
+      .sort((a, b) => a[dateIdx].localeCompare(b[dateIdx]))
+
+    if (rows.length < 5) return null
+
+    const timestamps = rows.map(r => Math.floor(new Date(r[dateIdx]).getTime() / 1000))
+    const opens      = rows.map(r => parseFloat(r[openIdx])  || 0)
+    const highs      = rows.map(r => parseFloat(r[highIdx])  || 0)
+    const lows       = rows.map(r => parseFloat(r[lowIdx])   || 0)
+    const closes     = rows.map(r => parseFloat(r[closeIdx]))
+    const vols       = rows.map(r => volIdx >= 0 ? parseInt(r[volIdx]) || 0 : 0)
+    const lastClose  = closes.at(-1) ?? null
+
+    console.log(`[Stooq] chart OK: ${symbol} → ${stooqSymbol} (${rows.length} bars)`)
+    return {
+      chart: { result: [{
+        meta: { symbol, regularMarketPrice: lastClose, chartPreviousClose: closes.at(-2) ?? null },
+        timestamp: timestamps,
+        indicators: {
+          quote:    [{ open: opens, high: highs, low: lows, close: closes, volume: vols }],
+          adjclose: [{ adjclose: closes }],
+        },
+      }], error: null },
+    }
+  } catch (e) { console.warn('[Stooq] chart error:', e.message); return null }
+}
+
 // Company overview — fundamentals (P/E, margins, sector, etc.)
 async function getAVSummary(symbol, keys = {}) {
   const key = keys.av || process.env.ALPHA_VANTAGE_API_KEY || process.env.AV_API_KEY
@@ -1046,9 +1118,19 @@ app.get('/api/chart', async (req, res) => {
     const td = await getTwelveDataChart(symbol, interval, range, keys)
     if (td) return res.json(saveChart(td, 'TwelveData'))
 
-    // 5th: Alpha Vantage (25 req/day free tier — last resort)
+    // 5th: Alpha Vantage (25 req/day free tier)
     const av = await getAVChart(symbol, interval, range, keys)
     if (av) return res.json(saveChart(av, 'AV'))
+
+    // 6th: Stooq (free, no key, US equities — daily/weekly only)
+    const stooq = await getStooqChart(symbol, interval, range)
+    if (stooq) return res.json(saveChart(stooq, 'Stooq'))
+
+    // 6th-b: Stooq daily fallback if intraday requested and all providers failed
+    if (!['1d', '1wk'].includes(interval)) {
+      const stooqDaily = await getStooqChart(symbol, '1d', '1y')
+      if (stooqDaily) return res.json(saveChart(stooqDaily, 'Stooq-daily'))
+    }
 
     res.status(502).json({ chart: { result: null, error: { code: 'unavailable', description: 'No market data provider returned data' } } })
   } catch (e) {
