@@ -708,7 +708,9 @@ async function apiFetchText(url, timeoutMs = 15000) {
 async function getStooqChart(symbol, interval = '1d', range = '1y') {
   // Only daily/weekly — Stooq intraday requires login
   if (!['1d', '1wk'].includes(interval)) return null
-  // Skip crypto, forex, futures (contain special chars in Yahoo format)
+  // Never try Stooq for crypto — bare tickers (SOL, BTC, ETH) match unrelated US stocks
+  if (isCryptoSymbol(symbol)) return null
+  // Skip forex, futures
   if (/[=!]/.test(symbol) || symbol.endsWith('-USD') || symbol.endsWith('-GBP') || symbol.endsWith('-EUR')) return null
 
   const stooqInterval = interval === '1wk' ? 'w' : 'd'
@@ -873,6 +875,91 @@ async function getBinanceSingleQuote(symbol) {
       regularMarketPreviousClose: prev,
     }
   } catch (e) { console.warn('[Binance] quote error:', e.message); return null }
+}
+
+// ── CoinGecko helpers (free, no key, crypto fallback when Binance is blocked) ──
+// api.coingecko.com is a public REST API with generous rate limits.
+// Used only when Binance fails (e.g. Railway IP block). Covers 10 000+ coins.
+
+const COINGECKO_IDS = {
+  'BTC':'bitcoin','ETH':'ethereum','SOL':'solana','BNB':'binancecoin',
+  'XRP':'ripple','ADA':'cardano','DOGE':'dogecoin','AVAX':'avalanche-2',
+  'DOT':'polkadot','MATIC':'matic-network','LINK':'chainlink','UNI':'uniswap',
+  'LTC':'litecoin','BCH':'bitcoin-cash','ATOM':'cosmos','NEAR':'near',
+  'FIL':'filecoin','TRX':'tron','XLM':'stellar','SHIB':'shiba-inu',
+  'APT':'aptos','ARB':'arbitrum','OP':'optimism','SUI':'sui','INJ':'injective-protocol',
+  'TON':'the-open-network','PEPE':'pepe','WIF':'dogwifcoin','JUP':'jupiter-exchange-solana',
+  'ICP':'internet-computer','HBAR':'hedera-hashgraph','AAVE':'aave','SAND':'the-sandbox',
+  'MANA':'decentraland','GRT':'the-graph','CRV':'curve-dao-token','DYDX':'dydx',
+  'LDO':'lido-dao','STX':'blockstack','THETA':'theta-token','FTM':'fantom',
+  'ALGO':'algorand','VET':'vechain','EOS':'eos','ZEC':'zcash','XMR':'monero',
+}
+
+function cgId(symbol) {
+  const base = symbol.toUpperCase().replace(/-(USD|USDT|USDC|BTC|ETH|EUR|GBP)$/, '')
+  return COINGECKO_IDS[base] || null
+}
+
+async function getCoinGeckoChart(symbol, interval = '1d', range = '1y') {
+  if (!isCryptoSymbol(symbol)) return null
+  const id = cgId(symbol)
+  if (!id) return null
+
+  // CoinGecko OHLC endpoint — days param
+  const daysMap = { '1d':1,'5d':7,'1mo':30,'3mo':90,'6mo':180,'1y':365,'2y':730,'5y':1825,'max':1825 }
+  const days = daysMap[range] || 365
+
+  // CoinGecko only provides daily OHLC for all ranges; for short ranges (<2d) use hourly
+  const url = `https://api.coingecko.com/api/v3/coins/${id}/ohlc?vs_currency=usd&days=${days}`
+  try {
+    const r = await fetch(url, { signal: AbortSignal.timeout(20000) })
+    if (!r.ok) throw new Error(`HTTP ${r.status}`)
+    const d = await r.json()
+    if (!Array.isArray(d) || d.length < 5) return null
+
+    const timestamps = d.map(k => Math.floor(k[0] / 1000))
+    const opens  = d.map(k => k[1])
+    const highs  = d.map(k => k[2])
+    const lows   = d.map(k => k[3])
+    const closes = d.map(k => k[4])
+    const lastClose = closes.at(-1)
+
+    console.log(`[CoinGecko] chart OK: ${symbol} → ${id} (${d.length} bars)`)
+    return {
+      chart: { result: [{
+        meta: { symbol, regularMarketPrice: lastClose, chartPreviousClose: closes.at(-2) ?? null },
+        timestamp: timestamps,
+        indicators: {
+          quote:    [{ open: opens, high: highs, low: lows, close: closes, volume: closes.map(() => 0) }],
+          adjclose: [{ adjclose: closes }],
+        },
+      }], error: null },
+    }
+  } catch (e) { console.warn('[CoinGecko] chart error:', e.message); return null }
+}
+
+async function getCoinGeckoQuote(symbol) {
+  if (!isCryptoSymbol(symbol)) return null
+  const id = cgId(symbol)
+  if (!id) return null
+  try {
+    const url = `https://api.coingecko.com/api/v3/simple/price?ids=${id}&vs_currencies=usd&include_24hr_change=true&include_24hr_vol=true`
+    const d = await apiFetch(url, 10000)
+    const c = d?.[id]
+    const price = c?.usd
+    if (!price) return null
+    const chgPct = c?.usd_24h_change ?? null
+    const chg    = chgPct != null ? +(price * chgPct / 100).toFixed(6) : null
+    console.log(`[CoinGecko] quote OK: ${symbol} → ${id} $${price}`)
+    return {
+      symbol,
+      shortName:                  id,
+      regularMarketPrice:         price,
+      regularMarketChange:        chg,
+      regularMarketChangePercent: chgPct != null ? +chgPct.toFixed(4) : null,
+      regularMarketVolume:        c?.usd_24h_vol ?? null,
+    }
+  } catch (e) { console.warn('[CoinGecko] quote error:', e.message); return null }
 }
 
 // ── Nasdaq.com Historical API (free, no API key, US stocks + ETFs) ────────────
@@ -1235,18 +1322,23 @@ app.get('/api/quote', async (req, res) => {
     if (av?.some(r => r.regularMarketPrice != null))
       return res.json({ quoteResponse: { result: av } })
 
-    // 5th: Binance real-time quotes for any crypto symbols in the batch.
+    // 5th: Binance → CoinGecko for crypto (free, real-time, no key).
     // Must run BEFORE Twelve Data — TD demo returns stale crypto prices (months old).
+    // CoinGecko is the fallback when Binance is blocked on Railway's IPs.
     if (symbols.some(isCryptoSymbol)) {
       const binResults = await Promise.all(symbols.map(s => getBinanceSingleQuote(s).catch(() => null)))
-      // If all requested symbols are crypto and Binance returned at least one price → done.
-      // For mixed batches (stock + crypto), only return if every symbol is covered.
+      // Fill any Binance misses with CoinGecko
+      const cgResults  = await Promise.all(symbols.map((s, i) =>
+        binResults[i]?.regularMarketPrice != null ? Promise.resolve(null) : getCoinGeckoQuote(s).catch(() => null)
+      ))
+      const cryptoResults = symbols.map((s, i) => binResults[i] || cgResults[i] || null)
+
       const allCrypto = symbols.every(isCryptoSymbol)
-      if (allCrypto && binResults.some(r => r?.regularMarketPrice != null)) {
-        return res.json({ quoteResponse: { result: binResults.map((r, i) => r || { symbol: symbols[i], regularMarketPrice: null }) } })
+      if (allCrypto && cryptoResults.some(r => r?.regularMarketPrice != null)) {
+        return res.json({ quoteResponse: { result: cryptoResults.map((r, i) => r || { symbol: symbols[i], regularMarketPrice: null }) } })
       }
-      // Mixed batch: cache Binance prices so the chart-price fallback below picks them up.
-      binResults.forEach((r, i) => {
+      // Mixed batch: cache prices so the chart-price fallback below picks them up.
+      cryptoResults.forEach((r, i) => {
         if (r?.regularMarketPrice != null) cacheSet(`aisaq:${symbols[i]}`, r)
       })
     }
@@ -1302,12 +1394,14 @@ app.get('/api/chart', async (req, res) => {
     const fmp = await getFMPChart(symbol, interval, range, keys)
     if (fmp) return res.json(saveChart(fmp, 'FMP'))
 
-    // 3.5: Binance — crypto fast-path (free, real-time, no key)
-    // Must run BEFORE Twelve Data: TD demo key returns stale crypto prices
-    // (e.g. SOL at $172 when it's actually $84 — months-old cached demo data).
+    // 3.5: Crypto fast-path — Binance then CoinGecko (free, real-time, no key)
+    // Must run BEFORE Twelve Data: TD demo key returns stale crypto prices.
+    // CoinGecko is the fallback if Binance is blocked on Railway's IPs.
     if (isCryptoSymbol(symbol)) {
       const binanceFast = await getBinanceChart(symbol, interval, range)
       if (binanceFast) return res.json(saveChart(binanceFast, 'Binance'))
+      const cgFast = await getCoinGeckoChart(symbol, interval, range)
+      if (cgFast) return res.json(saveChart(cgFast, 'CoinGecko'))
     }
 
     // 4th: Twelve Data (800 req/day free tier; demo key covers major US symbols)

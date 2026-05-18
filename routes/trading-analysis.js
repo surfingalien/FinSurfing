@@ -12,6 +12,18 @@ const Anthropic  = require('@anthropic-ai/sdk')
 
 const router = express.Router()
 
+// ── Crypto detection (mirrors server.js isCryptoSymbol) ───────────────────────
+const CRYPTO_TICKERS = new Set([
+  'BTC','ETH','SOL','BNB','XRP','ADA','DOGE','AVAX','DOT','MATIC','LINK',
+  'UNI','LTC','BCH','TRX','NEAR','SHIB','APT','ARB','OP','SUI','SEI','INJ',
+  'TIA','JUP','WIF','BONK','PEPE','TON','ATOM','FIL','ICP','XLM','XMR',
+])
+function isCryptoSymbol(s) {
+  if (!s) return false
+  const u = s.toUpperCase()
+  return /^[A-Z0-9.]+-[A-Z]{3,4}$/.test(u) || CRYPTO_TICKERS.has(u)
+}
+
 // ── Symbol conversion: TradingView → Yahoo Finance ────────────────────────────
 
 const CRYPTO_MAP = {
@@ -752,8 +764,9 @@ router.post('/analyze', async (req, res) => {
         )
         const qd = await qr.json()
         const lp = qd?.quoteResponse?.result?.[0]?.regularMarketPrice
-        if (lp && lp > 0 && Math.abs(lp - price) / price < 0.5) {
-          // Sanity check: accept only if within 50% of bar close (guards stale quote data)
+        if (lp && lp > 0 && (Math.abs(lp - price) / price < 0.5 || isCryptoSymbol(sym))) {
+          // Sanity check: accept if within 50% of bar close, OR always for crypto
+          // (crypto quote from Binance/CoinGecko is authoritative even when bars are stale)
           price = lp
           priceLabel = 'live quote'
         }

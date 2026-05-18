@@ -54,15 +54,39 @@ function normalise(raw) {
   if (s.includes(':')) return s
   // Crypto Yahoo-style: BTC-USD → BITSTAMP:BTCUSD
   const cryptoMap = {
-    'BTC-USD': 'BITSTAMP:BTCUSD', 'ETH-USD': 'BITSTAMP:ETHUSD',
-    'SOL-USD': 'BINANCE:SOLUSDT', 'BNB-USD': 'BINANCE:BNBUSDT',
-    'ADA-USD': 'BINANCE:ADAUSDT', 'DOGE-USD':'BINANCE:DOGEUSDT',
-    'XRP-USD': 'BITSTAMP:XRPUSD', 'AVAX-USD':'BINANCE:AVAXUSDT',
+    // Dash format (Yahoo-style)
+    'BTC-USD':  'BITSTAMP:BTCUSD',  'ETH-USD':  'BITSTAMP:ETHUSD',
+    'SOL-USD':  'BINANCE:SOLUSDT',  'BNB-USD':  'BINANCE:BNBUSDT',
+    'ADA-USD':  'BINANCE:ADAUSDT',  'DOGE-USD': 'BINANCE:DOGEUSDT',
+    'XRP-USD':  'BITSTAMP:XRPUSD',  'AVAX-USD': 'BINANCE:AVAXUSDT',
+    'MATIC-USD':'BINANCE:MATICUSDT','LINK-USD':  'BINANCE:LINKUSDT',
+    'DOT-USD':  'BINANCE:DOTUSDT',  'SHIB-USD': 'BINANCE:SHIBUSDT',
+    'UNI-USD':  'BINANCE:UNIUSDT',  'LTC-USD':  'BITSTAMP:LTCUSD',
+    'NEAR-USD': 'BINANCE:NEARUSDT', 'APT-USD':  'BINANCE:APTUSDT',
+    'ARB-USD':  'BINANCE:ARBUSD',   'OP-USD':   'BINANCE:OPUSDT',
+    'SUI-USD':  'BINANCE:SUIUSDT',  'INJ-USD':  'BINANCE:INJUSDT',
+    'PEPE-USD': 'BINANCE:PEPEUSDT', 'WIF-USD':  'BINANCE:WIFUSDT',
+    'TON-USD':  'BINANCE:TONUSDT',  'XLM-USD':  'BINANCE:XLMUSDT',
+    // Bare ticker — map to explicit price chart (avoids CRYPTOCAP: market-cap resolution)
+    'BTC':  'BITSTAMP:BTCUSD',  'ETH':  'BITSTAMP:ETHUSD',
+    'SOL':  'BINANCE:SOLUSDT',  'BNB':  'BINANCE:BNBUSDT',
+    'XRP':  'BITSTAMP:XRPUSD',  'ADA':  'BINANCE:ADAUSDT',
+    'DOGE': 'BINANCE:DOGEUSDT', 'AVAX': 'BINANCE:AVAXUSDT',
+    'MATIC':'BINANCE:MATICUSDT','LINK': 'BINANCE:LINKUSDT',
+    'DOT':  'BINANCE:DOTUSDT',  'SHIB': 'BINANCE:SHIBUSDT',
+    'UNI':  'BINANCE:UNIUSDT',  'LTC':  'BITSTAMP:LTCUSD',
+    'NEAR': 'BINANCE:NEARUSDT', 'APT':  'BINANCE:APTUSDT',
+    'ARB':  'BINANCE:ARBUSD',   'OP':   'BINANCE:OPUSDT',
+    'SUI':  'BINANCE:SUIUSDT',  'INJ':  'BINANCE:INJUSDT',
+    'PEPE': 'BINANCE:PEPEUSDT', 'WIF':  'BINANCE:WIFUSDT',
+    'TON':  'BINANCE:TONUSDT',  'XLM':  'BINANCE:XLMUSDT',
+    'ATOM': 'BINANCE:ATOMUSDT', 'FIL':  'BINANCE:FILUSDT',
+    'TRX':  'BINANCE:TRXUSDT',  'ICP':  'BINANCE:ICPUSDT',
   }
   if (cryptoMap[s]) return cryptoMap[s]
-  // Strip -USD suffix
+  // Generic -USD suffix → Binance USDT pair
   if (s.endsWith('-USD')) return 'BINANCE:' + s.replace('-USD', 'USDT')
-  return s  // bare ticker — TradingView resolves to primary exchange
+  return s  // bare stock ticker — TradingView resolves to primary exchange
 }
 
 // ── Load tv.js once, then resolve the promise on subsequent calls ─────────────
