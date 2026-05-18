@@ -63,10 +63,10 @@ function tvToChartParams(tvInterval) {
   const map = {
     '1':   { interval: '1m',  range: '1d'  },
     '5':   { interval: '5m',  range: '5d'  },
-    '15':  { interval: '15m', range: '7d'  },
-    '30':  { interval: '30m', range: '14d' },
-    '60':  { interval: '60m', range: '30d' },
-    '240': { interval: '60m', range: '60d' },
+    '15':  { interval: '15m', range: '1mo' },
+    '30':  { interval: '30m', range: '1mo' },
+    '60':  { interval: '60m', range: '1mo' },
+    '240': { interval: '60m', range: '3mo' },
     'D':   { interval: '1d',  range: '1y'  },
     'W':   { interval: '1wk', range: '2y'  },
   }
@@ -624,8 +624,9 @@ router.post('/analyze', async (req, res) => {
     const timestamps = result?.timestamp
     const ohlcv      = result?.indicators?.quote?.[0]
 
-    if (!timestamps || !ohlcv?.close || timestamps.length < 30)
-      return res.status(422).json({ error: `Insufficient price history for ${sym}` })
+    console.log(`[trading-analysis] ${sym} ${yInterval}/${range}: ${timestamps?.length ?? 0} bars`)
+    if (!timestamps || !ohlcv?.close || timestamps.length < 10)
+      return res.status(422).json({ error: `Insufficient price history for ${sym} (${timestamps?.length ?? 0} bars returned for ${yInterval}/${range})` })
 
     // Build OHLCV arrays, filtering out null closes
     const bars = timestamps
@@ -639,7 +640,7 @@ router.post('/analyze', async (req, res) => {
       }))
       .filter(b => b.c != null && !isNaN(b.c))
 
-    if (bars.length < 30)
+    if (bars.length < 10)
       return res.status(422).json({ error: `Not enough valid OHLCV bars for ${sym}` })
 
     const ts      = bars.map(b => b.t)
