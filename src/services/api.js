@@ -9,7 +9,7 @@ function cached(key, fn) {
 
 // Read user-supplied API keys from localStorage and return them as request headers.
 // Keys are stored by ApiKeysContext under 'finsurf_api_keys'.
-function getApiKeyHeaders() {
+export function getApiKeyHeaders() {
   try {
     const stored = JSON.parse(localStorage.getItem('finsurf_api_keys') || '{}')
     const h = {}

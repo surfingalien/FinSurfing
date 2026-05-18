@@ -5,7 +5,8 @@
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { Monitor, Search, RefreshCw, ExternalLink, Clock } from 'lucide-react'
+import { Monitor, Search, RefreshCw, ExternalLink, Clock, Brain } from 'lucide-react'
+import TradingAIPanel from './TradingAIPanel'
 
 // ── Timeframes ────────────────────────────────────────────────────────────────
 const TIMEFRAMES = [
@@ -169,6 +170,8 @@ export default function TradingViewView() {
   const [inputVal, setInputVal] = useState('SPY')
   const [interval, setInterval] = useState('60')
   const [uid,      setUid]      = useState(0)
+  const [showAI,   setShowAI]   = useState(false)
+  const [livePrice, setLivePrice] = useState(null)
 
   const apply = useCallback(() => {
     const s = normalise(inputVal)
@@ -252,6 +255,20 @@ export default function TradingViewView() {
           >
             <RefreshCw className="w-3.5 h-3.5" />
           </button>
+
+          {/* AI Panel toggle */}
+          <button
+            onClick={() => setShowAI(v => !v)}
+            title="Toggle AI Analysis"
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+              showAI
+                ? 'bg-violet-500/20 text-violet-400 border-violet-500/30'
+                : 'bg-white/[0.03] text-slate-400 border-white/[0.06] hover:text-white'
+            }`}
+          >
+            <Brain className="w-3.5 h-3.5" />
+            AI
+          </button>
         </div>
       </div>
 
@@ -281,12 +298,19 @@ export default function TradingViewView() {
         </a>
       </div>
 
-      {/* ── Chart ── */}
-      <div
-        className="rounded-2xl overflow-hidden border border-white/[0.07]"
-        style={{ height: 600 }}
-      >
-        <TVChart symbol={symbol} interval={interval} uid={uid} />
+      {/* ── Chart + AI Panel ── */}
+      <div className="flex gap-4" style={{ height: 660 }}>
+        {/* Chart */}
+        <div className="flex-1 min-w-0 rounded-2xl overflow-hidden border border-white/[0.07]">
+          <TVChart symbol={symbol} interval={interval} uid={uid} />
+        </div>
+
+        {/* AI Panel */}
+        {showAI && (
+          <div className="w-[380px] shrink-0 rounded-2xl border border-white/[0.07] bg-[#0a0e1a] overflow-hidden">
+            <TradingAIPanel symbol={symbol} interval={interval} price={livePrice} />
+          </div>
+        )}
       </div>
 
       <p className="text-center text-[10px] text-slate-700 shrink-0 pb-1">
