@@ -820,6 +820,33 @@ async function getBinanceChart(symbol, interval = '1d', range = '1y') {
   } catch (e) { console.warn('[Binance] chart error:', e.message); return null }
 }
 
+// Real-time quote for a single crypto symbol via Binance 24hr ticker.
+async function getBinanceSingleQuote(symbol) {
+  if (!isCryptoSymbol(symbol)) return null
+  const base   = symbol.replace(/-(USD|USDT|BTC|ETH|EUR|GBP|BUSD)$/, '')
+  const binSym = base + 'USDT'
+  try {
+    const d = await apiFetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${binSym}`, 8000)
+    const price = parseFloat(d?.lastPrice)
+    if (!price) return null
+    const prev  = parseFloat(d.prevClosePrice) || price
+    const chg   = +(price - prev).toFixed(6)
+    console.log(`[Binance] quote OK: ${symbol} → ${binSym} $${price}`)
+    return {
+      symbol,
+      shortName:                  base,
+      regularMarketPrice:         price,
+      regularMarketChange:        chg,
+      regularMarketChangePercent: +(chg / prev * 100).toFixed(4),
+      regularMarketVolume:        parseFloat(d.volume)    || null,
+      regularMarketDayHigh:       parseFloat(d.highPrice) || null,
+      regularMarketDayLow:        parseFloat(d.lowPrice)  || null,
+      regularMarketOpen:          parseFloat(d.openPrice) || null,
+      regularMarketPreviousClose: prev,
+    }
+  } catch (e) { console.warn('[Binance] quote error:', e.message); return null }
+}
+
 // ── Nasdaq.com Historical API (free, no API key, US stocks + ETFs) ────────────
 // api.nasdaq.com provides daily OHLCV for all US-listed equities (NYSE, NASDAQ,
 // AMEX). Covers small-caps, recent IPOs, SPACs (SOUN, PLTR, etc.) that the
@@ -1180,7 +1207,23 @@ app.get('/api/quote', async (req, res) => {
     if (av?.some(r => r.regularMarketPrice != null))
       return res.json({ quoteResponse: { result: av } })
 
-    // 5th: Twelve Data (demo key or user key)
+    // 5th: Binance real-time quotes for any crypto symbols in the batch.
+    // Must run BEFORE Twelve Data — TD demo returns stale crypto prices (months old).
+    if (symbols.some(isCryptoSymbol)) {
+      const binResults = await Promise.all(symbols.map(s => getBinanceSingleQuote(s).catch(() => null)))
+      // If all requested symbols are crypto and Binance returned at least one price → done.
+      // For mixed batches (stock + crypto), only return if every symbol is covered.
+      const allCrypto = symbols.every(isCryptoSymbol)
+      if (allCrypto && binResults.some(r => r?.regularMarketPrice != null)) {
+        return res.json({ quoteResponse: { result: binResults.map((r, i) => r || { symbol: symbols[i], regularMarketPrice: null }) } })
+      }
+      // Mixed batch: cache Binance prices so the chart-price fallback below picks them up.
+      binResults.forEach((r, i) => {
+        if (r?.regularMarketPrice != null) cacheSet(`aisaq:${symbols[i]}`, r)
+      })
+    }
+
+    // 6th: Twelve Data (demo key or user key) — US stocks/ETFs
     const tdResults = await Promise.all(symbols.map(s => getTwelveDataQuote(s, keys).catch(() => null)))
     if (tdResults.some(r => r?.regularMarketPrice != null))
       return res.json({ quoteResponse: { result: tdResults.map((r, i) => r || { symbol: symbols[i], regularMarketPrice: null }) } })
@@ -1231,6 +1274,14 @@ app.get('/api/chart', async (req, res) => {
     const fmp = await getFMPChart(symbol, interval, range, keys)
     if (fmp) return res.json(saveChart(fmp, 'FMP'))
 
+    // 3.5: Binance — crypto fast-path (free, real-time, no key)
+    // Must run BEFORE Twelve Data: TD demo key returns stale crypto prices
+    // (e.g. SOL at $172 when it's actually $84 — months-old cached demo data).
+    if (isCryptoSymbol(symbol)) {
+      const binanceFast = await getBinanceChart(symbol, interval, range)
+      if (binanceFast) return res.json(saveChart(binanceFast, 'Binance'))
+    }
+
     // 4th: Twelve Data (800 req/day free tier; demo key covers major US symbols)
     const td = await getTwelveDataChart(symbol, interval, range, keys)
     if (td) return res.json(saveChart(td, 'TwelveData'))
@@ -1239,7 +1290,7 @@ app.get('/api/chart', async (req, res) => {
     const av = await getAVChart(symbol, interval, range, keys)
     if (av) return res.json(saveChart(av, 'AV'))
 
-    // 6th: Binance (free, no key — crypto only: BTC-USD, ETH-USD, SOL-USD, etc.)
+    // 6th: Binance fallback for crypto that slipped past the fast-path
     const binance = await getBinanceChart(symbol, interval, range)
     if (binance) return res.json(saveChart(binance, 'Binance'))
 
