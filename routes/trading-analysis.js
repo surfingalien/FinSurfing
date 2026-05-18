@@ -605,43 +605,52 @@ router.post('/analyze', async (req, res) => {
   const sym = tvToYahoo(symbol.trim())
   if (!sym) return res.status(400).json({ error: 'Could not convert symbol to Yahoo Finance format' })
 
-  const { interval: yInterval, range } = tvToChartParams(String(interval))
+  let { interval: yInterval, range } = tvToChartParams(String(interval))
 
   try {
-    // Fetch OHLCV via internal /api/chart proxy (same pattern as backtest.js)
     const port = process.env.PORT || 3001
     const fwdHeaders = {}
     for (const h of ['x-aisa-key', 'x-finnhub-key', 'x-fmp-key', 'x-td-key', 'x-av-key']) {
       if (req.headers[h]) fwdHeaders[h] = req.headers[h]
     }
 
-    const r = await fetch(
-      `http://127.0.0.1:${port}/api/chart?symbol=${encodeURIComponent(sym)}&interval=${yInterval}&range=${range}`,
-      { headers: fwdHeaders, signal: AbortSignal.timeout(30000) }
-    )
-    const yahooData = await r.json()
-    const result     = yahooData?.chart?.result?.[0]
-    const timestamps = result?.timestamp
-    const ohlcv      = result?.indicators?.quote?.[0]
+    // Helper: fetch chart and return filtered bars, or null if insufficient
+    const fetchBars = async (ivl, rng) => {
+      const r = await fetch(
+        `http://127.0.0.1:${port}/api/chart?symbol=${encodeURIComponent(sym)}&interval=${ivl}&range=${rng}`,
+        { headers: fwdHeaders, signal: AbortSignal.timeout(30000) }
+      )
+      const d    = await r.json()
+      const res  = d?.chart?.result?.[0]
+      const ts   = res?.timestamp
+      const q    = res?.indicators?.quote?.[0]
+      console.log(`[trading-analysis] ${sym} ${ivl}/${rng}: ${ts?.length ?? 0} raw bars`)
+      if (!ts?.length || !q?.close) return null
+      const bars = ts.map((t, i) => ({
+        t, o: q.open?.[i], h: q.high?.[i], l: q.low?.[i], c: q.close?.[i], v: q.volume?.[i] ?? 0,
+      })).filter(b => b.c != null && !isNaN(b.c))
+      return bars.length >= 10 ? bars : null
+    }
 
-    console.log(`[trading-analysis] ${sym} ${yInterval}/${range}: ${timestamps?.length ?? 0} bars`)
-    if (!timestamps || !ohlcv?.close || timestamps.length < 10)
-      return res.status(422).json({ error: `Insufficient price history for ${sym} (${timestamps?.length ?? 0} bars returned for ${yInterval}/${range})` })
+    // Primary attempt
+    let bars = await fetchBars(yInterval, range)
 
-    // Build OHLCV arrays, filtering out null closes
-    const bars = timestamps
-      .map((t, i) => ({
-        t,
-        o: ohlcv.open?.[i],
-        h: ohlcv.high?.[i],
-        l: ohlcv.low?.[i],
-        c: ohlcv.close?.[i],
-        v: ohlcv.volume?.[i] ?? 0,
-      }))
-      .filter(b => b.c != null && !isNaN(b.c))
+    // Fallback 1: daily 1y (works without any user API keys via AV/TD demo)
+    if (!bars && yInterval !== '1d') {
+      console.log(`[trading-analysis] ${sym}: intraday failed, falling back to 1d/1y`)
+      bars = await fetchBars('1d', '1y')
+      if (bars) { yInterval = '1d'; range = '1y' }
+    }
 
-    if (bars.length < 10)
-      return res.status(422).json({ error: `Not enough valid OHLCV bars for ${sym}` })
+    // Fallback 2: weekly 2y
+    if (!bars) {
+      console.log(`[trading-analysis] ${sym}: daily failed, falling back to 1wk/2y`)
+      bars = await fetchBars('1wk', '2y')
+      if (bars) { yInterval = '1wk'; range = '2y' }
+    }
+
+    if (!bars)
+      return res.status(422).json({ error: `No market data available for ${sym}. Add an AISA, Finnhub, or FMP API key in Settings for full coverage.` })
 
     const ts      = bars.map(b => b.t)
     const opens   = bars.map(b => b.o ?? b.c)

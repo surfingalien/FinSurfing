@@ -584,8 +584,11 @@ async function getTwelveDataChart(symbol, interval = '1d', range = '1y', keys = 
   const tdIvl   = ivlMap[interval]
   if (!tdIvl) return null
   try {
-    const days       = { '1d':3,'5d':10,'1mo':38,'3mo':98,'6mo':190,'1y':375,'2y':745,'5y':1835,'max':5000 }
-    const outputsize = Math.min(days[range] || 375, 5000)
+    // outputsize = number of data points (not calendar days). For intraday intervals
+    // we need far more bars than calendar days, so calculate per-interval.
+    const calDays = { '1d':2,'5d':7,'1mo':30,'3mo':92,'6mo':184,'1y':366,'2y':732,'5y':1827,'max':5000 }[range] || 366
+    const barsPerTradingDay = { '1min':390,'5min':78,'15min':26,'30min':13,'1h':7,'1day':1,'1week':0.2,'1month':0.05 }[tdIvl] || 1
+    const outputsize = Math.min(Math.ceil(calDays * barsPerTradingDay * 5 / 7), 5000)
     const url        = `https://api.twelvedata.com/time_series?symbol=${encodeURIComponent(symbol)}&interval=${tdIvl}&outputsize=${outputsize}&apikey=${key}`
     const data       = await apiFetch(url, 15000)
     if (data?.status !== 'ok' || !Array.isArray(data?.values) || !data.values.length) {
