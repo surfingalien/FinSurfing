@@ -580,7 +580,7 @@ function volumeAnalysis(volumes) {
 
 // ── Analysis prompt builder ────────────────────────────────────────────────────
 
-function buildAnalysisPrompt(symbol, interval, price, indicators, patterns, vol) {
+function buildAnalysisPrompt(symbol, interval, price, indicators, patterns, vol, priceLabel = 'last bar close') {
   const { rsi, macd, ema9, ema21, ema50, ema200, bb, atr, stochRsi, vwap, obv, sr } = indicators
 
   const rsiInterp = rsi == null ? 'N/A'
@@ -619,7 +619,7 @@ function buildAnalysisPrompt(symbol, interval, price, indicators, patterns, vol)
 MARKET DATA:
 - Symbol: ${symbol}
 - Timeframe: ${interval}
-- Current Price: ${price}
+- Current Price: ${price} [${priceLabel}]
 
 TECHNICAL INDICATORS:
 - RSI(14): ${rsiInterp}
@@ -674,7 +674,7 @@ router.post('/analyze', async (req, res) => {
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) return res.status(503).json({ error: 'AI service not configured (ANTHROPIC_API_KEY missing)' })
 
-  const { symbol, interval = 'D' } = req.body
+  const { symbol, interval = 'D', livePrice: clientLivePrice } = req.body
 
   if (!symbol || typeof symbol !== 'string')
     return res.status(400).json({ error: 'symbol is required' })
@@ -736,7 +736,30 @@ router.post('/analyze', async (req, res) => {
     const closes  = bars.map(b => b.c)
     const volumes = bars.map(b => b.v)
 
-    const price = closes[closes.length - 1]
+    // Resolve current price: prefer live price from TradingView widget (most accurate),
+    // then try a fresh quote from the internal API, then fall back to last bar close.
+    let price = closes[closes.length - 1]
+    let priceLabel = 'last bar close'
+
+    if (clientLivePrice && typeof clientLivePrice === 'number' && clientLivePrice > 0) {
+      price = clientLivePrice
+      priceLabel = 'live (TradingView)'
+    } else {
+      try {
+        const qr = await fetch(
+          `http://127.0.0.1:${port}/api/quote?symbols=${encodeURIComponent(sym)}`,
+          { headers: fwdHeaders, signal: AbortSignal.timeout(5000) }
+        )
+        const qd = await qr.json()
+        const lp = qd?.quoteResponse?.result?.[0]?.regularMarketPrice
+        if (lp && lp > 0 && Math.abs(lp - price) / price < 0.5) {
+          // Sanity check: accept only if within 50% of bar close (guards stale quote data)
+          price = lp
+          priceLabel = 'live quote'
+        }
+      } catch { /* keep last bar close */ }
+    }
+    console.log(`[trading-analysis] ${sym} price: $${price} (${priceLabel})`)
 
     // Compute all indicators
     const rsi      = computeRSI(closes)
@@ -757,7 +780,7 @@ router.post('/analyze', async (req, res) => {
     const indicators = { rsi, macd, ema9, ema21, ema50, ema200, bb, atr, stochRsi, vwap, obv, sr, patterns, volume: vol }
 
     // Build prompt and call Claude
-    const analysisPrompt = buildAnalysisPrompt(sym, interval, price, indicators, patterns, vol)
+    const analysisPrompt = buildAnalysisPrompt(sym, interval, price, indicators, patterns, vol, priceLabel)
 
     const anthropic = new Anthropic({ apiKey })
     const msg = await anthropic.messages.create({

@@ -122,7 +122,7 @@ export default function TradingAIPanel({ symbol, interval, price }) {
       const res = await fetch('/api/trading-analysis/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...getApiKeyHeaders() },
-        body: JSON.stringify({ symbol, interval }),
+        body: JSON.stringify({ symbol, interval, livePrice: price ?? null }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Analysis failed')
