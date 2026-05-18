@@ -767,6 +767,123 @@ async function getStooqChart(symbol, interval = '1d', range = '1y') {
   } catch (e) { console.warn('[Stooq] chart error:', e.message); return null }
 }
 
+// ── Binance helpers (free, no API key, crypto only) ───────────────────────────
+// api.binance.com is a public REST API — no auth needed for market data.
+// Covers every crypto asset TradingView lists (BTC, ETH, SOL, DOGE, etc.).
+
+function isCryptoSymbol(symbol) {
+  // Yahoo Finance format: crypto = TICKER-CURRENCY (BTC-USD, ETH-USD, SOL1-USD)
+  // Forex uses =X suffix (EURUSD=X), futures use =F (GC=F) — excluded here.
+  return /^[A-Z0-9.]+-[A-Z]{3,4}$/.test(symbol)
+}
+
+async function getBinanceChart(symbol, interval = '1d', range = '1y') {
+  if (!isCryptoSymbol(symbol)) return null
+  // Convert Yahoo format (BTC-USD) → Binance pair (BTCUSDT)
+  const base    = symbol.replace(/-(USD|USDT|BTC|ETH|EUR|GBP|BUSD)$/, '')
+  const binSym  = base + 'USDT'
+
+  const ivlMap = { '1m':'1m','5m':'5m','15m':'15m','30m':'30m','60m':'1h','1h':'1h','1d':'1d','1wk':'1w','1mo':'1M' }
+  const bInterval = ivlMap[interval]
+  if (!bInterval) return null
+
+  const days   = { '1d':2,'5d':7,'1mo':30,'3mo':92,'6mo':184,'1y':365,'2y':730,'5y':1825,'max':1000 }[range] || 365
+  const perDay = { '1m':1440,'5m':288,'15m':96,'30m':48,'60m':24,'1h':24,'1d':1,'1wk':1/7,'1mo':1/30 }
+  const limit  = Math.min(Math.ceil(days * (perDay[interval] ?? 1)), 1000)
+
+  const url = `https://api.binance.com/api/v3/klines?symbol=${binSym}&interval=${bInterval}&limit=${limit}`
+  try {
+    const r = await fetch(url, { signal: AbortSignal.timeout(15000) })
+    if (!r.ok) throw new Error(`HTTP ${r.status}`)
+    const d = await r.json()
+    if (!Array.isArray(d) || d.length < 5) return null
+
+    const timestamps = d.map(k => Math.floor(k[0] / 1000))
+    const opens  = d.map(k => parseFloat(k[1]))
+    const highs  = d.map(k => parseFloat(k[2]))
+    const lows   = d.map(k => parseFloat(k[3]))
+    const closes = d.map(k => parseFloat(k[4]))
+    const vols   = d.map(k => parseFloat(k[5]))
+    const lastClose = closes.at(-1)
+
+    console.log(`[Binance] chart OK: ${symbol} → ${binSym} (${d.length} bars)`)
+    return {
+      chart: { result: [{
+        meta: { symbol, regularMarketPrice: lastClose, chartPreviousClose: closes.at(-2) ?? null },
+        timestamp: timestamps,
+        indicators: {
+          quote:    [{ open: opens, high: highs, low: lows, close: closes, volume: vols }],
+          adjclose: [{ adjclose: closes }],
+        },
+      }], error: null },
+    }
+  } catch (e) { console.warn('[Binance] chart error:', e.message); return null }
+}
+
+// ── Nasdaq.com Historical API (free, no API key, US stocks + ETFs) ────────────
+// api.nasdaq.com provides daily OHLCV for all US-listed equities (NYSE, NASDAQ,
+// AMEX). Covers small-caps, recent IPOs, SPACs (SOUN, PLTR, etc.) that the
+// Twelve Data demo key misses. No auth required.
+
+async function getNasdaqChart(symbol, interval = '1d', range = '1y') {
+  if (!['1d', '1wk'].includes(interval)) return null
+  if (isCryptoSymbol(symbol) || /[=!]/.test(symbol)) return null
+
+  const days    = { '1d':2,'5d':8,'1mo':35,'3mo':95,'6mo':185,'1y':370,'2y':740,'5y':1830,'max':9999 }
+  const daysBack = Math.min(days[range] || 370, 1825)
+  const todate  = new Date().toISOString().slice(0, 10)
+  const fromdate = new Date(Date.now() - daysBack * 86400000).toISOString().slice(0, 10)
+
+  for (const assetclass of ['stocks', 'etf']) {
+    const url = `https://api.nasdaq.com/api/quote/${encodeURIComponent(symbol)}/historical?assetclass=${assetclass}&fromdate=${fromdate}&limit=1825&todate=${todate}&type=1`
+    try {
+      const r = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+          'Accept':          'application/json, text/plain, */*',
+          'Accept-Language': 'en-US,en;q=0.9',
+          'Referer':         'https://www.nasdaq.com/',
+          'Origin':          'https://www.nasdaq.com',
+        },
+        signal: AbortSignal.timeout(18000),
+      })
+      if (!r.ok) continue
+      const d = await r.json()
+      const rows = d?.data?.tradesTable?.rows
+      if (!rows?.length) continue
+
+      const parseNum = s => parseFloat((s ?? '').replace(/[$,]/g, '')) || 0
+      const parseVol = s => parseInt((s ?? '').replace(/,/g, ''))     || 0
+
+      const sorted = [...rows]
+        .filter(row => row.close && parseNum(row.close) > 0)
+        .sort((a, b) => new Date(a.date) - new Date(b.date))
+      if (sorted.length < 5) continue
+
+      const timestamps = sorted.map(r => Math.floor(new Date(r.date).getTime() / 1000))
+      const opens  = sorted.map(r => parseNum(r.open))
+      const highs  = sorted.map(r => parseNum(r.high))
+      const lows   = sorted.map(r => parseNum(r.low))
+      const closes = sorted.map(r => parseNum(r.close))
+      const vols   = sorted.map(r => parseVol(r.volume))
+      const lastClose = closes.at(-1)
+
+      console.log(`[Nasdaq] chart OK: ${symbol} as ${assetclass} (${sorted.length} bars)`)
+      return {
+        chart: { result: [{
+          meta: { symbol, regularMarketPrice: lastClose, chartPreviousClose: closes.at(-2) ?? null },
+          timestamp: timestamps,
+          indicators: {
+            quote:    [{ open: opens, high: highs, low: lows, close: closes, volume: vols }],
+            adjclose: [{ adjclose: closes }],
+          },
+        }], error: null },
+      }
+    } catch (e) { console.warn(`[Nasdaq] ${assetclass} for ${symbol}:`, e.message) }
+  }
+  return null
+}
+
 // Company overview — fundamentals (P/E, margins, sector, etc.)
 async function getAVSummary(symbol, keys = {}) {
   const key = keys.av || process.env.ALPHA_VANTAGE_API_KEY || process.env.AV_API_KEY
@@ -1122,14 +1239,28 @@ app.get('/api/chart', async (req, res) => {
     const av = await getAVChart(symbol, interval, range, keys)
     if (av) return res.json(saveChart(av, 'AV'))
 
-    // 6th: Stooq (free, no key, US equities — daily/weekly only)
+    // 6th: Binance (free, no key — crypto only: BTC-USD, ETH-USD, SOL-USD, etc.)
+    const binance = await getBinanceChart(symbol, interval, range)
+    if (binance) return res.json(saveChart(binance, 'Binance'))
+
+    // 7th: Nasdaq.com (free, no key — all US stocks + ETFs, daily/weekly only)
+    const nasdaq = await getNasdaqChart(symbol, interval, range)
+    if (nasdaq) return res.json(saveChart(nasdaq, 'Nasdaq'))
+
+    // 8th: Stooq (free, no key — additional US equity coverage)
     const stooq = await getStooqChart(symbol, interval, range)
     if (stooq) return res.json(saveChart(stooq, 'Stooq'))
 
-    // 6th-b: Stooq daily fallback if intraday requested and all providers failed
+    // Fallbacks for intraday when all intraday providers failed — try daily data
     if (!['1d', '1wk'].includes(interval)) {
-      const stooqDaily = await getStooqChart(symbol, '1d', '1y')
-      if (stooqDaily) return res.json(saveChart(stooqDaily, 'Stooq-daily'))
+      const nasdaqD = await getNasdaqChart(symbol, '1d', range === '1d' || range === '5d' ? '1mo' : range)
+      if (nasdaqD) return res.json(saveChart(nasdaqD, 'Nasdaq-daily'))
+
+      const binanceD = await getBinanceChart(symbol, '1d', range)
+      if (binanceD) return res.json(saveChart(binanceD, 'Binance-daily'))
+
+      const stooqD = await getStooqChart(symbol, '1d', '1y')
+      if (stooqD) return res.json(saveChart(stooqD, 'Stooq-daily'))
     }
 
     res.status(502).json({ chart: { result: null, error: { code: 'unavailable', description: 'No market data provider returned data' } } })
