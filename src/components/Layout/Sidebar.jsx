@@ -26,31 +26,62 @@ import ApiKeysModal from '../Settings/ApiKeysModal'
 
 // ── Nav item definitions ──────────────────────────────────────────────────────
 
-function buildTabs(user, triggeredCount, tradingUnread) {
-  return [
-    { id: 'dashboard',       label: 'Dashboard',      icon: LayoutDashboard },
-    { id: 'portfolio',       label: 'Portfolio',      icon: PieChart },
-    { id: 'watchlist',       label: 'Watchlist',      icon: Eye },
-    { id: 'analyze',         label: 'Analyze',        icon: LineChart },
-    { id: 'recommendations', label: 'Advisory',       icon: Lightbulb },
-    { id: 'montecarlo',      label: 'Retirement',     icon: TrendingUp },
-    { id: 'screener',        label: 'Screener',       icon: SlidersHorizontal },
-    { id: 'strategies',      label: 'Strategies',     icon: GitBranch },
-    { id: 'alerts',          label: 'Alerts',         icon: Bell,  badge: triggeredCount },
-    { id: 'research',        label: 'AI Agent',       icon: Bot },
-    { id: 'trading',         label: 'Trader Network', icon: Users,         badge: tradingUnread },
-    { id: 'earnings',        label: 'Earnings',       icon: Calendar },
-    { id: 'backtest',        label: 'Backtester',     icon: FlaskConical },
-    { id: 'buy-signals',    label: 'AI Buy Signals',  icon: Sparkles },
-    { id: 'ai-brain',      label: 'AI Brain',        icon: Brain },
-    { id: 'ai-watchlist',  label: 'AI Watchlist',    icon: Bookmark },
-    { id: 'tradingview',   label: 'TradingView',     icon: Monitor  },
-    { id: 'analytics',       label: 'Risk Analytics', icon: Activity },
-    { id: 'rebalancer',      label: 'AI Rebalancer',  icon: BarChart3 },
-    ...(user?.role === 'admin'
-      ? [{ id: 'admin', label: 'Admin', icon: ShieldCheck, admin: true }]
-      : []),
+function buildGroups(user, triggeredCount, tradingUnread) {
+  const groups = [
+    {
+      label: 'Overview',
+      items: [
+        { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+        { id: 'portfolio',  label: 'Portfolio', icon: PieChart },
+        { id: 'watchlist',  label: 'Watchlist', icon: Eye },
+        { id: 'alerts',     label: 'Alerts',    icon: Bell, badge: triggeredCount },
+      ],
+    },
+    {
+      label: 'Markets',
+      items: [
+        { id: 'analyze',     label: 'Analyze',     icon: LineChart },
+        { id: 'screener',    label: 'Screener',     icon: SlidersHorizontal },
+        { id: 'earnings',    label: 'Earnings',     icon: Calendar },
+        { id: 'tradingview', label: 'TradingView',  icon: Monitor },
+      ],
+    },
+    {
+      label: 'AI Tools',
+      items: [
+        { id: 'ai-brain',        label: 'AI Brain',      icon: Brain },
+        { id: 'buy-signals',     label: 'AI Buy Signals', icon: Sparkles },
+        { id: 'ai-watchlist',    label: 'AI Watchlist',   icon: Bookmark },
+        { id: 'research',        label: 'AI Agent',       icon: Bot },
+        { id: 'recommendations', label: 'Advisory',       icon: Lightbulb },
+      ],
+    },
+    {
+      label: 'Strategies',
+      items: [
+        { id: 'strategies', label: 'Strategies',     icon: GitBranch },
+        { id: 'backtest',   label: 'Backtester',     icon: FlaskConical },
+        { id: 'trading',    label: 'Trader Network', icon: Users, badge: tradingUnread },
+      ],
+    },
+    {
+      label: 'Planning',
+      items: [
+        { id: 'analytics',  label: 'Risk Analytics', icon: Activity },
+        { id: 'montecarlo', label: 'Retirement',      icon: TrendingUp },
+        { id: 'rebalancer', label: 'AI Rebalancer',   icon: BarChart3 },
+      ],
+    },
   ]
+
+  if (user?.role === 'admin') {
+    groups.push({
+      label: 'Admin',
+      items: [{ id: 'admin', label: 'Admin', icon: ShieldCheck, admin: true }],
+    })
+  }
+
+  return groups
 }
 
 // ── Tooltip wrapper (shows label when collapsed) ──────────────────────────────
@@ -198,7 +229,7 @@ export default function Sidebar({
   const [showCreate,     setShowCreate]     = useState(false)
   const [showApiKeys,    setShowApiKeys]    = useState(false)
 
-  const tabs = buildTabs(user, triggeredCount, tradingUnread)
+  const groups = buildGroups(user, triggeredCount, tradingUnread)
 
   const toggleCollapse = () => {
     setCollapsed(v => {
@@ -254,15 +285,30 @@ export default function Sidebar({
       )}
 
       {/* Nav items */}
-      <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-0.5 scrollbar-hide">
-        {tabs.map(tab => (
-          <NavItem
-            key={tab.id}
-            tab={tab}
-            active={activeTab === tab.id}
-            collapsed={collapsed}
-            onClick={() => handleTabChange(tab.id)}
-          />
+      <nav className="flex-1 overflow-y-auto py-2 px-2 scrollbar-hide">
+        {groups.map((group, gi) => (
+          <div key={group.label} className={gi > 0 ? 'mt-3' : ''}>
+            {/* Group label — hidden when collapsed */}
+            {!collapsed && (
+              <div className="px-3 mb-1 text-[9px] font-semibold uppercase tracking-widest text-slate-600 select-none">
+                {group.label}
+              </div>
+            )}
+            {collapsed && gi > 0 && (
+              <div className="my-2 mx-3 border-t border-white/[0.06]" />
+            )}
+            <div className="space-y-0.5">
+              {group.items.map(tab => (
+                <NavItem
+                  key={tab.id}
+                  tab={tab}
+                  active={activeTab === tab.id}
+                  collapsed={collapsed}
+                  onClick={() => handleTabChange(tab.id)}
+                />
+              ))}
+            </div>
+          </div>
         ))}
       </nav>
 
@@ -367,10 +413,19 @@ export default function Sidebar({
               )}
 
               {/* Nav */}
-              <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-0.5 scrollbar-hide">
-                {tabs.map(tab => (
-                  <NavItem key={tab.id} tab={tab} active={activeTab === tab.id}
-                    collapsed={false} onClick={() => handleTabChange(tab.id)} />
+              <nav className="flex-1 overflow-y-auto py-2 px-2 scrollbar-hide">
+                {groups.map((group, gi) => (
+                  <div key={group.label} className={gi > 0 ? 'mt-3' : ''}>
+                    <div className="px-3 mb-1 text-[9px] font-semibold uppercase tracking-widest text-slate-600 select-none">
+                      {group.label}
+                    </div>
+                    <div className="space-y-0.5">
+                      {group.items.map(tab => (
+                        <NavItem key={tab.id} tab={tab} active={activeTab === tab.id}
+                          collapsed={false} onClick={() => handleTabChange(tab.id)} />
+                      ))}
+                    </div>
+                  </div>
                 ))}
               </nav>
 
