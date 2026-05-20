@@ -144,15 +144,15 @@ ${marketSnippet}
 
 Respond ONLY with valid JSON (no markdown, no text outside the JSON object):
 {
-  "marketRegime": "≤6 words",
-  "macroOutlook": "≤25 words",
-  "agentConsensusTheme": "≤20 words",
+  "marketRegime": "≤5 words",
+  "macroOutlook": "≤15 words",
+  "agentConsensusTheme": "≤12 words",
   "dataSource": "live|knowledge",
   "rankedStocks": [
     {
       "rank": 1,
       "symbol": "TICKER",
-      "name": "Full company name",
+      "name": "Company name",
       "sector": "Sector",
       "type": "Stock|ETF|Crypto",
       "currentPrice": 0.0,
@@ -169,27 +169,27 @@ Respond ONLY with valid JSON (no markdown, no text outside the JSON object):
       "sentimentScore": 0,
       "macroScore": 0,
       "riskScore": 0,
-      "fundamentalAnalysis": "≤15 words on valuation/earnings",
-      "technicalAnalysis": "≤15 words on price/momentum",
-      "sentimentAnalysis": "≤15 words on news/flow",
-      "macroAnalysis": "≤15 words on sector/macro",
-      "riskNote": "≤15 words on downside/risk",
-      "supervisorSynthesis": "≤25 words summary",
-      "keyDrivers": ["≤5 words","≤5 words","≤5 words"],
-      "dissentingView": "≤12 words or null"
+      "fundamentalAnalysis": "≤10 words",
+      "technicalAnalysis": "≤10 words",
+      "sentimentAnalysis": "≤10 words",
+      "macroAnalysis": "≤10 words",
+      "riskNote": "≤10 words",
+      "supervisorSynthesis": "≤15 words",
+      "keyDrivers": ["≤4 words","≤4 words"],
+      "dissentingView": "≤8 words or null"
     }
   ],
   "agentNotes": {
-    "fundamentalAnalyst": "≤20 words market-wide fundamental view",
-    "technicalAnalyst": "≤20 words market-wide technical view",
-    "sentimentAnalyst": "≤20 words market-wide sentiment view",
-    "macroEconomist": "≤20 words macro outlook",
-    "riskManager": "≤20 words key risks"
+    "fundamentalAnalyst": "≤15 words",
+    "technicalAnalyst": "≤15 words",
+    "sentimentAnalyst": "≤15 words",
+    "macroEconomist": "≤15 words",
+    "riskManager": "≤15 words"
   }
 }
 
 Rules:
-- Include exactly 5 top picks; prefer symbols NOT already in holdings
+- Include exactly 20 top picks ranked by compositeScore; prefer symbols NOT already in holdings
 - compositeScore = weighted avg (fundamental 25%, technical 20%, sentiment 15%, macro 20%, risk 20%)
 - All scores 0-100; riskScore: higher = safer
 - entryPrice: limit order price at or slightly below current price

@@ -1305,18 +1305,18 @@ app.get('/api/quote', async (req, res) => {
       return res.json({ quoteResponse: { result: fromCache } })
     }
 
-    // 1st: AISA — serial requests, 200ms apart (respects ~5 req/s limit); 6 s total budget
+    // 1st: Finnhub REST — parallel fetches, fastest for US stocks/ETFs
+    const fh = await getFinnhubQuotes(symbols, keys)
+    if (fh?.some(r => r.regularMarketPrice != null))
+      return res.json({ quoteResponse: { result: fh } })
+
+    // 2nd: AISA — serial requests, 200ms apart (respects ~5 req/s limit); 6 s total budget
     const aisa = await Promise.race([
       getAISAQuotes(symbols, keys).catch(() => null),
       new Promise(r => setTimeout(() => r(null), 6000)),
     ])
     if (aisa?.some(r => r.regularMarketPrice != null))
       return res.json({ quoteResponse: { result: aisa } })
-
-    // 2nd: Finnhub
-    const fh = await getFinnhubQuotes(symbols, keys)
-    if (fh?.some(r => r.regularMarketPrice != null))
-      return res.json({ quoteResponse: { result: fh } })
 
     // 3rd: FMP
     const fmp = await getFMPQuotes(symbols, keys)

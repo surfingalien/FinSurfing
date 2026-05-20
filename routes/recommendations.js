@@ -80,13 +80,13 @@ router.post('/', recLimit, async (req, res) => {
     : ''
 
   const countInstructions = focusStr
-    ? `Generate ${Math.min(focusSymbols.length, 10)} recommendations covering the focus symbols above.`
-    : `Generate exactly 10 recommendations split across asset classes and time horizons:
-- 3 Stocks for 3-month holding
-- 2 Stocks for 6-month holding
-- 2 ETFs (any time horizon — mix of 3m and 6m)
-- 2 Cryptocurrencies (any time horizon — mix of 3m and 6m)
-- 1 additional pick of any type you think is compelling`
+    ? `Generate ${Math.min(focusSymbols.length, 20)} recommendations covering the focus symbols above.`
+    : `Generate exactly 20 recommendations split across asset classes and time horizons:
+- 7 Stocks for 3-month holding
+- 5 Stocks for 6-month holding
+- 4 ETFs (mix of 3m and 6m)
+- 3 Cryptocurrencies (mix of 3m and 6m)
+- 1 additional high-conviction pick of any type`
 
   const prompt = `You are a senior portfolio strategist. Provide specific actionable buy recommendations for a retail investor.
 
@@ -134,7 +134,7 @@ Respond ONLY with a JSON object — no markdown, no explanation, just the JSON:
       const client = new Anthropic({ apiKey })
       const msg = await client.messages.create({
         model:      'claude-sonnet-4-6',
-        max_tokens: 4096,
+        max_tokens: 8192,
         messages:   [{ role: 'user', content: prompt }],
       })
       raw = msg.content?.[0]?.text || ''
@@ -147,7 +147,7 @@ Respond ONLY with a JSON object — no markdown, no explanation, just the JSON:
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.GROQ_API_KEY}` },
           body:    JSON.stringify({
             model:      'llama-3.3-70b-versatile',
-            max_tokens: 2500,
+            max_tokens: 8000,
             messages:   [{ role: 'user', content: prompt }],
           }),
           signal: AbortSignal.timeout(60_000),
