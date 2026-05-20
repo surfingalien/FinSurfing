@@ -1294,71 +1294,81 @@ app.get('/api/quote', async (req, res) => {
   for (const sym of symbols) _fhEnsureSub(sym)
 
   try {
-    // 0th: instant caches — WS-populated fhq, AISA quote, or chart-price (all zero-latency)
-    const fromCache = symbols.map(sym =>
-      cacheGet(`fhq:${sym}`)
-      || cacheGet(`aisaq:${sym}`)
-      || (() => { const p = getPriceFromChartCache(sym); return p != null ? { symbol: sym, shortName: sym, regularMarketPrice: p } : null })()
-    )
-    if (fromCache.every(r => r !== null)) {
-      console.log('[quote] all from cache:', symbols.join(','))
-      return res.json({ quoteResponse: { result: fromCache } })
-    }
+    // Split into crypto (Binance/CoinGecko) and non-crypto (Finnhub→AISA→FMP→AV→TD)
+    // Run both branches in parallel so a mixed batch (e.g. NVDA + BTC-USD) always
+    // returns real-time prices for both asset classes.
+    const cryptoSyms = symbols.filter(isCryptoSymbol)
+    const stockSyms  = symbols.filter(s => !isCryptoSymbol(s))
 
-    // 1st: Finnhub REST — parallel fetches, fastest for US stocks/ETFs
-    const fh = await getFinnhubQuotes(symbols, keys)
-    if (fh?.some(r => r.regularMarketPrice != null))
-      return res.json({ quoteResponse: { result: fh } })
+    // ── Crypto: Binance real-time → CoinGecko fallback ────────────────────────
+    const cryptoPromise = cryptoSyms.length
+      ? (async () => {
+          // Check cache first (zero-latency)
+          const cached = cryptoSyms.map(s =>
+            cacheGet(`fhq:${s}`) || cacheGet(`aisaq:${s}`) || null
+          )
+          if (cached.every(r => r !== null)) return cached
 
-    // 2nd: AISA — serial requests, 200ms apart (respects ~5 req/s limit); 6 s total budget
-    const aisa = await Promise.race([
-      getAISAQuotes(symbols, keys).catch(() => null),
-      new Promise(r => setTimeout(() => r(null), 6000)),
-    ])
-    if (aisa?.some(r => r.regularMarketPrice != null))
-      return res.json({ quoteResponse: { result: aisa } })
+          const binResults = await Promise.all(cryptoSyms.map(s => getBinanceSingleQuote(s).catch(() => null)))
+          const cgResults  = await Promise.all(cryptoSyms.map((s, i) =>
+            binResults[i]?.regularMarketPrice != null
+              ? Promise.resolve(null)
+              : getCoinGeckoQuote(s).catch(() => null)
+          ))
+          return cryptoSyms.map((s, i) => binResults[i] || cgResults[i] || { symbol: s, regularMarketPrice: null })
+        })()
+      : Promise.resolve([])
 
-    // 3rd: FMP
-    const fmp = await getFMPQuotes(symbols, keys)
-    if (fmp?.some(r => r.regularMarketPrice != null))
-      return res.json({ quoteResponse: { result: fmp } })
+    // ── Stocks/ETFs: Finnhub → AISA → FMP → AV → Twelve Data → cache ─────────
+    const stockPromise = stockSyms.length
+      ? (async () => {
+          // 0th: instant caches
+          const fromCache = stockSyms.map(sym =>
+            cacheGet(`fhq:${sym}`)
+            || cacheGet(`aisaq:${sym}`)
+            || (() => { const p = getPriceFromChartCache(sym); return p != null ? { symbol: sym, shortName: sym, regularMarketPrice: p } : null })()
+          )
+          if (fromCache.every(r => r !== null)) return fromCache
 
-    // 4th: Alpha Vantage (free tier, 25 req/day)
-    const av = await getAVQuotes(symbols, keys)
-    if (av?.some(r => r.regularMarketPrice != null))
-      return res.json({ quoteResponse: { result: av } })
+          // 1st: Finnhub REST (parallel, fastest for US stocks/ETFs)
+          const fh = await getFinnhubQuotes(stockSyms, keys)
+          if (fh?.some(r => r.regularMarketPrice != null)) return fh
 
-    // 5th: Binance → CoinGecko for crypto (free, real-time, no key).
-    // Must run BEFORE Twelve Data — TD demo returns stale crypto prices (months old).
-    // CoinGecko is the fallback when Binance is blocked on Railway's IPs.
-    if (symbols.some(isCryptoSymbol)) {
-      const binResults = await Promise.all(symbols.map(s => getBinanceSingleQuote(s).catch(() => null)))
-      // Fill any Binance misses with CoinGecko
-      const cgResults  = await Promise.all(symbols.map((s, i) =>
-        binResults[i]?.regularMarketPrice != null ? Promise.resolve(null) : getCoinGeckoQuote(s).catch(() => null)
-      ))
-      const cryptoResults = symbols.map((s, i) => binResults[i] || cgResults[i] || null)
+          // 2nd: AISA (serial, 6 s budget)
+          const aisa = await Promise.race([
+            getAISAQuotes(stockSyms, keys).catch(() => null),
+            new Promise(r => setTimeout(() => r(null), 6000)),
+          ])
+          if (aisa?.some(r => r.regularMarketPrice != null)) return aisa
 
-      const allCrypto = symbols.every(isCryptoSymbol)
-      if (allCrypto && cryptoResults.some(r => r?.regularMarketPrice != null)) {
-        return res.json({ quoteResponse: { result: cryptoResults.map((r, i) => r || { symbol: symbols[i], regularMarketPrice: null }) } })
-      }
-      // Mixed batch: cache prices so the chart-price fallback below picks them up.
-      cryptoResults.forEach((r, i) => {
-        if (r?.regularMarketPrice != null) cacheSet(`aisaq:${symbols[i]}`, r)
-      })
-    }
+          // 3rd: FMP
+          const fmp = await getFMPQuotes(stockSyms, keys)
+          if (fmp?.some(r => r.regularMarketPrice != null)) return fmp
 
-    // 6th: Twelve Data (demo key or user key) — US stocks/ETFs
-    const tdResults = await Promise.all(symbols.map(s => getTwelveDataQuote(s, keys).catch(() => null)))
-    if (tdResults.some(r => r?.regularMarketPrice != null))
-      return res.json({ quoteResponse: { result: tdResults.map((r, i) => r || { symbol: symbols[i], regularMarketPrice: null }) } })
+          // 4th: Alpha Vantage
+          const av = await getAVQuotes(stockSyms, keys)
+          if (av?.some(r => r.regularMarketPrice != null)) return av
 
-    // Last: merge chart-cache prices for symbols we have, null for the rest
-    const merged = symbols.map((sym, i) => {
-      const p = getPriceFromChartCache(sym)
-      return p != null ? { symbol: sym, shortName: sym, regularMarketPrice: p } : { symbol: sym, regularMarketPrice: null }
-    })
+          // 5th: Twelve Data
+          const td = await Promise.all(stockSyms.map(s => getTwelveDataQuote(s, keys).catch(() => null)))
+          if (td.some(r => r?.regularMarketPrice != null))
+            return td.map((r, i) => r || { symbol: stockSyms[i], regularMarketPrice: null })
+
+          // Last: chart-price cache
+          return stockSyms.map(sym => {
+            const p = getPriceFromChartCache(sym)
+            return p != null ? { symbol: sym, shortName: sym, regularMarketPrice: p } : { symbol: sym, regularMarketPrice: null }
+          })
+        })()
+      : Promise.resolve([])
+
+    // ── Merge results preserving original symbol order ─────────────────────────
+    const [cryptoResults, stockResults] = await Promise.all([cryptoPromise, stockPromise])
+
+    const cryptoMap = Object.fromEntries(cryptoResults.map(r => [r.symbol, r]))
+    const stockMap  = Object.fromEntries(stockResults.map(r => [r.symbol, r]))
+    const merged = symbols.map(s => cryptoMap[s] || stockMap[s] || { symbol: s, regularMarketPrice: null })
+
     return res.json({ quoteResponse: { result: merged } })
   } catch (e) {
     res.json({ quoteResponse: { result: symbols.map(s => ({ symbol: s, regularMarketPrice: null })) } })
