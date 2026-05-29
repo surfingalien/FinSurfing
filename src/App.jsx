@@ -221,7 +221,7 @@ function MainApp({ onSignIn }) {
               <StockAgentView portfolio={portfolio} />
             )}
             {activeTab === 'second-brain' && (
-              <ResearchNotesView />
+              <ResearchNotesView portfolio={portfolio} />
             )}
             {activeTab === 'trading' && (
               <TradingNetworkView />
