@@ -91,3 +91,61 @@
   font-family: 'JetBrains Mono', monospace !important;
   font-size: 12px !important;
 }
+
+/* ── Design tokens ───────────────────────────────────────── */
+:root {
+  --accent-live:   #00ffcc;
+  --gain:          #34d399;
+  --loss:          #f87171;
+  --surface-bg:    #0a0f1a;
+  --surface-card:  rgba(255, 255, 255, 0.04);
+  --border-subtle: rgba(255, 255, 255, 0.07);
+  --border-medium: rgba(255, 255, 255, 0.12);
+}
+
+/* ── AI panel spring entrance ──────────────────────────── */
+.ai-panel-in {
+  animation: aiPanelIn 0.32s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+@keyframes aiPanelIn {
+  from { opacity: 0; transform: translateY(8px); filter: blur(4px); }
+  to   { opacity: 1; transform: translateY(0);   filter: blur(0px); }
+}
+
+/* ── Respect prefers-reduced-motion (WCAG 2.3.3) ──────── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  .ticker-track { animation: none; }
+  .ai-panel-in  { animation: none; }
+}
+
+/* ── Pro Mode — industrial terminal aesthetic ──────────── */
+html.pro-mode body {
+  background-image: none !important;
+  background-color: #04080e !important;
+}
+
+html.pro-mode .glass {
+  background:    rgba(4, 8, 14, 0.98) !important;
+  border-color:  rgba(74, 246, 38, 0.14) !important;
+  border-radius: 2px !important;
+}
+
+html.pro-mode .glass-card {
+  border-radius: 2px !important;
+}
+
+html.pro-mode ::-webkit-scrollbar-thumb {
+  background: rgba(74, 246, 38, 0.35) !important;
+}
+
+html.pro-mode .badge-up {
+  background:   rgba(74, 246, 38, 0.08) !important;
+  color:        #4af626 !important;
+  border-color: rgba(74, 246, 38, 0.22) !important;
+}

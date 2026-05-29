@@ -159,7 +159,8 @@ function StockCard({ stock, onAnalyze, horizon }) {
   }
 
   return (
-    <div className="glass rounded-2xl border border-white/[0.07] overflow-hidden hover:border-white/[0.12] transition-all">
+    <div className="p-1 rounded-[1.5rem] bg-white/[0.015] ring-1 ring-white/[0.07] hover:ring-white/[0.12] transition-all">
+      <div className="glass rounded-[1.25rem] border border-white/[0.06] overflow-hidden shadow-[inset_0_1px_0_rgba(255,255,255,0.07)]">
       <div className="p-4">
         <div className="flex items-start gap-3">
           <div className="flex flex-col items-center gap-1 shrink-0">
@@ -286,6 +287,7 @@ function StockCard({ stock, onAnalyze, horizon }) {
           )}
         </div>
       )}
+      </div>
     </div>
   )
 }
@@ -632,7 +634,7 @@ export default function AIBrainView({ portfolio, onAnalyze }) {
                 {analysis.rankedStocks.length} recommendations
               </span>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 ai-panel-in">
               {analysis.rankedStocks.map((stock, i) => (
                 <StockCard key={`${stock.symbol}-${i}`} stock={stock} onAnalyze={onAnalyze} horizon={horizon} />
               ))}
