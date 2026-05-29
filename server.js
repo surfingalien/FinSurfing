@@ -1026,7 +1026,54 @@ async function getNasdaqChart(symbol, interval = '1d', range = '1y') {
   return null
 }
 
-// Company overview — fundamentals (P/E, margins, sector, etc.)
+// ── Nasdaq.com real-time quote (free, no key, US stocks + ETFs) ───────────────
+async function getNasdaqQuotes(symbols) {
+  const headers = {
+    'Accept':          'application/json, text/plain, */*',
+    'User-Agent':      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+    'Referer':         'https://www.nasdaq.com/',
+    'Origin':          'https://www.nasdaq.com',
+  }
+  const results = await Promise.all(symbols.map(async (sym) => {
+    for (const assetclass of ['stocks', 'etf', 'index']) {
+      try {
+        const url = `https://api.nasdaq.com/api/quote/${encodeURIComponent(sym)}/info?assetClass=${assetclass}`
+        const r = await fetch(url, { headers, signal: AbortSignal.timeout(8000) })
+        if (!r.ok) continue
+        const d = await r.json()
+        const primary = d?.data?.primaryData
+        if (!primary?.lastSalePrice) continue
+
+        const rawPrice = parseFloat(primary.lastSalePrice.replace(/[^0-9.-]/g, ''))
+        if (!rawPrice || rawPrice <= 0) continue
+
+        const sign      = primary.deltaIndicator === 'down' ? -1 : 1
+        const rawChange = parseFloat((primary.netChange || '0').replace(/[^0-9.]/g, '')) * sign
+        const rawPct    = parseFloat((primary.percentageChange || '0').replace(/[^0-9.]/g, '')) * sign
+
+        const keyStats = d?.data?.keyStats || {}
+        const hi52 = parseFloat((keyStats.FiftyTwoWeekHighLow?.value || '').split('/')[0]?.replace(/[^0-9.]/g, ''))
+        const lo52 = parseFloat((keyStats.FiftyTwoWeekHighLow?.value || '').split('/')[1]?.replace(/[^0-9.]/g, ''))
+
+        console.log(`[Nasdaq quote] ${sym}: $${rawPrice}`)
+        return {
+          symbol:                     sym,
+          shortName:                  d.data?.companyName || sym,
+          regularMarketPrice:         rawPrice,
+          regularMarketChange:        rawChange || null,
+          regularMarketChangePercent: rawPct    || null,
+          regularMarketVolume:        parseInt((primary.volume || '0').replace(/,/g, '')) || null,
+          fiftyTwoWeekHigh:           isNaN(hi52) ? null : hi52,
+          fiftyTwoWeekLow:            isNaN(lo52) ? null : lo52,
+        }
+      } catch { /* try next assetclass */ }
+    }
+    return null
+  }))
+  return results
+}
+
+
 async function getAVSummary(symbol, keys = {}) {
   const key = keys.av || process.env.ALPHA_VANTAGE_API_KEY || process.env.AV_API_KEY
   if (!key) return null
@@ -1349,7 +1396,12 @@ app.get('/api/quote', async (req, res) => {
           const av = await getAVQuotes(stockSyms, keys)
           if (av?.some(r => r.regularMarketPrice != null)) return av
 
-          // 5th: Twelve Data
+          // 5th: Nasdaq.com (free, no key — covers all US stocks/ETFs in real-time)
+          const nasdaqQ = await getNasdaqQuotes(stockSyms).catch(() => null)
+          if (nasdaqQ?.some(r => r?.regularMarketPrice != null))
+            return nasdaqQ.map((r, i) => r || { symbol: stockSyms[i], regularMarketPrice: null })
+
+          // 6th: Twelve Data
           const td = await Promise.all(stockSyms.map(s => getTwelveDataQuote(s, keys).catch(() => null)))
           if (td.some(r => r?.regularMarketPrice != null))
             return td.map((r, i) => r || { symbol: stockSyms[i], regularMarketPrice: null })

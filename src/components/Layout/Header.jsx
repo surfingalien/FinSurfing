@@ -24,8 +24,10 @@ export default function Header({ onMobileMenuOpen }) {
     const t = setInterval(() => {
       const now = new Date()
       setTime(now)
-      const day  = now.getDay()
-      const mins = now.getHours() * 60 + now.getMinutes()
+      // Use Eastern Time for market hours check (NYSE/NASDAQ are ET-based)
+      const et    = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }))
+      const day   = et.getDay()
+      const mins  = et.getHours() * 60 + et.getMinutes()
       setMarketOpen(day >= 1 && day <= 5 && mins >= 570 && mins < 960)
     }, 1000)
     return () => clearInterval(t)
