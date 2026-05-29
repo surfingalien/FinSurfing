@@ -14,7 +14,7 @@ import {
   TrendingUp, SlidersHorizontal, GitBranch, Bell, Bot,
   ShieldCheck, ChevronLeft, ChevronRight, LogIn, LogOut,
   User, KeyRound, Activity, X, Menu, FolderOpen, Users, Calendar,
-  FlaskConical, BarChart3, Settings, Sparkles, Brain, Bookmark, Monitor,
+  FlaskConical, BarChart3, Settings, Sparkles, Brain, Bookmark, Monitor, BookOpen,
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useAITrader } from '../../contexts/AITraderContext'
@@ -53,6 +53,7 @@ function buildGroups(user, triggeredCount, tradingUnread) {
         { id: 'buy-signals',     label: 'AI Buy Signals', icon: Sparkles },
         { id: 'ai-watchlist',    label: 'AI Watchlist',   icon: Bookmark },
         { id: 'research',        label: 'AI Agent',       icon: Bot },
+        { id: 'second-brain',    label: 'Second Brain',   icon: BookOpen },
         { id: 'recommendations', label: 'Advisory',       icon: Lightbulb },
       ],
     },

@@ -20,6 +20,8 @@
     "helmet": "^7.2.0",
     "jsonwebtoken": "^9.0.3",
     "lucide-react": "^0.395.0",
+    "markmap-lib": "^0.18.12",
+    "markmap-view": "^0.18.12",
     "nodemailer": "^8.0.7",
     "pg": "^8.20.0",
     "react": "^18.3.1",

@@ -356,3 +356,24 @@ CREATE TABLE IF NOT EXISTS ai_trader_following (
 );
 
 CREATE INDEX IF NOT EXISTS idx_at_following_user ON ai_trader_following(user_id);
+
+-- ── RESEARCH NOTES (Second Brain) ──────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS research_notes (
+  id          UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     UUID          NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  symbol      VARCHAR(20),                             -- NULL = market-wide note
+  title       VARCHAR(255)  NOT NULL,
+  content     TEXT          NOT NULL DEFAULT '',        -- markdown
+  note_type   VARCHAR(20)   NOT NULL DEFAULT 'note',   -- note | thesis | braindump | url
+  source_url  TEXT,
+  tags        TEXT[]        NOT NULL DEFAULT '{}',
+  created_at  TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_research_notes_user    ON research_notes(user_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_research_notes_symbol  ON research_notes(user_id, symbol);
+
+CREATE TRIGGER research_notes_updated_at
+  BEFORE UPDATE ON research_notes
+  FOR EACH ROW EXECUTE FUNCTION set_updated_at();

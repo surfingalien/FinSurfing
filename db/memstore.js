@@ -15,6 +15,7 @@ const MEM = {
   portfolios: new Map(), // id → portfolio object
   holdings:   new Map(), // portfolioId → [ holding, ... ]
   shares:     new Map(), // shareId → share object
+  notes:      new Map(), // id → research_note object
 }
 
 module.exports = { MEM }
