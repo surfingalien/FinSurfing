@@ -9,6 +9,7 @@ import {
   Search, Eye, Ban, CheckCircle, BarChart2,
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
+import GovernancePanel from './GovernancePanel'
 
 const BASE = import.meta.env.VITE_API_URL || ''
 
@@ -446,8 +447,8 @@ function OverviewStats({ authFetch }) {
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
-const SECTIONS = ['overview', 'users', 'portfolios', 'logs']
-const SECTION_LABELS = { overview: 'Overview', users: 'Users', portfolios: 'Portfolios', logs: 'Access Logs' }
+const SECTIONS       = ['overview', 'users', 'portfolios', 'logs', 'governance']
+const SECTION_LABELS = { overview: 'Overview', users: 'Users', portfolios: 'Portfolios', logs: 'Access Logs', governance: 'AI Governance' }
 
 export default function AdminDashboard() {
   const { authFetch, user } = useAuth()
@@ -493,6 +494,7 @@ export default function AdminDashboard() {
       {section === 'users'       && <UsersTable      authFetch={authFetch} />}
       {section === 'portfolios'  && <PortfoliosTable authFetch={authFetch} />}
       {section === 'logs'        && <AccessLogsTable authFetch={authFetch} />}
+      {section === 'governance'  && <GovernancePanel />}
     </div>
   )
 }
