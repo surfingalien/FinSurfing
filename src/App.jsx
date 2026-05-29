@@ -22,6 +22,7 @@ import ScreenerView from './components/Screener/ScreenerView'
 import StrategiesView from './components/Strategies/StrategiesView'
 import AlertsView from './components/Alerts/AlertsView'
 import StockAgentView from './components/Research/StockAgentView'
+import ResearchNotesView from './components/Research/ResearchNotesView'
 import TradingNetworkView from './components/Trading/TradingNetworkView'
 import EarningsCalendarView from './components/EarningsCalendar/EarningsCalendarView'
 import BacktestView from './components/Backtest/BacktestView'
@@ -219,11 +220,14 @@ function MainApp({ onSignIn }) {
             {activeTab === 'research' && (
               <StockAgentView portfolio={portfolio} />
             )}
+            {activeTab === 'second-brain' && (
+              <ResearchNotesView portfolio={portfolio} />
+            )}
             {activeTab === 'trading' && (
               <TradingNetworkView />
             )}
             {activeTab === 'earnings' && (
-              <EarningsCalendarView portfolio={portfolio} onAnalyze={navigateToAnalyze} />
+              <EarningsCalendarView portfolio={portfolio} onAnalyze={navigateToAnalyze} onNavigate={navigateTo} />
             )}
             {activeTab === 'backtest' && (
               <BacktestView />
