@@ -229,7 +229,7 @@ Rules:
   }
 
   // ── Step 3: run Claude Opus 4.8 via circuit breaker (Groq fallback on overload) ──
-  const AI_MODEL = 'claude-opus-4-8'
+  const AI_MODEL = 'claude-sonnet-4-6'
   let raw     = ''
   let llmUsed = 'claude'
   let tokensIn = null, tokensOut = null
