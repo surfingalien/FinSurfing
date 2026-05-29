@@ -159,7 +159,8 @@ function StockCard({ stock, onAnalyze, horizon }) {
   }
 
   return (
-    <div className="glass rounded-2xl border border-white/[0.07] overflow-hidden hover:border-white/[0.12] transition-all">
+    <div className="p-1 rounded-[1.5rem] bg-white/[0.015] ring-1 ring-white/[0.07] hover:ring-white/[0.12] transition-all">
+      <div className="glass rounded-[1.25rem] border border-white/[0.06] overflow-hidden shadow-[inset_0_1px_0_rgba(255,255,255,0.07)]">
       <div className="p-4">
         <div className="flex items-start gap-3">
           <div className="flex flex-col items-center gap-1 shrink-0">
@@ -265,14 +266,28 @@ function StockCard({ stock, onAnalyze, horizon }) {
             <p className="text-[11px] text-slate-300 leading-relaxed">{stock.supervisorSynthesis}</p>
           </div>
 
-          {stock.dissentingView && (
+          {stock.bearCase && (
             <div className="flex items-start gap-2 text-[11px] text-amber-400/80 bg-amber-500/8 rounded-lg px-3 py-2">
               <AlertTriangle className="w-3 h-3 shrink-0 mt-0.5" />
-              <span>{stock.dissentingView}</span>
+              <div>
+                <span className="font-semibold text-amber-400">Bear Case: </span>
+                <span>{stock.bearCase}</span>
+              </div>
+            </div>
+          )}
+
+          {stock.thesisBreaker && (
+            <div className="flex items-start gap-2 text-[11px] text-red-400/80 bg-red-500/8 rounded-lg px-3 py-2">
+              <Shield className="w-3 h-3 shrink-0 mt-0.5" />
+              <div>
+                <span className="font-semibold text-red-400">Thesis Breaker: </span>
+                <span>{stock.thesisBreaker}</span>
+              </div>
             </div>
           )}
         </div>
       )}
+      </div>
     </div>
   )
 }
@@ -619,7 +634,7 @@ export default function AIBrainView({ portfolio, onAnalyze }) {
                 {analysis.rankedStocks.length} recommendations
               </span>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 ai-panel-in">
               {analysis.rankedStocks.map((stock, i) => (
                 <StockCard key={`${stock.symbol}-${i}`} stock={stock} onAnalyze={onAnalyze} horizon={horizon} />
               ))}

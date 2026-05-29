@@ -10,11 +10,14 @@
  * well inside the 8 192-token limit and prevent JSON truncation.
  */
 
-const express   = require('express')
-const Anthropic = require('@anthropic-ai/sdk')
-const rateLimit = require('express-rate-limit')
+const express             = require('express')
+const Anthropic           = require('@anthropic-ai/sdk')
+const rateLimit           = require('express-rate-limit')
+const { getBreaker, CircuitOpenError } = require('../lib/circuit-breaker')
+const { logCall }         = require('../lib/ai-audit')
 
-const router = express.Router()
+const router  = express.Router()
+const breaker = getBreaker('ai-brain', { threshold: 3, resetTimeoutMs: 60_000 })
 
 const brainLimit = rateLimit({
   windowMs: 5 * 60 * 1000, max: 4,
@@ -82,6 +85,9 @@ function fmtQuote(q) {
 }
 
 router.post('/analyze', brainLimit, async (req, res) => {
+  if (process.env.AI_BRAIN_DISABLED === 'true')
+    return res.status(503).json({ error: 'AI Brain is temporarily disabled (kill switch active)', killSwitch: true })
+
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) return res.status(503).json({ error: 'AI service not configured (ANTHROPIC_API_KEY missing)' })
 
@@ -169,14 +175,15 @@ Respond ONLY with valid JSON (no markdown, no text outside the JSON object):
       "sentimentScore": 0,
       "macroScore": 0,
       "riskScore": 0,
-      "fundamentalAnalysis": "≤10 words",
-      "technicalAnalysis": "≤10 words",
-      "sentimentAnalysis": "≤10 words",
-      "macroAnalysis": "≤10 words",
-      "riskNote": "≤10 words",
-      "supervisorSynthesis": "≤15 words",
+      "fundamentalAnalysis": "≤10 words on valuation/earnings",
+      "technicalAnalysis": "≤10 words on price/momentum",
+      "sentimentAnalysis": "≤10 words on news/flow",
+      "macroAnalysis": "≤10 words on sector/macro",
+      "riskNote": "≤10 words on downside/risk",
+      "supervisorSynthesis": "≤15 words summary",
       "keyDrivers": ["≤4 words","≤4 words"],
-      "dissentingView": "≤8 words or null"
+      "bearCase": "≤8 words — primary downside risk",
+      "thesisBreaker": "≤6 words — event that invalidates this pick"
     }
   ],
   "agentNotes": {
@@ -221,29 +228,51 @@ Rules:
     return d.choices?.[0]?.message?.content || ''
   }
 
-  // ── Step 3: run Claude (Groq fallback on overloaded) ──────────────────────
+  // ── Step 3: run Claude Opus 4.8 via circuit breaker (Groq fallback on overload) ──
+  const AI_MODEL = 'claude-opus-4-8'
+  let raw     = ''
+  let llmUsed = 'claude'
+  let tokensIn = null, tokensOut = null
+
   try {
-    let raw     = ''
-    let llmUsed = 'claude'
-    try {
+    const { result: msg, durationMs } = await breaker.call(async () => {
       const client = new Anthropic({ apiKey })
-      const msg = await client.messages.create({
-        model:      'claude-sonnet-4-6',
+      return client.messages.create({
+        model:      AI_MODEL,
         max_tokens: 8192,
         messages:   [{ role: 'user', content: prompt }],
       })
-      raw = msg.content?.[0]?.text || ''
-    } catch (claudeErr) {
-      const isOverloaded = claudeErr.status === 529 || claudeErr.message?.includes('overloaded')
-      if (isOverloaded && process.env.GROQ_API_KEY) {
-        console.warn('[ai-brain] Claude overloaded, falling back to Groq')
-        raw = await callGroq(prompt)
-        llmUsed = 'groq'
-      } else {
-        throw claudeErr
-      }
+    })
+    raw       = msg.content?.[0]?.text || ''
+    tokensIn  = msg.usage?.input_tokens
+    tokensOut = msg.usage?.output_tokens
+    logCall({ route: 'ai-brain', model: AI_MODEL, llm: 'claude', symbols: universe, success: true, tokensIn, tokensOut, durationMs })
+  } catch (claudeErr) {
+    if (claudeErr instanceof CircuitOpenError) {
+      logCall({ route: 'ai-brain', model: AI_MODEL, llm: 'claude', symbols: universe, success: false, error: claudeErr.message, durationMs: 0 })
+      return res.status(503).json({ error: claudeErr.message, circuitOpen: true })
     }
 
+    const isOverloaded = claudeErr.status === 529 || claudeErr.message?.includes('overloaded')
+    if (isOverloaded && process.env.GROQ_API_KEY) {
+      console.warn('[ai-brain] Claude overloaded, falling back to Groq')
+      const groqModel = 'llama-3.3-70b-versatile'
+      const t0 = Date.now()
+      try {
+        raw = await callGroq(prompt)
+        llmUsed = 'groq'
+        logCall({ route: 'ai-brain', model: groqModel, llm: 'groq', symbols: universe, success: true, durationMs: Date.now() - t0 })
+      } catch (groqErr) {
+        logCall({ route: 'ai-brain', model: groqModel, llm: 'groq', symbols: universe, success: false, error: groqErr.message, durationMs: Date.now() - t0 })
+        throw groqErr
+      }
+    } else {
+      logCall({ route: 'ai-brain', model: AI_MODEL, llm: 'claude', symbols: universe, success: false, error: claudeErr.message, durationMs: claudeErr._durationMs || 0 })
+      throw claudeErr
+    }
+  }
+
+  try {
     // Robust JSON extraction: try direct parse first, then regex match
     let data
     try {
@@ -273,6 +302,7 @@ Rules:
       universeAnalyzed: universe,
       liveDataSymbols:  liveQuotes.map(q => q.symbol),
       llmUsed,
+      modelUsed: llmUsed === 'claude' ? AI_MODEL : 'llama-3.3-70b-versatile',
       agentsUsed: ['Fundamental Analyst','Technical Analyst','Sentiment Agent','Macro Economist','Risk Manager','Supervisor'],
     })
   } catch (err) {

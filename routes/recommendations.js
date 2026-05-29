@@ -15,15 +15,19 @@
  *      to actual market prices (percentages stay as Claude intended).
  */
 
-const express   = require('express')
-const Anthropic = require('@anthropic-ai/sdk')
-const router    = express.Router()
-const rateLimit = require('express-rate-limit')
+const express             = require('express')
+const Anthropic           = require('@anthropic-ai/sdk')
+const router              = express.Router()
+const rateLimit           = require('express-rate-limit')
+const { getBreaker, CircuitOpenError } = require('../lib/circuit-breaker')
+const { logCall }         = require('../lib/ai-audit')
 
 const recLimit = rateLimit({
   windowMs: 60 * 1000, max: 5,
   message: { error: 'Too many recommendation requests — wait a minute' },
 })
+
+const breaker = getBreaker('recommendations', { threshold: 3, resetTimeoutMs: 60_000 })
 
 // Extract user API key headers to forward to the internal quote endpoint
 function fwdKeys(req) {
@@ -56,6 +60,9 @@ async function fetchLiveQuotes(symbols, fwdHeaders) {
 }
 
 router.post('/', recLimit, async (req, res) => {
+  if (process.env.AI_RECOMMENDATIONS_DISABLED === 'true')
+    return res.status(503).json({ error: 'AI Buy Signals are temporarily disabled (kill switch active)', killSwitch: true })
+
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) return res.status(503).json({ error: 'AI service not configured (ANTHROPIC_API_KEY missing)' })
 
@@ -121,45 +128,70 @@ Respond ONLY with a JSON object — no markdown, no explanation, just the JSON:
       "risk": "Low" | "Medium" | "High",
       "thesis": "2-3 sentence specific investment thesis",
       "catalyst": "Primary near-term catalyst",
-      "technicalSignal": "Brief technical setup note"
+      "technicalSignal": "Brief technical setup note",
+      "bearCase": "Primary downside risk in ≤10 words",
+      "thesisBreaker": "Specific event that invalidates this pick in ≤8 words"
     }
   ],
   "marketOutlook": "2-sentence overall market view",
   "keyRisks": "1-sentence macro risk to watch"
 }`
 
+  const REC_MODEL = 'claude-sonnet-4-6'
+  let raw     = ''
+  let llmUsed = 'claude'
+  let tokensIn = null, tokensOut = null
+  const allSymbols = [...new Set([...holdings, ...focusSymbols])]
+
   try {
-    let raw = ''
-    try {
+    const { result: msg, durationMs } = await breaker.call(async () => {
       const client = new Anthropic({ apiKey })
-      const msg = await client.messages.create({
-        model:      'claude-sonnet-4-6',
+      return client.messages.create({
+        model:      REC_MODEL,
         max_tokens: 8192,
         messages:   [{ role: 'user', content: prompt }],
       })
-      raw = msg.content?.[0]?.text || ''
-    } catch (claudeErr) {
-      const isOverloaded = claudeErr.status === 529 || claudeErr.message?.includes('overloaded')
-      if (isOverloaded && process.env.GROQ_API_KEY) {
-        console.warn('[recommendations] Claude overloaded, falling back to Groq')
+    })
+    raw       = msg.content?.[0]?.text || ''
+    tokensIn  = msg.usage?.input_tokens
+    tokensOut = msg.usage?.output_tokens
+    logCall({ route: 'recommendations', model: REC_MODEL, llm: 'claude', symbols: allSymbols, success: true, tokensIn, tokensOut, durationMs })
+  } catch (claudeErr) {
+    if (claudeErr instanceof CircuitOpenError) {
+      logCall({ route: 'recommendations', model: REC_MODEL, llm: 'claude', symbols: allSymbols, success: false, error: claudeErr.message, durationMs: 0 })
+      return res.status(503).json({ error: claudeErr.message, circuitOpen: true })
+    }
+
+    const isOverloaded = claudeErr.status === 529 || claudeErr.message?.includes('overloaded')
+    if (isOverloaded && process.env.GROQ_API_KEY) {
+      console.warn('[recommendations] Claude overloaded, falling back to Groq')
+      const groqModel = 'llama-3.3-70b-versatile'
+      const t0 = Date.now()
+      try {
         const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
           method:  'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.GROQ_API_KEY}` },
-          body:    JSON.stringify({
-            model:      'llama-3.3-70b-versatile',
-            max_tokens: 8000,
-            messages:   [{ role: 'user', content: prompt }],
-          }),
-          signal: AbortSignal.timeout(60_000),
+          body:    JSON.stringify({ model: groqModel, max_tokens: 8000, messages: [{ role: 'user', content: prompt }] }),
+          signal:  AbortSignal.timeout(60_000),
         })
         if (!r.ok) throw new Error(`Groq API error ${r.status}`)
         const d = await r.json()
-        raw = d.choices?.[0]?.message?.content || ''
-      } else {
-        throw claudeErr
+        raw     = d.choices?.[0]?.message?.content || ''
+        llmUsed = 'groq'
+        logCall({ route: 'recommendations', model: groqModel, llm: 'groq', symbols: allSymbols, success: true, durationMs: Date.now() - t0 })
+      } catch (groqErr) {
+        logCall({ route: 'recommendations', model: groqModel, llm: 'groq', symbols: allSymbols, success: false, error: groqErr.message, durationMs: Date.now() - t0 })
+        console.error('[recommendations]', groqErr.message)
+        return res.status(500).json({ error: 'Recommendation service error: ' + groqErr.message })
       }
+    } else {
+      logCall({ route: 'recommendations', model: REC_MODEL, llm: 'claude', symbols: allSymbols, success: false, error: claudeErr.message, durationMs: claudeErr._durationMs || 0 })
+      console.error('[recommendations]', claudeErr.message)
+      return res.status(500).json({ error: 'Recommendation service error: ' + claudeErr.message })
     }
+  }
 
+  try {
     const match = raw.match(/\{[\s\S]*\}/)
     if (!match) {
       console.error('[recommendations] Non-JSON response:', raw.slice(0, 200))
@@ -170,30 +202,28 @@ Respond ONLY with a JSON object — no markdown, no explanation, just the JSON:
     if (!Array.isArray(data.recommendations) || !data.recommendations.length)
       return res.status(500).json({ error: 'Empty recommendations from AI' })
 
-    // ── Step 3: Re-anchor prices to live market data ─────────────────────────
-    // Fetch live quotes for every symbol Claude recommended (includes symbols we
-    // didn't know ahead of time in the general/non-focus case).
-    const recSymbols = data.recommendations.map(r => r.symbol).filter(Boolean)
+    // ── Re-anchor prices to live market data ─────────────────────────────────
+    const recSymbols     = data.recommendations.map(r => r.symbol).filter(Boolean)
     const postLivePrices = await fetchLiveQuotes(recSymbols, fwdHeaders)
     const allLivePrices  = { ...preLivePrices, ...postLivePrices }
 
     let pricesAnchored = 0
     data.recommendations = data.recommendations.map(rec => {
       const lp = allLivePrices[rec.symbol]
-      if (!lp || lp <= 0) return rec               // no live price — keep Claude's estimate
-      if (Math.abs(lp - rec.entryPrice) / rec.entryPrice < 0.03) return rec  // already accurate
+      if (!lp || lp <= 0) return rec
+      if (Math.abs(lp - rec.entryPrice) / rec.entryPrice < 0.03) return rec
 
       pricesAnchored++
-      const entry  = +lp.toFixed(lp >= 100 ? 2 : 4)
-      const tp     = +(entry * (1 + rec.targetReturn / 100)).toFixed(entry >= 100 ? 2 : 4)
-      const sl     = +(entry * (1 - rec.stopLoss    / 100)).toFixed(entry >= 100 ? 2 : 4)
+      const entry = +lp.toFixed(lp >= 100 ? 2 : 4)
+      const tp    = +(entry * (1 + rec.targetReturn / 100)).toFixed(entry >= 100 ? 2 : 4)
+      const sl    = +(entry * (1 - rec.stopLoss    / 100)).toFixed(entry >= 100 ? 2 : 4)
       return { ...rec, entryPrice: entry, takeProfitPrice: tp, stopLossPrice: sl, livePriceUsed: true }
     })
 
     if (pricesAnchored > 0)
       console.log(`[recommendations] re-anchored prices for ${pricesAnchored}/${recSymbols.length} symbols`)
 
-    return res.json({ ...data, generatedAt: new Date().toISOString() })
+    return res.json({ ...data, generatedAt: new Date().toISOString(), llmUsed })
   } catch (err) {
     console.error('[recommendations]', err.message)
     return res.status(500).json({ error: 'Recommendation service error: ' + err.message })

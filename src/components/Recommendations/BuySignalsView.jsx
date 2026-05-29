@@ -159,6 +159,18 @@ function RecCard({ rec, onAnalyze, liveQuote }) {
             <span className="text-slate-500">{rec.technicalSignal}</span>
           </div>
         )}
+        {rec.bearCase && (
+          <div className="flex items-start gap-1.5 text-[11px]">
+            <AlertTriangle className="w-3 h-3 text-amber-400 shrink-0 mt-0.5" />
+            <span className="text-slate-400"><span className="text-amber-400 font-medium">Bear: </span>{rec.bearCase}</span>
+          </div>
+        )}
+        {rec.thesisBreaker && (
+          <div className="flex items-start gap-1.5 text-[11px]">
+            <Shield className="w-3 h-3 text-red-400 shrink-0 mt-0.5" />
+            <span className="text-slate-400"><span className="text-red-400 font-medium">Breaker: </span>{rec.thesisBreaker}</span>
+          </div>
+        )}
       </div>
 
       {/* Footer: sector + watchlist */}
