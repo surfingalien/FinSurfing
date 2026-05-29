@@ -29,13 +29,13 @@
     @apply bg-white/[0.06] border-white/[0.12];
   }
   .btn-primary {
-    @apply px-4 py-2 rounded-lg bg-mint-500/20 text-mint-400 border border-mint-500/30
+    @apply px-4 py-2 min-h-[44px] sm:min-h-0 rounded-lg bg-mint-500/20 text-mint-400 border border-mint-500/30
            hover:bg-mint-500/30 hover:border-mint-500/50 transition-all duration-150
-           font-medium text-sm focus:outline-none focus:ring-2 focus:ring-mint-500/40;
+           font-medium text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-mint-500/50;
   }
   .btn-ghost {
-    @apply px-4 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.06]
-           transition-all duration-150 font-medium text-sm focus:outline-none;
+    @apply px-4 py-2 min-h-[44px] sm:min-h-0 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.06]
+           transition-all duration-150 font-medium text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20;
   }
   .btn-danger {
     @apply px-3 py-1.5 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20
@@ -45,6 +45,7 @@
     @apply w-full px-3 py-2 rounded-lg bg-white/[0.05] border border-white/[0.1]
            text-white placeholder-slate-500 text-sm
            focus:outline-none focus:border-mint-500/50 focus:bg-white/[0.08]
+           focus-visible:ring-2 focus-visible:ring-mint-500/40
            transition-all duration-150;
   }
   .badge-up {
