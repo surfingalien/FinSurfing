@@ -121,7 +121,9 @@ Respond ONLY with a JSON object — no markdown, no explanation, just the JSON:
       "risk": "Low" | "Medium" | "High",
       "thesis": "2-3 sentence specific investment thesis",
       "catalyst": "Primary near-term catalyst",
-      "technicalSignal": "Brief technical setup note"
+      "technicalSignal": "Brief technical setup note",
+      "bearCase": "Primary downside risk in ≤10 words",
+      "thesisBreaker": "Specific event that invalidates this pick in ≤8 words"
     }
   ],
   "marketOutlook": "2-sentence overall market view",

@@ -265,10 +265,23 @@ function StockCard({ stock, onAnalyze, horizon }) {
             <p className="text-[11px] text-slate-300 leading-relaxed">{stock.supervisorSynthesis}</p>
           </div>
 
-          {stock.dissentingView && (
+          {stock.bearCase && (
             <div className="flex items-start gap-2 text-[11px] text-amber-400/80 bg-amber-500/8 rounded-lg px-3 py-2">
               <AlertTriangle className="w-3 h-3 shrink-0 mt-0.5" />
-              <span>{stock.dissentingView}</span>
+              <div>
+                <span className="font-semibold text-amber-400">Bear Case: </span>
+                <span>{stock.bearCase}</span>
+              </div>
+            </div>
+          )}
+
+          {stock.thesisBreaker && (
+            <div className="flex items-start gap-2 text-[11px] text-red-400/80 bg-red-500/8 rounded-lg px-3 py-2">
+              <Shield className="w-3 h-3 shrink-0 mt-0.5" />
+              <div>
+                <span className="font-semibold text-red-400">Thesis Breaker: </span>
+                <span>{stock.thesisBreaker}</span>
+              </div>
             </div>
           )}
         </div>

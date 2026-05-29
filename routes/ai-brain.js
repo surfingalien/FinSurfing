@@ -169,14 +169,15 @@ Respond ONLY with valid JSON (no markdown, no text outside the JSON object):
       "sentimentScore": 0,
       "macroScore": 0,
       "riskScore": 0,
-      "fundamentalAnalysis": "≤10 words",
-      "technicalAnalysis": "≤10 words",
-      "sentimentAnalysis": "≤10 words",
-      "macroAnalysis": "≤10 words",
-      "riskNote": "≤10 words",
-      "supervisorSynthesis": "≤15 words",
+      "fundamentalAnalysis": "≤10 words on valuation/earnings",
+      "technicalAnalysis": "≤10 words on price/momentum",
+      "sentimentAnalysis": "≤10 words on news/flow",
+      "macroAnalysis": "≤10 words on sector/macro",
+      "riskNote": "≤10 words on downside/risk",
+      "supervisorSynthesis": "≤15 words summary",
       "keyDrivers": ["≤4 words","≤4 words"],
-      "dissentingView": "≤8 words or null"
+      "bearCase": "≤8 words — primary downside risk",
+      "thesisBreaker": "≤6 words — event that invalidates this pick"
     }
   ],
   "agentNotes": {
