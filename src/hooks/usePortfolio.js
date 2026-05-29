@@ -4,7 +4,8 @@
  * When authenticated (activePortfolioId + authFetch provided):
  *   → Fetches holdings from GET /api/portfolios/:id
  *   → Mutations (add/remove/update) call the appropriate API endpoints
- *   → localStorage is NOT used (data lives in the server)
+ *   → localStorage is used as a backup so holdings survive server restarts
+ *     (Railway ephemeral memory resets on every deploy)
  *
  * When guest (no activePortfolioId / not authenticated):
  *   → Falls back to localStorage, namespaced by userId (or 'guest')
@@ -38,22 +39,31 @@ function saveStored(userId, positions) {
   try { localStorage.setItem(lsKey(userId), JSON.stringify(positions)) } catch {}
 }
 
+// ── API mode: localStorage backup (survives Railway server restarts) ───────────
+function apiLsKey(pid) { return `finsurf_api_holdings_${pid}` }
+
+function loadApiBackup(pid) {
+  try { const r = localStorage.getItem(apiLsKey(pid)); return r ? JSON.parse(r) : null } catch { return null }
+}
+
+function saveApiBackup(pid, holdings) {
+  try { localStorage.setItem(apiLsKey(pid), JSON.stringify(holdings)) } catch {}
+}
+
 // ── Main hook ─────────────────────────────────────────────────────────────────
 export function usePortfolio({ userId, activePortfolioId, authFetch } = {}) {
   const apiMode = !!(activePortfolioId && authFetch)
 
-  // positions: always the raw holdings array (no market data yet)
   const [positions,    setPositions]    = useState(apiMode ? [] : (loadStored(userId) || INITIAL_PORTFOLIO))
   const [quotes,       setQuotes]       = useState({})
   const [loading,      setLoading]      = useState(apiMode)
   const [lastUpdated,  setLastUpdated]  = useState(null)
   const [apiError,     setApiError]     = useState(null)
 
-  // Track the portfolio ID in a ref so callbacks stay stable
   const portIdRef = useRef(activePortfolioId)
   portIdRef.current = activePortfolioId
 
-  // ── API mode: load holdings from server ────────────────────────────────────
+  // ── API mode: load holdings from server, restore from localStorage if empty ──
   const loadFromApi = useCallback(async () => {
     if (!activePortfolioId || !authFetch) return
     setLoading(true)
@@ -62,15 +72,56 @@ export function usePortfolio({ userId, activePortfolioId, authFetch } = {}) {
       const res  = await authFetch(`/api/portfolios/${activePortfolioId}`)
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = await res.json()
-      const holdings = (data.holdings || []).map(h => ({
-        id:        h.id,
-        symbol:    h.symbol,
-        name:      h.name   || h.symbol,
-        shares:    parseFloat(h.shares),
-        avgCost:   parseFloat(h.avgCost ?? h.avg_cost_basis ?? 0),
-        sector:    h.sector    || null,
-        assetClass:h.assetClass|| 'equity',
+      let holdings = (data.holdings || []).map(h => ({
+        id:         h.id,
+        symbol:     h.symbol,
+        name:       h.name   || h.symbol,
+        shares:     parseFloat(h.shares),
+        avgCost:    parseFloat(h.avgCost ?? h.avg_cost_basis ?? 0),
+        sector:     h.sector     || null,
+        assetClass: h.assetClass || 'equity',
       }))
+
+      // Server returned empty — restore from localStorage backup (e.g. after Railway restart)
+      if (holdings.length === 0) {
+        const backup = loadApiBackup(activePortfolioId)
+        if (backup?.length) {
+          console.log(`[portfolio] Server empty — restoring ${backup.length} holdings from localStorage backup`)
+          for (const h of backup) {
+            try {
+              await authFetch(`/api/portfolios/${activePortfolioId}/holdings`, {
+                method: 'POST',
+                body: {
+                  symbol:     h.symbol,
+                  name:       h.name,
+                  shares:     h.shares,
+                  avgCost:    h.avgCost,
+                  sector:     h.sector     || null,
+                  assetClass: h.assetClass || 'equity',
+                },
+              })
+            } catch { /* best effort */ }
+          }
+          // Re-fetch to get server-assigned IDs
+          const res2 = await authFetch(`/api/portfolios/${activePortfolioId}`)
+          if (res2.ok) {
+            const data2 = await res2.json()
+            holdings = (data2.holdings || []).map(h => ({
+              id:         h.id,
+              symbol:     h.symbol,
+              name:       h.name   || h.symbol,
+              shares:     parseFloat(h.shares),
+              avgCost:    parseFloat(h.avgCost ?? h.avg_cost_basis ?? 0),
+              sector:     h.sector     || null,
+              assetClass: h.assetClass || 'equity',
+            }))
+          }
+        }
+      }
+
+      // Always keep localStorage in sync with whatever the server has
+      if (holdings.length > 0) saveApiBackup(activePortfolioId, holdings)
+
       setPositions(holdings)
     } catch (err) {
       setApiError(err.message)
@@ -79,12 +130,10 @@ export function usePortfolio({ userId, activePortfolioId, authFetch } = {}) {
     }
   }, [activePortfolioId, authFetch])
 
-  // Reload whenever the active portfolio changes
   useEffect(() => {
     if (apiMode) {
       loadFromApi()
     } else {
-      // Guest mode — restore from localStorage when userId changes
       setPositions(loadStored(userId) || INITIAL_PORTFOLIO)
     }
   }, [activePortfolioId, userId, apiMode]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -94,7 +143,7 @@ export function usePortfolio({ userId, activePortfolioId, authFetch } = {}) {
     if (!apiMode) saveStored(userId, positions)
   }, [positions, userId, apiMode])
 
-  // ── Quote refresh (works the same regardless of mode) ─────────────────────
+  // ── Quote refresh ──────────────────────────────────────────────────────────
   const refresh = useCallback(async () => {
     if (!positions.length) return
     setLoading(true)
@@ -114,11 +163,9 @@ export function usePortfolio({ userId, activePortfolioId, authFetch } = {}) {
 
   useEffect(() => {
     if (!positions.length) return
-    // Full fetch on mount and every 5 min (prevClose, dayHigh, etc.)
     refresh()
     const fullRefresh = setInterval(refresh, 5 * 60_000)
 
-    // Real-time price stream — merges only price/change/changePct into existing quote data
     const symbols = positions.map(p => p.symbol)
     const unsub = subscribeQuotes(symbols, ({ symbol, price, change, changePct, ts }) => {
       setQuotes(prev => {
@@ -144,16 +191,15 @@ export function usePortfolio({ userId, activePortfolioId, authFetch } = {}) {
 
   const addPosition = useCallback(async (pos) => {
     if (apiMode) {
-      // Upsert via API (POST does insert-or-update by symbol)
       const res = await authFetch(`/api/portfolios/${portIdRef.current}/holdings`, {
         method: 'POST',
         body: {
-          symbol:    pos.symbol,
-          name:      pos.name,
-          shares:    pos.shares,
-          avgCost:   pos.avgCost,
-          sector:    pos.sector    || null,
-          assetClass:pos.assetClass|| 'equity',
+          symbol:     pos.symbol,
+          name:       pos.name,
+          shares:     pos.shares,
+          avgCost:    pos.avgCost,
+          sector:     pos.sector     || null,
+          assetClass: pos.assetClass || 'equity',
         },
       })
       if (!res.ok) {
@@ -179,7 +225,6 @@ export function usePortfolio({ userId, activePortfolioId, authFetch } = {}) {
 
   const removePosition = useCallback(async (symbol) => {
     if (apiMode) {
-      // Find the holding ID first
       const holding = positions.find(p => p.symbol === symbol)
       if (!holding?.id) { await loadFromApi(); return }
       const res = await authFetch(
@@ -190,6 +235,9 @@ export function usePortfolio({ userId, activePortfolioId, authFetch } = {}) {
         const d = await res.json().catch(() => ({}))
         throw new Error(d.error || 'Failed to remove holding')
       }
+      // Remove from localStorage backup immediately
+      const backup = loadApiBackup(portIdRef.current) || []
+      saveApiBackup(portIdRef.current, backup.filter(h => h.symbol !== symbol))
       await loadFromApi()
     } else {
       setPositions(prev => prev.filter(p => p.symbol !== symbol))
@@ -200,16 +248,15 @@ export function usePortfolio({ userId, activePortfolioId, authFetch } = {}) {
     if (apiMode) {
       const holding = positions.find(p => p.symbol === symbol)
       if (!holding) return
-      // Re-upsert with merged values
       const res = await authFetch(`/api/portfolios/${portIdRef.current}/holdings`, {
         method: 'POST',
         body: {
           symbol,
-          name:      updates.name      ?? holding.name,
-          shares:    updates.shares    ?? holding.shares,
-          avgCost:   updates.avgCost   ?? holding.avgCost,
-          sector:    updates.sector    ?? holding.sector,
-          assetClass:updates.assetClass?? holding.assetClass,
+          name:       updates.name       ?? holding.name,
+          shares:     updates.shares     ?? holding.shares,
+          avgCost:    updates.avgCost    ?? holding.avgCost,
+          sector:     updates.sector     ?? holding.sector,
+          assetClass: updates.assetClass ?? holding.assetClass,
         },
       })
       if (!res.ok) {
@@ -231,22 +278,16 @@ export function usePortfolio({ userId, activePortfolioId, authFetch } = {}) {
     const gainLoss   = mktValue !== null ? mktValue - costBasis : null
     const gainLossPct= gainLoss !== null && costBasis > 0 ? (gainLoss / costBasis) * 100 : null
 
-    // ── Today's P/L — proper daily reset.
-    // Problem: after a session closes, Yahoo keeps regularMarketPrice = that
-    // session's close and regularMarketPreviousClose = the prior session's close,
-    // so (price − prevClose) equals yesterday's full move, not "today's" move.
-    // Fix: check regularMarketTime (Unix seconds). If it's from a previous
-    // calendar date, the market hasn't traded today → todayGL = 0.
     const prevClose  = q?.prevClose ?? null
-    const marketTime = q?.marketTime ?? null   // Unix seconds
+    const marketTime = q?.marketTime ?? null
     const isToday    = marketTime
       ? new Date(marketTime * 1000).toDateString() === new Date().toDateString()
-      : true   // if timestamp missing, trust the change value
+      : true
     const todayGL    = isToday && price !== null && prevClose !== null
       ? (price - prevClose) * pos.shares
       : isToday && q?.change != null
         ? q.change * pos.shares
-        : 0   // prior session data — reset to 0 until today's session begins
+        : 0
 
     return { ...pos, ...q, price, costBasis, mktValue, gainLoss, gainLossPct, todayGL }
   })

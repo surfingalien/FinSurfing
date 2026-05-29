@@ -41,14 +41,33 @@ const DEMO_PORTFOLIOS = [
 ]
 const DEMO_HOLDINGS = {
   'demo-p1': [
-    { id: 'h1', symbol: 'AAPL', name: 'Apple Inc.', shares: 10, avgCost: 150, sector: 'Technology', assetClass: 'equity' },
-    { id: 'h2', symbol: 'MSFT', name: 'Microsoft Corp.', shares: 5, avgCost: 290, sector: 'Technology', assetClass: 'equity' },
-    { id: 'h3', symbol: 'NVDA', name: 'NVIDIA Corp.', shares: 8, avgCost: 420, sector: 'Technology', assetClass: 'equity' },
-    { id: 'h4', symbol: 'SPY',  name: 'SPDR S&P 500 ETF', shares: 20, avgCost: 440, sector: 'Index', assetClass: 'etf' },
+    { id: 'h1',  symbol: 'NVDA',  name: 'NVIDIA Corporation',             shares: 50,     avgCost: 112.07, sector: 'Technology',            assetClass: 'equity' },
+    { id: 'h2',  symbol: 'TSM',   name: 'Taiwan Semiconductor Mfg',       shares: 20,     avgCost: 180.51, sector: 'Technology',            assetClass: 'equity' },
+    { id: 'h3',  symbol: 'AMD',   name: 'Advanced Micro Devices',         shares: 10,     avgCost: 131.19, sector: 'Technology',            assetClass: 'equity' },
+    { id: 'h4',  symbol: 'TSLA',  name: 'Tesla Inc',                      shares: 15,     avgCost: 216.75, sector: 'Technology',            assetClass: 'equity' },
+    { id: 'h5',  symbol: 'INTC',  name: 'Intel Corporation',              shares: 25,     avgCost: 19.54,  sector: 'Technology',            assetClass: 'equity' },
+    { id: 'h6',  symbol: 'AVGO',  name: 'Broadcom Inc',                   shares: 10,     avgCost: 177.54, sector: 'Technology',            assetClass: 'equity' },
+    { id: 'h7',  symbol: 'GOOG',  name: 'Alphabet Inc',                   shares: 10,     avgCost: 165.77, sector: 'Technology',            assetClass: 'equity' },
+    { id: 'h8',  symbol: 'AAPL',  name: 'Apple Inc',                      shares: 10,     avgCost: 150.46, sector: 'Technology',            assetClass: 'equity' },
+    { id: 'h9',  symbol: 'TXN',   name: 'Texas Instruments',              shares: 10,     avgCost: 207.26, sector: 'Technology',            assetClass: 'equity' },
+    { id: 'h10', symbol: 'AMZN',  name: 'Amazon.com Inc',                 shares: 10,     avgCost: 166.61, sector: 'Technology',            assetClass: 'equity' },
+    { id: 'h11', symbol: 'QCOM',  name: 'Qualcomm Inc',                   shares: 10,     avgCost: 163.21, sector: 'Technology',            assetClass: 'equity' },
+    { id: 'h12', symbol: 'ARM',   name: 'Arm Holdings PLC',               shares: 5,      avgCost: 201.50, sector: 'Technology',            assetClass: 'equity' },
+    { id: 'h13', symbol: 'MSFT',  name: 'Microsoft Corporation',          shares: 10,     avgCost: 400.57, sector: 'Technology',            assetClass: 'equity' },
+    { id: 'h14', symbol: 'FSELX', name: 'Fidelity Select Semiconductors', shares: 30.035, avgCost: 67.25,  sector: 'Technology',            assetClass: 'etf'    },
+    { id: 'h15', symbol: 'XOM',   name: 'Exxon Mobil Corporation',        shares: 10,     avgCost: 147.72, sector: 'Energy',                assetClass: 'equity' },
+    { id: 'h16', symbol: 'CL',    name: 'Colgate-Palmolive Co',           shares: 15,     avgCost: 94.64,  sector: 'Consumer Staples',      assetClass: 'equity' },
+    { id: 'h17', symbol: 'BROS',  name: 'Dutch Bros Inc',                 shares: 15,     avgCost: 63.48,  sector: 'Consumer Discretionary', assetClass: 'equity' },
+    { id: 'h18', symbol: 'PG',    name: 'Procter & Gamble Co',            shares: 10,     avgCost: 157.15, sector: 'Consumer Staples',      assetClass: 'equity' },
+    { id: 'h19', symbol: 'ADSK',  name: 'Autodesk Inc',                   shares: 10,     avgCost: 256.17, sector: 'Technology',            assetClass: 'equity' },
+    { id: 'h20', symbol: 'BABA',  name: 'Alibaba Group Holding',          shares: 10,     avgCost: 188.38, sector: 'Technology',            assetClass: 'equity' },
+    { id: 'h21', symbol: 'ORCL',  name: 'Oracle Corporation',             shares: 15,     avgCost: 265.80, sector: 'Technology',            assetClass: 'equity' },
+    { id: 'h22', symbol: 'SOUN',  name: 'SoundHound AI Inc',              shares: 150,    avgCost: 15.45,  sector: 'Technology',            assetClass: 'equity' },
+    { id: 'h23', symbol: 'COIN',  name: 'Coinbase Global Inc',            shares: 15,     avgCost: 257.11, sector: 'Financials',            assetClass: 'equity' },
   ],
   'demo-p2': [
-    { id: 'h5', symbol: 'QQQ', name: 'Invesco QQQ Trust', shares: 5, avgCost: 380, sector: 'Index', assetClass: 'etf' },
-    { id: 'h6', symbol: 'BRK-B', name: 'Berkshire Hathaway B', shares: 3, avgCost: 340, sector: 'Financials', assetClass: 'equity' },
+    { id: 'h24', symbol: 'QQQ',   name: 'Invesco QQQ Trust',              shares: 5,      avgCost: 380,    sector: 'Index',                 assetClass: 'etf'    },
+    { id: 'h25', symbol: 'BRK-B', name: 'Berkshire Hathaway B',           shares: 3,      avgCost: 340,    sector: 'Financials',            assetClass: 'equity' },
   ],
 }
 
@@ -640,16 +659,18 @@ router.post('/:id/import', async (req, res) => {
     for (const h of holdings) {
       if (!h.symbol || isNaN(h.shares) || isNaN(h.avgCost ?? h.avg_cost_basis)) continue
       const sym = h.symbol.toUpperCase()
-      const found = existing.findIndex(e => e.symbol === sym)
-      if (found >= 0) continue  // DO NOTHING on conflict
-      existing.push({
-        id: 'h-' + crypto.randomBytes(6).toString('hex'),
+      const idx = existing.findIndex(e => e.symbol === sym)
+      const record = {
+        id: idx >= 0 ? existing[idx].id : 'h-' + crypto.randomBytes(6).toString('hex'),
         symbol: sym, name: h.name || sym,
         shares: parseFloat(h.shares),
         avg_cost_basis: parseFloat(h.avgCost ?? h.avg_cost_basis ?? 0),
         sector: h.sector || null, asset_class: h.assetClass || 'equity',
-        created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
-      })
+        created_at: idx >= 0 ? existing[idx].created_at : new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }
+      if (idx >= 0) existing[idx] = record
+      else existing.push(record)
       imported++
     }
     MEM.holdings.set(req.params.id, existing)
@@ -667,11 +688,17 @@ router.post('/:id/import', async (req, res) => {
     for (const h of holdings) {
       if (!h.symbol || isNaN(h.shares) || isNaN(h.avgCost ?? h.avg_cost_basis)) continue
       await query(
-        `INSERT INTO holdings (portfolio_id, symbol, name, shares, avg_cost_basis, sector)
-         VALUES ($1, $2, $3, $4, $5, $6)
-         ON CONFLICT (portfolio_id, symbol) DO NOTHING`,
+        `INSERT INTO holdings (portfolio_id, symbol, name, shares, avg_cost_basis, sector, asset_class)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         ON CONFLICT (portfolio_id, symbol) DO UPDATE SET
+           shares         = EXCLUDED.shares,
+           avg_cost_basis = EXCLUDED.avg_cost_basis,
+           name           = COALESCE(EXCLUDED.name, holdings.name),
+           sector         = COALESCE(EXCLUDED.sector, holdings.sector),
+           asset_class    = EXCLUDED.asset_class,
+           updated_at     = NOW()`,
         [req.params.id, h.symbol.toUpperCase(), h.name || null,
-         h.shares, h.avgCost ?? h.avg_cost_basis ?? 0, h.sector || null]
+         h.shares, h.avgCost ?? h.avg_cost_basis ?? 0, h.sector || null, h.assetClass || 'equity']
       )
       imported++
     }
