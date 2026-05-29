@@ -1,6 +1,6 @@
 'use strict'
 /**
- * Admin portfolio holdings — sourced from Portfolio_Positions_Apr-21-2026.numbers
+ * Admin portfolio holdings — sourced from Portfolio_Positions_May292026.xlsx
  * (Fidelity Individual TOD account, exact quantities and average cost bases).
  *
  * Used by:
@@ -14,29 +14,31 @@
 const crypto = require('crypto')
 const bcrypt  = require('bcryptjs')
 
-// ── Holdings from the Numbers file ───────────────────────────────────────────
+// ── Holdings from Portfolio_Positions_May292026.xlsx ─────────────────────────
 const ADMIN_HOLDINGS = [
-  { symbol: 'AAPL',  name: 'Apple Inc.',                      shares: 10,  avgCost: 150.46, sector: 'Technology',            assetClass: 'equity' },
-  { symbol: 'ADSK',  name: 'Autodesk Inc.',                   shares: 10,  avgCost: 256.17, sector: 'Technology',            assetClass: 'equity' },
-  { symbol: 'AMD',   name: 'Advanced Micro Devices Inc.',     shares: 10,  avgCost: 131.19, sector: 'Technology',            assetClass: 'equity' },
-  { symbol: 'AMZN',  name: 'Amazon.com Inc.',                 shares: 10,  avgCost: 166.61, sector: 'Consumer Cyclical',     assetClass: 'equity' },
-  { symbol: 'AVGO',  name: 'Broadcom Inc.',                   shares: 10,  avgCost: 177.54, sector: 'Technology',            assetClass: 'equity' },
-  { symbol: 'BABA',  name: 'Alibaba Group Holding Ltd.',      shares: 10,  avgCost: 188.38, sector: 'Consumer Cyclical',     assetClass: 'equity' },
-  { symbol: 'BROS',  name: 'Dutch Bros Inc.',                 shares: 15,  avgCost: 63.48,  sector: 'Consumer Cyclical',     assetClass: 'equity' },
-  { symbol: 'CL',    name: 'Colgate-Palmolive Co.',           shares: 15,  avgCost: 94.64,  sector: 'Consumer Defensive',    assetClass: 'equity' },
-  { symbol: 'COIN',  name: 'Coinbase Global Inc. Class A',    shares: 15,  avgCost: 257.11, sector: 'Financial Services',    assetClass: 'equity' },
-  { symbol: 'GOOG',  name: 'Alphabet Inc. Class C',           shares: 10,  avgCost: 165.77, sector: 'Communication Services',assetClass: 'equity' },
-  { symbol: 'INTC',  name: 'Intel Corp.',                     shares: 25,  avgCost: 19.54,  sector: 'Technology',            assetClass: 'equity' },
-  { symbol: 'MSFT',  name: 'Microsoft Corp.',                 shares: 10,  avgCost: 400.57, sector: 'Technology',            assetClass: 'equity' },
-  { symbol: 'NVDA',  name: 'NVIDIA Corp.',                    shares: 50,  avgCost: 112.07, sector: 'Technology',            assetClass: 'equity' },
-  { symbol: 'ORCL',  name: 'Oracle Corp.',                    shares: 15,  avgCost: 265.80, sector: 'Technology',            assetClass: 'equity' },
-  { symbol: 'PG',    name: 'Procter & Gamble Co.',            shares: 10,  avgCost: 157.15, sector: 'Consumer Defensive',    assetClass: 'equity' },
-  { symbol: 'QCOM',  name: 'Qualcomm Inc.',                   shares: 10,  avgCost: 163.21, sector: 'Technology',            assetClass: 'equity' },
-  { symbol: 'SOUN',  name: 'SoundHound AI Inc.',              shares: 150, avgCost: 15.45,  sector: 'Technology',            assetClass: 'equity' },
-  { symbol: 'TSLA',  name: 'Tesla Inc.',                      shares: 15,  avgCost: 216.75, sector: 'Consumer Cyclical',     assetClass: 'equity' },
-  { symbol: 'TSM',   name: 'Taiwan Semiconductor Mfg. Co.',  shares: 20,  avgCost: 180.51, sector: 'Technology',            assetClass: 'equity' },
-  { symbol: 'TXN',   name: 'Texas Instruments Inc.',          shares: 10,  avgCost: 207.26, sector: 'Technology',            assetClass: 'equity' },
-  { symbol: 'XOM',   name: 'Exxon Mobil Corp.',               shares: 10,  avgCost: 147.72, sector: 'Energy',                assetClass: 'equity' },
+  { symbol: 'AAPL',  name: 'Apple Inc.',                      shares: 10,     avgCost: 150.46, sector: 'Technology',             assetClass: 'equity' },
+  { symbol: 'ADSK',  name: 'Autodesk Inc.',                   shares: 10,     avgCost: 256.17, sector: 'Technology',             assetClass: 'equity' },
+  { symbol: 'AMD',   name: 'Advanced Micro Devices Inc.',     shares: 10,     avgCost: 131.19, sector: 'Technology',             assetClass: 'equity' },
+  { symbol: 'AMZN',  name: 'Amazon.com Inc.',                 shares: 10,     avgCost: 166.61, sector: 'Consumer Cyclical',      assetClass: 'equity' },
+  { symbol: 'ARM',   name: 'Arm Holdings plc',                shares: 5,      avgCost: 201.50, sector: 'Technology',             assetClass: 'equity' },
+  { symbol: 'AVGO',  name: 'Broadcom Inc.',                   shares: 10,     avgCost: 177.54, sector: 'Technology',             assetClass: 'equity' },
+  { symbol: 'BABA',  name: 'Alibaba Group Holding Ltd.',      shares: 10,     avgCost: 188.38, sector: 'Consumer Cyclical',      assetClass: 'equity' },
+  { symbol: 'BROS',  name: 'Dutch Bros Inc.',                 shares: 15,     avgCost: 63.48,  sector: 'Consumer Cyclical',      assetClass: 'equity' },
+  { symbol: 'CL',    name: 'Colgate-Palmolive Co.',           shares: 15,     avgCost: 94.64,  sector: 'Consumer Defensive',     assetClass: 'equity' },
+  { symbol: 'COIN',  name: 'Coinbase Global Inc. Class A',    shares: 15,     avgCost: 257.11, sector: 'Financial Services',     assetClass: 'equity' },
+  { symbol: 'FSELX', name: 'Fidelity Select Semiconductors',  shares: 30.035, avgCost: 67.25,  sector: 'Technology',             assetClass: 'equity' },
+  { symbol: 'GOOG',  name: 'Alphabet Inc. Class C',           shares: 10,     avgCost: 165.77, sector: 'Communication Services', assetClass: 'equity' },
+  { symbol: 'INTC',  name: 'Intel Corp.',                     shares: 25,     avgCost: 19.54,  sector: 'Technology',             assetClass: 'equity' },
+  { symbol: 'MSFT',  name: 'Microsoft Corp.',                 shares: 10,     avgCost: 400.57, sector: 'Technology',             assetClass: 'equity' },
+  { symbol: 'NVDA',  name: 'NVIDIA Corp.',                    shares: 50,     avgCost: 112.07, sector: 'Technology',             assetClass: 'equity' },
+  { symbol: 'ORCL',  name: 'Oracle Corp.',                    shares: 15,     avgCost: 265.80, sector: 'Technology',             assetClass: 'equity' },
+  { symbol: 'PG',    name: 'Procter & Gamble Co.',            shares: 10,     avgCost: 157.15, sector: 'Consumer Defensive',     assetClass: 'equity' },
+  { symbol: 'QCOM',  name: 'Qualcomm Inc.',                   shares: 10,     avgCost: 163.21, sector: 'Technology',             assetClass: 'equity' },
+  { symbol: 'SOUN',  name: 'SoundHound AI Inc.',              shares: 150,    avgCost: 15.45,  sector: 'Technology',             assetClass: 'equity' },
+  { symbol: 'TSLA',  name: 'Tesla Inc.',                      shares: 15,     avgCost: 216.75, sector: 'Consumer Cyclical',      assetClass: 'equity' },
+  { symbol: 'TSM',   name: 'Taiwan Semiconductor Mfg. Co.',  shares: 20,     avgCost: 180.51, sector: 'Technology',             assetClass: 'equity' },
+  { symbol: 'TXN',   name: 'Texas Instruments Inc.',          shares: 10,     avgCost: 207.26, sector: 'Technology',             assetClass: 'equity' },
+  { symbol: 'XOM',   name: 'Exxon Mobil Corp.',               shares: 10,     avgCost: 147.72, sector: 'Energy',                 assetClass: 'equity' },
 ]
 
 // ── DB-mode: seed admin user + portfolio + holdings at startup ────────────────
@@ -84,25 +86,28 @@ async function seedAdminDB(query) {
       portfolioId = newPort.id
     }
 
-    // 4. Seed holdings only if portfolio is empty
-    const { rows: [{ count }] } = await query(
-      'SELECT COUNT(*) FROM holdings WHERE portfolio_id = $1', [portfolioId]
-    )
-    if (parseInt(count) > 0) {
-      console.log('[ADMIN SEED] Holdings already present — skipping')
-      return
-    }
-
+    // 4. Upsert each holding by symbol — safe to run on every startup
+    let added = 0, updated = 0
     for (const h of ADMIN_HOLDINGS) {
-      await query(`
+      const { rowCount } = await query(`
         INSERT INTO holdings
           (portfolio_id, symbol, name, shares, avg_cost, sector, asset_class, created_at, updated_at)
         VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
-        ON CONFLICT DO NOTHING
+        ON CONFLICT (portfolio_id, symbol)
+        DO UPDATE SET
+          name        = EXCLUDED.name,
+          shares      = EXCLUDED.shares,
+          avg_cost    = EXCLUDED.avg_cost,
+          sector      = EXCLUDED.sector,
+          asset_class = EXCLUDED.asset_class,
+          updated_at  = NOW()
+        WHERE holdings.shares != EXCLUDED.shares OR holdings.avg_cost != EXCLUDED.avg_cost
       `, [portfolioId, h.symbol, h.name, h.shares, h.avgCost, h.sector, h.assetClass])
+      if (rowCount > 0) updated++
+      else added++
     }
 
-    console.log(`[ADMIN SEED] Seeded ${ADMIN_HOLDINGS.length} holdings into admin portfolio (DB)`)
+    console.log(`[ADMIN SEED] Holdings synced — ${updated} upserted, ${added} unchanged (DB)`)
   } catch (err) {
     console.error('[ADMIN SEED] DB seed failed:', err.message)
   }
