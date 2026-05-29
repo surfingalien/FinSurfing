@@ -227,7 +227,7 @@ function MainApp({ onSignIn }) {
               <TradingNetworkView />
             )}
             {activeTab === 'earnings' && (
-              <EarningsCalendarView portfolio={portfolio} onAnalyze={navigateToAnalyze} />
+              <EarningsCalendarView portfolio={portfolio} onAnalyze={navigateToAnalyze} onNavigate={navigateTo} />
             )}
             {activeTab === 'backtest' && (
               <BacktestView />

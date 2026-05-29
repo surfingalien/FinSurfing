@@ -208,6 +208,72 @@ router.get('/calendar', async (req, res) => {
   }
 })
 
+// ── GET /api/earnings/positioning ────────────────────────────────────────────
+// Historical EPS beat rate + surprise % per symbol, using Finnhub earnings history
+router.get('/positioning', async (req, res) => {
+  const fKey = req.headers['x-finnhub-key'] || process.env.FINNHUB_API_KEY || process.env.FINNHUB_KEY
+  if (!fKey) return res.status(503).json({ error: 'Finnhub API key not configured' })
+
+  const { symbols: symbolsStr = '' } = req.query
+  const symbols = symbolsStr.split(',').map(s => s.trim().toUpperCase()).filter(Boolean).slice(0, 20)
+  if (!symbols.length) return res.status(400).json({ error: 'symbols required' })
+
+  try {
+    const results = await Promise.all(
+      symbols.map(async sym => {
+        try {
+          const r = await fetch(
+            `https://finnhub.io/api/v1/stock/earnings?symbol=${sym}&limit=8&token=${fKey}`,
+            { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(10000) }
+          )
+          const data = await r.json()
+          const quarters = Array.isArray(data) ? data : []
+
+          let beat_count = 0
+          let total_quarters = 0
+          let surprise_sum = 0
+          let surprise_count = 0
+
+          for (const q of quarters) {
+            if (q.actual != null && q.estimate != null) {
+              total_quarters++
+              if (q.actual >= q.estimate) beat_count++
+              if (q.estimate !== 0) {
+                const sp = ((q.actual - q.estimate) / Math.abs(q.estimate)) * 100
+                surprise_sum += sp
+                surprise_count++
+              }
+            }
+          }
+
+          const recent_quarters = quarters.slice(0, 4).map(q => ({
+            period:       q.period || null,
+            actual:       q.actual ?? null,
+            estimate:     q.estimate ?? null,
+            surprise_pct: (q.actual != null && q.estimate != null && q.estimate !== 0)
+              ? ((q.actual - q.estimate) / Math.abs(q.estimate)) * 100
+              : null,
+          }))
+
+          return {
+            symbol:               sym,
+            beat_rate:            total_quarters > 0 ? beat_count / total_quarters : null,
+            beat_count,
+            total_quarters,
+            avg_eps_surprise_pct: surprise_count > 0 ? surprise_sum / surprise_count : null,
+            recent_quarters,
+          }
+        } catch {
+          return { symbol: sym, beat_rate: null, beat_count: 0, total_quarters: 0, avg_eps_surprise_pct: null, recent_quarters: [] }
+        }
+      })
+    )
+    return res.json(results)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // ── GET /api/earnings/date ────────────────────────────────────────────────────
 router.get('/date', async (req, res) => {
   const { symbol } = req.query

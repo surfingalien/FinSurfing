@@ -10,6 +10,7 @@ import {
 import { fetchQuotes, fmt, fmtPct } from '../../services/api'
 import { calcFearGreed, calcSectorPerformance } from '../../services/forecast'
 import { scanPortfolio, SIGNAL_TYPES } from '../../services/aiEngine'
+import SentimentPulseWidget from '../Sentiment/SentimentPulseWidget'
 
 /* ── Sector beta proxies ─────────────────────── */
 const SECTOR_BETA = {
@@ -648,6 +649,11 @@ export default function DashboardView({ portfolio, onAnalyze }) {
           <PortfolioRisk positions={positions} quotes={quotes} />
         </div>
       </div>
+
+      {/* ── News Sentiment Pulse ── */}
+      {positions.length > 0 && (
+        <SentimentPulseWidget symbols={positions.map(p => p.symbol)} />
+      )}
 
       {/* Disclaimer */}
       <div className="text-center text-[11px] text-slate-600 border-t border-white/[0.04] pt-3">
