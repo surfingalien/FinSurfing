@@ -145,14 +145,14 @@ function WatchlistItem({ item, onRemove, onAnalyze }) {
             <div className="flex items-center gap-1.5 shrink-0">
               <button
                 onClick={() => onAnalyze?.(item.symbol)}
-                className="text-[11px] px-2.5 py-1 rounded-lg bg-mint-500/15 text-mint-400 border border-mint-500/25 hover:bg-mint-500/25 transition-all font-medium"
+                className="text-[11px] px-2.5 py-1 min-h-[44px] sm:min-h-0 sm:py-1 rounded-lg bg-mint-500/15 text-mint-400 border border-mint-500/25 hover:bg-mint-500/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-mint-500/40 transition-all font-medium"
               >
                 Analyze
               </button>
               <button
                 onClick={() => onRemove(item.symbol)}
-                className="p-1.5 rounded-lg text-slate-600 hover:text-red-400 hover:bg-red-500/10 transition-all opacity-0 group-hover:opacity-100"
-                title="Remove from AI Watchlist"
+                aria-label={`Remove ${item.symbol} from AI watchlist`}
+                className="flex items-center justify-center min-h-[44px] min-w-[44px] rounded-lg text-slate-600 hover:text-red-400 hover:bg-red-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/40 transition-all sm:opacity-0 sm:group-hover:opacity-100"
               >
                 <X className="w-3.5 h-3.5" />
               </button>

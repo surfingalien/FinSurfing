@@ -173,10 +173,11 @@ export default function WatchlistView({ watchlist }) {
                         <MiniSparkline symbol={q.symbol} />
                       </div>
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-2 py-1">
                       <button
                         onClick={() => removeSymbol(q.symbol)}
-                        className="opacity-0 group-hover:opacity-100 p-1 text-slate-500 hover:text-red-400 transition-all"
+                        aria-label={`Remove ${q.symbol} from watchlist`}
+                        className="flex items-center justify-center min-h-[44px] min-w-[44px] text-slate-600 hover:text-red-400 focus-visible:text-red-400 transition-all rounded-lg hover:bg-red-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/40 sm:opacity-0 sm:group-hover:opacity-100"
                       >
                         <X className="w-3.5 h-3.5" />
                       </button>
