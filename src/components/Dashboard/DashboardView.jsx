@@ -3,6 +3,7 @@
  * Portfolio heatmap · Fear & Greed · Sector performance · AI scan · Risk analysis
  */
 import { useState, useEffect, useMemo, useCallback } from 'react'
+import { motion } from 'motion/react'
 import {
   TrendingUp, TrendingDown, Activity, Shield, BarChart2,
   Zap, RefreshCw, Layers, AlertCircle,
@@ -549,7 +550,9 @@ export default function DashboardView({ portfolio, onAnalyze }) {
 
       {/* ── Summary stats ── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="glass-card">
+        <motion.div className="glass-card"
+          initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: 0, ease: 'easeOut' }}>
           <div className="text-xs text-slate-500 mb-1">Portfolio Value</div>
           <div className="text-2xl font-black font-mono text-white">
             ${totals.totalValue.toLocaleString('en-US', { maximumFractionDigits: 0 })}
@@ -558,9 +561,11 @@ export default function DashboardView({ portfolio, onAnalyze }) {
             {totals.totalGL >= 0 ? '+' : ''}${Math.abs(totals.totalGL).toFixed(0)}{' '}
             ({totals.totalGLPct >= 0 ? '+' : ''}{totals.totalGLPct.toFixed(2)}%) all-time
           </div>
-        </div>
+        </motion.div>
 
-        <div className="glass-card">
+        <motion.div className="glass-card"
+          initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: 0.07, ease: 'easeOut' }}>
           <div className="text-xs text-slate-500 mb-1">Today's P/L</div>
           <div className={`text-2xl font-black font-mono ${todayColor}`}>
             {totals.todayGL >= 0 ? '+' : ''}${Math.abs(totals.todayGL).toFixed(0)}
@@ -568,9 +573,11 @@ export default function DashboardView({ portfolio, onAnalyze }) {
           <div className="text-[10px] text-slate-600 mt-0.5">
             {totals.upCount}↑ {totals.dnCount}↓ vs. prior close
           </div>
-        </div>
+        </motion.div>
 
-        <div className="glass-card">
+        <motion.div className="glass-card"
+          initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: 0.14, ease: 'easeOut' }}>
           <div className="text-xs text-slate-500 mb-1">Fear & Greed</div>
           <div className="flex items-center gap-2 mt-1">
             <div className="text-2xl font-black font-mono text-white">{fg?.score ?? '—'}</div>
@@ -581,13 +588,15 @@ export default function DashboardView({ portfolio, onAnalyze }) {
               </span>
             )}
           </div>
-        </div>
+        </motion.div>
 
-        <div className="glass-card">
+        <motion.div className="glass-card"
+          initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: 0.21, ease: 'easeOut' }}>
           <div className="text-xs text-slate-500 mb-1">Market Breadth</div>
           <div className="text-2xl font-black font-mono text-white">{totals.upCount}/{positions.length}</div>
           <div className="text-[10px] text-slate-600 mt-0.5">holdings advancing today</div>
-        </div>
+        </motion.div>
       </div>
 
       {/* ── Heatmap + Fear & Greed ── */}
