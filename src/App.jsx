@@ -6,6 +6,7 @@ import { AITraderProvider } from './contexts/AITraderContext'
 import { ApiKeysProvider } from './contexts/ApiKeysContext'
 import { ProModeProvider } from './contexts/ProModeContext'
 import { ToastProvider } from './components/shared/ToastNotifications'
+import { TooltipProvider } from './components/shared/Tooltip'
 import LandingPage from './components/Landing/LandingPage'
 import AuthPage from './components/Auth/AuthPage'
 import Header from './components/Layout/Header'
@@ -288,11 +289,13 @@ export default function App() {
   return (
     <ProModeProvider>
       <ApiKeysProvider>
-        <ToastProvider>
-          <AuthProvider>
-            <AppInner />
-          </AuthProvider>
-        </ToastProvider>
+        <TooltipProvider>
+          <ToastProvider>
+            <AuthProvider>
+              <AppInner />
+            </AuthProvider>
+          </ToastProvider>
+        </TooltipProvider>
       </ApiKeysProvider>
     </ProModeProvider>
   )

@@ -10,6 +10,9 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.52.0",
+    "@radix-ui/react-dialog": "^1.1.15",
+    "@radix-ui/react-popover": "^1.1.15",
+    "@radix-ui/react-tooltip": "^1.2.8",
     "bcryptjs": "^2.4.3",
     "clsx": "^2.1.1",
     "cookie-parser": "^1.4.7",
