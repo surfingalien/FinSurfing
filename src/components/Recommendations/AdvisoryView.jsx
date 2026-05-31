@@ -76,18 +76,24 @@ function TrendingUp2(props) {
   )
 }
 
+// ETF/fund: no pe, no revenueGrowth, no earningsGrowth from fundamentals
+function isEtfLike(summary) {
+  return summary != null && summary.pe == null && summary.revenueGrowth == null && summary.earningsGrowth == null
+}
+
 function scoreForPersona(persona, summary, chartData) {
   const weights = persona.weights
   let score = 50
+  const etf = isEtfLike(summary)
 
-  if (summary) {
+  if (summary && !etf) {
+    // ── Stock scoring ──────────────────────────────────────────────────────
     const rg = (summary.revenueGrowth || 0) * 100
     const eg = (summary.earningsGrowth || 0) * 100
     score += rg * weights.revenueGrowth * 2
     score += eg * weights.earningsGrowth * 2
 
     const pe = summary.pe || 30
-    const pbRatio = summary.priceToBook || 3
     const valScore = pe < 15 ? 20 : pe < 25 ? 10 : pe < 40 ? 0 : -10
     score += valScore * weights.valuation * 2
 
@@ -98,11 +104,36 @@ function scoreForPersona(persona, summary, chartData) {
     if (summary.dividendYield && weights.stability > 0.3) score += 5
   }
 
+  if (summary && etf) {
+    // ── ETF/fund scoring — use beta, yield, and 52w position ──────────────
+    const beta = summary.beta ?? 1
+    const dy   = (summary.dividendYield ?? 0)
+
+    // Stability: low-beta ETFs score better for defensive/value
+    const stabScore = beta < 0.6 ? 20 : beta < 0.85 ? 12 : beta < 1.1 ? 4 : beta < 1.4 ? -4 : -12
+    score += stabScore * weights.stability * 2
+
+    // Yield: dividend ETFs bonus for value/defensive personas
+    if (dy > 0.03) score += 18 * weights.valuation
+    else if (dy > 0.01) score += 8 * weights.valuation
+
+    // 52-week position: proxy for trend strength (growth/momentum personas)
+    if (summary.low52 != null && summary.high52 != null && chartData.length > 0) {
+      const lastClose = chartData[chartData.length - 1].close
+      const range52 = summary.high52 - summary.low52
+      if (range52 > 0) {
+        const pos = (lastClose - summary.low52) / range52   // 0 = at 52w low, 1 = at 52w high
+        score += (pos * 24 - 8) * weights.momentum          // range: -8 to +16
+      }
+    }
+  }
+
+  // ── Technical momentum: applies to both stocks and ETFs ─────────────────
   if (chartData.length > 20) {
-    const closes = chartData.map(c => c.close)
-    const rsiArr = calcRSI(closes)
+    const closes  = chartData.map(c => c.close)
+    const rsiArr  = calcRSI(closes)
     const lastRSI = rsiArr[rsiArr.length - 1]
-    const sma50 = calcSMA(closes, 50)
+    const sma50   = calcSMA(closes, 50)
     const lastClose = closes[closes.length - 1]
     const lastSMA50 = sma50[sma50.length - 1]
 
@@ -117,10 +148,45 @@ function scoreForPersona(persona, summary, chartData) {
 }
 
 function personaRecommendation(persona, score, summary) {
-  const pe = summary?.pe || 30
-  const beta = summary?.beta || 1
-  const rg = (summary?.revenueGrowth || 0) * 100
+  const pe   = summary?.pe ?? null
+  const beta = summary?.beta ?? 1
+  const rg   = (summary?.revenueGrowth ?? 0) * 100
+  const dy   = (summary?.dividendYield ?? 0) * 100
+  const etf  = isEtfLike(summary)
 
+  if (etf) {
+    // ── ETF-specific recommendations ──────────────────────────────────────
+    if (persona.id === 'growth') {
+      if (score >= 68) return { action: 'Overweight', rationale: `Strong price momentum — ETF is near 52-week highs with bullish technical setup. Suitable for growth allocation.` }
+      if (score >= 52) return { action: 'Buy', rationale: `Moderate upside momentum. Reasonable entry for a core growth position.` }
+      if (score >= 38) return { action: 'Hold', rationale: `Sideways momentum. Wait for a technical breakout before adding.` }
+      return { action: 'Underweight', rationale: `Weak momentum signals. Consider waiting for trend recovery above key moving averages.` }
+    }
+    if (persona.id === 'value') {
+      if (dy > 3 && score >= 55) return { action: 'Buy', rationale: `High dividend yield (${dy.toFixed(1)}%) with stable trend. Good income-focused ETF position.` }
+      if (dy > 1.5 && score >= 45) return { action: 'Buy', rationale: `Decent yield (${dy.toFixed(1)}%) with positive momentum. Solid all-weather ETF holding.` }
+      if (score >= 48) return { action: 'Hold', rationale: `Low-yield ETF. Suitable only as a growth holding, not a value/income play.` }
+      return { action: 'Reduce', rationale: `Below-average trend and minimal yield. Look for higher-conviction entry.` }
+    }
+    if (persona.id === 'momentum') {
+      if (score >= 65) return { action: 'Buy', rationale: `Strong price momentum — RSI healthy and price above key moving averages. Ride the trend.` }
+      if (score >= 48) return { action: 'Watch', rationale: `Mixed momentum. Set a price alert — enter on confirmed breakout above resistance.` }
+      return { action: 'Avoid', rationale: `Weak trend. ETF below key moving averages. Wait for momentum confirmation.` }
+    }
+    if (persona.id === 'defensive') {
+      if (beta < 0.7 && score >= 55) return { action: 'Buy', rationale: `Low beta (${fmt(beta, 2)}) ETF with stable trend. Excellent defensive allocation.` }
+      if (beta < 1.0) return { action: 'Hold', rationale: `Moderate defensiveness (beta ${fmt(beta, 2)}). Suitable as a partial hedge in volatile markets.` }
+      return { action: 'Underweight', rationale: `High beta (${fmt(beta, 2)}) for a defensive allocation. Consider bond or utility ETFs instead.` }
+    }
+    if (persona.id === 'esg') {
+      if (score >= 60) return { action: 'Buy', rationale: `Strong trend with reasonable yield. Check the fund's ESG screening methodology for alignment.` }
+      if (score >= 45) return { action: 'Hold', rationale: `Neutral setup. Verify ESG ratings (MSCI, Sustainalytics) before increasing allocation.` }
+      return { action: 'Research', rationale: `Weak trend. Many ESG ETFs have lower volatility — this one needs more investigation.` }
+    }
+    return { action: 'Hold', rationale: 'Insufficient data for a strong conviction.' }
+  }
+
+  // ── Stock recommendations (existing logic) ────────────────────────────────
   if (persona.id === 'growth') {
     if (score >= 70) return { action: 'Strong Buy', rationale: `High revenue growth (${rg.toFixed(1)}%) with strong momentum. Growth profile aligns well.` }
     if (score >= 50) return { action: 'Buy', rationale: `Moderate growth potential. Consider position sizing based on risk tolerance.` }
@@ -128,10 +194,11 @@ function personaRecommendation(persona, score, summary) {
     return { action: 'Avoid', rationale: `Does not meet growth criteria. Below-average revenue and earnings momentum.` }
   }
   if (persona.id === 'value') {
-    if (pe < 15 && score >= 60) return { action: 'Strong Buy', rationale: `Low P/E (${fmt(pe)}×) with solid fundamentals. Classic value opportunity.` }
-    if (pe < 25 && score >= 50) return { action: 'Buy', rationale: `Reasonably valued at ${fmt(pe)}× earnings. Margin of safety present.` }
-    if (pe < 35) return { action: 'Hold', rationale: `Fairly valued. Wait for a better entry point below ${fmt(pe * 0.85, 0)}×.` }
-    return { action: 'Avoid', rationale: `Expensive at ${fmt(pe)}× earnings. Value investors would require a significant pullback.` }
+    if (pe != null && pe < 15 && score >= 60) return { action: 'Strong Buy', rationale: `Low P/E (${fmt(pe)}×) with solid fundamentals. Classic value opportunity.` }
+    if (pe != null && pe < 25 && score >= 50) return { action: 'Buy', rationale: `Reasonably valued at ${fmt(pe)}× earnings. Margin of safety present.` }
+    if (pe != null && pe < 35) return { action: 'Hold', rationale: `Fairly valued. Wait for a better entry below ${fmt(pe * 0.85, 0)}×.` }
+    if (pe == null && score >= 55) return { action: 'Hold', rationale: `No P/E data available. Use technical signals and sector context for sizing.` }
+    return { action: 'Avoid', rationale: pe != null ? `Expensive at ${fmt(pe)}× earnings. Value investors would require a significant pullback.` : `Insufficient fundamental data for value assessment.` }
   }
   if (persona.id === 'momentum') {
     if (score >= 65) return { action: 'Buy', rationale: `Strong technical momentum. Price above key moving averages with healthy RSI.` }
@@ -234,7 +301,7 @@ export default function AdvisoryView({ portfolio }) {
             value={inputVal}
             onChange={e => handleSearch(e.target.value)}
             onBlur={() => setTimeout(() => setShowResults(false), 200)}
-            placeholder="Analyze any stock…"
+            placeholder="Analyze any stock or ETF — e.g. NVDA, SPY, QQQ…"
             className="input pl-9 uppercase"
           />
           {showResults && searchResults.length > 0 && (
@@ -326,23 +393,36 @@ export default function AdvisoryView({ portfolio }) {
                 </div>
 
                 {/* Fundamentals summary */}
-                {summary && (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                    {[
-                      { label: 'P/E', value: summary.pe ? fmt(summary.pe) + '×' : '—' },
-                      { label: 'EPS', value: summary.eps ? `$${fmt(summary.eps)}` : '—' },
-                      { label: 'Beta', value: summary.beta ? fmt(summary.beta, 2) : '—' },
-                      { label: 'Rev Growth', value: summary.revenueGrowth ? fmtPct(summary.revenueGrowth * 100) : '—' },
-                      { label: 'Profit Margin', value: summary.profitMargin ? fmtPct(summary.profitMargin * 100) : '—' },
-                      { label: 'Div Yield', value: summary.dividendYield ? fmtPct(summary.dividendYield * 100) : '—' },
-                    ].map(s => (
-                      <div key={s.label} className="glass-card">
-                        <div className="stat-label">{s.label}</div>
-                        <div className="text-base font-mono font-semibold text-white mt-0.5">{s.value}</div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                {summary && (() => {
+                  const etf = isEtfLike(summary)
+                  const rows = etf
+                    ? [
+                        { label: 'Beta', value: summary.beta ? fmt(summary.beta, 2) : '—' },
+                        { label: 'Div Yield', value: summary.dividendYield ? fmtPct(summary.dividendYield * 100) : '—' },
+                        { label: '52W High', value: summary.high52 ? `$${fmt(summary.high52)}` : '—' },
+                        { label: '52W Low', value: summary.low52 ? `$${fmt(summary.low52)}` : '—' },
+                        { label: 'Avg Volume', value: summary.avgVolume ? fmtLarge(summary.avgVolume) : '—' },
+                        { label: 'Market Cap', value: summary.marketCap ? fmtLarge(summary.marketCap) : '—' },
+                      ]
+                    : [
+                        { label: 'P/E', value: summary.pe ? fmt(summary.pe) + '×' : '—' },
+                        { label: 'EPS', value: summary.eps ? `$${fmt(summary.eps)}` : '—' },
+                        { label: 'Beta', value: summary.beta ? fmt(summary.beta, 2) : '—' },
+                        { label: 'Rev Growth', value: summary.revenueGrowth ? fmtPct(summary.revenueGrowth * 100) : '—' },
+                        { label: 'Profit Margin', value: summary.profitMargin ? fmtPct(summary.profitMargin * 100) : '—' },
+                        { label: 'Div Yield', value: summary.dividendYield ? fmtPct(summary.dividendYield * 100) : '—' },
+                      ]
+                  return (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                      {rows.map(s => (
+                        <div key={s.label} className="glass-card">
+                          <div className="stat-label">{s.label}</div>
+                          <div className="text-base font-mono font-semibold text-white mt-0.5">{s.value}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )
+                })()}
               </>
             )}
           </div>
@@ -368,16 +448,28 @@ export default function AdvisoryView({ portfolio }) {
           <Brain className="w-10 h-10 text-mint-400 opacity-60" />
           <div className="text-base font-semibold text-white">5-Persona Advisory Engine</div>
           <div className="text-sm text-slate-500 max-w-md">
-            Search for any stock to get personalized recommendations from five distinct investment personas —
+            Search for any stock or ETF to get personalized recommendations from five distinct investment personas —
             Growth Hawk, Value Seeker, Momentum Trader, Defensive Shield, and ESG Conscious.
           </div>
-          <div className="flex flex-wrap gap-2 justify-center mt-2">
-            {['AAPL', 'MSFT', 'NVDA', 'TSLA', 'XOM'].map(s => (
-              <button key={s} onClick={() => handleSelect(s)}
-                className="px-3 py-1.5 text-xs glass-card border border-white/[0.08] text-mint-400 font-mono hover:border-mint-500/30 transition-all">
-                {s}
-              </button>
-            ))}
+          <div className="mt-2 space-y-2">
+            <div className="text-[10px] text-slate-600 uppercase tracking-wider">Stocks</div>
+            <div className="flex flex-wrap gap-2 justify-center">
+              {['AAPL', 'MSFT', 'NVDA', 'TSLA', 'XOM', 'JPM'].map(s => (
+                <button key={s} onClick={() => handleSelect(s)}
+                  className="px-3 py-1.5 text-xs glass-card border border-white/[0.08] text-mint-400 font-mono hover:border-mint-500/30 transition-all">
+                  {s}
+                </button>
+              ))}
+            </div>
+            <div className="text-[10px] text-slate-600 uppercase tracking-wider mt-1">ETFs</div>
+            <div className="flex flex-wrap gap-2 justify-center">
+              {['SPY', 'QQQ', 'VTI', 'SCHD', 'GLD', 'TLT'].map(s => (
+                <button key={s} onClick={() => handleSelect(s)}
+                  className="px-3 py-1.5 text-xs glass-card border border-white/[0.08] text-purple-400 font-mono hover:border-purple-500/30 transition-all">
+                  {s}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       )}
