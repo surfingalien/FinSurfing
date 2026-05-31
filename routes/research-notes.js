@@ -224,20 +224,34 @@ router.post('/braindump', async (req, res) => {
 
   const symbolCtx = symbol ? ` about ${symbol.toUpperCase()}` : ''
   const prompt = `You are a senior investment analyst. The user has a raw braindump of investment thoughts${symbolCtx}.
-Structure it into a clean investment research note in Markdown.
+
+Do THREE things:
+1. Structure the thoughts into a clean investment research note.
+2. Play devil's advocate — list 3–5 specific reasons this thesis could be WRONG. Don't be generic.
+3. Extract 3 falsifiable assumptions — specific conditions that MUST hold for the bull case to play out.
 
 RAW THOUGHTS:
 ${raw.trim()}
 
-Respond ONLY with a valid JSON object:
+Respond ONLY with a valid JSON object (no markdown wrapper):
 {
   "title": "concise note title (max 60 chars)",
   "content": "full markdown note content",
   "tags": ["array", "of", "relevant", "tags"],
-  "note_type": "thesis" or "note" or "braindump"
+  "note_type": "thesis" or "note" or "braindump",
+  "counterarguments": [
+    "Specific reason the thesis could fail #1",
+    "Specific reason #2",
+    "Specific reason #3"
+  ],
+  "assumptions": [
+    "Specific falsifiable condition that must hold #1",
+    "Specific falsifiable condition #2",
+    "Specific falsifiable condition #3"
+  ]
 }
 
-Markdown structure to use where appropriate:
+Markdown structure for content:
 # [Symbol or Topic]
 ## Bull Case
 - key point
@@ -248,7 +262,10 @@ Markdown structure to use where appropriate:
 ## Thesis Breaker
 - event that invalidates this
 ## Action Items
-- [ ] specific next step`
+- [ ] specific next step
+
+For counterarguments: be specific to the user's thesis, not generic. "Valuation is stretched" is not specific. "NVDA's P/E of 45x requires 40% YoY revenue growth to be sustained — any deceleration invalidates the thesis" is specific.
+For assumptions: make them falsifiable with real observable data (earnings calls, macro reports, price levels).`
 
   try {
     const client = aiClient()

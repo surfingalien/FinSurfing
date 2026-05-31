@@ -1,23 +1,29 @@
 /**
  * AIBrainView — Multi-agent AI stock analysis.
- * 5 specialized agents (Fundamental, Technical, Sentiment, Macro, Risk)
- * collaborate through a supervisor to produce ranked buy recommendations.
  *
- * Features: custom symbol search, buy/sell price targets, AI watchlist, PDF export.
+ * Council improvements (2026-05-31):
+ * - Supervisor rebuilt as contradiction engine — surfaces agent disagreements
+ * - Confidence zones replace false-precision price targets
+ * - Thesis assumptions shown in expanded view
+ * - Volume signal indicator
+ * - Data freshness displayed
+ * - Prediction instrumentation (backend)
  */
 
 import { useState, useCallback } from 'react'
+import { motion, AnimatePresence } from 'motion/react'
 import {
   Brain, BarChart2, TrendingUp, Eye, Globe, Shield,
   Sparkles, RefreshCw, ChevronDown, ChevronUp, AlertTriangle,
   Target, Zap, Activity, Clock, CheckCircle2, Search,
   Bookmark, BookmarkCheck, Download, X, DollarSign,
   Cpu, HeartPulse, Zap as ZapEnergy, LineChart, Bitcoin,
+  GitFork, Layers, Lock, TrendingDown, Volume2,
 } from 'lucide-react'
 import { useAIWatchlist } from '../../hooks/useAIWatchlist'
 import { exportAnalysisToPDF } from '../../utils/pdfExport'
 
-/* ── scan mode definitions ────────────────────────────────── */
+/* ── scan modes ────────────────────────────────────────────── */
 const SCAN_MODES = [
   { id: 'broad',      label: 'Broad Market',  icon: Globe,      color: 'text-mint-400',    bg: 'bg-mint-500/15',    border: 'border-mint-500/30'    },
   { id: 'tech',       label: 'Tech & AI',     icon: Cpu,        color: 'text-blue-400',    bg: 'bg-blue-500/15',    border: 'border-blue-500/30'    },
@@ -28,7 +34,6 @@ const SCAN_MODES = [
   { id: 'crypto',     label: 'Crypto',        icon: Bitcoin,    color: 'text-yellow-400',  bg: 'bg-yellow-500/15',  border: 'border-yellow-500/30'  },
 ]
 
-/* ── helpers ──────────────────────────────────────────────── */
 function getApiKeyHeaders() {
   try {
     const s = JSON.parse(localStorage.getItem('finsurf_api_keys') || '{}')
@@ -42,16 +47,16 @@ function getApiKeyHeaders() {
   } catch { return {} }
 }
 
-const DEFAULT_UNIVERSE_STR = 'NVDA,MSFT,AAPL,AMZN,GOOGL,META,AVGO,TSLA,JPM,V,LLY,UNH,COST,NFLX,MELI,CRWD,ANET,AMD,PLTR,ORCL'
-
 /* ── agent config ─────────────────────────────────────────── */
 const AGENTS = [
-  { key: 'fundamental', label: 'Fundamental',  icon: BarChart2,  color: 'text-blue-400',   bg: 'bg-blue-500/15',   border: 'border-blue-500/25',   scoreKey: 'fundamentalScore', analysisKey: 'fundamentalAnalysis',  noteKey: 'fundamentalAnalyst'  },
-  { key: 'technical',   label: 'Technical',    icon: TrendingUp, color: 'text-cyan-400',   bg: 'bg-cyan-500/15',   border: 'border-cyan-500/25',   scoreKey: 'technicalScore',   analysisKey: 'technicalAnalysis',   noteKey: 'technicalAnalyst'   },
-  { key: 'sentiment',   label: 'Sentiment',    icon: Eye,        color: 'text-purple-400', bg: 'bg-purple-500/15', border: 'border-purple-500/25', scoreKey: 'sentimentScore',   analysisKey: 'sentimentAnalysis',   noteKey: 'sentimentAnalyst'   },
-  { key: 'macro',       label: 'Macro',        icon: Globe,      color: 'text-amber-400',  bg: 'bg-amber-500/15',  border: 'border-amber-500/25',  scoreKey: 'macroScore',       analysisKey: 'macroAnalysis',       noteKey: 'macroEconomist'     },
-  { key: 'risk',        label: 'Risk',         icon: Shield,     color: 'text-red-400',    bg: 'bg-red-500/15',    border: 'border-red-500/25',    scoreKey: 'riskScore',        analysisKey: 'riskNote',            noteKey: 'riskManager'        },
+  { key: 'fundamental', label: 'Fundamental',  icon: BarChart2,  color: 'text-blue-400',   bg: 'bg-blue-500/15',   border: 'border-blue-500/25',   scoreKey: 'fundamentalScore', analysisKey: 'fundamentalAnalysis' },
+  { key: 'technical',   label: 'Technical',    icon: TrendingUp, color: 'text-cyan-400',   bg: 'bg-cyan-500/15',   border: 'border-cyan-500/25',   scoreKey: 'technicalScore',   analysisKey: 'technicalAnalysis'  },
+  { key: 'sentiment',   label: 'Sentiment',    icon: Eye,        color: 'text-purple-400', bg: 'bg-purple-500/15', border: 'border-purple-500/25', scoreKey: 'sentimentScore',   analysisKey: 'sentimentAnalysis'  },
+  { key: 'macro',       label: 'Macro',        icon: Globe,      color: 'text-amber-400',  bg: 'bg-amber-500/15',  border: 'border-amber-500/25',  scoreKey: 'macroScore',       analysisKey: 'macroAnalysis'      },
+  { key: 'risk',        label: 'Risk',         icon: Shield,     color: 'text-red-400',    bg: 'bg-red-500/15',    border: 'border-red-500/25',    scoreKey: 'riskScore',        analysisKey: 'riskNote'           },
 ]
+
+const AGENT_MAP = Object.fromEntries(AGENTS.map(a => [a.label, a]))
 
 const VERDICT_CONFIG = {
   'Strong Buy':   { color: 'text-emerald-400', bg: 'bg-emerald-500/15', border: 'border-emerald-500/30' },
@@ -71,16 +76,25 @@ const HORIZON_OPTIONS = [
   { value: '12m', label: '12 Month' },
 ]
 
+const VOLUME_SIGNAL = {
+  Confirming: { color: 'text-emerald-400', bg: 'bg-emerald-500/10', label: '↑ Vol Confirming' },
+  Weak:       { color: 'text-amber-400',   bg: 'bg-amber-500/10',   label: '↓ Vol Weak'       },
+  Diverging:  { color: 'text-red-400',     bg: 'bg-red-500/10',     label: '⚡ Vol Diverging'  },
+  Unknown:    { color: 'text-slate-500',   bg: 'bg-white/[0.03]',   label: 'Vol Unknown'      },
+}
+
 /* ── ScoreBar ──────────────────────────────────────────────── */
-function ScoreBar({ agent, score }) {
+function ScoreBar({ agent, score, conflictAgents = [] }) {
   const Icon = agent.icon
   const pct  = Math.min(100, Math.max(0, score))
   const barColor = pct >= 75 ? 'bg-emerald-400' : pct >= 50 ? 'bg-amber-400' : 'bg-red-400'
+  const inConflict = conflictAgents.includes(agent.label)
   return (
-    <div className="flex items-center gap-2">
+    <div className={`flex items-center gap-2 ${inConflict ? 'ring-1 ring-amber-500/30 rounded px-1 -mx-1' : ''}`}>
       <div className={`flex items-center gap-1 w-[82px] shrink-0 ${agent.color}`}>
         <Icon className="w-3 h-3 shrink-0" />
         <span className="text-[10px] font-medium">{agent.label}</span>
+        {inConflict && <span className="text-amber-400 text-[9px] ml-0.5">⚡</span>}
       </div>
       <div className="flex-1 h-1.5 bg-white/[0.05] rounded-full overflow-hidden">
         <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${pct}%` }} />
@@ -107,10 +121,66 @@ function CompositeRing({ score }) {
   )
 }
 
-/* ── PriceLevels ───────────────────────────────────────────── */
-function PriceLevels({ stock }) {
-  if (!stock.entryPrice && !stock.takeProfitPrice && !stock.stopLossPrice) return null
-  const fmt = (v) => v ? `$${v.toFixed(2)}` : '—'
+/* ── ConflictBanner ─────────────────────────────────────────── */
+function ConflictBanner({ conflict }) {
+  if (!conflict?.exists || conflict.spread < 25) return null
+  const severity = conflict.spread >= 40 ? 'high' : 'medium'
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -4 }}
+      animate={{ opacity: 1, y: 0 }}
+      className={`flex items-start gap-3 p-3 rounded-xl border text-xs ${
+        severity === 'high'
+          ? 'bg-amber-500/10 border-amber-500/30 text-amber-300'
+          : 'bg-blue-500/8 border-blue-500/20 text-blue-300'
+      }`}
+    >
+      <GitFork className={`w-3.5 h-3.5 shrink-0 mt-0.5 ${severity === 'high' ? 'text-amber-400' : 'text-blue-400'}`} />
+      <div className="min-w-0">
+        <span className={`font-bold ${severity === 'high' ? 'text-amber-400' : 'text-blue-400'}`}>
+          Agent Conflict ({conflict.spread}pt spread):
+        </span>{' '}
+        <span className="font-medium">{conflict.agents?.[0]} vs {conflict.agents?.[1]}</span>
+        {conflict.meaning && <span className="text-slate-400"> — {conflict.meaning}</span>}
+      </div>
+    </motion.div>
+  )
+}
+
+/* ── PriceZones ────────────────────────────────────────────── */
+function PriceZones({ stock }) {
+  const hasZones = stock.entryZoneLow || stock.entryZoneHigh
+  const hasFallback = stock.entryPrice
+  if (!hasZones && !hasFallback) return null
+
+  const fmt = (v) => v ? `$${Number(v).toFixed(2)}` : null
+
+  if (hasZones) {
+    return (
+      <div className="mt-3 grid grid-cols-3 gap-1.5 text-center">
+        <div className="bg-blue-500/10 rounded-lg p-1.5 border border-blue-500/20">
+          <div className="text-[9px] text-blue-400 font-medium mb-0.5">Entry Zone</div>
+          <div className="text-[10px] font-mono font-bold text-white leading-tight">
+            {fmt(stock.entryZoneLow)}<br/><span className="text-slate-500">—</span><br/>{fmt(stock.entryZoneHigh)}
+          </div>
+        </div>
+        <div className="bg-emerald-500/10 rounded-lg p-1.5 border border-emerald-500/20">
+          <div className="text-[9px] text-emerald-400 font-medium mb-0.5">Target Zone</div>
+          <div className="text-[10px] font-mono font-bold text-emerald-400 leading-tight">
+            {fmt(stock.targetZoneLow)}<br/><span className="text-slate-500">—</span><br/>{fmt(stock.targetZoneHigh)}
+          </div>
+        </div>
+        <div className="bg-red-500/10 rounded-lg p-1.5 border border-red-500/20">
+          <div className="text-[9px] text-red-400 font-medium mb-0.5">Stop Zone</div>
+          <div className="text-[10px] font-mono font-bold text-red-400 leading-tight">
+            {fmt(stock.stopZoneLow)}<br/><span className="text-slate-500">—</span><br/>{fmt(stock.stopZoneHigh)}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Fallback to legacy exact prices (older responses)
   return (
     <div className="mt-3 grid grid-cols-3 gap-1.5 text-center">
       <div className="bg-blue-500/10 rounded-lg p-1.5 border border-blue-500/20">
@@ -118,13 +188,35 @@ function PriceLevels({ stock }) {
         <div className="text-[11px] font-mono font-bold text-white">{fmt(stock.entryPrice)}</div>
       </div>
       <div className="bg-emerald-500/10 rounded-lg p-1.5 border border-emerald-500/20">
-        <div className="text-[9px] text-emerald-400 font-medium mb-0.5">Take Profit</div>
+        <div className="text-[9px] text-emerald-400 font-medium mb-0.5">Target</div>
         <div className="text-[11px] font-mono font-bold text-emerald-400">{fmt(stock.takeProfitPrice)}</div>
       </div>
       <div className="bg-red-500/10 rounded-lg p-1.5 border border-red-500/20">
-        <div className="text-[9px] text-red-400 font-medium mb-0.5">Stop Loss</div>
+        <div className="text-[9px] text-red-400 font-medium mb-0.5">Stop</div>
         <div className="text-[11px] font-mono font-bold text-red-400">{fmt(stock.stopLossPrice)}</div>
       </div>
+    </div>
+  )
+}
+
+/* ── ThesisAssumptions ─────────────────────────────────────── */
+function ThesisAssumptions({ assumptions }) {
+  if (!assumptions?.length) return null
+  return (
+    <div className="rounded-xl p-3 bg-indigo-500/8 border border-indigo-500/20">
+      <div className="flex items-center gap-1.5 mb-2 text-[11px] font-semibold text-indigo-400">
+        <Lock className="w-3 h-3" />
+        Bull Case Assumptions
+        <span className="text-[9px] text-slate-500 font-normal ml-1">— thesis breaks if these fail</span>
+      </div>
+      <ul className="space-y-1">
+        {assumptions.map((a, i) => (
+          <li key={i} className="flex items-start gap-2 text-[11px] text-slate-300">
+            <span className="text-indigo-500 shrink-0 mt-0.5 font-mono">{i + 1}.</span>
+            <span>{a}</span>
+          </li>
+        ))}
+      </ul>
     </div>
   )
 }
@@ -135,7 +227,9 @@ function StockCard({ stock, onAnalyze, horizon }) {
   const { addStock, removeStock, hasSymbol } = useAIWatchlist()
   const verdict    = VERDICT_CONFIG[stock.agentVerdict]   || VERDICT_CONFIG['Buy']
   const confidence = CONFIDENCE_CONFIG[stock.confidence]  || CONFIDENCE_CONFIG['Medium']
+  const volSig     = VOLUME_SIGNAL[stock.volumeSignal]    || VOLUME_SIGNAL['Unknown']
   const inWatchlist = hasSymbol(stock.symbol)
+  const conflictAgents = stock.agentConflict?.exists ? (stock.agentConflict.agents || []) : []
 
   const toggleWatchlist = () => {
     if (inWatchlist) {
@@ -146,9 +240,10 @@ function StockCard({ stock, onAnalyze, horizon }) {
         name:            stock.name,
         sector:          stock.sector,
         addedFrom:       'ai-brain',
-        entryPrice:      stock.entryPrice,
-        takeProfitPrice: stock.takeProfitPrice,
-        stopLossPrice:   stock.stopLossPrice,
+        entryZoneLow:    stock.entryZoneLow,
+        entryZoneHigh:   stock.entryZoneHigh,
+        targetZoneLow:   stock.targetZoneLow,
+        targetZoneHigh:  stock.targetZoneHigh,
         targetReturn:    stock.targetReturn,
         stopLoss:        stock.stopLoss,
         horizon:         horizon || stock.horizon || '6m',
@@ -159,10 +254,18 @@ function StockCard({ stock, onAnalyze, horizon }) {
   }
 
   return (
-    <div className="p-1 rounded-[1.5rem] bg-white/[0.015] ring-1 ring-white/[0.07] hover:ring-white/[0.12] transition-all">
+    <motion.div
+      layout
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="p-1 rounded-[1.5rem] bg-white/[0.015] ring-1 ring-white/[0.07] hover:ring-white/[0.12] transition-all"
+    >
       <div className="glass rounded-[1.25rem] border border-white/[0.06] overflow-hidden shadow-[inset_0_1px_0_rgba(255,255,255,0.07)]">
       <div className="p-4">
-        <div className="flex items-start gap-3">
+        {/* Conflict banner inside card */}
+        <ConflictBanner conflict={stock.agentConflict} />
+
+        <div className={`flex items-start gap-3 ${stock.agentConflict?.exists ? 'mt-2.5' : ''}`}>
           <div className="flex flex-col items-center gap-1 shrink-0">
             <span className="text-[10px] text-slate-600 font-mono">#{stock.rank}</span>
             <CompositeRing score={stock.compositeScore} />
@@ -190,7 +293,7 @@ function StockCard({ stock, onAnalyze, horizon }) {
               </div>
             </div>
 
-            <div className="flex gap-3 mb-3">
+            <div className="flex gap-2 mb-3 flex-wrap">
               <div className="flex items-center gap-1 text-[11px]">
                 <Target className="w-3 h-3 text-emerald-400" />
                 <span className="text-emerald-400 font-mono font-bold">+{stock.targetReturn}%</span>
@@ -199,6 +302,11 @@ function StockCard({ stock, onAnalyze, horizon }) {
                 <Shield className="w-3 h-3 text-red-400" />
                 <span className="text-red-400 font-mono font-bold">-{stock.stopLoss}%</span>
               </div>
+              {stock.volumeSignal && stock.volumeSignal !== 'Unknown' && (
+                <span className={`text-[9px] font-medium px-1.5 py-0.5 rounded ${volSig.bg} ${volSig.color}`}>
+                  {volSig.label}
+                </span>
+              )}
               {stock.sector && (
                 <span className="text-[10px] text-slate-500 bg-white/[0.04] px-1.5 py-0.5 rounded">{stock.sector}</span>
               )}
@@ -206,12 +314,11 @@ function StockCard({ stock, onAnalyze, horizon }) {
 
             <div className="space-y-1.5">
               {AGENTS.map(a => (
-                <ScoreBar key={a.key} agent={a} score={stock[a.scoreKey] ?? 0} />
+                <ScoreBar key={a.key} agent={a} score={stock[a.scoreKey] ?? 0} conflictAgents={conflictAgents} />
               ))}
             </div>
 
-            {/* Price levels */}
-            <PriceLevels stock={stock} />
+            <PriceZones stock={stock} />
 
             {stock.keyDrivers?.length > 0 && (
               <div className="flex flex-wrap gap-1 mt-3">
@@ -240,55 +347,68 @@ function StockCard({ stock, onAnalyze, horizon }) {
             onClick={() => setExpanded(v => !v)}
             className="flex-1 flex items-center justify-center gap-1 text-[10px] text-slate-600 hover:text-slate-400 transition-colors py-1"
           >
-            {expanded ? <><ChevronUp className="w-3 h-3" /> Less</> : <><ChevronDown className="w-3 h-3" /> Agent Analysis</>}
+            {expanded ? <><ChevronUp className="w-3 h-3" /> Less</> : <><ChevronDown className="w-3 h-3" /> Full Analysis</>}
           </button>
         </div>
       </div>
 
-      {expanded && (
-        <div className="border-t border-white/[0.06] px-4 pb-4 space-y-3 pt-3">
-          {AGENTS.map(a => (
-            <div key={a.key} className={`rounded-xl p-3 ${a.bg} border ${a.border}`}>
-              <div className={`flex items-center gap-1.5 mb-1 text-[11px] font-semibold ${a.color}`}>
-                <a.icon className="w-3 h-3" />
-                {a.label} Agent
-                <span className="ml-auto text-[10px] font-mono opacity-70">{stock[a.scoreKey]}/100</span>
+      <AnimatePresence>
+        {expanded && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="border-t border-white/[0.06] px-4 pb-4 space-y-3 pt-3 overflow-hidden"
+          >
+            {AGENTS.map(a => (
+              <div key={a.key} className={`rounded-xl p-3 ${a.bg} border ${a.border}`}>
+                <div className={`flex items-center gap-1.5 mb-1 text-[11px] font-semibold ${a.color}`}>
+                  <a.icon className="w-3 h-3" />
+                  {a.label} Agent
+                  <span className="ml-auto text-[10px] font-mono opacity-70">{stock[a.scoreKey]}/100</span>
+                  {conflictAgents.includes(a.label) && (
+                    <span className="text-amber-400 text-[9px] px-1 rounded bg-amber-500/15 border border-amber-500/20">⚡ conflicted</span>
+                  )}
+                </div>
+                <p className="text-[11px] text-slate-300 leading-relaxed">{stock[a.analysisKey]}</p>
               </div>
-              <p className="text-[11px] text-slate-300 leading-relaxed">{stock[a.analysisKey]}</p>
-            </div>
-          ))}
+            ))}
 
-          <div className="rounded-xl p-3 bg-mint-500/8 border border-mint-500/20">
-            <div className="flex items-center gap-1.5 mb-1 text-[11px] font-semibold text-mint-400">
-              <Brain className="w-3 h-3" />
-              Supervisor Synthesis
-            </div>
-            <p className="text-[11px] text-slate-300 leading-relaxed">{stock.supervisorSynthesis}</p>
-          </div>
-
-          {stock.bearCase && (
-            <div className="flex items-start gap-2 text-[11px] text-amber-400/80 bg-amber-500/8 rounded-lg px-3 py-2">
-              <AlertTriangle className="w-3 h-3 shrink-0 mt-0.5" />
-              <div>
-                <span className="font-semibold text-amber-400">Bear Case: </span>
-                <span>{stock.bearCase}</span>
+            <div className="rounded-xl p-3 bg-mint-500/8 border border-mint-500/20">
+              <div className="flex items-center gap-1.5 mb-1 text-[11px] font-semibold text-mint-400">
+                <Brain className="w-3 h-3" />
+                Supervisor Synthesis
               </div>
+              <p className="text-[11px] text-slate-300 leading-relaxed">{stock.supervisorSynthesis}</p>
             </div>
-          )}
 
-          {stock.thesisBreaker && (
-            <div className="flex items-start gap-2 text-[11px] text-red-400/80 bg-red-500/8 rounded-lg px-3 py-2">
-              <Shield className="w-3 h-3 shrink-0 mt-0.5" />
-              <div>
-                <span className="font-semibold text-red-400">Thesis Breaker: </span>
-                <span>{stock.thesisBreaker}</span>
+            <ThesisAssumptions assumptions={stock.thesisAssumptions} />
+
+            {stock.bearCase && (
+              <div className="flex items-start gap-2 text-[11px] text-amber-400/80 bg-amber-500/8 rounded-lg px-3 py-2">
+                <AlertTriangle className="w-3 h-3 shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-semibold text-amber-400">Bear Case: </span>
+                  <span>{stock.bearCase}</span>
+                </div>
               </div>
-            </div>
-          )}
-        </div>
-      )}
+            )}
+
+            {stock.thesisBreaker && (
+              <div className="flex items-start gap-2 text-[11px] text-red-400/80 bg-red-500/8 rounded-lg px-3 py-2">
+                <Shield className="w-3 h-3 shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-semibold text-red-400">Thesis Breaker: </span>
+                  <span>{stock.thesisBreaker}</span>
+                </div>
+              </div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
       </div>
-    </div>
+    </motion.div>
   )
 }
 
@@ -327,7 +447,7 @@ function AgentNotesPanel({ notes }) {
             <div className={`flex items-center gap-1 mb-1 text-[10px] font-semibold ${a.color}`}>
               <a.icon className="w-2.5 h-2.5" />{a.label}
             </div>
-            <p className="text-[10px] text-slate-400 leading-relaxed">{notes?.[a.noteKey]}</p>
+            <p className="text-[10px] text-slate-400 leading-relaxed">{notes?.[a.key === 'fundamental' ? 'fundamentalAnalyst' : a.key === 'technical' ? 'technicalAnalyst' : a.key === 'sentiment' ? 'sentimentAnalyst' : a.key === 'macro' ? 'macroEconomist' : 'riskManager']}</p>
           </div>
         ))}
       </div>
@@ -398,7 +518,7 @@ export default function AIBrainView({ portfolio, onAnalyze }) {
       const body = { horizon, holdings, scanMode }
       if (customSymbols.trim()) {
         body.symbols = parseSymbols(customSymbols)
-        delete body.scanMode  // custom symbols override scan mode
+        delete body.scanMode
       }
       const res  = await fetch('/api/ai-brain/analyze', {
         method:  'POST',
@@ -417,6 +537,9 @@ export default function AIBrainView({ portfolio, onAnalyze }) {
     }
   }, [horizon, holdings, customSymbols, scanMode])
 
+  // Count stocks with agent conflicts
+  const conflictCount = analysis?.rankedStocks?.filter(s => s.agentConflict?.exists).length ?? 0
+
   return (
     <div className="space-y-6 animate-fade-in">
 
@@ -429,12 +552,12 @@ export default function AIBrainView({ portfolio, onAnalyze }) {
           <div>
             <h1 className="text-xl font-bold text-white">AI Brain</h1>
             <p className="text-xs text-slate-500">
-              5-agent collaborative analysis · Fundamental · Technical · Sentiment · Macro · Risk
+              Contradiction engine · Fundamental · Technical · Sentiment · Macro · Risk
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2 shrink-0 flex-wrap">
           {analysis && (
             <button
               onClick={() => exportAnalysisToPDF(analysis, horizon)}
@@ -532,10 +655,10 @@ export default function AIBrainView({ portfolio, onAnalyze }) {
                 ? 'bg-mint-500/15 border-mint-500/30 text-mint-400 animate-pulse'
                 : 'bg-white/[0.03] border-white/[0.06] text-slate-600'
             }`}>
-              <Sparkles className="w-5 h-5" />
+              <GitFork className="w-5 h-5" />
             </div>
             <span className={`text-[9px] font-medium ${activeAgent === AGENTS.length ? 'text-mint-400' : 'text-slate-600'}`}>
-              Supervisor
+              Contradiction Engine
             </span>
           </div>
 
@@ -544,7 +667,7 @@ export default function AIBrainView({ portfolio, onAnalyze }) {
             <p className="text-slate-500 text-xs mt-1">
               {activeAgent < AGENTS.length && activeAgent >= 0
                 ? `${AGENTS[activeAgent].label} agent is evaluating…`
-                : 'Supervisor is synthesizing agent findings…'}
+                : 'Contradiction engine is surfacing disagreements…'}
             </p>
           </div>
 
@@ -579,10 +702,10 @@ export default function AIBrainView({ portfolio, onAnalyze }) {
             ))}
           </div>
           <div>
-            <p className="text-white font-semibold">5 Specialized AI Agents, One Consensus</p>
+            <p className="text-white font-semibold">5 Specialized Agents · Contradiction Engine · Confidence Zones</p>
             <p className="text-slate-500 text-sm mt-1 max-w-lg mx-auto">
-              Fundamental, Technical, Sentiment, Macro, and Risk agents collaborate through a supervisor
-              to score and rank stocks. Search custom symbols or use the default universe.
+              When agents disagree, the spread is the signal. Agent conflicts, volume confirmation,
+              thesis assumptions, and confidence zones — not false-precision price targets.
             </p>
           </div>
           <button onClick={runAnalysis} className="btn-primary flex items-center gap-2 mx-auto">
@@ -600,7 +723,7 @@ export default function AIBrainView({ portfolio, onAnalyze }) {
                 <Activity className="w-3.5 h-3.5 text-indigo-400" />
                 <span className="text-xs font-semibold text-indigo-400">Market Regime</span>
                 <span className="ml-auto flex items-center gap-2">
-                  {analysis.dataSource === 'live'
+                  {analysis.dataAge === 'live'
                     ? <span className="flex items-center gap-1 text-[10px] text-emerald-400"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />Live data</span>
                     : <span className="flex items-center gap-1 text-[10px] text-amber-400"><span className="w-1.5 h-1.5 rounded-full bg-amber-400" />Knowledge only</span>
                   }
@@ -612,8 +735,13 @@ export default function AIBrainView({ portfolio, onAnalyze }) {
             </div>
             <div className="glass rounded-xl p-4 border border-mint-500/15">
               <div className="flex items-center gap-2 mb-1">
-                <Sparkles className="w-3.5 h-3.5 text-mint-400" />
+                <GitFork className="w-3.5 h-3.5 text-mint-400" />
                 <span className="text-xs font-semibold text-mint-400">Agent Consensus</span>
+                {conflictCount > 0 && (
+                  <span className="ml-auto text-[10px] text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+                    ⚡ {conflictCount} conflict{conflictCount > 1 ? 's' : ''} detected
+                  </span>
+                )}
               </div>
               <p className="text-sm text-slate-200 leading-relaxed">{analysis.agentConsensusTheme}</p>
               <p className="text-[10px] text-slate-600 mt-2">Universe: {analysis.universeAnalyzed?.join(', ')}</p>
@@ -629,12 +757,12 @@ export default function AIBrainView({ portfolio, onAnalyze }) {
                 Ranked Picks — {HORIZON_OPTIONS.find(o => o.value === analysis.horizon)?.label} Horizon
               </span>
               <span className="text-xs text-slate-500 ml-auto flex items-center gap-2">
-                <DollarSign className="w-3 h-3" /> Entry · Target · Stop shown on each card
+                <Layers className="w-3 h-3" /> Zones · Assumptions · Conflicts
                 <span className="text-slate-600">·</span>
                 {analysis.rankedStocks.length} recommendations
               </span>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 ai-panel-in">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {analysis.rankedStocks.map((stock, i) => (
                 <StockCard key={`${stock.symbol}-${i}`} stock={stock} onAnalyze={onAnalyze} horizon={horizon} />
               ))}
@@ -643,7 +771,8 @@ export default function AIBrainView({ portfolio, onAnalyze }) {
 
           <div className="text-center text-[11px] text-slate-600 border-t border-white/[0.04] pt-3">
             AI Brain analysis is for informational purposes only. Not financial advice.
-            Multi-agent scoring does not guarantee future returns. Always conduct independent research.
+            Confidence zones and conflict signals do not guarantee future returns. Always conduct independent research.
+            Predictions are logged for win-rate tracking.
           </div>
         </>
       )}
