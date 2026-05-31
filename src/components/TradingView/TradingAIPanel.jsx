@@ -353,12 +353,14 @@ export default function TradingAIPanel({ symbol, interval, price }) {
                     />
                   </div>
 
-                  {/* Entry / Stop / Target grid */}
+                  {/* Entry zone / Stop / Target grid */}
                   <div className="grid grid-cols-3 gap-1.5 text-[11px]">
                     <div className="bg-white/[0.04] rounded-lg p-1.5">
-                      <div className="text-slate-500 text-[9px] mb-0.5">Entry</div>
-                      <div className="text-white font-mono">
-                        {analysis.entry != null ? `$${analysis.entry.toFixed(2)}` : '—'}
+                      <div className="text-slate-500 text-[9px] mb-0.5">Entry Zone</div>
+                      <div className="text-white font-mono leading-tight">
+                        {analysis.entryZoneLow != null && analysis.entryZoneHigh != null
+                          ? <><span className="text-[9px] opacity-70">${analysis.entryZoneLow.toFixed(2)}</span><br/><span className="text-[9px] opacity-70">– ${analysis.entryZoneHigh.toFixed(2)}</span></>
+                          : analysis.entry != null ? `$${analysis.entry.toFixed(2)}` : '—'}
                       </div>
                     </div>
                     <div className="bg-red-500/10 rounded-lg p-1.5">
@@ -430,12 +432,12 @@ export default function TradingAIPanel({ symbol, interval, price }) {
                       label="MACD"
                       value={
                         indicators.macd != null
-                          ? `${indicators.macd.value?.toFixed(3) ?? '—'} · ${indicators.macd.trend ?? '—'}`
-                          : (patterns.includes('macd_bullish') ? 'Bullish cross' : patterns.includes('macd_bearish') ? 'Bearish cross' : '—')
+                          ? `${indicators.macd.macd?.toFixed(3) ?? '—'} · ${indicators.macd.trend ?? '—'}`
+                          : '—'
                       }
                       colorClass={
-                        patterns.includes('macd_bullish') ? 'text-emerald-400'
-                          : patterns.includes('macd_bearish') ? 'text-red-400'
+                        indicators.macd?.trend === 'bullish' ? 'text-emerald-400'
+                          : indicators.macd?.trend === 'bearish' ? 'text-red-400'
                           : 'text-slate-300'
                       }
                       even={false}
@@ -562,6 +564,20 @@ export default function TradingAIPanel({ symbol, interval, price }) {
                   </div>
                 )}
 
+                {/* ── Contradictions ────────────────────────────────────── */}
+                {analysis.contradictions && analysis.contradictions.length > 0 && (
+                  <div className="px-3 mb-3">
+                    <div className="text-[10px] text-amber-500/70 mb-1.5 uppercase tracking-wider flex items-center gap-1">
+                      <AlertTriangle className="w-3 h-3" /> Signal Conflicts
+                    </div>
+                    <div className="rounded-lg bg-amber-500/5 border border-amber-500/15 p-2.5 space-y-1">
+                      {analysis.contradictions.map((c, i) => (
+                        <p key={i} className="text-[11px] text-amber-400/80 leading-tight">{c}</p>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* ── AI Reasoning ──────────────────────────────────────── */}
                 {analysis.reasoning && (
                   <div className="px-3 mb-3">
@@ -640,7 +656,15 @@ export default function TradingAIPanel({ symbol, interval, price }) {
             <div className="p-3 border-t border-white/[0.07] shrink-0">
               {/* Quick prompts */}
               <div className="flex gap-1 mb-2 flex-wrap">
-                {["Should I buy?", "What's the risk?", "Best entry?"].map(q => (
+                {[
+                  "Should I buy?",
+                  "What's the risk?",
+                  "Best entry?",
+                  "Where's the stop?",
+                  "Explain the trend",
+                  "Any red flags?",
+                  "Price target?",
+                ].map(q => (
                   <button
                     key={q}
                     onClick={() => setChatInput(q)}
