@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Guide Claude Code (claude.ai/code) for this repo.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Commands
 `npm run dev` — Vite:5173 + Express:3001 concurrently | `npm run build` → dist/ | `node server.js` — prod only. No tests/lint.
@@ -29,7 +29,7 @@ React18+Vite SPA → Express API proxy. Dev: Vite proxies `/api/*` → :3001. Pr
 **TwelveData search**: allows AMEX/CBOE/BATS exchanges; ETF instrument_type always passes
 
 ## API Keys
-`extractKeys(req)` in server.js: headers `x-aisa-key` `x-finnhub-key` `x-fmp-key` `x-td-key` `x-av-key` → env fallback. Client inject via `src/services/api.js` (30s cache).
+`extractKeys(req)` in server.js: headers `x-aisa-key` `x-finnhub-key` `x-fmp-key` `x-td-key` `x-av-key` → env fallback. Client injects via `src/services/api.js` (30s cache).
 
 ## AI Brain Scan Universes (`routes/ai-brain.js` → `SCAN_UNIVERSES`)
 `broad` | `stocks` + 11 GICS (`stocks_tech` … `stocks_real_estate`) | 8 ETF (`etfs_broad` `etfs_sector` `etfs_bond` `etfs_commodity` `etfs_intl` `etfs_leveraged` `etfs_thematic` `etfs_real_estate`) | 8 crypto (`crypto_l1` `crypto_l2` `crypto_defi` `crypto_ai` `crypto_meme` `crypto_infra` `crypto_exchange` `crypto_stable`) | 8 mutual fund (`mutualfunds` `mutualfunds_index` `mutualfunds_bond` …)
@@ -46,4 +46,4 @@ React18+Vite SPA → Express API proxy. Dev: Vite proxies `/api/*` → :3001. Pr
 ```
 
 ## Deploy
-Railway auto-deploy `main` (`railway.toml` + `Procfile`).
+Railway auto-deploys `main` (`railway.toml` + `Procfile`).
