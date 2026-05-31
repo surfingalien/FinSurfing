@@ -9,6 +9,7 @@
  */
 
 import { useState, useEffect, useRef } from 'react'
+import { AnimatePresence, motion } from 'motion/react'
 import {
   LayoutDashboard, PieChart, Eye, LineChart, Lightbulb,
   TrendingUp, SlidersHorizontal, GitBranch, Bell, Bot,
@@ -23,6 +24,7 @@ import AccountSwitcher from '../Portfolio/AccountSwitcher'
 import CreatePortfolioModal from '../Portfolio/CreatePortfolioModal'
 import ChangePasswordModal from '../Auth/ChangePasswordModal'
 import ApiKeysModal from '../Settings/ApiKeysModal'
+import { Tooltip } from '../shared/Tooltip'
 
 // ── Nav item definitions ──────────────────────────────────────────────────────
 
@@ -85,41 +87,32 @@ function buildGroups(user, triggeredCount, tradingUnread) {
   return groups
 }
 
-// ── Tooltip wrapper (shows label when collapsed) ──────────────────────────────
-function Tooltip({ label, children }) {
-  return (
-    <div className="relative group/tip">
-      {children}
-      <div className="absolute left-full top-1/2 -translate-y-1/2 ml-3 z-[200]
-                      px-2.5 py-1 rounded-md text-xs font-medium whitespace-nowrap
-                      bg-[#1a1f2e] border border-white/10 text-white shadow-xl
-                      opacity-0 pointer-events-none group-hover/tip:opacity-100
-                      transition-opacity duration-150">
-        {label}
-        <div className="absolute right-full top-1/2 -translate-y-1/2
-                        border-4 border-transparent border-r-[#1a1f2e]" />
-      </div>
-    </div>
-  )
-}
-
 // ── Single nav item ───────────────────────────────────────────────────────────
 function NavItem({ tab, active, collapsed, onClick }) {
   const Icon = tab.icon
-  const base =
-    'relative flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 group'
-  const activeStyle = tab.admin
-    ? 'bg-amber-500/15 text-amber-400 border border-amber-500/25'
-    : 'bg-mint-500/12 text-mint-400 border border-mint-500/20'
-  const idleStyle   = tab.admin
-    ? 'text-amber-500/50 hover:text-amber-400 hover:bg-amber-500/8 border border-transparent'
-    : 'text-slate-400 hover:text-white hover:bg-white/[0.05] border border-transparent'
+  const idleStyle = tab.admin
+    ? 'text-amber-500/60 hover:text-amber-400'
+    : 'text-slate-400 hover:text-white'
 
   const inner = (
-    <button onClick={onClick} className={`${base} ${active ? activeStyle : idleStyle}`}>
-      <Icon className={`w-4 h-4 shrink-0 ${active ? '' : 'opacity-70 group-hover:opacity-100'}`} />
+    <motion.button
+      onClick={onClick}
+      whileHover={{ x: collapsed ? 0 : 2 }}
+      whileTap={{ scale: 0.97 }}
+      transition={{ duration: 0.12 }}
+      className={`relative flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm font-medium
+                  border transition-colors duration-150 group
+                  ${active
+                    ? tab.admin
+                      ? 'bg-amber-500/15 text-amber-400 border-amber-500/25'
+                      : 'bg-mint-500/12 text-mint-400 border-mint-500/20'
+                    : tab.admin
+                      ? `border-transparent ${idleStyle} hover:bg-amber-500/8`
+                      : `border-transparent ${idleStyle} hover:bg-white/[0.05]`
+                  }`}
+    >
+      <Icon className={`w-4 h-4 shrink-0 transition-opacity ${active ? '' : 'opacity-70 group-hover:opacity-100'}`} />
       {!collapsed && <span className="truncate">{tab.label}</span>}
-      {/* Alert badge */}
       {tab.badge > 0 && (
         <span className={`
           ${collapsed ? 'absolute top-1 right-1' : 'ml-auto'}
@@ -129,10 +122,10 @@ function NavItem({ tab, active, collapsed, onClick }) {
           {tab.badge > 9 ? '9+' : tab.badge}
         </span>
       )}
-    </button>
+    </motion.button>
   )
 
-  return collapsed ? <Tooltip label={tab.label}>{inner}</Tooltip> : inner
+  return collapsed ? <Tooltip content={tab.label} side="right">{inner}</Tooltip> : inner
 }
 
 // ── User section (bottom of sidebar) ─────────────────────────────────────────
@@ -158,7 +151,7 @@ function UserSection({ collapsed, onNavigate, onSignIn }) {
         {!collapsed && 'Sign In'}
       </button>
     )
-    return collapsed ? <Tooltip label="Sign In">{btn}</Tooltip> : btn
+    return collapsed ? <Tooltip content="Sign In" side="right">{btn}</Tooltip> : btn
   }
 
   const initials = user.displayName
@@ -319,7 +312,7 @@ export default function Sidebar({
         {/* API Keys button */}
         {collapsed
           ? (
-            <Tooltip label="API Keys">
+            <Tooltip content="API Keys" side="right">
               <button onClick={() => setShowApiKeys(true)}
                 className={`relative flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm font-medium
                             border border-transparent transition-all
@@ -375,15 +368,23 @@ export default function Sidebar({
       </aside>
 
       {/* ── Mobile overlay drawer ── */}
-      {mobileOpen && (
+      <AnimatePresence>
+        {mobileOpen && (
         <>
           {/* Backdrop */}
-          <div className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm lg:hidden"
-               onClick={onMobileClose} />
+          <motion.div
+            className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm lg:hidden"
+            onClick={onMobileClose}
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            transition={{ duration: 0.18 }}
+          />
 
           {/* Drawer */}
-          <aside className="fixed inset-y-0 left-0 z-50 flex flex-col lg:hidden w-[220px]
-                            animate-in slide-in-from-left duration-200">
+          <motion.aside
+            className="fixed inset-y-0 left-0 z-50 flex flex-col lg:hidden w-[220px]"
+            initial={{ x: -220 }} animate={{ x: 0 }} exit={{ x: -220 }}
+            transition={{ type: 'spring', stiffness: 380, damping: 38 }}
+          >
             <div className="flex flex-col h-full border-r border-white/[0.06] bg-[#070b14]">
               {/* Close button */}
               <div className="flex items-center justify-between h-14 px-4 border-b border-white/[0.06] shrink-0">
@@ -450,9 +451,10 @@ export default function Sidebar({
                 <UserSection collapsed={false} onNavigate={handleTabChange} onSignIn={onSignIn} />
               </div>
             </div>
-          </aside>
+          </motion.aside>
         </>
-      )}
+        )}
+      </AnimatePresence>
 
       {showCreate   && <CreatePortfolioModal onClose={() => setShowCreate(false)} />}
       {showApiKeys  && <ApiKeysModal onClose={() => setShowApiKeys(false)} />}

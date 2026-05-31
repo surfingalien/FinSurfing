@@ -1,10 +1,12 @@
 import { useState, useMemo, useRef, useCallback } from 'react'
+import { AnimatePresence, motion } from 'motion/react'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { PortfolioProvider, usePortfolioContext } from './contexts/PortfolioContext'
 import { AITraderProvider } from './contexts/AITraderContext'
 import { ApiKeysProvider } from './contexts/ApiKeysContext'
 import { ProModeProvider } from './contexts/ProModeContext'
 import { ToastProvider } from './components/shared/ToastNotifications'
+import { TooltipProvider } from './components/shared/Tooltip'
 import LandingPage from './components/Landing/LandingPage'
 import AuthPage from './components/Auth/AuthPage'
 import Header from './components/Layout/Header'
@@ -181,7 +183,15 @@ function MainApp({ onSignIn }) {
 
         {/* Scrollable main content */}
         <main ref={mainRef} className="flex-1 overflow-y-auto">
-          <div className="max-w-screen-2xl mx-auto w-full px-4 py-6">
+          <AnimatePresence mode="wait">
+          <motion.div
+            key={activeTab}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.18, ease: 'easeOut' }}
+            className="max-w-screen-2xl mx-auto w-full px-4 py-6"
+          >
             {activeTab === 'dashboard' && (
               <DashboardView portfolio={portfolio} onAnalyze={navigateToAnalyze} />
             )}
@@ -259,7 +269,8 @@ function MainApp({ onSignIn }) {
             {activeTab === 'admin' && (
               <AdminDashboard />
             )}
-          </div>
+          </motion.div>
+          </AnimatePresence>
 
           <footer className="border-t border-white/[0.04] py-4 px-6">
             <div className="max-w-screen-2xl mx-auto flex items-center justify-between text-xs text-slate-600">
@@ -278,11 +289,13 @@ export default function App() {
   return (
     <ProModeProvider>
       <ApiKeysProvider>
-        <ToastProvider>
-          <AuthProvider>
-            <AppInner />
-          </AuthProvider>
-        </ToastProvider>
+        <TooltipProvider>
+          <ToastProvider>
+            <AuthProvider>
+              <AppInner />
+            </AuthProvider>
+          </ToastProvider>
+        </TooltipProvider>
       </ApiKeysProvider>
     </ProModeProvider>
   )
