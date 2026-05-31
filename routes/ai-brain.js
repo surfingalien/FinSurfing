@@ -37,6 +37,7 @@ const SCAN_UNIVERSES = {
     'NVDA','MSFT','AAPL','AMZN','GOOGL','META','TSLA','JPM','LLY','CRWD',
     'PLTR','AVGO','SPY','QQQ','GLD','ARKK','BTC-USD','ETH-USD','SOL-USD','BNB-USD',
   ],
+  // ── Stock sector aliases (kept for backward compat, also used as sub-modes) ──
   tech: [
     'NVDA','MSFT','AAPL','GOOGL','META','AMZN','AMD','AVGO','CRM','ADBE',
     'SNOW','PLTR','CRWD','ANET','TSLA','SMCI','ARM','INTC','QCOM','MU',
@@ -50,8 +51,65 @@ const SCAN_UNIVERSES = {
     'BMY','MRNA','CVS','CI','HUM','MDT','ABT','TMO','DHR','BSX',
   ],
   energy: [
-    'XOM','CVX','COP','SLB','CAT','DE','HON','RTX','GE','BA',
-    'UPS','LMT','NEE','DUK','AMT','WM','PLD','WELL','O','PSA',
+    'XOM','CVX','COP','SLB','EOG','PXD','HAL','VLO','PSX','MPC',
+    'DVN','FANG','OXY','HES','BKR','MRO','APA','NOV','FTI','CHK',
+  ],
+  // ── Stocks parent + all 11 GICS sectors ─────────────────────────────────────
+  stocks: [
+    // All-sector top 20 US equities
+    'NVDA','MSFT','AAPL','AMZN','GOOGL','META','TSLA','JPM','LLY','CRWD',
+    'BRK-B','UNH','JNJ','XOM','V','AVGO','MA','PG','HD','ABBV',
+  ],
+  stocks_tech: [
+    'NVDA','MSFT','AAPL','GOOGL','META','AMZN','AMD','AVGO','CRM','ADBE',
+    'SNOW','PLTR','CRWD','ANET','TSLA','SMCI','ARM','INTC','QCOM','MU',
+  ],
+  stocks_finance: [
+    'JPM','BAC','WFC','GS','MS','V','MA','BRK-B','SCHW','AXP',
+    'C','BLK','KKR','APO','SPGI','ICE','CME','PGR','CB','MET',
+  ],
+  stocks_healthcare: [
+    'LLY','UNH','JNJ','ABBV','MRK','PFE','AMGN','ISRG','VRTX','REGN',
+    'BMY','MRNA','CVS','CI','HUM','MDT','ABT','TMO','DHR','BSX',
+  ],
+  stocks_energy: [
+    'XOM','CVX','COP','SLB','EOG','PXD','HAL','VLO','PSX','MPC',
+    'DVN','FANG','OXY','HES','BKR','MRO','APA','NOV','FTI','CHK',
+  ],
+  stocks_consumer_disc: [
+    // Consumer Discretionary
+    'AMZN','TSLA','HD','MCD','NKE','TGT','SBUX','BKNG','LOW','CMG',
+    'ABNB','ROST','TJX','YUM','DHI','LEN','F','GM','EBAY','ETSY',
+  ],
+  stocks_consumer_stap: [
+    // Consumer Staples
+    'PG','KO','PEP','WMT','COST','PM','MO','CL','EL','CHD',
+    'GIS','K','CPB','HRL','SJM','MKC','CAG','HSY','TSN','KHC',
+  ],
+  stocks_industrials: [
+    // Industrials
+    'CAT','DE','HON','RTX','GE','BA','UPS','LMT','UNP','CSX',
+    'NSC','FDX','ETN','ITW','PH','EMR','ROK','IEX','CARR','OTIS',
+  ],
+  stocks_materials: [
+    // Materials
+    'LIN','APD','ECL','FCX','NUE','VMC','MLM','IFF','PPG','EMN',
+    'DD','DOW','CF','MOS','ALB','WRK','IP','PKG','SEE','BLL',
+  ],
+  stocks_utilities: [
+    // Utilities
+    'NEE','DUK','SO','D','AEE','AWK','WEC','EXC','PEG','ES',
+    'EIX','PCG','AES','ETR','FE','CMS','NI','EVRG','PNW','ATO',
+  ],
+  stocks_realestate: [
+    // Real Estate REITs
+    'AMT','PLD','CCI','EQIX','PSA','DLR','O','WY','VTR','SPG',
+    'AVB','EQR','ARE','VICI','NNN','EXR','INVH','MAA','UDR','CPT',
+  ],
+  stocks_comms: [
+    // Communication Services
+    'GOOGL','META','DIS','NFLX','CMCSA','T','VZ','CHTR','TMUS','EA',
+    'TTWO','ATVI','WBD','FOXA','FOX','PARA','SNAP','PINS','MTCH','ZG',
   ],
   etfs: [
     'SPY','QQQ','GLD','TLT','IWM','VTI','ARKK','XLK','XLE','XLF',
@@ -111,10 +169,10 @@ const SCAN_UNIVERSES = {
   ],
   crypto_l2: [
     // Layer 2 scaling solutions and rollups
-    'MATIC-USD','ARB-USD','OP-USD','IMX-USD','LRC-USD','METIS-USD',
-    'BOBA-USD','ZKS-USD','MNT-USD','STRK-USD','MANTA-USD','KAVA-USD',
-    'CELO-USD','MOVR-USD','GLMR-USD','ACA-USD','CFG-USD','ROSE-USD',
-    'SCRT-USD','ASTR-USD',
+    'MATIC-USD','ARB-USD','OP-USD','IMX-USD','LRC-USD','MNT-USD',
+    'STRK-USD','ZK-USD','METIS-USD','MANTA-USD','BOBA-USD','KAVA-USD',
+    'CELO-USD','MOVR-USD','GLMR-USD','ROSE-USD','ASTR-USD','SCRT-USD',
+    'CFG-USD','ACA-USD',
   ],
   crypto_defi: [
     // Decentralized finance protocols
@@ -131,25 +189,25 @@ const SCAN_UNIVERSES = {
     'MYRIA-USD','NGL-USD',
   ],
   crypto_meme: [
-    // Meme and community-driven coins
+    // Meme and community-driven coins — major exchanges only
     'DOGE-USD','SHIB-USD','PEPE-USD','BONK-USD','FLOKI-USD','WIF-USD',
-    'MEME-USD','BRETT-USD','TURBO-USD','COQ-USD','MYRO-USD','SLERF-USD',
-    'POPCAT-USD','MEW-USD','BOME-USD','GME-USD','MOG-USD','LADYS-USD',
-    'SATS-USD','ORDI-USD',
+    'MEME-USD','TURBO-USD','BOME-USD','ORDI-USD','SATS-USD','NEIRO-USD',
+    'BRETT-USD','APE-USD','BLUR-USD','GALA-USD','GMT-USD','LUNC-USD',
+    'MANA-USD','SAND-USD',
   ],
   crypto_infra: [
     // Infrastructure, storage, DePIN, and oracle networks
     'LINK-USD','FIL-USD','HNT-USD','AR-USD','STORJ-USD','IOTX-USD',
     'RLC-USD','ANKR-USD','BAND-USD','API3-USD','RPL-USD','FLUX-USD',
     'COTI-USD','GLM-USD','CTSI-USD','NKN-USD','THETA-USD','TFUEL-USD',
-    'SKY-USD','XYO-USD',
+    'AKT-USD','AIOZ-USD',
   ],
   crypto_exchange: [
-    // Exchange tokens and CeFi / payment networks
+    // Exchange tokens, payments, and major settlement networks
     'BNB-USD','CRO-USD','XRP-USD','XLM-USD','LTC-USD','BCH-USD',
-    'XMR-USD','ZEC-USD','DASH-USD','WAVES-USD','OMG-USD','OXT-USD',
-    'MCO-USD','HTX-USD','GT-USD','NEXO-USD','CEL-USD','BGB-USD',
-    'FTT-USD','KCS-USD',
+    'XMR-USD','ZEC-USD','DASH-USD','WAVES-USD','OMG-USD','ZRX-USD',
+    'BAT-USD','ENJ-USD','CHZ-USD','GAS-USD','NEXO-USD','STX-USD',
+    'CFX-USD','NANO-USD',
   ],
   // ── Mutual fund category universes ──────────────────────────
   mutualfunds: [
@@ -317,7 +375,7 @@ CRITICAL: When two agents disagree by 25+ points, that spread IS the primary sig
 Analyze this universe for a ${horizonLabel} horizon. Today is late May 2026.
 Universe: ${universe.join(', ')}
 Avoid holdings: ${holdingStr}
-${scanMode.startsWith('mutualfunds') ? `\nNOTE: This universe contains mutual funds (category: ${scanMode === 'mutualfunds' ? 'Broad All-Category' : scanMode.replace('mutualfunds_','').toUpperCase()}). Score each fund on: (1) Fundamental = portfolio holdings quality, manager tenure & track record, alpha vs benchmark, (2) Technical = NAV trend, momentum, and performance relative to category peers, (3) Sentiment = fund flows, retail/institutional demand, manager commentary, (4) Macro = asset-class fit for current rate/growth/inflation regime, (5) Risk = expense ratio, max drawdown, concentration risk, redemption risk. Price targets refer to NAV zones. Omit stop-loss precision — use downside risk zones only.` : ''}${scanMode.startsWith('etfs_') ? `\nNOTE: This is an ETF sub-category scan (${scanMode.replace('etfs_','').toUpperCase()}). Scoring focus: (1) Fundamental = underlying index quality, holdings composition, expense ratio vs peers, (2) Technical = ETF price trend & momentum, discount/premium to NAV, options flow if available, (3) Sentiment = fund flows, AUM trend, institutional rotation signals, (4) Macro = how well this ETF category fits the current rate/sector/growth regime, (5) Risk = liquidity, tracking error, concentration, leverage if any.` : ''}${scanMode.startsWith('crypto_') ? `\nNOTE: This is a crypto sub-category scan (${scanMode.replace('crypto_','').toUpperCase()}). Scoring focus: (1) Fundamental = protocol TVL, revenue, developer activity, tokenomics, (2) Technical = price trend vs BTC, momentum, on-chain volume signal, (3) Sentiment = social dominance, whale flows, exchange inflows/outflows, (4) Macro = correlation to BTC cycle stage, risk-on/off regime, regulatory climate, (5) Risk = smart contract risk, liquidity depth, centralization risk. Consider current crypto market cycle phase.` : ''}
+${scanMode.startsWith('mutualfunds') ? `\nNOTE: This universe contains mutual funds (category: ${scanMode === 'mutualfunds' ? 'Broad All-Category' : scanMode.replace('mutualfunds_','').toUpperCase()}). Score each fund on: (1) Fundamental = portfolio holdings quality, manager tenure & track record, alpha vs benchmark, (2) Technical = NAV trend, momentum, and performance relative to category peers, (3) Sentiment = fund flows, retail/institutional demand, manager commentary, (4) Macro = asset-class fit for current rate/growth/inflation regime, (5) Risk = expense ratio, max drawdown, concentration risk, redemption risk. Price targets refer to NAV zones. Omit stop-loss precision — use downside risk zones only.` : ''}${scanMode.startsWith('etfs_') ? `\nNOTE: This is an ETF sub-category scan (${scanMode.replace('etfs_','').toUpperCase()}). Scoring focus: (1) Fundamental = underlying index quality, holdings composition, expense ratio vs peers, (2) Technical = ETF price trend & momentum, discount/premium to NAV, options flow if available, (3) Sentiment = fund flows, AUM trend, institutional rotation signals, (4) Macro = how well this ETF category fits the current rate/sector/growth regime, (5) Risk = liquidity, tracking error, concentration, leverage if any.` : ''}${scanMode.startsWith('crypto_') ? `\nNOTE: This is a crypto sub-category scan (${scanMode.replace('crypto_','').toUpperCase()}). Scoring focus: (1) Fundamental = protocol TVL, revenue, developer activity, tokenomics, (2) Technical = price trend vs BTC, momentum, on-chain volume signal, (3) Sentiment = social dominance, whale flows, exchange inflows/outflows, (4) Macro = correlation to BTC cycle stage, risk-on/off regime, regulatory climate, (5) Risk = smart contract risk, liquidity depth, centralization risk. Consider current crypto market cycle phase.` : ''}${scanMode.startsWith('stocks_') ? `\nNOTE: This is a stock sector scan (GICS Sector: ${scanMode.replace('stocks_','').replace(/_/g,' ').toUpperCase()}). Scoring focus: (1) Fundamental = earnings growth, margins, valuation vs sector peers, balance sheet quality, (2) Technical = price trend, relative strength vs S&P 500, breakout/breakdown levels, (3) Sentiment = analyst upgrades/downgrades, short interest, insider activity, (4) Macro = sector-specific tailwinds/headwinds in the current rate/growth regime, (5) Risk = concentration risk, regulatory exposure, competitive moat strength.` : ''}
 ${marketSnippet}
 
 ⚠️ STRICT TOKEN BUDGET — respect every word limit or the response will be truncated.

@@ -26,10 +26,7 @@ import { exportAnalysisToPDF } from '../../utils/pdfExport'
 /* ── scan modes ────────────────────────────────────────────── */
 const SCAN_MODES = [
   { id: 'broad',      label: 'Broad Market',  icon: Globe,      color: 'text-mint-400',    bg: 'bg-mint-500/15',    border: 'border-mint-500/30'    },
-  { id: 'tech',       label: 'Tech & AI',     icon: Cpu,        color: 'text-blue-400',    bg: 'bg-blue-500/15',    border: 'border-blue-500/30'    },
-  { id: 'finance',    label: 'Finance',       icon: BarChart2,  color: 'text-amber-400',   bg: 'bg-amber-500/15',   border: 'border-amber-500/30'   },
-  { id: 'healthcare', label: 'Healthcare',    icon: HeartPulse, color: 'text-rose-400',    bg: 'bg-rose-500/15',    border: 'border-rose-500/30'    },
-  { id: 'energy',     label: 'Energy & Ind.', icon: ZapEnergy,  color: 'text-orange-400',  bg: 'bg-orange-500/15',  border: 'border-orange-500/30'  },
+  { id: 'stocks',     label: 'Stocks',        icon: TrendingUp, color: 'text-sky-400',     bg: 'bg-sky-500/15',     border: 'border-sky-500/30'     },
   { id: 'etfs',       label: 'ETFs',          icon: LineChart,  color: 'text-purple-400',  bg: 'bg-purple-500/15',  border: 'border-purple-500/30'  },
   { id: 'crypto',     label: 'Crypto',        icon: Bitcoin,    color: 'text-yellow-400',  bg: 'bg-yellow-500/15',  border: 'border-yellow-500/30'  },
   { id: 'mutualfunds', label: 'Mutual Funds', icon: PieChart,   color: 'text-teal-400',    bg: 'bg-teal-500/15',    border: 'border-teal-500/30'    },
@@ -45,6 +42,21 @@ const FUND_SUBMODES = [
   { id: 'mutualfunds_bond',     label: 'Bond / Fixed',  description: 'VBTLX, PTTAX, MWTRX, DODIX…'           },
   { id: 'mutualfunds_intl',     label: 'International', description: 'DODFX, VGTSX, PRIDX, FDIVX…'           },
   { id: 'mutualfunds_balanced', label: 'Balanced',      description: 'PRWCX, VWELX, FPURX, TRRIX…'           },
+]
+
+const STOCK_SUBMODES = [
+  { id: 'stocks',                label: 'All Sectors',       description: 'Top 20 US equities across all GICS sectors'   },
+  { id: 'stocks_tech',           label: 'Technology',        description: 'NVDA, MSFT, AAPL, AMD, CRWD, ARM, AVGO…'      },
+  { id: 'stocks_finance',        label: 'Financials',        description: 'JPM, GS, BAC, V, MA, BRK-B, BLK, KKR…'       },
+  { id: 'stocks_healthcare',     label: 'Healthcare',        description: 'LLY, UNH, JNJ, ABBV, ISRG, VRTX, AMGN…'      },
+  { id: 'stocks_energy',         label: 'Energy',            description: 'XOM, CVX, COP, SLB, EOG, HAL, VLO…'           },
+  { id: 'stocks_consumer_disc',  label: 'Consumer Discr.',   description: 'AMZN, TSLA, HD, MCD, NKE, BKNG, SBUX…'        },
+  { id: 'stocks_consumer_stap',  label: 'Consumer Staples',  description: 'PG, KO, PEP, WMT, COST, PM, CL, GIS…'         },
+  { id: 'stocks_industrials',    label: 'Industrials',       description: 'CAT, DE, HON, RTX, GE, BA, UPS, LMT…'         },
+  { id: 'stocks_materials',      label: 'Materials',         description: 'LIN, APD, ECL, FCX, NUE, VMC, PPG, DD…'        },
+  { id: 'stocks_utilities',      label: 'Utilities',         description: 'NEE, DUK, SO, AWK, WEC, EXC, PEG, AES…'        },
+  { id: 'stocks_realestate',     label: 'Real Estate',       description: 'AMT, PLD, EQIX, PSA, DLR, O, VICI, SPG…'      },
+  { id: 'stocks_comms',          label: 'Communication',     description: 'GOOGL, META, DIS, NFLX, T, VZ, TMUS, EA…'     },
 ]
 
 const ETF_SUBMODES = [
@@ -639,9 +651,10 @@ export default function AIBrainView({ portfolio, onAnalyze }) {
           {SCAN_MODES.map(m => {
             const Icon = m.icon
             const active = scanMode === m.id
-              || (m.id === 'mutualfunds' && scanMode.startsWith('mutualfunds'))
+              || (m.id === 'stocks'      && scanMode.startsWith('stocks'))
               || (m.id === 'etfs'        && scanMode.startsWith('etfs_'))
               || (m.id === 'crypto'      && scanMode.startsWith('crypto_'))
+              || (m.id === 'mutualfunds' && scanMode.startsWith('mutualfunds'))
             return (
               <button
                 key={m.id}
@@ -662,30 +675,36 @@ export default function AIBrainView({ portfolio, onAnalyze }) {
       )}
 
       {/* ── Sub-category pickers ── */}
-      {(scanMode.startsWith('mutualfunds') || scanMode.startsWith('etfs') || scanMode.startsWith('crypto')) && !customSymbols.trim() && (() => {
+      {(scanMode.startsWith('stocks') || scanMode.startsWith('mutualfunds') || scanMode.startsWith('etfs') || scanMode.startsWith('crypto')) && !customSymbols.trim() && (() => {
+        const isStock  = scanMode === 'stocks' || scanMode.startsWith('stocks_')
         const isFund   = scanMode.startsWith('mutualfunds')
         const isEtf    = scanMode === 'etfs' || scanMode.startsWith('etfs_')
         const isCrypto = scanMode === 'crypto' || scanMode.startsWith('crypto_')
-        const submodes = isFund ? FUND_SUBMODES : isEtf ? ETF_SUBMODES : CRYPTO_SUBMODES
-        const accent   = isFund ? 'teal' : isEtf ? 'purple' : 'yellow'
-        const Icon     = isFund ? PieChart : isEtf ? LineChart : Bitcoin
-        const label    = isFund ? 'Fund Category' : isEtf ? 'ETF Category' : 'Crypto Sector'
-        const activeColor = isFund
-          ? 'bg-teal-500/20 text-teal-300 border-teal-500/40'
-          : isEtf
-            ? 'bg-purple-500/20 text-purple-300 border-purple-500/40'
-            : 'bg-yellow-500/20 text-yellow-300 border-yellow-500/40'
-        const hoverColor = isFund
-          ? 'hover:text-teal-300 hover:border-teal-500/25'
-          : isEtf
-            ? 'hover:text-purple-300 hover:border-purple-500/25'
-            : 'hover:text-yellow-300 hover:border-yellow-500/25'
-        const panelStyle = isFund
-          ? 'bg-teal-500/5 border-teal-500/15'
-          : isEtf
-            ? 'bg-purple-500/5 border-purple-500/15'
-            : 'bg-yellow-500/5 border-yellow-500/15'
-        const headerColor = isFund ? 'text-teal-400/70' : isEtf ? 'text-purple-400/70' : 'text-yellow-400/70'
+        const submodes = isStock ? STOCK_SUBMODES : isFund ? FUND_SUBMODES : isEtf ? ETF_SUBMODES : CRYPTO_SUBMODES
+        const Icon     = isStock ? TrendingUp : isFund ? PieChart : isEtf ? LineChart : Bitcoin
+        const label    = isStock ? 'Stock Sector (GICS)' : isFund ? 'Fund Category' : isEtf ? 'ETF Category' : 'Crypto Sector'
+        const activeColor = isStock
+          ? 'bg-sky-500/20 text-sky-300 border-sky-500/40'
+          : isFund
+            ? 'bg-teal-500/20 text-teal-300 border-teal-500/40'
+            : isEtf
+              ? 'bg-purple-500/20 text-purple-300 border-purple-500/40'
+              : 'bg-yellow-500/20 text-yellow-300 border-yellow-500/40'
+        const hoverColor = isStock
+          ? 'hover:text-sky-300 hover:border-sky-500/25'
+          : isFund
+            ? 'hover:text-teal-300 hover:border-teal-500/25'
+            : isEtf
+              ? 'hover:text-purple-300 hover:border-purple-500/25'
+              : 'hover:text-yellow-300 hover:border-yellow-500/25'
+        const panelStyle = isStock
+          ? 'bg-sky-500/5 border-sky-500/15'
+          : isFund
+            ? 'bg-teal-500/5 border-teal-500/15'
+            : isEtf
+              ? 'bg-purple-500/5 border-purple-500/15'
+              : 'bg-yellow-500/5 border-yellow-500/15'
+        const headerColor = isStock ? 'text-sky-400/70' : isFund ? 'text-teal-400/70' : isEtf ? 'text-purple-400/70' : 'text-yellow-400/70'
         const activeSub = submodes.find(s => s.id === scanMode)
         return (
           <div className={`flex flex-col gap-2 p-3 rounded-xl border ${panelStyle}`}>
