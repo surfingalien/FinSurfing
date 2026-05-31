@@ -14,9 +14,27 @@ const router = express.Router()
 
 // ── Crypto detection (mirrors server.js isCryptoSymbol) ───────────────────────
 const CRYPTO_TICKERS = new Set([
+  // Layer 1
   'BTC','ETH','SOL','BNB','XRP','ADA','DOGE','AVAX','DOT','MATIC','LINK',
-  'UNI','LTC','BCH','TRX','NEAR','SHIB','APT','ARB','OP','SUI','SEI','INJ',
-  'TIA','JUP','WIF','BONK','PEPE','TON','ATOM','FIL','ICP','XLM','XMR',
+  'UNI','LTC','BCH','TRX','NEAR','SHIB','APT','SUI','SEI','INJ','TIA','JUP',
+  'TON','ATOM','FIL','ICP','XLM','XMR','DASH','ZEC','ETC','FTM','ONE','WAVES',
+  'HBAR','FLOW','EOS','XTZ','THETA','ALGO','VET','EGLD','KAVA','CELO',
+  // Layer 2
+  'ARB','OP','IMX','LRC','MNT','STRK','ZK','METIS','MANTA','MOVR','GLMR',
+  'BOBA','ROSE','ASTR','SCRT','CFG','ACA',
+  // DeFi
+  'AAVE','MKR','COMP','SNX','YFI','SUSHI','CRV','DYDX','GMX','PENDLE',
+  'CVX','FXS','LDO','RPL','RUNE','BAL','1INCH','OSMO','CAKE',
+  // AI & Data
+  'FET','OCEAN','AGIX','RNDR','WLD','GRT','NMR','TAO','AKT','ALT','AIOZ','ARKM',
+  // Meme
+  'WIF','BONK','PEPE','FLOKI','MEME','BOME','TURBO','ORDI','SATS','BRETT','NEIRO',
+  // Infrastructure
+  'HNT','AR','STORJ','IOTX','RLC','ANKR','BAND','API3','FLUX','COTI','GLM',
+  'CTSI','NKN','TFUEL',
+  // Exchange & payments
+  'CRO','STX','CFX','GALA','GMT','APE','LUNC','PYTH','JTO',
+  'ZETA','BLUR','BAT','MANA','SAND','AXS',
 ])
 function isCryptoSymbol(s) {
   if (!s) return false
@@ -27,65 +45,120 @@ function isCryptoSymbol(s) {
 // ── Symbol conversion: TradingView → Yahoo Finance ────────────────────────────
 
 const CRYPTO_MAP = {
-  'BTCUSD':  'BTC-USD',
-  'ETHUSD':  'ETH-USD',
-  'SOLUSD':  'SOL-USD',
-  'SOLUSDT': 'SOL-USD',
-  'BTCUSDT': 'BTC-USD',
-  'ETHUSDT': 'ETH-USD',
-  'XRPUSD':  'XRP-USD',
-  'XRPUSDT': 'XRP-USD',
-  'BNBUSD':  'BNB-USD',
-  'BNBUSDT': 'BNB-USD',
-  'ADAUSD':  'ADA-USD',
-  'ADAUSDT': 'ADA-USD',
-  'DOGEUSD': 'DOGE-USD',
-  'DOGEUSDT':'DOGE-USD',
-  'AVAXUSD': 'AVAX-USD',
-  'AVAXUSDT':'AVAX-USD',
-  'LINKUSD': 'LINK-USD',
-  'LINKUSDT':'LINK-USD',
-  'MATICUSD':'MATIC-USD',
-  'MATICUSDT':'MATIC-USD',
-  'DOTUSD':  'DOT-USD',
-  'DOTUSDT': 'DOT-USD',
-  'LTCUSD':  'LTC-USD',
-  'LTCUSDT': 'LTC-USD',
-  'ATOMUSD': 'ATOM-USD',
-  'ATOMUSDT':'ATOM-USD',
-  'UNIUSD':  'UNI-USD',
-  'UNIUSDT': 'UNI-USD',
-  'SHIBUSD': 'SHIB-USD',
-  'SHIBUSDT':'SHIB-USD',
-  'PEPEUSD': 'PEPE-USD',
-  'PEPEUSDT':'PEPE-USD',
-  'NEARUSD': 'NEAR-USD',
-  'NEARUSDT':'NEAR-USD',
-  'APTUSDT': 'APT-USD',
-  'ARBUSD':  'ARB-USD',
-  'ARBUSDT': 'ARB-USD',
-  'OPUSD':   'OP-USD',
-  'OPUSDT':  'OP-USD',
-  'SUIUSD':  'SUI-USD',
-  'SUIUSDT': 'SUI-USD',
-  'INJUSD':  'INJ-USD',
-  'INJUSDT': 'INJ-USD',
-  'TONUSD':  'TON-USD',
-  'TONUSDT': 'TON-USD',
-  'FILUSD':  'FIL-USD',
-  'FILUSDT': 'FIL-USD',
-  'ICPUSD':  'ICP-USD',
-  'ICPUSDT': 'ICP-USD',
-  'TRXUSD':  'TRX-USD',
-  'TRXUSDT': 'TRX-USD',
-  'XLMUSD':  'XLM-USD',
-  'XLMUSDT': 'XLM-USD',
-  'XMRUSD':  'XMR-USD',
-  'ZETAUSD': 'ZETA-USD',
-  'WIFUSD':  'WIF-USD',
-  'WIFUSDT': 'WIF-USD',
-  'JUPUSD':  'JUP-USD',
-  'JUPUSDT': 'JUP-USD',
+  // Major L1
+  'BTCUSD':'BTC-USD',   'BTCUSDT':'BTC-USD',
+  'ETHUSD':'ETH-USD',   'ETHUSDT':'ETH-USD',
+  'SOLUSD':'SOL-USD',   'SOLUSDT':'SOL-USD',
+  'XRPUSD':'XRP-USD',   'XRPUSDT':'XRP-USD',
+  'BNBUSD':'BNB-USD',   'BNBUSDT':'BNB-USD',
+  'ADAUSD':'ADA-USD',   'ADAUSDT':'ADA-USD',
+  'DOGEUSD':'DOGE-USD', 'DOGEUSDT':'DOGE-USD',
+  'AVAXUSD':'AVAX-USD', 'AVAXUSDT':'AVAX-USD',
+  'LINKUSD':'LINK-USD', 'LINKUSDT':'LINK-USD',
+  'MATICUSD':'MATIC-USD','MATICUSDT':'MATIC-USD',
+  'DOTUSD':'DOT-USD',   'DOTUSDT':'DOT-USD',
+  'LTCUSD':'LTC-USD',   'LTCUSDT':'LTC-USD',
+  'ATOMUSD':'ATOM-USD', 'ATOMUSDT':'ATOM-USD',
+  'UNIUSD':'UNI-USD',   'UNIUSDT':'UNI-USD',
+  'SHIBUSD':'SHIB-USD', 'SHIBUSDT':'SHIB-USD',
+  'PEPEUSD':'PEPE-USD', 'PEPEUSDT':'PEPE-USD',
+  'NEARUSD':'NEAR-USD', 'NEARUSDT':'NEAR-USD',
+  'APTUSD':'APT-USD',   'APTUSDT':'APT-USD',
+  'SUIUSD':'SUI-USD',   'SUIUSDT':'SUI-USD',
+  'INJUSD':'INJ-USD',   'INJUSDT':'INJ-USD',
+  'TONUSD':'TON-USD',   'TONUSDT':'TON-USD',
+  'FILUSD':'FIL-USD',   'FILUSDT':'FIL-USD',
+  'ICPUSD':'ICP-USD',   'ICPUSDT':'ICP-USD',
+  'TRXUSD':'TRX-USD',   'TRXUSDT':'TRX-USD',
+  'XLMUSD':'XLM-USD',   'XLMUSDT':'XLM-USD',
+  'XMRUSD':'XMR-USD',
+  'TIAUSD':'TIA-USD',   'TIAUSDT':'TIA-USD',
+  'JUPUSD':'JUP-USD',   'JUPUSDT':'JUP-USD',
+  'HBARUSD':'HBAR-USD', 'HBARUSDT':'HBAR-USD',
+  'FTMUSD':'FTM-USD',   'FTMUSDT':'FTM-USD',
+  'ALGOUSD':'ALGO-USD', 'ALGOUSDT':'ALGO-USD',
+  'VETUSD':'VET-USD',   'VETUSDT':'VET-USD',
+  'EOSUSD':'EOS-USD',   'EOSUSDT':'EOS-USD',
+  'ZECUSD':'ZEC-USD',   'ZECUSDT':'ZEC-USD',
+  'ETCUSD':'ETC-USD',   'ETCUSDT':'ETC-USD',
+  'EGLDUSDT':'EGLD-USD',
+  'KAVAUSD':'KAVA-USD', 'KAVAUSDT':'KAVA-USD',
+  'CELOUSDT':'CELO-USD',
+  // Layer 2
+  'ARBUSD':'ARB-USD',   'ARBUSDT':'ARB-USD',
+  'OPUSD':'OP-USD',     'OPUSDT':'OP-USD',
+  'IMXUSD':'IMX-USD',   'IMXUSDT':'IMX-USD',
+  'LRCUSD':'LRC-USD',   'LRCUSDT':'LRC-USD',
+  'MNTUSDT':'MNT-USD',
+  'STRKUSDT':'STRK-USD',
+  'ZKUSDT':'ZK-USD',
+  'METISUSDT':'METIS-USD',
+  'MANTAUSDT':'MANTA-USD',
+  'MOVRUSDT':'MOVR-USD',
+  'ROSEUSD':'ROSE-USD', 'ROSEUSDT':'ROSE-USD',
+  // DeFi
+  'AAVEUSD':'AAVE-USD', 'AAVEUSDT':'AAVE-USD',
+  'MKRUSDT':'MKR-USD',
+  'COMPUSD':'COMP-USD', 'COMPUSDT':'COMP-USD',
+  'SNXUSD':'SNX-USD',   'SNXUSDT':'SNX-USD',
+  'YFIUSDT':'YFI-USD',
+  'SUSHIUSD':'SUSHI-USD','SUSHIUSDT':'SUSHI-USD',
+  'CRVUSD':'CRV-USD',   'CRVUSDT':'CRV-USD',
+  'DYDXUSDT':'DYDX-USD',
+  'GMXUSDT':'GMX-USD',
+  'PENDLEUSDT':'PENDLE-USD',
+  'CVXUSDT':'CVX-USD',
+  'FXSUSDT':'FXS-USD',
+  'LDOUSDT':'LDO-USD',
+  'RPLUSDT':'RPL-USD',
+  'RUNEUSDT':'RUNE-USD',
+  'BALUSDT':'BAL-USD',
+  '1INCHUSDT':'1INCH-USD',
+  'CAKEUSDT':'CAKE-USD',
+  // AI & Data
+  'FETUSD':'FET-USD',   'FETUSDT':'FET-USD',
+  'OCEANUSDT':'OCEAN-USD',
+  'AGIXUSDT':'AGIX-USD',
+  'RNDRUSDT':'RNDR-USD',
+  'WLDUSDT':'WLD-USD',
+  'GRTUSD':'GRT-USD',   'GRTUSDT':'GRT-USD',
+  'TAOUSDT':'TAO-USD',
+  'AKTUSDT':'AKT-USD',
+  'ARKMUSDT':'ARKM-USD',
+  // Meme
+  'WIFUSD':'WIF-USD',   'WIFUSDT':'WIF-USD',
+  'BONKUSDT':'BONK-USD',
+  'FLOKIUSDT':'FLOKI-USD',
+  'MEMEUSDT':'MEME-USD',
+  'BOMEUSDT':'BOME-USD',
+  'TURBOUSDT':'TURBO-USD',
+  'ORDIUSDT':'ORDI-USD',
+  'BRETTUSDT':'BRETT-USD',
+  'NEIROUSDT':'NEIRO-USD',
+  // Infrastructure
+  'HNTUSD':'HNT-USD',   'HNTUSDT':'HNT-USD',
+  'ARUSDT':'AR-USD',
+  'STORJUSDT':'STORJ-USD',
+  'ANKRUSDT':'ANKR-USD',
+  'BANDUSD':'BAND-USD', 'BANDUSDT':'BAND-USD',
+  'THETAUSD':'THETA-USD','THETAUSDT':'THETA-USD',
+  'GLMUSDT':'GLM-USD',
+  'CTSIUSDT':'CTSI-USD',
+  // Exchange & payments
+  'CROUSD':'CRO-USD',   'CROUSDT':'CRO-USD',
+  'STXUSD':'STX-USD',   'STXUSDT':'STX-USD',
+  'GALAUSDT':'GALA-USD',
+  'MANAUSDT':'MANA-USD',
+  'SANDUSDT':'SAND-USD',
+  'AXSUSD':'AXS-USD',   'AXSUSDT':'AXS-USD',
+  'APEUSDT':'APE-USD',
+  'BLURUSDT':'BLUR-USD',
+  'JTOUSDT':'JTO-USD',
+  'PYTHUSDT':'PYTH-USD',
+  'SEIUSDT':'SEI-USD',
+  'ZETAUSD':'ZETA-USD', 'ZETAUSDT':'ZETA-USD',
+  'CFXUSDT':'CFX-USD',
+  'BATUSD':'BAT-USD',   'BATUSDT':'BAT-USD',
 }
 
 // Crypto exchanges: any symbol from these gets treated as crypto
@@ -626,7 +699,7 @@ function buildAnalysisPrompt(symbol, interval, price, indicators, patterns, vol,
 
   const patternsStr = patterns && patterns.length ? patterns.join(', ') : 'none detected'
 
-  const prompt = `You are an expert quantitative trading analyst. Analyze the following technical data for ${symbol} on the ${interval} timeframe and generate a precise trading signal.
+  const prompt = `You are an expert quantitative trading analyst. Analyze the following technical data for ${symbol} on the ${interval} timeframe and generate a structured trading signal.
 
 MARKET DATA:
 - Symbol: ${symbol}
@@ -650,7 +723,11 @@ ${volInterp}
 DETECTED PATTERNS:
 ${patternsStr}
 
-Based on this comprehensive technical picture, provide a complete trading analysis. Consider confluence of signals, risk/reward ratios, and current market context.
+ANALYSIS INSTRUCTIONS:
+1. Look for CONTRADICTIONS between indicators (e.g. RSI overbought but MACD still bullish, price above EMA50 but OBV falling, BB squeeze while RSI diverging). List each contradiction explicitly.
+2. For price targets, provide a ZONE (low/high) based on key S/R and ATR, not a single precise number. Entry zone should reflect realistic fill range around current price.
+3. Assess overall signal confidence based on indicator CONFLUENCE — high confidence requires 4+ indicators agreeing.
+4. Reasoning should explicitly weigh the bull and bear cases before reaching a conclusion.
 
 Respond with ONLY pure JSON (absolutely no markdown fences, no backticks, no code blocks, no text before or after the JSON). The JSON must match this exact shape:
 {
@@ -658,6 +735,8 @@ Respond with ONLY pure JSON (absolutely no markdown fences, no backticks, no cod
   "confidence": 0-100,
   "trend": "BULLISH or BEARISH or NEUTRAL",
   "entry": number,
+  "entryZoneLow": number,
+  "entryZoneHigh": number,
   "stopLoss": number,
   "takeProfit": [number, number],
   "riskReward": number,
@@ -671,9 +750,10 @@ Respond with ONLY pure JSON (absolutely no markdown fences, no backticks, no cod
     "bollinger": "concise interpretation string",
     "volume": "concise interpretation string"
   },
+  "contradictions": ["contradiction1 if any", "contradiction2 if any"],
   "patterns": ["pattern1", "pattern2"],
-  "reasoning": "3-4 sentence reasoning string",
-  "keyRisks": ["risk1", "risk2", "risk3"],
+  "reasoning": "3-4 sentence analysis weighing bull and bear cases",
+  "risks": ["risk1", "risk2", "risk3"],
   "disclaimer": "brief risk disclaimer string"
 }`
 

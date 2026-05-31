@@ -56,16 +56,16 @@ const FEATURES = [
   {
     icon: Shield,
     color: '#8b5cf6',
-    title: 'Bank-Grade Security',
-    desc: 'OWASP-compliant auth. JWT access tokens in memory, HTTP-only refresh cookies, bcrypt passwords.',
+    title: 'Private by Design',
+    desc: 'Your holdings never leave your account. No data selling, no third-party brokers, no tracking pixels.',
   },
 ]
 
 const STATS = [
-  { value: '50+',   label: 'Live indicators',  icon: Activity },
-  { value: '11',    label: 'Portfolio types',   icon: PieChart  },
-  { value: '90d',   label: 'AI price forecasts',icon: Brain     },
-  { value: '1K+',   label: 'Monte Carlo sims',  icon: TrendingUp},
+  { value: '50+',   label: 'Live indicators — more than most paid platforms', icon: Activity },
+  { value: '11',    label: 'Portfolio types — stocks, crypto, IRA, 401k & more', icon: PieChart  },
+  { value: '90d',   label: 'AI price forecasts with confidence intervals', icon: Brain     },
+  { value: '1,000', label: 'Monte Carlo paths per retirement simulation', icon: TrendingUp},
 ]
 
 const SCREENSHOTS = [
@@ -231,7 +231,13 @@ export default function LandingPage({ onSignIn, onRegister, onTryDemo }) {
       {/* ── Navbar ── */}
       <nav className="relative z-10 flex items-center justify-between px-6 py-4 max-w-6xl mx-auto">
         <Logo />
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-5">
+          <a
+            href="#how-it-works"
+            className="hidden sm:block text-sm text-slate-500 hover:text-slate-300 transition-colors"
+          >
+            How it works
+          </a>
           <button
             onClick={onSignIn}
             className="px-4 py-2 text-sm text-slate-300 hover:text-white transition-colors"
@@ -255,7 +261,7 @@ export default function LandingPage({ onSignIn, onRegister, onTryDemo }) {
         <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-[#00ffcc]/20
                         bg-[#00ffcc]/5 text-[#00ffcc] text-xs font-medium mb-6">
           <span className="w-1.5 h-1.5 rounded-full bg-[#00ffcc] animate-pulse" />
-          Live market data · AI-powered analysis · Zero ads
+          No ads. No upsells. Just your data.
         </div>
 
         <h1 className="text-5xl sm:text-6xl font-black tracking-tight mb-6 leading-tight">
@@ -264,12 +270,11 @@ export default function LandingPage({ onSignIn, onRegister, onTryDemo }) {
           by AI
         </h1>
 
-        <p className="text-lg text-slate-400 max-w-2xl mx-auto mb-10 leading-relaxed">
-          Real-time tracking, AI advisory, Monte Carlo retirement sims, and
-          a full stock screener — all in one dark, beautiful dashboard.
+        <p className="text-lg text-slate-400 max-w-xl mx-auto mb-10 leading-relaxed">
+          The only stock intelligence platform built around what you actually own.
         </p>
 
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
           <button
             onClick={onTryDemo}
             className="flex items-center gap-2 px-8 py-3.5 rounded-xl font-bold text-[#0a0e1a]
@@ -281,11 +286,10 @@ export default function LandingPage({ onSignIn, onRegister, onTryDemo }) {
           </button>
           <button
             onClick={onRegister}
-            className="flex items-center gap-2 px-8 py-3.5 rounded-xl font-semibold text-white text-base
-                       border border-white/10 hover:bg-white/5 transition-all"
+            className="flex items-center gap-1 text-sm text-slate-400 hover:text-white transition-colors"
           >
-            Create Free Account
-            <ArrowRight size={16} />
+            Create free account
+            <ArrowRight size={14} />
           </button>
         </div>
       </section>
@@ -311,15 +315,37 @@ export default function LandingPage({ onSignIn, onRegister, onTryDemo }) {
             Built for serious investors. No fluff, no locked features, no subscription required.
           </p>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {FEATURES.map(f => (
+
+        {/* Top 3 hero features */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 mb-5">
+          {FEATURES.slice(0, 3).map(f => (
+            <div
+              key={f.title}
+              className="rounded-2xl p-6 border border-white/[0.08] bg-white/[0.03]
+                         hover:bg-white/[0.06] hover:border-white/[0.14] transition-all duration-300"
+            >
+              <div
+                className="w-11 h-11 rounded-xl flex items-center justify-center mb-5"
+                style={{ background: `${f.color}18` }}
+              >
+                <f.icon size={22} style={{ color: f.color }} />
+              </div>
+              <h3 className="text-base font-semibold text-white mb-2.5">{f.title}</h3>
+              <p className="text-sm text-slate-500 leading-relaxed">{f.desc}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Secondary features */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          {FEATURES.slice(3).map(f => (
             <FeatureCard key={f.title} {...f} />
           ))}
         </div>
       </section>
 
       {/* ── How it works ── */}
-      <section className="relative z-10 max-w-4xl mx-auto px-6 mb-20">
+      <section id="how-it-works" className="relative z-10 max-w-4xl mx-auto px-6 mb-20">
         <div className="rounded-3xl border border-white/[0.06] overflow-hidden"
           style={{ background: 'linear-gradient(135deg, rgba(0,255,204,0.04), rgba(99,102,241,0.04))' }}>
           <div className="p-8 sm:p-12">
@@ -406,13 +432,13 @@ export default function LandingPage({ onSignIn, onRegister, onTryDemo }) {
         <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
           <Logo />
           <div className="flex items-center gap-6 text-xs text-slate-600">
-            <span>Not financial advice</span>
+            <span>Data via Yahoo Finance &amp; Finnhub</span>
             <span>·</span>
-            <span>Data via Yahoo Finance</span>
+            <span>Open source</span>
             <span>·</span>
-            <span>OWASP Compliant</span>
+            <span>Zero tracking</span>
           </div>
-          <div className="text-xs text-slate-700">© 2025 FinSurf. All rights reserved.</div>
+          <div className="text-xs text-slate-700">© 2025 FinSurf. Not financial advice.</div>
         </div>
       </footer>
     </div>

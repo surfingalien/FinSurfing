@@ -572,10 +572,27 @@ async function getFMPSearch(q, keys = {}) {
   try {
     const data = await apiFetch(fmpUrl(`/search?query=${encodeURIComponent(q)}&limit=10`, key), 8000)
     if (!Array.isArray(data) || !data.length) return null
-    return { quotes: data.map(r => ({
-      symbol: r.symbol, shortname: r.name, longname: r.name,
-      quoteType: 'EQUITY', exchange: r.exchangeShortName,
-    })) }
+    return { quotes: data.map(r => {
+      // FMP search doesn't return a type field in v3 — infer from exchange and name
+      const exch = (r.exchangeShortName || '').toUpperCase()
+      const name = (r.name || '').toLowerCase()
+      let quoteType = 'EQUITY'
+      if (
+        exch === 'ETF' ||
+        /\betf\b/.test(name) ||
+        name.includes(' fund') || name.includes(' trust') ||
+        name.includes('vanguard') || name.includes('ishares') ||
+        name.includes('spdr')    || name.includes('invesco') ||
+        name.includes('schwab')  || name.includes('fidelity') ||
+        name.includes('blackrock') || name.includes('direxion') ||
+        name.includes('proshares') || name.includes('wisdomtree')
+      ) {
+        quoteType = 'ETF'
+      } else if (exch === 'INDEX' || name.includes(' index')) {
+        quoteType = 'INDEX'
+      }
+      return { symbol: r.symbol, shortname: r.name, longname: r.name, quoteType, exchange: r.exchangeShortName }
+    }) }
   } catch { return null }
 }
 
@@ -1699,7 +1716,15 @@ async function getTwelveDataSearch(query, keys = {}) {
     const list = data?.data
     if (!Array.isArray(list) || !list.length) return null
     return { quotes: list
-      .filter(s => s.country === 'United States' || s.exchange?.startsWith('NASDAQ') || s.exchange?.startsWith('NYSE'))
+      .filter(s =>
+        s.country === 'United States' ||
+        s.exchange?.startsWith('NASDAQ') ||
+        s.exchange?.startsWith('NYSE') ||
+        s.exchange?.startsWith('AMEX') ||
+        s.exchange?.startsWith('CBOE') ||
+        s.exchange?.startsWith('BATS') ||
+        s.instrument_type?.toUpperCase() === 'ETF'
+      )
       .slice(0, 8)
       .map(s => ({
         symbol:    s.symbol,
