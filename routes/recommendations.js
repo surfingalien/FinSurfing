@@ -66,7 +66,7 @@ router.post('/', recLimit, async (req, res) => {
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) return res.status(503).json({ error: 'AI service not configured (ANTHROPIC_API_KEY missing)' })
 
-  const { holdings = [], focusSymbols = [] } = req.body
+  const { holdings = [], focusSymbols = [], includeFunds = false } = req.body
   const holdingStr = holdings.length    ? holdings.join(', ') : 'none'
   const focusStr   = focusSymbols.length ? focusSymbols.join(', ') : ''
   const fwdHeaders = fwdKeys(req)
@@ -86,19 +86,23 @@ router.post('/', recLimit, async (req, res) => {
     ? `\nFOCUS MODE: Analyze ONLY these specific symbols: ${focusStr}. All recommendations must come from this list.`
     : ''
 
+  const fundInstructions = includeFunds && !focusStr
+    ? `\nMUTUAL FUNDS: Include 2 mutual fund recommendations (type "Fund") from top retail funds such as FXAIX, VFIAX, VTSAX, FSKAX, FSELX, FCNTX, FDGRX, PRGFX, AGTHX, PRWCX. For funds: targetReturn 3–15%, stopLoss 8–20%, sector = fund category (e.g. "Large-Cap Growth", "Index Fund", "Sector Fund").`
+    : ''
+
   const countInstructions = focusStr
     ? `Generate ${Math.min(focusSymbols.length, 20)} recommendations covering the focus symbols above.`
-    : `Generate exactly 20 recommendations split across asset classes and time horizons:
+    : `Generate exactly ${includeFunds ? 22 : 20} recommendations split across asset classes and time horizons:
 - 7 Stocks for 3-month holding
 - 5 Stocks for 6-month holding
 - 4 ETFs (mix of 3m and 6m)
 - 3 Cryptocurrencies (mix of 3m and 6m)
-- 1 additional high-conviction pick of any type`
+- 1 additional high-conviction pick of any type${includeFunds ? '\n- 2 Mutual Funds (type "Fund", use fund ticker symbols)' : ''}`
 
   const prompt = `You are a senior portfolio strategist. Provide specific actionable buy recommendations for a retail investor.
 
 Current portfolio holdings (avoid overlap): ${holdingStr}${focusInstructions}
-${livePriceSnippet}
+${livePriceSnippet}${fundInstructions}
 
 ${countInstructions}
 
@@ -117,7 +121,7 @@ Respond ONLY with a JSON object — no markdown, no explanation, just the JSON:
     {
       "symbol": "string",
       "name": "string",
-      "type": "Stock" | "ETF" | "Crypto",
+      "type": "Stock" | "ETF" | "Crypto" | "Fund",
       "period": "3m" | "6m",
       "sector": "string (for stocks/ETFs) or 'Digital Asset' for crypto",
       "targetReturn": number,

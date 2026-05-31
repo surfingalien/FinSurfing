@@ -61,6 +61,11 @@ const SCAN_UNIVERSES = {
     'BTC-USD','ETH-USD','SOL-USD','BNB-USD','ADA-USD','DOGE-USD','XRP-USD',
     'AVAX-USD','DOT-USD','LINK-USD','MATIC-USD','UNI-USD',
   ],
+  mutualfunds: [
+    'FXAIX','VFIAX','VTSAX','FSKAX','FSELX','FCNTX','FDGRX',
+    'PRGFX','AGTHX','PRWCX','TRBCX','VWUSX','FGRTX','VDADX',
+    'DODGX','OAKMX','CGMFX','VGHCX','FBIOX','RPMGX',
+  ],
 }
 
 function fwdKeys(req) {
@@ -178,6 +183,7 @@ CRITICAL: When two agents disagree by 25+ points, that spread IS the primary sig
 Analyze this universe for a ${horizonLabel} horizon. Today is late May 2026.
 Universe: ${universe.join(', ')}
 Avoid holdings: ${holdingStr}
+${scanMode === 'mutualfunds' ? `\nNOTE: This universe contains mutual funds. For each fund score on: (1) Fundamental = long-term holdings quality & manager track record, (2) Technical = NAV trend & momentum vs benchmark, (3) Sentiment = fund flows & retail demand, (4) Macro = sector/asset-class fit for current regime, (5) Risk = expense ratio, drawdown history, concentration risk. Price targets refer to NAV levels. Skip stop-loss precision — use risk zones instead.` : ''}
 ${marketSnippet}
 
 ⚠️ STRICT TOKEN BUDGET — respect every word limit or the response will be truncated.

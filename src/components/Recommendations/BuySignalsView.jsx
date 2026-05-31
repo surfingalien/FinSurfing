@@ -28,6 +28,7 @@ const TYPE_CONFIG = {
   Stock:  { color: 'text-blue-400',    bg: 'bg-blue-500/10',    border: 'border-blue-500/25',    emoji: '📈' },
   ETF:    { color: 'text-purple-400',  bg: 'bg-purple-500/10',  border: 'border-purple-500/25',  emoji: '🧺' },
   Crypto: { color: 'text-amber-400',   bg: 'bg-amber-500/10',   border: 'border-amber-500/25',   emoji: '₿'  },
+  Fund:   { color: 'text-teal-400',    bg: 'bg-teal-500/10',    border: 'border-teal-500/25',    emoji: '🏦' },
 }
 
 const RISK_CONFIG = {
@@ -57,7 +58,7 @@ function RecCard({ rec, onAnalyze, liveQuote }) {
         symbol:       rec.symbol,
         name:         rec.name,
         sector:       rec.sector,
-        addedFrom:    'buy-signals',
+        addedFrom:    rec.type === 'Fund' ? 'mutual-fund' : 'buy-signals',
         targetReturn: rec.targetReturn,
         stopLoss:     rec.stopLoss,
         horizon:      rec.period,
@@ -200,10 +201,11 @@ export default function BuySignalsView({ portfolio, onAnalyze }) {
   const [recs,          setRecs]          = useState(null)
   const [loading,       setLoading]       = useState(false)
   const [error,         setError]         = useState(null)
-  const [filter,        setFilter]        = useState('all')   // 'all' | 'Stock' | 'ETF' | 'Crypto'
+  const [filter,        setFilter]        = useState('all')   // 'all' | 'Stock' | 'ETF' | 'Crypto' | 'Fund'
   const [period,        setPeriod]        = useState('all')   // 'all' | '3m' | '6m'
   const [customSymbols, setCustomSymbols] = useState('')
   const [liveQuotes,    setLiveQuotes]    = useState({})
+  const [includeFunds,  setIncludeFunds]  = useState(false)
 
   const holdings = portfolio?.positions?.map(p => p.symbol) ?? []
 
@@ -219,6 +221,7 @@ export default function BuySignalsView({ portfolio, onAnalyze }) {
     try {
       const body = { holdings }
       if (customSymbols.trim()) body.focusSymbols = parseSymbols(customSymbols)
+      if (includeFunds && !customSymbols.trim()) body.includeFunds = true
       const res = await fetch('/api/recommendations', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json', ...getApiKeyHeaders() },
@@ -298,6 +301,24 @@ export default function BuySignalsView({ portfolio, onAnalyze }) {
             }
           </button>
         </div>
+      </div>
+
+      {/* ── Mutual fund toggle ── */}
+      <div className="flex items-center gap-3 p-3 rounded-xl bg-white/[0.03] border border-white/[0.08]">
+        <label className="flex items-center gap-2.5 cursor-pointer select-none group">
+          <div
+            onClick={() => setIncludeFunds(v => !v)}
+            className={`relative w-9 h-5 rounded-full transition-colors ${includeFunds ? 'bg-teal-500' : 'bg-white/[0.08]'}`}
+          >
+            <div className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${includeFunds ? 'translate-x-4' : 'translate-x-0'}`} />
+          </div>
+          <span className={`text-xs font-medium transition-colors ${includeFunds ? 'text-teal-400' : 'text-slate-500 group-hover:text-slate-300'}`}>
+            🏦 Include Mutual Funds
+          </span>
+        </label>
+        {includeFunds && (
+          <span className="text-[10px] text-slate-500 ml-1">Top retail funds (FXAIX, VFIAX, FCNTX…) will be added to picks</span>
+        )}
       </div>
 
       {/* ── Symbol search ── */}
@@ -408,8 +429,8 @@ export default function BuySignalsView({ portfolio, onAnalyze }) {
           {/* Filters */}
           <div className="flex flex-wrap items-center gap-2">
             {/* Type filter */}
-            <div className="flex gap-1">
-              {['all','Stock','ETF','Crypto'].map(f => (
+            <div className="flex gap-1 flex-wrap">
+              {['all','Stock','ETF','Crypto','Fund'].map(f => (
                 <button
                   key={f}
                   onClick={() => setFilter(f)}

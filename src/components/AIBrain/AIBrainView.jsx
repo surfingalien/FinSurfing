@@ -18,7 +18,7 @@ import {
   Target, Zap, Activity, Clock, CheckCircle2, Search,
   Bookmark, BookmarkCheck, Download, X, DollarSign,
   Cpu, HeartPulse, Zap as ZapEnergy, LineChart, Bitcoin,
-  GitFork, Layers, Lock, TrendingDown, Volume2,
+  GitFork, Layers, Lock, TrendingDown, Volume2, PieChart,
 } from 'lucide-react'
 import { useAIWatchlist } from '../../hooks/useAIWatchlist'
 import { exportAnalysisToPDF } from '../../utils/pdfExport'
@@ -32,6 +32,7 @@ const SCAN_MODES = [
   { id: 'energy',     label: 'Energy & Ind.', icon: ZapEnergy,  color: 'text-orange-400',  bg: 'bg-orange-500/15',  border: 'border-orange-500/30'  },
   { id: 'etfs',       label: 'ETFs',          icon: LineChart,  color: 'text-purple-400',  bg: 'bg-purple-500/15',  border: 'border-purple-500/30'  },
   { id: 'crypto',     label: 'Crypto',        icon: Bitcoin,    color: 'text-yellow-400',  bg: 'bg-yellow-500/15',  border: 'border-yellow-500/30'  },
+  { id: 'mutualfunds', label: 'Mutual Funds', icon: PieChart,   color: 'text-teal-400',    bg: 'bg-teal-500/15',    border: 'border-teal-500/30'    },
 ]
 
 function getApiKeyHeaders() {
