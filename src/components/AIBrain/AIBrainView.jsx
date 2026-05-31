@@ -35,7 +35,7 @@ const SCAN_MODES = [
   { id: 'mutualfunds', label: 'Mutual Funds', icon: PieChart,   color: 'text-teal-400',    bg: 'bg-teal-500/15',    border: 'border-teal-500/30'    },
 ]
 
-/* ── fund sub-category modes ───────────────────────────────── */
+/* ── sub-category modes ────────────────────────────────────── */
 const FUND_SUBMODES = [
   { id: 'mutualfunds',          label: 'All Funds',     description: 'Broad top 20 across all categories'     },
   { id: 'mutualfunds_index',    label: 'Index',         description: 'FXAIX, VFIAX, VTSAX, FZROX…'           },
@@ -45,6 +45,29 @@ const FUND_SUBMODES = [
   { id: 'mutualfunds_bond',     label: 'Bond / Fixed',  description: 'VBTLX, PTTAX, MWTRX, DODIX…'           },
   { id: 'mutualfunds_intl',     label: 'International', description: 'DODFX, VGTSX, PRIDX, FDIVX…'           },
   { id: 'mutualfunds_balanced', label: 'Balanced',      description: 'PRWCX, VWELX, FPURX, TRRIX…'           },
+]
+
+const ETF_SUBMODES = [
+  { id: 'etfs',          label: 'All ETFs',      description: 'Broad cross-asset top 20'                  },
+  { id: 'etfs_sector',   label: 'Sector',        description: 'XLK, XLE, XLF, XLV, XLI, XLY, XLU…'      },
+  { id: 'etfs_broad',    label: 'Broad Market',  description: 'SPY, QQQ, VTI, IWM, VUG, VTV, SCHB…'      },
+  { id: 'etfs_bond',     label: 'Bond / Fixed',  description: 'TLT, AGG, HYG, LQD, SHY, TIP, EMB…'       },
+  { id: 'etfs_intl',     label: 'International', description: 'EEM, EFA, VEA, FXI, EWJ, IEMG, VWO…'      },
+  { id: 'etfs_commodity',label: 'Commodities',   description: 'GLD, SLV, USO, DBA, GDX, PDBC, COPX…'     },
+  { id: 'etfs_thematic', label: 'Thematic',      description: 'ARKK, ICLN, BOTZ, HACK, DRIV, PAVE…'      },
+  { id: 'etfs_dividend', label: 'Dividend',      description: 'VYM, SCHD, HDV, DVY, NOBL, DGRW, VIG…'    },
+  { id: 'etfs_bitcoin',  label: 'Bitcoin ETFs',  description: 'IBIT, FBTC, GBTC, ARKB, ETHA, BITO…'      },
+]
+
+const CRYPTO_SUBMODES = [
+  { id: 'crypto',          label: 'All Crypto',    description: 'Broad top 20 cross-category'              },
+  { id: 'crypto_l1',       label: 'Layer 1',       description: 'BTC, ETH, SOL, ADA, AVAX, ATOM, NEAR…'   },
+  { id: 'crypto_l2',       label: 'Layer 2',       description: 'MATIC, ARB, OP, IMX, LRC, MNT, STRK…'    },
+  { id: 'crypto_defi',     label: 'DeFi',          description: 'UNI, AAVE, MKR, CRV, DYDX, GMX, LDO…'    },
+  { id: 'crypto_ai',       label: 'AI & Data',     description: 'FET, OCEAN, AGIX, RNDR, WLD, GRT, TAO…'  },
+  { id: 'crypto_meme',     label: 'Meme',          description: 'DOGE, SHIB, PEPE, BONK, WIF, FLOKI…'     },
+  { id: 'crypto_infra',    label: 'Infrastructure',description: 'LINK, FIL, HNT, AR, STORJ, THETA, RLC…'  },
+  { id: 'crypto_exchange', label: 'Exchange',      description: 'BNB, CRO, XRP, XLM, LTC, BCH, NEXO…'     },
 ]
 
 function getApiKeyHeaders() {
@@ -615,7 +638,10 @@ export default function AIBrainView({ portfolio, onAnalyze }) {
         <div className="flex gap-1.5 overflow-x-auto pb-0.5 scrollbar-hide">
           {SCAN_MODES.map(m => {
             const Icon = m.icon
-            const active = scanMode === m.id || (m.id === 'mutualfunds' && scanMode.startsWith('mutualfunds'))
+            const active = scanMode === m.id
+              || (m.id === 'mutualfunds' && scanMode.startsWith('mutualfunds'))
+              || (m.id === 'etfs'        && scanMode.startsWith('etfs_'))
+              || (m.id === 'crypto'      && scanMode.startsWith('crypto_'))
             return (
               <button
                 key={m.id}
@@ -635,41 +661,61 @@ export default function AIBrainView({ portfolio, onAnalyze }) {
         </div>
       )}
 
-      {/* ── Fund sub-category picker ── */}
-      {scanMode.startsWith('mutualfunds') && !customSymbols.trim() && (
-        <div className="flex flex-col gap-2 p-3 rounded-xl bg-teal-500/5 border border-teal-500/15">
-          <div className="flex items-center gap-1.5 text-[10px] text-teal-400/70 font-medium uppercase tracking-wider">
-            <PieChart className="w-3 h-3" />
-            Fund Category
-          </div>
-          <div className="flex gap-1.5 flex-wrap">
-            {FUND_SUBMODES.map(sub => {
-              const active = scanMode === sub.id
-              return (
+      {/* ── Sub-category pickers ── */}
+      {(scanMode.startsWith('mutualfunds') || scanMode.startsWith('etfs') || scanMode.startsWith('crypto')) && !customSymbols.trim() && (() => {
+        const isFund   = scanMode.startsWith('mutualfunds')
+        const isEtf    = scanMode === 'etfs' || scanMode.startsWith('etfs_')
+        const isCrypto = scanMode === 'crypto' || scanMode.startsWith('crypto_')
+        const submodes = isFund ? FUND_SUBMODES : isEtf ? ETF_SUBMODES : CRYPTO_SUBMODES
+        const accent   = isFund ? 'teal' : isEtf ? 'purple' : 'yellow'
+        const Icon     = isFund ? PieChart : isEtf ? LineChart : Bitcoin
+        const label    = isFund ? 'Fund Category' : isEtf ? 'ETF Category' : 'Crypto Sector'
+        const activeColor = isFund
+          ? 'bg-teal-500/20 text-teal-300 border-teal-500/40'
+          : isEtf
+            ? 'bg-purple-500/20 text-purple-300 border-purple-500/40'
+            : 'bg-yellow-500/20 text-yellow-300 border-yellow-500/40'
+        const hoverColor = isFund
+          ? 'hover:text-teal-300 hover:border-teal-500/25'
+          : isEtf
+            ? 'hover:text-purple-300 hover:border-purple-500/25'
+            : 'hover:text-yellow-300 hover:border-yellow-500/25'
+        const panelStyle = isFund
+          ? 'bg-teal-500/5 border-teal-500/15'
+          : isEtf
+            ? 'bg-purple-500/5 border-purple-500/15'
+            : 'bg-yellow-500/5 border-yellow-500/15'
+        const headerColor = isFund ? 'text-teal-400/70' : isEtf ? 'text-purple-400/70' : 'text-yellow-400/70'
+        const activeSub = submodes.find(s => s.id === scanMode)
+        return (
+          <div className={`flex flex-col gap-2 p-3 rounded-xl border ${panelStyle}`}>
+            <div className={`flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider ${headerColor}`}>
+              <Icon className="w-3 h-3" />
+              {label}
+            </div>
+            <div className="flex gap-1.5 flex-wrap">
+              {submodes.map(sub => (
                 <button
                   key={sub.id}
                   onClick={() => setScanMode(sub.id)}
                   disabled={loading}
                   title={sub.description}
                   className={`px-3 py-1 rounded-lg text-xs font-medium border whitespace-nowrap transition-all disabled:opacity-40 ${
-                    active
-                      ? 'bg-teal-500/20 text-teal-300 border-teal-500/40'
-                      : 'bg-white/[0.03] text-slate-400 border-white/[0.07] hover:text-teal-300 hover:border-teal-500/25'
+                    scanMode === sub.id
+                      ? activeColor
+                      : `bg-white/[0.03] text-slate-400 border-white/[0.07] ${hoverColor}`
                   }`}
                 >
                   {sub.label}
                 </button>
-              )
-            })}
+              ))}
+            </div>
+            {activeSub && (
+              <div className="text-[10px] text-slate-500">{activeSub.description}</div>
+            )}
           </div>
-          {(() => {
-            const active = FUND_SUBMODES.find(s => s.id === scanMode)
-            return active ? (
-              <div className="text-[10px] text-slate-500">{active.description}</div>
-            ) : null
-          })()}
-        </div>
-      )}
+        )
+      })()}
 
       {customSymbols.trim() && (
         <div className="text-[11px] text-slate-500 px-1">

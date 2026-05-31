@@ -57,9 +57,99 @@ const SCAN_UNIVERSES = {
     'SPY','QQQ','GLD','TLT','IWM','VTI','ARKK','XLK','XLE','XLF',
     'XLV','XLI','XLY','AGG','HYG','EEM','EFA','VNQ','XLP','IBIT',
   ],
+  // ── ETF sub-categories ──────────────────────────────────────
+  etfs_sector: [
+    // SPDR sector + specialty sector ETFs
+    'XLK','XLE','XLF','XLV','XLI','XLY','XLP','XLU','XLB','XLRE',
+    'XLC','XBI','XHB','XRT','XOP','KIE','XSD','XPH','XES','XNTK',
+  ],
+  etfs_broad: [
+    // Broad market, size, and style index ETFs
+    'SPY','QQQ','VTI','IWM','DIA','MDY','VUG','VTV','VO','VB',
+    'SCHB','ITOT','SCHA','SCHX','SCHG','SCHV','MGK','MGV','SPMD','SPSM',
+  ],
+  etfs_bond: [
+    // Investment-grade, high-yield, TIPS, duration
+    'TLT','AGG','BND','HYG','LQD','SHY','IEF','TIP','VCIT','VCSH',
+    'BKLN','JNK','VGSH','VGIT','VGLT','MBB','EMB','IAGG','SGOV','STIP',
+  ],
+  etfs_intl: [
+    // Developed + emerging market international ETFs
+    'EEM','EFA','VEA','VWO','FXI','EWJ','EWZ','IEMG','MCHI','ASHR',
+    'EWU','EWG','EWY','EWT','EWA','EWC','EPOL','EWI','EWS','EDEN',
+  ],
+  etfs_commodity: [
+    // Gold, silver, oil, agriculture, miners
+    'GLD','SLV','USO','DBA','IAU','GDX','GDXJ','COPX','PDBC','UNG',
+    'CORN','SOYB','WEAT','CPER','REMX','PICK','SLX','MOO','PALL','DBB',
+  ],
+  etfs_thematic: [
+    // Innovation, AI, clean energy, cybersecurity, robotics
+    'ARKK','ARKQ','ARKG','ARKF','ARKX','ICLN','BOTZ','HACK','DRIV','ROBO',
+    'PAVE','KOMP','BLOK','FINX','IHAK','EDOC','MOON','BUZZ','METV','UFO',
+  ],
+  etfs_dividend: [
+    // Dividend growth, high yield, income
+    'VYM','SCHD','HDV','DVY','NOBL','DGRW','DGRO','VIG','SDY','SPYD',
+    'SPHD','FVD','CDL','PFF','PFFD','IDV','REET','VNQ','O','MORT',
+  ],
+  etfs_bitcoin: [
+    // Spot Bitcoin + Ethereum ETFs and crypto-linked
+    'IBIT','FBTC','GBTC','ARKB','HODL','EZBC','BTCO','BRRR','BITO','BITI',
+    'ETHA','FETH','CETH','ETHV','DEFI','WGMI','MSTR','COIN','CLSK','MARA',
+  ],
   crypto: [
     'BTC-USD','ETH-USD','SOL-USD','BNB-USD','ADA-USD','DOGE-USD','XRP-USD',
     'AVAX-USD','DOT-USD','LINK-USD','MATIC-USD','UNI-USD',
+  ],
+  // ── Crypto sub-categories ───────────────────────────────────
+  crypto_l1: [
+    // Layer 1 smart-contract chains
+    'BTC-USD','ETH-USD','SOL-USD','BNB-USD','ADA-USD','AVAX-USD','DOT-USD',
+    'ATOM-USD','NEAR-USD','APT-USD','SUI-USD','TON-USD','ICP-USD','ALGO-USD',
+    'FTM-USD','EGLD-USD','ONE-USD','WAVES-USD','HBAR-USD','EOS-USD',
+  ],
+  crypto_l2: [
+    // Layer 2 scaling solutions and rollups
+    'MATIC-USD','ARB-USD','OP-USD','IMX-USD','LRC-USD','METIS-USD',
+    'BOBA-USD','ZKS-USD','MNT-USD','STRK-USD','MANTA-USD','KAVA-USD',
+    'CELO-USD','MOVR-USD','GLMR-USD','ACA-USD','CFG-USD','ROSE-USD',
+    'SCRT-USD','ASTR-USD',
+  ],
+  crypto_defi: [
+    // Decentralized finance protocols
+    'UNI-USD','AAVE-USD','MKR-USD','COMP-USD','CRV-USD','SNX-USD',
+    'YFI-USD','BAL-USD','SUSHI-USD','1INCH-USD','RUNE-USD','DYDX-USD',
+    'GMX-USD','PENDLE-USD','CVX-USD','FXS-USD','LDO-USD','RPL-USD',
+    'OSMO-USD','CAKE-USD',
+  ],
+  crypto_ai: [
+    // AI, data, and machine-learning tokens
+    'FET-USD','OCEAN-USD','AGIX-USD','RNDR-USD','WLD-USD','GRT-USD',
+    'NMR-USD','TAO-USD','AKT-USD','ALT-USD','AIOZ-USD','CTXC-USD',
+    'MATRIX-USD','DBC-USD','CLORE-USD','PAAL-USD','TURBO-USD','ARKM-USD',
+    'MYRIA-USD','NGL-USD',
+  ],
+  crypto_meme: [
+    // Meme and community-driven coins
+    'DOGE-USD','SHIB-USD','PEPE-USD','BONK-USD','FLOKI-USD','WIF-USD',
+    'MEME-USD','BRETT-USD','TURBO-USD','COQ-USD','MYRO-USD','SLERF-USD',
+    'POPCAT-USD','MEW-USD','BOME-USD','GME-USD','MOG-USD','LADYS-USD',
+    'SATS-USD','ORDI-USD',
+  ],
+  crypto_infra: [
+    // Infrastructure, storage, DePIN, and oracle networks
+    'LINK-USD','FIL-USD','HNT-USD','AR-USD','STORJ-USD','IOTX-USD',
+    'RLC-USD','ANKR-USD','BAND-USD','API3-USD','RPL-USD','FLUX-USD',
+    'COTI-USD','GLM-USD','CTSI-USD','NKN-USD','THETA-USD','TFUEL-USD',
+    'SKY-USD','XYO-USD',
+  ],
+  crypto_exchange: [
+    // Exchange tokens and CeFi / payment networks
+    'BNB-USD','CRO-USD','XRP-USD','XLM-USD','LTC-USD','BCH-USD',
+    'XMR-USD','ZEC-USD','DASH-USD','WAVES-USD','OMG-USD','OXT-USD',
+    'MCO-USD','HTX-USD','GT-USD','NEXO-USD','CEL-USD','BGB-USD',
+    'FTT-USD','KCS-USD',
   ],
   // ── Mutual fund category universes ──────────────────────────
   mutualfunds: [
@@ -227,7 +317,7 @@ CRITICAL: When two agents disagree by 25+ points, that spread IS the primary sig
 Analyze this universe for a ${horizonLabel} horizon. Today is late May 2026.
 Universe: ${universe.join(', ')}
 Avoid holdings: ${holdingStr}
-${scanMode.startsWith('mutualfunds') ? `\nNOTE: This universe contains mutual funds (category: ${scanMode === 'mutualfunds' ? 'Broad All-Category' : scanMode.replace('mutualfunds_','').toUpperCase()}). Score each fund on: (1) Fundamental = portfolio holdings quality, manager tenure & track record, alpha vs benchmark, (2) Technical = NAV trend, momentum, and performance relative to category peers, (3) Sentiment = fund flows, retail/institutional demand, manager commentary, (4) Macro = asset-class fit for current rate/growth/inflation regime, (5) Risk = expense ratio, max drawdown, concentration risk, redemption risk. Price targets refer to NAV zones. Omit stop-loss precision — use downside risk zones only.` : ''}
+${scanMode.startsWith('mutualfunds') ? `\nNOTE: This universe contains mutual funds (category: ${scanMode === 'mutualfunds' ? 'Broad All-Category' : scanMode.replace('mutualfunds_','').toUpperCase()}). Score each fund on: (1) Fundamental = portfolio holdings quality, manager tenure & track record, alpha vs benchmark, (2) Technical = NAV trend, momentum, and performance relative to category peers, (3) Sentiment = fund flows, retail/institutional demand, manager commentary, (4) Macro = asset-class fit for current rate/growth/inflation regime, (5) Risk = expense ratio, max drawdown, concentration risk, redemption risk. Price targets refer to NAV zones. Omit stop-loss precision — use downside risk zones only.` : ''}${scanMode.startsWith('etfs_') ? `\nNOTE: This is an ETF sub-category scan (${scanMode.replace('etfs_','').toUpperCase()}). Scoring focus: (1) Fundamental = underlying index quality, holdings composition, expense ratio vs peers, (2) Technical = ETF price trend & momentum, discount/premium to NAV, options flow if available, (3) Sentiment = fund flows, AUM trend, institutional rotation signals, (4) Macro = how well this ETF category fits the current rate/sector/growth regime, (5) Risk = liquidity, tracking error, concentration, leverage if any.` : ''}${scanMode.startsWith('crypto_') ? `\nNOTE: This is a crypto sub-category scan (${scanMode.replace('crypto_','').toUpperCase()}). Scoring focus: (1) Fundamental = protocol TVL, revenue, developer activity, tokenomics, (2) Technical = price trend vs BTC, momentum, on-chain volume signal, (3) Sentiment = social dominance, whale flows, exchange inflows/outflows, (4) Macro = correlation to BTC cycle stage, risk-on/off regime, regulatory climate, (5) Risk = smart contract risk, liquidity depth, centralization risk. Consider current crypto market cycle phase.` : ''}
 ${marketSnippet}
 
 ⚠️ STRICT TOKEN BUDGET — respect every word limit or the response will be truncated.
