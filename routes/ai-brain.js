@@ -5,26 +5,33 @@
  * POST /api/ai-brain/analyze
  * body: { symbols?, scanMode?, horizon?, holdings? }
  *
- * scanMode selects from SCAN_UNIVERSES; custom symbols override it entirely.
- * All per-stock analysis fields are hard-capped at 15 words to keep output
- * well inside the 8 192-token limit and prevent JSON truncation.
+ * Council improvements applied (2026-05-31):
+ * - Supervisor rebuilt as contradiction engine (surfaces agent disagreements)
+ * - Price targets output as confidence zones, not false-precision numbers
+ * - Agent reasoning expanded to 20 words with plain-language prose
+ * - Thesis assumptions extracted (3 falsifiable conditions) for assumption-based staleness
+ * - Prediction logging for future win-rate tracking
  */
 
 const express             = require('express')
 const Anthropic           = require('@anthropic-ai/sdk')
 const rateLimit           = require('express-rate-limit')
+const fs                  = require('fs')
+const path                = require('path')
 const { getBreaker, CircuitOpenError } = require('../lib/circuit-breaker')
 const { logCall }         = require('../lib/ai-audit')
 
 const router  = express.Router()
 const breaker = getBreaker('ai-brain', { threshold: 3, resetTimeoutMs: 60_000 })
 
+const PREDICTION_LOG = path.join(__dirname, '../data/ai-brain-predictions.jsonl')
+
 const brainLimit = rateLimit({
   windowMs: 5 * 60 * 1000, max: 4,
   message: { error: 'Too many AI Brain requests — wait a few minutes' },
 })
 
-// ── Curated universe per scan mode (20 symbols each) ──────────────────────────
+// ── Curated universe per scan mode ───────────────────────────────────────────
 const SCAN_UNIVERSES = {
   broad: [
     'NVDA','MSFT','AAPL','AMZN','GOOGL','META','TSLA','JPM','LLY','CRWD',
@@ -56,7 +63,6 @@ const SCAN_UNIVERSES = {
   ],
 }
 
-// Extract AISA/Finnhub/FMP headers forwarded from the browser
 function fwdKeys(req) {
   const h = {}
   for (const k of ['x-aisa-key','x-finnhub-key','x-fmp-key','x-td-key','x-av-key']) {
@@ -65,7 +71,6 @@ function fwdKeys(req) {
   return h
 }
 
-// Format a quote into a compact one-liner (kept short to save prompt tokens)
 function fmtQuote(q) {
   if (!q?.regularMarketPrice) return null
   const price = q.regularMarketPrice
@@ -75,13 +80,40 @@ function fmtQuote(q) {
   const hi    = q.fiftyTwoWeekHigh
   const lo    = q.fiftyTwoWeekLow
   const cap   = q.marketCap
+  const vol   = q.regularMarketVolume
+  const avgVol = q.averageDailyVolume3Month
   const chgStr = chg != null ? ` (${sign}${chg.toFixed(2)}%)` : ''
+  const volRatio = (vol && avgVol) ? ` Vol=${(vol/avgVol).toFixed(2)}x avg` : ''
   return (
     `${q.symbol}: $${price.toFixed(price >= 1 ? 2 : 6)}${chgStr}` +
     ` MktCap=${cap ? '$' + (cap / 1e9).toFixed(0) + 'B' : 'N/A'}` +
     ` P/E=${pe ? pe.toFixed(1) : 'N/A'}` +
-    ` 52w=${lo != null && hi != null ? `$${lo.toFixed(0)}-$${hi.toFixed(0)}` : 'N/A'}`
+    ` 52w=$${lo?.toFixed(0) ?? '?'}-$${hi?.toFixed(0) ?? '?'}` +
+    volRatio
   )
+}
+
+// Write a prediction record for future win-rate tracking
+function logPrediction(symbol, agents, zones, generatedAt) {
+  try {
+    const dir = path.dirname(PREDICTION_LOG)
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+    const record = JSON.stringify({
+      symbol, generatedAt,
+      fundamentalScore: agents.fundamentalScore,
+      technicalScore:   agents.technicalScore,
+      sentimentScore:   agents.sentimentScore,
+      macroScore:       agents.macroScore,
+      riskScore:        agents.riskScore,
+      compositeScore:   agents.compositeScore,
+      entryZoneMid:     zones?.entryZoneLow != null ? (zones.entryZoneLow + zones.entryZoneHigh) / 2 : null,
+      targetZoneMid:    zones?.targetZoneLow != null ? (zones.targetZoneLow + zones.targetZoneHigh) / 2 : null,
+      verdict:          agents.agentVerdict,
+      // outcome fields filled later by a scheduled job
+      price7d: null, price30d: null, price90d: null,
+    })
+    fs.appendFileSync(PREDICTION_LOG, record + '\n')
+  } catch { /* non-fatal */ }
 }
 
 router.post('/analyze', brainLimit, async (req, res) => {
@@ -101,16 +133,16 @@ router.post('/analyze', brainLimit, async (req, res) => {
   if (!['3m','6m','12m'].includes(horizon))
     return res.status(400).json({ error: 'horizon must be 3m, 6m, or 12m' })
 
-  // Custom symbols override scan mode; otherwise use the named universe
   const baseList = (symbols?.length && Array.isArray(symbols))
     ? symbols.map(s => String(s).toUpperCase().replace(/[^A-Z0-9.-]/g, '')).filter(Boolean)
     : (SCAN_UNIVERSES[scanMode] || SCAN_UNIVERSES.broad)
 
-  const universe    = [...new Set(baseList)].slice(0, 20)
-  const holdingStr  = holdings.length ? holdings.join(', ') : 'none'
+  const universe     = [...new Set(baseList)].slice(0, 20)
+  const holdingStr   = holdings.length ? holdings.join(', ') : 'none'
   const horizonLabel = { '3m': '3-month', '6m': '6-month', '12m': '12-month' }[horizon]
+  const generatedAt  = new Date().toISOString()
 
-  // ── Step 1: fetch live quotes ──────────────────────────────────────────────
+  // ── Step 1: fetch live quotes with volume data ─────────────────────────────
   let marketSnippet = ''
   let liveQuotes    = []
   try {
@@ -125,28 +157,30 @@ router.post('/analyze', brainLimit, async (req, res) => {
     console.warn('[ai-brain] Quote fetch failed, knowledge-only mode:', e.message)
   }
 
-  // Only include quotes that have an actual price value
   const validQuotes = liveQuotes.filter(q => q?.regularMarketPrice != null && q.regularMarketPrice > 0)
   const missingSyms = universe.filter(s => !validQuotes.find(q => q.symbol === s))
+  const dataAge     = validQuotes.length ? 'live' : 'knowledge'
 
   if (validQuotes.length > 0) {
-    marketSnippet = '\n\nLIVE SNAPSHOT (use these prices as primary data — do not override with training knowledge):\n'
+    marketSnippet = '\n\nLIVE SNAPSHOT (prices + volume ratio vs 3-month avg — use as primary source):\n'
       + validQuotes.map(fmtQuote).join('\n')
     if (missingSyms.length)
-      marketSnippet += `\n\nNo live price for: ${missingSyms.join(', ')} — use your best knowledge for those.`
+      marketSnippet += `\n\nNo live data for: ${missingSyms.join(', ')} — use training knowledge.`
   } else {
     marketSnippet = '\n\nNote: No live market data available — use training knowledge for prices.'
   }
 
-  // ── Step 2: build prompt with STRICT length limits to avoid truncation ─────
-  const prompt = `You are a 5-agent investment AI (Fundamental, Technical, Sentiment, Macro, Risk + Supervisor).
-Analyze this universe for a ${horizonLabel} horizon. Today is mid-May 2026.
+  // ── Step 2: prompt — contradiction engine + zones + assumptions ────────────
+  const prompt = `You are a 5-agent investment AI with a Supervisor whose job is to SURFACE CONTRADICTIONS, not average scores.
 
+CRITICAL: When two agents disagree by 25+ points, that spread IS the primary signal. Do not smooth it. Surface it.
+
+Analyze this universe for a ${horizonLabel} horizon. Today is late May 2026.
 Universe: ${universe.join(', ')}
 Avoid holdings: ${holdingStr}
 ${marketSnippet}
 
-⚠️ STRICT TOKEN BUDGET — every text field must stay within the word limit shown or the response will be truncated and fail.
+⚠️ STRICT TOKEN BUDGET — respect every word limit or the response will be truncated.
 
 Respond ONLY with valid JSON (no markdown, no text outside the JSON object):
 {
@@ -167,23 +201,38 @@ Respond ONLY with valid JSON (no markdown, no text outside the JSON object):
       "agentVerdict": "Strong Buy|Buy|Moderate Buy",
       "targetReturn": 0,
       "stopLoss": 0,
-      "entryPrice": 0.0,
-      "takeProfitPrice": 0.0,
-      "stopLossPrice": 0.0,
+      "entryZoneLow": 0.0,
+      "entryZoneHigh": 0.0,
+      "targetZoneLow": 0.0,
+      "targetZoneHigh": 0.0,
+      "stopZoneLow": 0.0,
+      "stopZoneHigh": 0.0,
       "fundamentalScore": 0,
       "technicalScore": 0,
       "sentimentScore": 0,
       "macroScore": 0,
       "riskScore": 0,
-      "fundamentalAnalysis": "≤10 words on valuation/earnings",
-      "technicalAnalysis": "≤10 words on price/momentum",
-      "sentimentAnalysis": "≤10 words on news/flow",
-      "macroAnalysis": "≤10 words on sector/macro",
-      "riskNote": "≤10 words on downside/risk",
-      "supervisorSynthesis": "≤15 words summary",
+      "fundamentalAnalysis": "≤20 words plain prose — specific valuation/earnings reasoning",
+      "technicalAnalysis": "≤20 words plain prose — specific price/volume/momentum reasoning",
+      "sentimentAnalysis": "≤20 words plain prose — specific news/flow/positioning reasoning",
+      "macroAnalysis": "≤20 words plain prose — specific macro/sector tailwind or headwind",
+      "riskNote": "≤20 words plain prose — specific downside scenario",
+      "supervisorSynthesis": "≤20 words — if agents agree, say so; if they conflict, say which two and why it matters",
+      "agentConflict": {
+        "exists": true,
+        "agents": ["Agent1","Agent2"],
+        "spread": 0,
+        "meaning": "≤15 words — what this disagreement signals for timing/sizing"
+      },
+      "thesisAssumptions": [
+        "≤10 words — falsifiable assumption 1",
+        "≤10 words — falsifiable assumption 2",
+        "≤10 words — falsifiable assumption 3"
+      ],
+      "volumeSignal": "Confirming|Weak|Diverging|Unknown",
       "keyDrivers": ["≤4 words","≤4 words"],
-      "bearCase": "≤8 words — primary downside risk",
-      "thesisBreaker": "≤6 words — event that invalidates this pick"
+      "bearCase": "≤10 words — primary downside risk",
+      "thesisBreaker": "≤8 words — event that invalidates this pick"
     }
   ],
   "agentNotes": {
@@ -196,17 +245,18 @@ Respond ONLY with valid JSON (no markdown, no text outside the JSON object):
 }
 
 Rules:
-- Include exactly 20 top picks ranked by compositeScore; prefer symbols NOT already in holdings
+- Include up to 20 top picks ranked by compositeScore; prefer symbols NOT already in holdings
 - compositeScore = weighted avg (fundamental 25%, technical 20%, sentiment 15%, macro 20%, risk 20%)
 - All scores 0-100; riskScore: higher = safer
-- entryPrice: limit order price at or slightly below current price
-- takeProfitPrice: entryPrice × (1 + targetReturn/100)
-- stopLossPrice: entryPrice × (1 - stopLoss/100)
-- currentPrice: from live snapshot if available, else estimate
+- agentConflict.exists = true when ANY two agent scores differ by ≥25 points
+- agentConflict.agents = the two most-divergent agents
+- Price zones: entryZoneLow/High = ±2% around ideal entry; targetZoneLow/High = ±3% around target; stopZoneLow/High = ±1.5% around stop
+- volumeSignal: "Confirming" if vol > 1.1x avg and price trending up; "Weak" if vol < 0.8x; "Diverging" if vol rising but price falling (or vice versa); "Unknown" if no data
+- thesisAssumptions: 3 specific, falsifiable conditions that must hold for the bull case to play out
 - dataSource: "live" if snapshot provided, else "knowledge"
-- STRICTLY respect the ≤N word limits — exceeding them causes JSON truncation`
+- STRICTLY respect all ≤N word limits`
 
-  // ── Groq fallback helper ───────────────────────────────────────────────────
+  // ── Groq fallback ─────────────────────────────────────────────────────────
   async function callGroq(text) {
     const groqKey = process.env.GROQ_API_KEY
     if (!groqKey) throw new Error('GROQ_API_KEY not configured')
@@ -228,7 +278,7 @@ Rules:
     return d.choices?.[0]?.message?.content || ''
   }
 
-  // ── Step 3: run Claude Opus 4.8 via circuit breaker (Groq fallback on overload) ──
+  // ── Step 3: run Claude via circuit breaker ─────────────────────────────────
   const AI_MODEL = 'claude-sonnet-4-6'
   let raw     = ''
   let llmUsed = 'claude'
@@ -273,7 +323,6 @@ Rules:
   }
 
   try {
-    // Robust JSON extraction: try direct parse first, then regex match
     let data
     try {
       data = JSON.parse(raw)
@@ -285,7 +334,7 @@ Rules:
       }
       try {
         data = JSON.parse(m[0])
-      } catch (parseErr) {
+      } catch {
         console.error('[ai-brain] JSON parse failed (likely truncated). raw length:', raw.length)
         return res.status(500).json({ error: 'AI Brain response was truncated — reduce symbols or try again' })
       }
@@ -294,11 +343,22 @@ Rules:
     if (!Array.isArray(data.rankedStocks) || !data.rankedStocks.length)
       return res.status(500).json({ error: 'AI Brain returned no ranked stocks — try again' })
 
+    // Log each prediction for win-rate tracking
+    for (const stock of data.rankedStocks) {
+      logPrediction(stock.symbol, stock, {
+        entryZoneLow:   stock.entryZoneLow,
+        entryZoneHigh:  stock.entryZoneHigh,
+        targetZoneLow:  stock.targetZoneLow,
+        targetZoneHigh: stock.targetZoneHigh,
+      }, generatedAt)
+    }
+
     return res.json({
       ...data,
       horizon,
       scanMode,
-      processedAt:      new Date().toISOString(),
+      processedAt:      generatedAt,
+      dataAge,
       universeAnalyzed: universe,
       liveDataSymbols:  liveQuotes.map(q => q.symbol),
       llmUsed,
