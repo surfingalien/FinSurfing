@@ -579,9 +579,13 @@ async function getFMPSearch(q, keys = {}) {
       let quoteType = 'EQUITY'
       if (
         exch === 'ETF' ||
-        name.includes(' etf') || name.includes(' fund') || name.includes(' trust') ||
-        name.includes(' ishares') || name.includes(' vanguard') || name.includes(' spdr') ||
-        name.includes(' invesco') || name.includes(' schwab') || name.includes(' fidelity')
+        /\betf\b/.test(name) ||
+        name.includes(' fund') || name.includes(' trust') ||
+        name.includes('vanguard') || name.includes('ishares') ||
+        name.includes('spdr')    || name.includes('invesco') ||
+        name.includes('schwab')  || name.includes('fidelity') ||
+        name.includes('blackrock') || name.includes('direxion') ||
+        name.includes('proshares') || name.includes('wisdomtree')
       ) {
         quoteType = 'ETF'
       } else if (exch === 'INDEX' || name.includes(' index')) {
