@@ -61,10 +61,54 @@ const SCAN_UNIVERSES = {
     'BTC-USD','ETH-USD','SOL-USD','BNB-USD','ADA-USD','DOGE-USD','XRP-USD',
     'AVAX-USD','DOT-USD','LINK-USD','MATIC-USD','UNI-USD',
   ],
+  // ── Mutual fund category universes ──────────────────────────
   mutualfunds: [
-    'FXAIX','VFIAX','VTSAX','FSKAX','FSELX','FCNTX','FDGRX',
-    'PRGFX','AGTHX','PRWCX','TRBCX','VWUSX','FGRTX','VDADX',
-    'DODGX','OAKMX','CGMFX','VGHCX','FBIOX','RPMGX',
+    // Broad: top 20 across all categories
+    'FXAIX','VFIAX','VTSAX','FCNTX','FDGRX','PRGFX','AGTHX',
+    'PRWCX','DODGX','FSELX','FBIOX','DODFX','VBTLX','PTTAX',
+    'VWELX','FPURX','TRBCX','VWUSX','CGMFX','OAKMX',
+  ],
+  mutualfunds_index: [
+    // Best passive index funds — low cost, broad market
+    'FXAIX','VFIAX','VTSAX','FSKAX','SWTSX','SWPPX','VEXAX',
+    'FSMAX','FZROX','FZILX','FNILX','VITSX','VINIX','VBTLX',
+    'FXNAX','SWAGX','SWISX','FBIIX','VGIT','VGSH',
+  ],
+  mutualfunds_growth: [
+    // Top active growth managers
+    'FCNTX','FDGRX','FBGRX','AGTHX','PRGFX','TRBCX','VWUSX',
+    'CGMFX','FGRTX','RPMGX','MSEGX','VPMAX','AMRMX','SPECX',
+    'ANCFX','GQEPX','MXXVX','PARNX','SEQUX','BIAWX',
+  ],
+  mutualfunds_value: [
+    // Dividend-focused, deep value, and quality value
+    'DODGX','FLPSX','VIVAX','VEIPX','VDIGX','DFDVX','FVDFX',
+    'USAWX','BUFVX','AIVSX','MFVFX','VWNDX','RWGRX','HAINX',
+    'TWVLX','PYVLX','AEPGX','CWGIX','DODFX','VEIRX',
+  ],
+  mutualfunds_sector: [
+    // Sector-specific funds across all industries
+    'FSELX','FBIOX','FSUTX','FSENX','FRESX','FSCPX','FSRPX',
+    'FSCSX','FSPHX','FBSOX','FSHCX','FNARX','FSAIX','FSDCX',
+    'FSNGX','FTRNX','FWWFX','FAGIX','RYREX','FSAVX',
+  ],
+  mutualfunds_bond: [
+    // Investment-grade, high-yield, TIPS, and short-duration
+    'VBTLX','VBMFX','FBNDX','PTTAX','PTTRX','LSBRX','MWTRX',
+    'VWESX','OSTIX','DODIX','VWEAX','FBIDX','FXNAX','SWAGX',
+    'MWTIX','PTRAX','FGOVX','FLTMX','FSTFX','VFIIX',
+  ],
+  mutualfunds_intl: [
+    // Developed and emerging market international equity
+    'DODFX','VGTSX','VFWIX','FSPSX','VTMGX','PRIDX','TBGVX',
+    'FOSFX','FDIVX','FSIIX','VEUSX','VWILX','MGIEX','HAINX',
+    'AEPGX','FIENX','MSFAX','CWGIX','VIHAX','PREMX',
+  ],
+  mutualfunds_balanced: [
+    // Multi-asset allocation and balanced funds
+    'PRWCX','VWELX','VWINX','FPURX','FBALX','TRRIX','DODBX',
+    'BERIX','ABALX','PRSIX','TIBIX','GLRBX','MALOX','FMSDX',
+    'VTHRX','VFORX','VFFVX','VTIVX','VTENX','FFNOX',
   ],
 }
 
@@ -183,7 +227,7 @@ CRITICAL: When two agents disagree by 25+ points, that spread IS the primary sig
 Analyze this universe for a ${horizonLabel} horizon. Today is late May 2026.
 Universe: ${universe.join(', ')}
 Avoid holdings: ${holdingStr}
-${scanMode === 'mutualfunds' ? `\nNOTE: This universe contains mutual funds. For each fund score on: (1) Fundamental = long-term holdings quality & manager track record, (2) Technical = NAV trend & momentum vs benchmark, (3) Sentiment = fund flows & retail demand, (4) Macro = sector/asset-class fit for current regime, (5) Risk = expense ratio, drawdown history, concentration risk. Price targets refer to NAV levels. Skip stop-loss precision — use risk zones instead.` : ''}
+${scanMode.startsWith('mutualfunds') ? `\nNOTE: This universe contains mutual funds (category: ${scanMode === 'mutualfunds' ? 'Broad All-Category' : scanMode.replace('mutualfunds_','').toUpperCase()}). Score each fund on: (1) Fundamental = portfolio holdings quality, manager tenure & track record, alpha vs benchmark, (2) Technical = NAV trend, momentum, and performance relative to category peers, (3) Sentiment = fund flows, retail/institutional demand, manager commentary, (4) Macro = asset-class fit for current rate/growth/inflation regime, (5) Risk = expense ratio, max drawdown, concentration risk, redemption risk. Price targets refer to NAV zones. Omit stop-loss precision — use downside risk zones only.` : ''}
 ${marketSnippet}
 
 ⚠️ STRICT TOKEN BUDGET — respect every word limit or the response will be truncated.

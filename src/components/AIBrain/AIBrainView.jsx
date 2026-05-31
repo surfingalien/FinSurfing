@@ -35,6 +35,18 @@ const SCAN_MODES = [
   { id: 'mutualfunds', label: 'Mutual Funds', icon: PieChart,   color: 'text-teal-400',    bg: 'bg-teal-500/15',    border: 'border-teal-500/30'    },
 ]
 
+/* ── fund sub-category modes ───────────────────────────────── */
+const FUND_SUBMODES = [
+  { id: 'mutualfunds',          label: 'All Funds',     description: 'Broad top 20 across all categories'     },
+  { id: 'mutualfunds_index',    label: 'Index',         description: 'FXAIX, VFIAX, VTSAX, FZROX…'           },
+  { id: 'mutualfunds_growth',   label: 'Growth',        description: 'FCNTX, FDGRX, AGTHX, CGMFX…'           },
+  { id: 'mutualfunds_value',    label: 'Value',         description: 'DODGX, VIVAX, VEIPX, FLPSX…'           },
+  { id: 'mutualfunds_sector',   label: 'Sector',        description: 'FSELX, FBIOX, FSPHX, FBSOX…'           },
+  { id: 'mutualfunds_bond',     label: 'Bond / Fixed',  description: 'VBTLX, PTTAX, MWTRX, DODIX…'           },
+  { id: 'mutualfunds_intl',     label: 'International', description: 'DODFX, VGTSX, PRIDX, FDIVX…'           },
+  { id: 'mutualfunds_balanced', label: 'Balanced',      description: 'PRWCX, VWELX, FPURX, TRRIX…'           },
+]
+
 function getApiKeyHeaders() {
   try {
     const s = JSON.parse(localStorage.getItem('finsurf_api_keys') || '{}')
@@ -603,7 +615,7 @@ export default function AIBrainView({ portfolio, onAnalyze }) {
         <div className="flex gap-1.5 overflow-x-auto pb-0.5 scrollbar-hide">
           {SCAN_MODES.map(m => {
             const Icon = m.icon
-            const active = scanMode === m.id
+            const active = scanMode === m.id || (m.id === 'mutualfunds' && scanMode.startsWith('mutualfunds'))
             return (
               <button
                 key={m.id}
@@ -622,6 +634,43 @@ export default function AIBrainView({ portfolio, onAnalyze }) {
           })}
         </div>
       )}
+
+      {/* ── Fund sub-category picker ── */}
+      {scanMode.startsWith('mutualfunds') && !customSymbols.trim() && (
+        <div className="flex flex-col gap-2 p-3 rounded-xl bg-teal-500/5 border border-teal-500/15">
+          <div className="flex items-center gap-1.5 text-[10px] text-teal-400/70 font-medium uppercase tracking-wider">
+            <PieChart className="w-3 h-3" />
+            Fund Category
+          </div>
+          <div className="flex gap-1.5 flex-wrap">
+            {FUND_SUBMODES.map(sub => {
+              const active = scanMode === sub.id
+              return (
+                <button
+                  key={sub.id}
+                  onClick={() => setScanMode(sub.id)}
+                  disabled={loading}
+                  title={sub.description}
+                  className={`px-3 py-1 rounded-lg text-xs font-medium border whitespace-nowrap transition-all disabled:opacity-40 ${
+                    active
+                      ? 'bg-teal-500/20 text-teal-300 border-teal-500/40'
+                      : 'bg-white/[0.03] text-slate-400 border-white/[0.07] hover:text-teal-300 hover:border-teal-500/25'
+                  }`}
+                >
+                  {sub.label}
+                </button>
+              )
+            })}
+          </div>
+          {(() => {
+            const active = FUND_SUBMODES.find(s => s.id === scanMode)
+            return active ? (
+              <div className="text-[10px] text-slate-500">{active.description}</div>
+            ) : null
+          })()}
+        </div>
+      )}
+
       {customSymbols.trim() && (
         <div className="text-[11px] text-slate-500 px-1">
           <span className="text-amber-400 font-medium">Custom symbols active</span> — scan mode overridden. Clear the search to use scan modes.
