@@ -166,12 +166,12 @@ function personaRecommendation(persona, score, summary) {
       if (dy > 3 && score >= 55) return { action: 'Buy', rationale: `High dividend yield (${dy.toFixed(1)}%) with stable trend. Good income-focused ETF position.` }
       if (dy > 1.5 && score >= 45) return { action: 'Buy', rationale: `Decent yield (${dy.toFixed(1)}%) with positive momentum. Solid all-weather ETF holding.` }
       if (score >= 48) return { action: 'Hold', rationale: `Low-yield ETF. Suitable only as a growth holding, not a value/income play.` }
-      return { action: 'Reduce', rationale: `Below-average trend and minimal yield. Look for higher-conviction entry.` }
+      return { action: 'Underweight', rationale: `Below-average trend and minimal yield. Look for higher-conviction entry.` }
     }
     if (persona.id === 'momentum') {
       if (score >= 65) return { action: 'Buy', rationale: `Strong price momentum — RSI healthy and price above key moving averages. Ride the trend.` }
-      if (score >= 48) return { action: 'Watch', rationale: `Mixed momentum. Set a price alert — enter on confirmed breakout above resistance.` }
-      return { action: 'Avoid', rationale: `Weak trend. ETF below key moving averages. Wait for momentum confirmation.` }
+      if (score >= 48) return { action: 'Hold', rationale: `Mixed momentum. Set a price alert — enter on confirmed breakout above resistance.` }
+      return { action: 'Sell', rationale: `Weak trend. ETF below key moving averages. Wait for momentum confirmation.` }
     }
     if (persona.id === 'defensive') {
       if (beta < 0.7 && score >= 55) return { action: 'Buy', rationale: `Low beta (${fmt(beta, 2)}) ETF with stable trend. Excellent defensive allocation.` }
@@ -181,29 +181,29 @@ function personaRecommendation(persona, score, summary) {
     if (persona.id === 'esg') {
       if (score >= 60) return { action: 'Buy', rationale: `Strong trend with reasonable yield. Check the fund's ESG screening methodology for alignment.` }
       if (score >= 45) return { action: 'Hold', rationale: `Neutral setup. Verify ESG ratings (MSCI, Sustainalytics) before increasing allocation.` }
-      return { action: 'Research', rationale: `Weak trend. Many ESG ETFs have lower volatility — this one needs more investigation.` }
+      return { action: 'Hold', rationale: `Weak trend. Many ESG ETFs have lower volatility — this one needs more investigation.` }
     }
     return { action: 'Hold', rationale: 'Insufficient data for a strong conviction.' }
   }
 
   // ── Stock recommendations (existing logic) ────────────────────────────────
   if (persona.id === 'growth') {
-    if (score >= 70) return { action: 'Strong Buy', rationale: `High revenue growth (${rg.toFixed(1)}%) with strong momentum. Growth profile aligns well.` }
+    if (score >= 70) return { action: 'Buy', rationale: `High revenue growth (${rg.toFixed(1)}%) with strong momentum. Growth profile aligns well.` }
     if (score >= 50) return { action: 'Buy', rationale: `Moderate growth potential. Consider position sizing based on risk tolerance.` }
     if (score >= 35) return { action: 'Hold', rationale: `Growth slowing or valuation stretched. Watch for re-acceleration signals.` }
-    return { action: 'Avoid', rationale: `Does not meet growth criteria. Below-average revenue and earnings momentum.` }
+    return { action: 'Sell', rationale: `Does not meet growth criteria. Below-average revenue and earnings momentum.` }
   }
   if (persona.id === 'value') {
-    if (pe != null && pe < 15 && score >= 60) return { action: 'Strong Buy', rationale: `Low P/E (${fmt(pe)}×) with solid fundamentals. Classic value opportunity.` }
+    if (pe != null && pe < 15 && score >= 60) return { action: 'Buy', rationale: `Low P/E (${fmt(pe)}×) with solid fundamentals. Classic value opportunity.` }
     if (pe != null && pe < 25 && score >= 50) return { action: 'Buy', rationale: `Reasonably valued at ${fmt(pe)}× earnings. Margin of safety present.` }
     if (pe != null && pe < 35) return { action: 'Hold', rationale: `Fairly valued. Wait for a better entry below ${fmt(pe * 0.85, 0)}×.` }
     if (pe == null && score >= 55) return { action: 'Hold', rationale: `No P/E data available. Use technical signals and sector context for sizing.` }
-    return { action: 'Avoid', rationale: pe != null ? `Expensive at ${fmt(pe)}× earnings. Value investors would require a significant pullback.` : `Insufficient fundamental data for value assessment.` }
+    return { action: 'Sell', rationale: pe != null ? `Expensive at ${fmt(pe)}× earnings. Value investors would require a significant pullback.` : `Insufficient fundamental data for value assessment.` }
   }
   if (persona.id === 'momentum') {
     if (score >= 65) return { action: 'Buy', rationale: `Strong technical momentum. Price above key moving averages with healthy RSI.` }
-    if (score >= 45) return { action: 'Watch', rationale: `Mixed momentum signals. Set alerts for a breakout above resistance.` }
-    return { action: 'Avoid', rationale: `Weak momentum. Price below key moving averages — wait for trend reversal.` }
+    if (score >= 45) return { action: 'Hold', rationale: `Mixed momentum signals. Set alerts for a breakout above resistance.` }
+    return { action: 'Sell', rationale: `Weak momentum. Price below key moving averages — wait for trend reversal.` }
   }
   if (persona.id === 'defensive') {
     if (beta < 0.8 && score >= 55) return { action: 'Buy', rationale: `Low beta (${fmt(beta, 2)}) with stable earnings. Excellent defensive holding.` }
@@ -213,7 +213,7 @@ function personaRecommendation(persona, score, summary) {
   if (persona.id === 'esg') {
     if (score >= 60) return { action: 'Buy', rationale: `Strong financial performance. Generally associated with responsible business practices.` }
     if (score >= 45) return { action: 'Hold', rationale: `Adequate profile. Research ESG ratings from MSCI or Sustainalytics for conviction.` }
-    return { action: 'Research', rationale: `Financial metrics need improvement. ESG leadership requires both financial and sustainability quality.` }
+    return { action: 'Hold', rationale: `Financial metrics need improvement. ESG leadership requires both financial and sustainability quality.` }
   }
   return { action: 'Hold', rationale: 'Insufficient data for strong conviction.' }
 }

@@ -38,8 +38,8 @@ function relativeTime(date) {
 function getSignalColor(signal) {
   if (!signal) return 'slate'
   const s = signal.toUpperCase()
-  if (s === 'BUY') return 'emerald'
-  if (s === 'SELL') return 'red'
+  if (s === 'BUY' || s === 'OVERWEIGHT') return 'emerald'
+  if (s === 'SELL' || s === 'UNDERWEIGHT') return 'red'
   return 'amber'
 }
 

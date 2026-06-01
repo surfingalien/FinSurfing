@@ -219,6 +219,34 @@ function tvToYahoo(tvSymbol) {
   return symUpper
 }
 
+// ── StockTwits retail sentiment (no API key required) ─────────────────────────
+
+async function fetchStockTwits(symbol) {
+  // Strip quote suffix for crypto (BTC-USD → BTC) then sanitize
+  const base = symbol.replace(/-[A-Z]+$/, '').replace(/[^A-Z0-9]/g, '')
+  if (!base) return null
+  try {
+    const r = await fetch(
+      `https://api.stocktwits.com/api/2/streams/symbol/${base}.json`,
+      { headers: { 'User-Agent': 'FinSurfing/1.0' }, signal: AbortSignal.timeout(4000) }
+    )
+    if (!r.ok) return null
+    const { messages = [] } = await r.json()
+    if (!messages.length) return null
+    let bullish = 0, bearish = 0, neutral = 0
+    const snippets = []
+    for (const m of messages.slice(0, 30)) {
+      const sent = m?.entities?.sentiment?.basic
+      if (sent === 'Bullish') bullish++
+      else if (sent === 'Bearish') bearish++
+      else neutral++
+      if (snippets.length < 3 && m.body)
+        snippets.push(`[${sent ?? 'Neutral'}] ${m.body.slice(0, 80).replace(/\n/g, ' ')}`)
+    }
+    return { bullish, bearish, neutral, total: messages.length, snippets }
+  } catch { return null }
+}
+
 // ── Interval conversion: TradingView → Yahoo interval + range ─────────────────
 
 function tvToChartParams(tvInterval) {
@@ -665,7 +693,7 @@ function volumeAnalysis(volumes) {
 
 // ── Analysis prompt builder ────────────────────────────────────────────────────
 
-function buildAnalysisPrompt(symbol, interval, price, indicators, patterns, vol, priceLabel = 'last bar close') {
+function buildAnalysisPrompt(symbol, interval, price, indicators, patterns, vol, priceLabel = 'last bar close', sentiment = null) {
   const { rsi, macd, ema9, ema21, ema50, ema200, bb, atr, stochRsi, vwap, obv, sr } = indicators
 
   const rsiInterp = rsi == null ? 'N/A'
@@ -699,6 +727,10 @@ function buildAnalysisPrompt(symbol, interval, price, indicators, patterns, vol,
 
   const patternsStr = patterns && patterns.length ? patterns.join(', ') : 'none detected'
 
+  const sentimentSection = sentiment
+    ? `\nRETAIL SENTIMENT (StockTwits — last ${sentiment.total} posts):\nBullish: ${sentiment.bullish} | Bearish: ${sentiment.bearish} | Neutral: ${sentiment.neutral}${sentiment.snippets.length ? '\nSample posts:\n' + sentiment.snippets.join('\n') : ''}\n`
+    : ''
+
   const prompt = `You are an expert quantitative trading analyst. Analyze the following technical data for ${symbol} on the ${interval} timeframe and generate a structured trading signal.
 
 MARKET DATA:
@@ -722,16 +754,17 @@ ${volInterp}
 
 DETECTED PATTERNS:
 ${patternsStr}
-
+${sentimentSection}
 ANALYSIS INSTRUCTIONS:
 1. Look for CONTRADICTIONS between indicators (e.g. RSI overbought but MACD still bullish, price above EMA50 but OBV falling, BB squeeze while RSI diverging). List each contradiction explicitly.
 2. For price targets, provide a ZONE (low/high) based on key S/R and ATR, not a single precise number. Entry zone should reflect realistic fill range around current price.
 3. Assess overall signal confidence based on indicator CONFLUENCE — high confidence requires 4+ indicators agreeing.
-4. Reasoning should explicitly weigh the bull and bear cases before reaching a conclusion.
+4. BULL/BEAR FRAMEWORK: Argue the 3 strongest bull reasons, then the 3 strongest bear reasons, then synthesize which case dominates. Your "reasoning" field must reflect this debate explicitly.
+5. Use the full 5-tier signal scale: BUY = strong entry, 4+ indicators confirming | OVERWEIGHT = favorable setup, add to existing position | HOLD = no clear directional edge, stay flat | UNDERWEIGHT = headwinds building, reduce exposure | SELL = exit or short, significant downside confirmed by multiple signals.
 
 Respond with ONLY pure JSON (absolutely no markdown fences, no backticks, no code blocks, no text before or after the JSON). The JSON must match this exact shape:
 {
-  "signal": "BUY or SELL or HOLD",
+  "signal": "BUY | OVERWEIGHT | HOLD | UNDERWEIGHT | SELL",
   "confidence": 0-100,
   "trend": "BULLISH or BEARISH or NEUTRAL",
   "entry": number,
@@ -872,8 +905,12 @@ router.post('/analyze', async (req, res) => {
 
     const indicators = { rsi, macd, ema9, ema21, ema50, ema200, bb, atr, stochRsi, vwap, obv, sr, patterns, volume: vol }
 
+    // Fetch StockTwits sentiment (fire-and-forget, non-blocking on failure)
+    const sentiment = await fetchStockTwits(sym)
+    if (sentiment) console.log(`[trading-analysis] ${sym} StockTwits: ${sentiment.bullish}B ${sentiment.bearish}Be ${sentiment.neutral}N / ${sentiment.total}`)
+
     // Build prompt and call Claude
-    const analysisPrompt = buildAnalysisPrompt(sym, interval, price, indicators, patterns, vol, priceLabel)
+    const analysisPrompt = buildAnalysisPrompt(sym, interval, price, indicators, patterns, vol, priceLabel, sentiment)
 
     const anthropic = new Anthropic({ apiKey })
     const msg = await anthropic.messages.create({
