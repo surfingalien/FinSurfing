@@ -43,6 +43,14 @@ function getSignalColor(signal) {
   return 'amber'
 }
 
+function getAlignmentColor(alignment) {
+  if (alignment === 'Bullish alignment') return 'emerald'
+  if (alignment === 'Bearish alignment') return 'red'
+  if (alignment === 'Tight alignment') return 'blue'
+  if (alignment === 'Wide divergence') return 'amber'
+  return 'slate'
+}
+
 function getPatternColor(pattern) {
   const bullish = ['20bar_breakout_up', 'golden_cross', 'volume_spike', 'strong_uptrend', 'above_ema50', 'above_ema200']
   const bearish = ['20bar_breakout_down', 'death_cross', 'strong_downtrend', 'below_ema50', 'below_ema200']
@@ -230,12 +238,14 @@ export default function TradingAIPanel({ symbol, interval, price }) {
   }
 
   // ── Derived display values ─────────────────────────────────────────────────
-  const analysis   = result?.analysis ?? null
-  const indicators = result?.indicators ?? null
-  const signal     = analysis?.signal ?? null
-  const color      = getSignalColor(signal)
-  const patterns   = indicators?.patterns ?? []
-  const ticker     = symbol.includes(':') ? symbol.split(':')[1] : symbol
+  const analysis          = result?.analysis ?? null
+  const indicators        = result?.indicators ?? null
+  const sentiment         = result?.sentiment ?? null
+  const sentimentAlignment = result?.sentimentAlignment ?? null
+  const signal            = analysis?.signal ?? null
+  const color             = getSignalColor(signal)
+  const patterns          = indicators?.patterns ?? []
+  const ticker            = symbol.includes(':') ? symbol.split(':')[1] : symbol
 
   // ── Tabs bar ───────────────────────────────────────────────────────────────
   const TABS = [
@@ -411,6 +421,26 @@ export default function TradingAIPanel({ symbol, interval, price }) {
                     <div className="flex justify-between text-[10px] mt-0.5">
                       <span className="text-emerald-400">{analysis.bullishProbability ?? 50}% Bull</span>
                       <span className="text-red-400">{analysis.bearishProbability ?? 50}% Bear</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Sentiment alignment ──────────────────────────────── */}
+                {(sentiment || sentimentAlignment) && sentimentAlignment !== 'No data' && (
+                  <div className="px-3 mb-3">
+                    <div className="text-[10px] text-slate-500 mb-1">Sentiment Alignment</div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {sentimentAlignment && (
+                        <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full bg-${getAlignmentColor(sentimentAlignment)}-500/20 text-${getAlignmentColor(sentimentAlignment)}-400`}>
+                          {sentimentAlignment}
+                        </span>
+                      )}
+                      {sentiment?.bullishPct != null && (
+                        <span className="text-[10px] text-slate-400">
+                          StockTwits: <span className="text-emerald-400">{sentiment.bullishPct}% bull</span>
+                          {' '}· {sentiment.bullish}B / {sentiment.bearish}Be ({sentiment.total} msgs)
+                        </span>
+                      )}
                     </div>
                   </div>
                 )}

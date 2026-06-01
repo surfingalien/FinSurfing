@@ -243,8 +243,26 @@ async function fetchStockTwits(symbol) {
       if (snippets.length < 3 && m.body)
         snippets.push(`[${sent ?? 'Neutral'}] ${m.body.slice(0, 80).replace(/\n/g, ' ')}`)
     }
-    return { bullish, bearish, neutral, total: messages.length, snippets }
+    const labeled = bullish + bearish
+    const bullishPct = labeled > 0 ? Math.round((bullish / labeled) * 100) : null
+    return { bullish, bearish, neutral, total: messages.length, snippets, bullishPct }
   } catch { return null }
+}
+
+// ── Multi-source sentiment alignment classifier (ported from OpenStock) ─
+
+function getSourceAlignment(bullishPcts) {
+  if (!bullishPcts || bullishPcts.length === 0) return 'No data'
+  if (bullishPcts.length === 1) return 'Single source'
+  const min = Math.min(...bullishPcts)
+  const max = Math.max(...bullishPcts)
+  const avg = bullishPcts.reduce((s, v) => s + v, 0) / bullishPcts.length
+  const spread = max - min
+  if (spread <= 12 && avg >= 60) return 'Bullish alignment'
+  if (spread <= 12 && avg <= 40) return 'Bearish alignment'
+  if (spread <= 12) return 'Tight alignment'
+  if (spread >= 25) return 'Wide divergence'
+  return 'Mixed'
 }
 
 // ── Interval conversion: TradingView → Yahoo interval + range ─────────────────
@@ -952,6 +970,12 @@ router.post('/analyze', async (req, res) => {
       volume: b.v,
     }))
 
+    // Compute multi-source sentiment alignment
+    const bullishPcts = []
+    if (sentiment?.bullishPct != null) bullishPcts.push(sentiment.bullishPct)
+    if (analysis?.bullishProbability != null) bullishPcts.push(analysis.bullishProbability)
+    const sentimentAlignment = getSourceAlignment(bullishPcts)
+
     return res.json({
       symbol:    sym,
       interval,
@@ -959,6 +983,8 @@ router.post('/analyze', async (req, res) => {
       analysis,
       indicators,
       candles,
+      sentiment: sentiment ? { bullish: sentiment.bullish, bearish: sentiment.bearish, neutral: sentiment.neutral, total: sentiment.total, bullishPct: sentiment.bullishPct, snippets: sentiment.snippets } : null,
+      sentimentAlignment,
       timestamp: new Date().toISOString(),
     })
   } catch (err) {
