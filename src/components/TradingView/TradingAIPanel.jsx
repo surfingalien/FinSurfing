@@ -117,6 +117,7 @@ export default function TradingAIPanel({ symbol, interval, price }) {
   const [streaming, setStreaming] = useState(false)
   const [alerts, setAlerts] = useState([])
   const [reasoningOpen, setReasoningOpen] = useState(false)
+  const [thesisOpen, setThesisOpen]       = useState(true)
 
   const debounceRef = useRef(null)
   const chatEndRef  = useRef(null)
@@ -605,6 +606,83 @@ export default function TradingAIPanel({ symbol, interval, price }) {
                         <p key={i} className="text-[11px] text-amber-400/80 leading-tight">{c}</p>
                       ))}
                     </div>
+                  </div>
+                )}
+
+                {/* ── Two-Sided Thesis ──────────────────────────────────── */}
+                {analysis.thesis && (
+                  <div className="px-3 mb-3">
+                    <button
+                      onClick={() => setThesisOpen(o => !o)}
+                      className="flex items-center gap-1 text-[10px] text-slate-500 hover:text-slate-300 transition-colors mb-1.5 uppercase tracking-wider w-full"
+                    >
+                      <ChevronRight className={`w-3 h-3 transition-transform ${thesisOpen ? 'rotate-90' : ''}`} />
+                      Two-Sided Thesis
+                      {analysis.thesis.entryType && (
+                        <span className={`ml-auto text-[9px] px-1.5 py-0.5 rounded-full font-medium ${
+                          analysis.thesis.entryType === 'left-entry'  ? 'bg-blue-500/20 text-blue-400' :
+                          analysis.thesis.entryType === 'right-entry' ? 'bg-emerald-500/20 text-emerald-400' :
+                                                                         'bg-slate-500/20 text-slate-400'
+                        }`}>
+                          {analysis.thesis.entryType === 'left-entry'  ? 'Left-Side Entry' :
+                           analysis.thesis.entryType === 'right-entry' ? 'Right-Side Entry' : 'No Entry'}
+                        </span>
+                      )}
+                    </button>
+                    {thesisOpen && (
+                      <div className="rounded-lg bg-white/[0.03] border border-white/[0.06] p-2.5 space-y-2.5">
+                        {analysis.thesis.claim && (
+                          <p className="text-[11px] text-slate-200 leading-tight font-medium border-b border-white/[0.06] pb-2">
+                            {analysis.thesis.claim}
+                          </p>
+                        )}
+                        {/* Left side */}
+                        <div className="space-y-1">
+                          <div className="text-[9px] text-blue-400/80 uppercase tracking-wider font-medium">Left — Structure</div>
+                          {analysis.thesis.left && <p className="text-[10px] text-slate-400 leading-snug">{analysis.thesis.left}</p>}
+                          {(analysis.thesis.leftMustBeTrue || analysis.thesis.leftBreaksIf) && (
+                            <div className="flex flex-col gap-0.5 mt-1">
+                              {analysis.thesis.leftMustBeTrue && (
+                                <span className="text-[9px] text-slate-500">
+                                  <span className="text-slate-400">Must hold:</span> {analysis.thesis.leftMustBeTrue}
+                                </span>
+                              )}
+                              {analysis.thesis.leftBreaksIf && (
+                                <span className="text-[9px] text-red-400/70">
+                                  <span className="text-red-400/90">Breaks if:</span> {analysis.thesis.leftBreaksIf}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                        {/* Right side */}
+                        <div className="space-y-1 border-t border-white/[0.04] pt-2">
+                          <div className="text-[9px] text-emerald-400/80 uppercase tracking-wider font-medium">Right — Market Confirmation</div>
+                          {analysis.thesis.right && <p className="text-[10px] text-slate-400 leading-snug">{analysis.thesis.right}</p>}
+                          {(analysis.thesis.rightMustBeTrue || analysis.thesis.rightBreaksIf) && (
+                            <div className="flex flex-col gap-0.5 mt-1">
+                              {analysis.thesis.rightMustBeTrue && (
+                                <span className="text-[9px] text-slate-500">
+                                  <span className="text-slate-400">Must hold:</span> {analysis.thesis.rightMustBeTrue}
+                                </span>
+                              )}
+                              {analysis.thesis.rightBreaksIf && (
+                                <span className="text-[9px] text-red-400/70">
+                                  <span className="text-red-400/90">Breaks if:</span> {analysis.thesis.rightBreaksIf}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                        {/* Priced-in */}
+                        {analysis.thesis.pricedIn && (
+                          <div className="border-t border-white/[0.04] pt-2">
+                            <div className="text-[9px] text-amber-400/80 uppercase tracking-wider font-medium mb-0.5">Priced-In Check</div>
+                            <p className="text-[10px] text-slate-400 leading-snug">{analysis.thesis.pricedIn}</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
 

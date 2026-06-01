@@ -777,7 +777,11 @@ ANALYSIS INSTRUCTIONS:
 1. Look for CONTRADICTIONS between indicators (e.g. RSI overbought but MACD still bullish, price above EMA50 but OBV falling, BB squeeze while RSI diverging). List each contradiction explicitly.
 2. For price targets, provide a ZONE (low/high) based on key S/R and ATR, not a single precise number. Entry zone should reflect realistic fill range around current price.
 3. Assess overall signal confidence based on indicator CONFLUENCE — high confidence requires 4+ indicators agreeing.
-4. BULL/BEAR FRAMEWORK: Argue the 3 strongest bull reasons, then the 3 strongest bear reasons, then synthesize which case dominates. Your "reasoning" field must reflect this debate explicitly.
+4. TWO-SIDED THESIS (institutional research framework — populate the "thesis" object):
+   LEFT SIDE — technical structure: What do the indicators say about the underlying price structure? Identify the 2-3 load-bearing assumptions the setup rests on. State your "variant view" — where this reading differs from the obvious, consensus interpretation of the chart. Then: what must remain true for the left case to hold, and what single signal would break it?
+   RIGHT SIDE — market confirmation: Is the market itself moving with or against the thesis right now? Judge via price momentum, OBV/volume trend, and trend alignment across EMAs. Is capital flowing into or out of this name? What must persist for the right case to hold, and what would break it?
+   PRICED-IN CHECK: Is this setup obvious and already crowded? A correct thesis that everyone can see has thin edge even if technically valid.
+   ENTRY TYPE — classify as exactly one of: "left-entry" (setup is structurally sound but market not yet confirming — higher timing risk, potentially better price), "right-entry" (market actively confirming the thesis — pay slightly higher for lower timing risk), "neither" (thesis doesn't hold on either side).
 5. Use the full 5-tier signal scale: BUY = strong entry, 4+ indicators confirming | OVERWEIGHT = favorable setup, add to existing position | HOLD = no clear directional edge, stay flat | UNDERWEIGHT = headwinds building, reduce exposure | SELL = exit or short, significant downside confirmed by multiple signals.
 
 Respond with ONLY pure JSON (absolutely no markdown fences, no backticks, no code blocks, no text before or after the JSON). The JSON must match this exact shape:
@@ -794,6 +798,17 @@ Respond with ONLY pure JSON (absolutely no markdown fences, no backticks, no cod
   "timeHorizon": "scalp or swing or position",
   "bullishProbability": 0-100,
   "bearishProbability": 0-100,
+  "thesis": {
+    "claim": "one sentence — what must happen for this trade to work",
+    "left": "technical structure case — load-bearing assumptions and variant view vs consensus chart read",
+    "leftMustBeTrue": "the one thing that must hold for the left case to survive",
+    "leftBreaksIf": "specific signal that would invalidate the structural case",
+    "right": "market confirmation — momentum, volume/OBV flow, trend alignment",
+    "rightMustBeTrue": "the condition that must persist for market to keep confirming",
+    "rightBreaksIf": "specific signal that would break the confirmation case",
+    "pricedIn": "is this the obvious trade — crowded or contrarian",
+    "entryType": "left-entry | right-entry | neither"
+  },
   "indicators": {
     "rsi": "concise interpretation string",
     "macd": "concise interpretation string",
@@ -803,7 +818,7 @@ Respond with ONLY pure JSON (absolutely no markdown fences, no backticks, no cod
   },
   "contradictions": ["contradiction1 if any", "contradiction2 if any"],
   "patterns": ["pattern1", "pattern2"],
-  "reasoning": "3-4 sentence analysis weighing bull and bear cases",
+  "reasoning": "3-4 sentence synthesis of the two-sided thesis — which side dominates and why",
   "risks": ["risk1", "risk2", "risk3"],
   "disclaimer": "brief risk disclaimer string"
 }`
