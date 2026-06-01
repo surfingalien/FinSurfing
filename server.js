@@ -645,6 +645,7 @@ async function getTwelveDataChart(symbol, interval = '1d', range = '1y', keys = 
 // Quote via Twelve Data (single symbol, counts against quota)
 async function getTwelveDataQuote(symbol, keys = {}) {
   const key  = keys.td || process.env.TWELVE_DATA_API_KEY || 'demo'
+  if (key === 'demo') return null
   try {
     const url  = `https://api.twelvedata.com/quote?symbol=${encodeURIComponent(symbol)}&apikey=${key}`
     const d    = await apiFetch(url, 10000)
