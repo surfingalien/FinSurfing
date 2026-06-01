@@ -948,7 +948,7 @@ router.post('/analyze', async (req, res) => {
     const anthropic = new Anthropic({ apiKey })
     const msg = await anthropic.messages.create({
       model:      'claude-sonnet-4-6',
-      max_tokens: 1024,
+      max_tokens: 2048,
       messages:   [{ role: 'user', content: analysisPrompt }],
     })
 
@@ -1069,7 +1069,7 @@ router.post('/chat', async (req, res) => {
 
     const stream = anthropic.messages.stream({
       model:      'claude-sonnet-4-6',
-      max_tokens: 1024,
+      max_tokens: 2048,
       system:     systemPrompt,
       messages,
     })
