@@ -128,10 +128,24 @@ export default function TradingAIPanel({ symbol, interval, price }) {
     setLoading(true)
     setError(null)
     try {
+      // Resolve live price: prop (TradingView widget) → quote API → server fallback
+      let livePrice = (price && price > 0) ? price : null
+      if (!livePrice) {
+        try {
+          const qr = await fetch(`/api/quote?symbols=${encodeURIComponent(symbol)}`, {
+            headers: getApiKeyHeaders(),
+            signal: AbortSignal.timeout(5000),
+          })
+          const qd = await qr.json()
+          const p  = qd?.quoteResponse?.result?.[0]?.regularMarketPrice
+          if (p && p > 0) livePrice = p
+        } catch { /* server will fall back to bar close */ }
+      }
+
       const res = await fetch('/api/trading-analysis/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...getApiKeyHeaders() },
-        body: JSON.stringify({ symbol, interval, livePrice: price ?? null }),
+        body: JSON.stringify({ symbol, interval, livePrice }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Analysis failed')
@@ -158,7 +172,7 @@ export default function TradingAIPanel({ symbol, interval, price }) {
       setError(e.message)
     }
     setLoading(false)
-  }, [symbol, interval])
+  }, [symbol, interval, price])
 
   // ── Auto-analyze on symbol / interval change ───────────────────────────────
   useEffect(() => {

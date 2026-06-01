@@ -910,11 +910,17 @@ router.post('/analyze', async (req, res) => {
         )
         const qd = await qr.json()
         const lp = qd?.quoteResponse?.result?.[0]?.regularMarketPrice
-        if (lp && lp > 0 && (Math.abs(lp - price) / price < 0.5 || isCryptoSymbol(sym))) {
-          // Sanity check: accept if within 50% of bar close, OR always for crypto
-          // (crypto quote from Binance/CoinGecko is authoritative even when bars are stale)
-          price = lp
-          priceLabel = 'live quote'
+        if (lp && lp > 0) {
+          // Trust the quote over bar close: bar data can be stale or from a demo key
+          // that normalises prices to ~$1. Only reject if the bar close already looks
+          // realistic (>$2) AND the quote is more than 10× off — which would signal a
+          // genuine data error rather than a stale/normalised bar.
+          const barLooksReal = price > 2
+          const withinRange  = Math.abs(lp - price) / price < 10
+          if (!barLooksReal || withinRange || isCryptoSymbol(sym)) {
+            price = lp
+            priceLabel = 'live quote'
+          }
         }
       } catch { /* keep last bar close */ }
     }
