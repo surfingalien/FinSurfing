@@ -603,6 +603,10 @@ async function getFMPSearch(q, keys = {}) {
 
 async function getTwelveDataChart(symbol, interval = '1d', range = '1y', keys = {}) {
   const key     = keys.td || process.env.TWELVE_DATA_API_KEY || 'demo'
+  // The demo key returns normalized price series (~$1 base) for non-AAPL/MSFT symbols,
+  // causing every symbol to show $1 prices. Skip demo for chart data — Nasdaq/Stooq/
+  // Binance cover the same universe for free without synthetic price distortion.
+  if (key === 'demo') return null
   const ivlMap  = { '1m':'1min','5m':'5min','15m':'15min','30m':'30min','60m':'1h','1h':'1h','1d':'1day','1wk':'1week','1mo':'1month' }
   const tdIvl   = ivlMap[interval]
   if (!tdIvl) return null
