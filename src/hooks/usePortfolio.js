@@ -175,8 +175,10 @@ export function usePortfolio({ userId, activePortfolioId, authFetch } = {}) {
           [symbol]: {
             ...existing,
             price,
-            change,
-            changePct,
+            // Don't overwrite a valid change/changePct with null from WS ticks that
+            // arrived before the REST quote populated prevClose in the server cache
+            change:    change    ?? existing.change,
+            changePct: changePct ?? existing.changePct,
             marketTime: ts ? Math.floor(ts / 1000) : existing.marketTime,
           },
         }

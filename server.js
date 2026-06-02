@@ -1526,6 +1526,29 @@ app.get('/api/quote', async (req, res) => {
     // ── Merge results preserving original symbol order ─────────────────────────
     const [cryptoResults, stockResults, fundResults] = await Promise.all([cryptoPromise, stockPromise, fundPromise])
 
+    // Supplement missing/zero regularMarketChange from Nasdaq (free, no key needed).
+    // Finnhub free tier sets d.c=0 after market close → code hardcodes change=0 and
+    // sets price=prevClose → Today's P&L = (prevClose-prevClose)×shares = $0.
+    // Nasdaq provides netChange correctly from the last session even post-close.
+    const needChange = stockResults.filter(r => r?.regularMarketPrice != null && !r.regularMarketChange)
+    if (needChange.length) {
+      try {
+        const nasdaqSupp = await getNasdaqQuotes(needChange.map(r => r.symbol))
+        if (nasdaqSupp) {
+          const nm = Object.fromEntries(nasdaqSupp.filter(Boolean).map(r => [r.symbol, r]))
+          for (const r of stockResults) {
+            if (!r.regularMarketChange && nm[r.symbol]?.regularMarketChange) {
+              r.regularMarketChange        = nm[r.symbol].regularMarketChange
+              r.regularMarketChangePercent = nm[r.symbol].regularMarketChangePercent
+              if (!r.regularMarketPreviousClose && r.regularMarketPrice != null && r.regularMarketChange != null) {
+                r.regularMarketPreviousClose = +(r.regularMarketPrice - r.regularMarketChange).toFixed(4)
+              }
+            }
+          }
+        }
+      } catch { /* best effort — P&L might still be 0 if Nasdaq is unreachable */ }
+    }
+
     const cryptoMap = Object.fromEntries(cryptoResults.map(r => [r.symbol, r]))
     const stockMap  = Object.fromEntries(stockResults.map(r => [r.symbol, r]))
     const fundMap   = Object.fromEntries(fundResults.map(r => [r.symbol, r]))
