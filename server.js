@@ -354,16 +354,17 @@ async function getFinnhubQuotes(symbols, keys = {}) {
       if (cached) return cached
       try {
         const d = await apiFetch(fhUrl(`/quote?symbol=${encodeURIComponent(sym)}`, key), 8000)
-        // d.c === 0 happens after market hours on the free tier — fall back to d.pc (previous close)
-        const price = d?.c || d?.pc || null
-        if (!price) return { symbol: sym, regularMarketPrice: null }
-        const isStale = !d.c && !!d.pc  // using prev close when market is closed
+        // d.c === 0 on the free tier means "market closed / no current trade".
+        // Return null so the cascade falls through to Nasdaq, which provides
+        // the actual last-session close price and netChange even after hours.
+        if (!d?.c && !d?.pc) return { symbol: sym, regularMarketPrice: null }
+        if (!d.c) return { symbol: sym, regularMarketPrice: null }
         const q = {
           symbol:                     sym,
           shortName:                  sym,
-          regularMarketPrice:         price,
-          regularMarketChange:        isStale ? 0 : (d.d   ?? null),
-          regularMarketChangePercent: isStale ? 0 : (d.dp  ?? null),
+          regularMarketPrice:         d.c,
+          regularMarketChange:        d.d   ?? null,
+          regularMarketChangePercent: d.dp  ?? null,
           regularMarketDayHigh:       d.h   ?? null,
           regularMarketDayLow:        d.l   ?? null,
           regularMarketOpen:          d.o   ?? null,

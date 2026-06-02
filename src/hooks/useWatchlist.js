@@ -35,13 +35,17 @@ export function useWatchlist() {
 
   useEffect(() => {
     if (!symbols.length) return
-    // Full fetch on mount and every 5 min
+    // Full fetch on mount and every 2 min
     refresh()
-    const fullRefresh = setInterval(refresh, 5 * 60_000)
+    const fullRefresh = setInterval(refresh, 2 * 60_000)
 
-    // Real-time stream — merges price/change/changePct ticks into the quotes array
+    // Real-time stream — merges price ticks; never overwrite valid change with null
     const unsub = subscribeQuotes(symbols, ({ symbol: sym, price, change, changePct }) => {
-      setQuotes(prev => prev.map(q => q.symbol === sym ? { ...q, price, change, changePct } : q))
+      setQuotes(prev => prev.map(q =>
+        q.symbol === sym
+          ? { ...q, price, change: change ?? q.change, changePct: changePct ?? q.changePct }
+          : q
+      ))
     })
 
     return () => { clearInterval(fullRefresh); unsub() }
