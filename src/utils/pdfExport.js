@@ -1,5 +1,5 @@
 /**
- * pdfExport.js — Generate a print-friendly HTML report for AI Brain analysis.
+ * pdfExport.js — Generate print-friendly HTML reports for AI Brain & Buy Signals.
  *
  * Usage:
  *   import { exportAnalysisToPDF } from '../utils/pdfExport'
@@ -18,13 +18,16 @@ function escHtml(str) {
 }
 
 function fmtPrice(val) {
-  if (val == null) return '—'
-  return `$${Number(val).toFixed(2)}`
+  if (val == null || isNaN(val)) return '—'
+  const n = Number(val)
+  if (n === 0) return '—'
+  return `$${n.toFixed(2)}`
 }
 
 function fmtPct(val, sign = true) {
-  if (val == null) return '—'
+  if (val == null || isNaN(val)) return '—'
   const n = Number(val)
+  if (n === 0) return '0%'
   return sign && n > 0 ? `+${n}%` : `${n}%`
 }
 
@@ -43,7 +46,6 @@ function horizonLabel(h) {
   return map[h] || h || '—'
 }
 
-/* ── Score color (for HTML) ──────────────────────────────── */
 function scoreColor(score) {
   if (score == null) return '#6b7280'
   if (score >= 75) return '#10b981'
@@ -51,7 +53,6 @@ function scoreColor(score) {
   return '#ef4444'
 }
 
-/* ── Verdict color ───────────────────────────────────────── */
 function verdictColor(verdict) {
   if (!verdict) return '#6b7280'
   const v = verdict.toLowerCase()
@@ -61,37 +62,71 @@ function verdictColor(verdict) {
   return '#6b7280'
 }
 
-/* ── Agent notes rows ────────────────────────────────────── */
+/* ── Format entry / target / stop zones ─────────────────── */
+function fmtZone(low, high) {
+  if (low != null && high != null && (low > 0 || high > 0))
+    return `$${Number(low).toFixed(2)}&nbsp;–&nbsp;$${Number(high).toFixed(2)}`
+  return '—'
+}
+
+function fmtStopLoss(stock) {
+  // Stop loss price = currentPrice × (1 – stopLoss%)
+  const pct   = stock.stopLoss
+  const price = stock.currentPrice
+  if (pct != null && price != null && price > 0) {
+    const slPrice = price * (1 - pct / 100)
+    return `$${slPrice.toFixed(2)}<br/><span style="font-size:10px;color:#ef4444;">–${pct}%</span>`
+  }
+  if (stock.stopLossPrice != null) return fmtPrice(stock.stopLossPrice)
+  return '—'
+}
+
+/* ── Agent market views (global, not per-stock) ─────────── */
 function buildAgentNotesRows(agentNotes) {
   if (!agentNotes) return ''
   const agents = [
-    { key: 'fundamentalAnalyst', label: 'Fundamental',  color: '#60a5fa' },
-    { key: 'technicalAnalyst',   label: 'Technical',    color: '#22d3ee' },
-    { key: 'sentimentAnalyst',   label: 'Sentiment',    color: '#a78bfa' },
-    { key: 'macroEconomist',     label: 'Macro',        color: '#fbbf24' },
-    { key: 'riskManager',        label: 'Risk',         color: '#f87171' },
+    { key: 'fundamentalAnalyst', label: 'Fundamental', color: '#60a5fa' },
+    { key: 'technicalAnalyst',   label: 'Technical',   color: '#22d3ee' },
+    { key: 'sentimentAnalyst',   label: 'Sentiment',   color: '#a78bfa' },
+    { key: 'macroEconomist',     label: 'Macro',       color: '#fbbf24' },
+    { key: 'riskManager',        label: 'Risk',        color: '#f87171' },
   ]
-
   return agents.map(a => {
     const note = agentNotes[a.key]
     if (!note) return ''
     return `
-      <div class="agent-note" style="border-left: 3px solid ${a.color};">
-        <div class="agent-label" style="color: ${a.color};">${escHtml(a.label)} Agent</div>
+      <div class="agent-note" style="border-left:3px solid ${a.color};">
+        <div class="agent-label" style="color:${a.color};">${escHtml(a.label)} Agent</div>
         <div class="agent-text">${escHtml(note)}</div>
       </div>`
   }).join('')
 }
 
-/* ── Stock table rows ────────────────────────────────────── */
-function buildStockRows(rankedStocks) {
-  if (!Array.isArray(rankedStocks) || rankedStocks.length === 0) {
+/* ── Summary table rows ──────────────────────────────────── */
+function buildStockRows(rankedStocks, horizon) {
+  if (!Array.isArray(rankedStocks) || !rankedStocks.length)
     return '<tr><td colspan="12" style="text-align:center;color:#9ca3af;padding:20px;">No ranked stocks available.</td></tr>'
-  }
 
   return rankedStocks.map(s => {
-    const scoreClr  = scoreColor(s.compositeScore)
+    const scoreClr   = scoreColor(s.compositeScore)
     const verdictClr = verdictColor(s.agentVerdict)
+
+    // Entry zone (AI Brain returns entryZoneLow/High; fallback to entryPrice)
+    const entryStr = (s.entryZoneLow != null || s.entryZoneHigh != null)
+      ? fmtZone(s.entryZoneLow, s.entryZoneHigh)
+      : fmtPrice(s.entryPrice)
+
+    // Target zone
+    const targetStr = (s.targetZoneLow != null || s.targetZoneHigh != null)
+      ? fmtZone(s.targetZoneLow, s.targetZoneHigh)
+      : fmtPrice(s.takeProfitPrice)
+
+    // Stop loss: calculate price from pct, fallback to stored price
+    const stopStr = fmtStopLoss(s)
+
+    // Horizon: per-stock if set, otherwise the analysis-level horizon
+    const stockHorizon = s.horizon || horizon || '—'
+
     return `
       <tr>
         <td style="text-align:center;font-weight:700;">${escHtml(s.rank)}</td>
@@ -101,12 +136,90 @@ function buildStockRows(rankedStocks) {
         <td style="text-align:center;font-weight:700;color:${scoreClr};">${s.compositeScore ?? '—'}</td>
         <td style="color:${verdictClr};font-weight:600;">${escHtml(s.agentVerdict)}</td>
         <td style="text-align:right;font-family:monospace;">${fmtPrice(s.currentPrice)}</td>
-        <td style="text-align:right;font-family:monospace;">${fmtPrice(s.entryPrice)}</td>
-        <td style="text-align:right;font-family:monospace;color:#10b981;">${fmtPrice(s.takeProfitPrice)}</td>
-        <td style="text-align:right;font-family:monospace;color:#ef4444;">${fmtPrice(s.stopLossPrice)}</td>
+        <td style="text-align:right;font-family:monospace;font-size:11px;" class="zone-cell">${entryStr}</td>
+        <td style="text-align:right;font-family:monospace;color:#10b981;font-size:11px;" class="zone-cell">${targetStr}</td>
+        <td style="text-align:right;font-family:monospace;" class="zone-cell">${stopStr}</td>
         <td style="text-align:right;font-family:monospace;color:#10b981;font-weight:600;">${fmtPct(s.targetReturn)}</td>
-        <td style="text-align:center;">${escHtml(s.horizon)}</td>
+        <td style="text-align:center;">${escHtml(horizonLabel(stockHorizon))}</td>
       </tr>`
+  }).join('')
+}
+
+/* ── Per-stock Fundamental / Technical / Sentiment / Macro / Risk ── */
+function buildStockDetailSections(rankedStocks) {
+  if (!Array.isArray(rankedStocks) || !rankedStocks.length) return ''
+
+  const agentDefs = [
+    { scoreKey: 'fundamentalScore', textKey: 'fundamentalAnalysis', label: 'Fundamental', color: '#60a5fa' },
+    { scoreKey: 'technicalScore',   textKey: 'technicalAnalysis',   label: 'Technical',   color: '#22d3ee' },
+    { scoreKey: 'sentimentScore',   textKey: 'sentimentAnalysis',   label: 'Sentiment',   color: '#a78bfa' },
+    { scoreKey: 'macroScore',       textKey: 'macroAnalysis',       label: 'Macro',       color: '#fbbf24' },
+    { scoreKey: 'riskScore',        textKey: 'riskNote',            label: 'Risk',        color: '#f87171' },
+  ]
+
+  return rankedStocks.map(s => {
+    const scoreClr   = scoreColor(s.compositeScore)
+    const verdictClr = verdictColor(s.agentVerdict)
+
+    const agentCards = agentDefs.map(a => {
+      const score = s[a.scoreKey]
+      const text  = s[a.textKey]
+      if (!text && score == null) return ''
+      const sClr = scoreColor(score)
+      return `
+        <div class="detail-agent-card" style="border-left:3px solid ${a.color};">
+          <div class="detail-agent-header">
+            <span class="detail-agent-label" style="color:${a.color};">${a.label}</span>
+            ${score != null ? `<span class="detail-agent-score" style="color:${sClr};">${score}</span>` : ''}
+          </div>
+          <div class="detail-agent-text">${escHtml(text || '—')}</div>
+        </div>`
+    }).join('')
+
+    const entryStr = (s.entryZoneLow != null || s.entryZoneHigh != null)
+      ? fmtZone(s.entryZoneLow, s.entryZoneHigh)
+      : fmtPrice(s.entryPrice)
+    const targetStr = (s.targetZoneLow != null || s.targetZoneHigh != null)
+      ? fmtZone(s.targetZoneLow, s.targetZoneHigh)
+      : fmtPrice(s.takeProfitPrice)
+    const stopStr = fmtStopLoss(s)
+
+    return `
+      <div class="stock-detail">
+        <div class="stock-detail-header">
+          <span class="stock-detail-rank">#${escHtml(s.rank)}</span>
+          <span class="stock-detail-symbol">${escHtml(s.symbol)}</span>
+          <span class="stock-detail-name">${escHtml(s.name)}</span>
+          <span class="stock-detail-sector">${escHtml(s.sector)}</span>
+          <span class="stock-detail-score" style="color:${scoreClr};">${s.compositeScore ?? '—'}</span>
+          <span class="stock-detail-verdict" style="color:${verdictClr};">${escHtml(s.agentVerdict)}</span>
+        </div>
+        <div class="stock-detail-prices">
+          <div class="price-pill">
+            <span class="price-pill-label">Current</span>
+            <span class="price-pill-value">${fmtPrice(s.currentPrice)}</span>
+          </div>
+          <div class="price-pill">
+            <span class="price-pill-label">Entry Zone</span>
+            <span class="price-pill-value">${entryStr}</span>
+          </div>
+          <div class="price-pill">
+            <span class="price-pill-label">Target Zone</span>
+            <span class="price-pill-value" style="color:#10b981;">${targetStr}</span>
+          </div>
+          <div class="price-pill">
+            <span class="price-pill-label">Stop Loss</span>
+            <span class="price-pill-value" style="color:#ef4444;">${stopStr}</span>
+          </div>
+          <div class="price-pill">
+            <span class="price-pill-label">Return</span>
+            <span class="price-pill-value" style="color:#10b981;font-weight:700;">${fmtPct(s.targetReturn)}</span>
+          </div>
+        </div>
+        <div class="detail-agents-grid">
+          ${agentCards}
+        </div>
+      </div>`
   }).join('')
 }
 
@@ -122,9 +235,10 @@ function buildHTML(analysis, horizon) {
     universeAnalyzed    = [],
   } = analysis
 
-  const agentNoteRows = buildAgentNotesRows(agentNotes)
-  const stockRows     = buildStockRows(rankedStocks)
-  const universeStr   = Array.isArray(universeAnalyzed) ? universeAnalyzed.join(', ') : '—'
+  const agentNoteRows     = buildAgentNotesRows(agentNotes)
+  const stockRows         = buildStockRows(rankedStocks, horizon)
+  const stockDetailBlocks = buildStockDetailSections(rankedStocks)
+  const universeStr       = Array.isArray(universeAnalyzed) ? universeAnalyzed.join(', ') : '—'
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -133,7 +247,6 @@ function buildHTML(analysis, horizon) {
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>AI Brain Analysis Report — FinSurfing</title>
   <style>
-    /* ── Reset & base ── */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html { font-size: 14px; }
     body {
@@ -142,11 +255,10 @@ function buildHTML(analysis, horizon) {
       color: #111827;
       line-height: 1.5;
       padding: 32px 40px;
-      max-width: 1100px;
+      max-width: 1200px;
       margin: 0 auto;
     }
 
-    /* ── Print button (hidden on print) ── */
     .print-btn {
       display: inline-flex;
       align-items: center;
@@ -163,193 +275,145 @@ function buildHTML(analysis, horizon) {
     }
     .print-btn:hover { background: #1e40af; }
 
-    /* ── Header ── */
     .report-header {
       border-bottom: 2px solid #e5e7eb;
       padding-bottom: 20px;
       margin-bottom: 28px;
     }
-    .report-title {
-      font-size: 26px;
-      font-weight: 800;
-      color: #111827;
-      letter-spacing: -0.5px;
-    }
-    .report-subtitle {
-      font-size: 13px;
-      color: #6b7280;
-      margin-top: 4px;
-    }
-    .report-meta {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 24px;
-      margin-top: 16px;
-    }
-    .meta-item {
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-    }
-    .meta-label {
-      font-size: 10px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      color: #9ca3af;
-    }
-    .meta-value {
-      font-size: 13px;
-      font-weight: 600;
-      color: #111827;
-    }
+    .report-title { font-size: 26px; font-weight: 800; color: #111827; letter-spacing: -0.5px; }
+    .report-subtitle { font-size: 13px; color: #6b7280; margin-top: 4px; }
+    .report-meta { display: flex; flex-wrap: wrap; gap: 24px; margin-top: 16px; }
+    .meta-item { display: flex; flex-direction: column; gap: 2px; }
+    .meta-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #9ca3af; }
+    .meta-value { font-size: 13px; font-weight: 600; color: #111827; }
 
-    /* ── Section ── */
-    .section {
-      margin-bottom: 32px;
-    }
+    .section { margin-bottom: 32px; }
     .section-title {
-      font-size: 13px;
-      font-weight: 800;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      color: #374151;
-      padding-bottom: 8px;
-      border-bottom: 1px solid #f3f4f6;
-      margin-bottom: 16px;
+      font-size: 13px; font-weight: 800; text-transform: uppercase;
+      letter-spacing: 0.08em; color: #374151;
+      padding-bottom: 8px; border-bottom: 1px solid #f3f4f6; margin-bottom: 16px;
     }
 
-    /* ── Market overview cards ── */
-    .overview-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 16px;
-    }
+    .overview-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
     .overview-card {
-      background: #f9fafb;
+      background: #f9fafb; border: 1px solid #e5e7eb;
+      border-radius: 10px; padding: 16px;
+    }
+    .overview-card-title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6b7280; margin-bottom: 6px; }
+    .overview-card-main  { font-size: 15px; font-weight: 700; color: #111827; margin-bottom: 4px; }
+    .overview-card-body  { font-size: 12px; color: #4b5563; line-height: 1.6; }
+    .universe-text { font-size: 11px; color: #9ca3af; margin-top: 8px; font-family: monospace; }
+
+    .agent-notes-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+    .agent-note { background: #f9fafb; border-radius: 8px; padding: 12px 12px 12px 14px; }
+    .agent-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 5px; }
+    .agent-text  { font-size: 11px; color: #4b5563; line-height: 1.55; }
+
+    /* ── Summary table ── */
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    thead tr { background: #f3f4f6; }
+    th {
+      text-align: left; padding: 8px 10px;
+      font-size: 10px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.06em; color: #6b7280; border-bottom: 1px solid #e5e7eb;
+    }
+    td { padding: 9px 10px; border-bottom: 1px solid #f3f4f6; color: #111827; vertical-align: middle; }
+    tbody tr:hover { background: #f9fafb; }
+    tbody tr:last-child td { border-bottom: none; }
+    .zone-cell { font-size: 11px; line-height: 1.4; }
+
+    /* ── Per-stock detail sections ── */
+    .stock-detail {
       border: 1px solid #e5e7eb;
       border-radius: 10px;
       padding: 16px;
+      margin-bottom: 16px;
+      background: #fafafa;
+      page-break-inside: avoid;
     }
-    .overview-card-title {
-      font-size: 10px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      color: #6b7280;
-      margin-bottom: 6px;
-    }
-    .overview-card-main {
-      font-size: 15px;
-      font-weight: 700;
-      color: #111827;
-      margin-bottom: 4px;
-    }
-    .overview-card-body {
-      font-size: 12px;
-      color: #4b5563;
-      line-height: 1.6;
-    }
-
-    /* ── Universe ── */
-    .universe-text {
-      font-size: 11px;
-      color: #9ca3af;
-      margin-top: 8px;
-      font-family: monospace;
-    }
-
-    /* ── Agent notes ── */
-    .agent-notes-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-      gap: 12px;
-    }
-    .agent-note {
-      background: #f9fafb;
-      border-radius: 8px;
-      padding: 12px 12px 12px 14px;
-    }
-    .agent-label {
-      font-size: 10px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      margin-bottom: 5px;
-    }
-    .agent-text {
-      font-size: 11px;
-      color: #4b5563;
-      line-height: 1.55;
-    }
-
-    /* ── Ranked stocks table ── */
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 12px;
-    }
-    thead tr {
-      background: #f3f4f6;
-    }
-    th {
-      text-align: left;
-      padding: 8px 10px;
-      font-size: 10px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      color: #6b7280;
+    .stock-detail-header {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 12px;
+      padding-bottom: 10px;
       border-bottom: 1px solid #e5e7eb;
     }
-    td {
-      padding: 9px 10px;
-      border-bottom: 1px solid #f3f4f6;
-      color: #111827;
-      vertical-align: middle;
+    .stock-detail-rank   { font-size: 11px; color: #9ca3af; font-weight: 700; }
+    .stock-detail-symbol { font-size: 16px; font-weight: 800; font-family: monospace; color: #111827; }
+    .stock-detail-name   { font-size: 13px; color: #374151; }
+    .stock-detail-sector { font-size: 11px; color: #6b7280; background: #f3f4f6; border-radius: 4px; padding: 2px 6px; }
+    .stock-detail-score  { font-size: 15px; font-weight: 800; margin-left: auto; }
+    .stock-detail-verdict { font-size: 12px; font-weight: 600; }
+
+    .stock-detail-prices {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 14px;
     }
-    tbody tr:hover { background: #f9fafb; }
-    tbody tr:last-child td { border-bottom: none; }
+    .price-pill {
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 6px;
+      padding: 6px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 90px;
+    }
+    .price-pill-label { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: #9ca3af; }
+    .price-pill-value { font-size: 12px; font-weight: 600; font-family: monospace; color: #111827; }
+
+    .detail-agents-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 10px;
+    }
+    .detail-agent-card {
+      background: #fff;
+      border-radius: 6px;
+      padding: 10px 10px 10px 12px;
+      border: 1px solid #f3f4f6;
+    }
+    .detail-agent-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 5px;
+    }
+    .detail-agent-label { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; }
+    .detail-agent-score { font-size: 13px; font-weight: 800; }
+    .detail-agent-text  { font-size: 11px; color: #4b5563; line-height: 1.5; }
 
     /* ── Disclaimer ── */
     .disclaimer {
-      background: #f9fafb;
-      border: 1px solid #e5e7eb;
-      border-radius: 8px;
-      padding: 14px 16px;
-      font-size: 11px;
-      color: #9ca3af;
-      line-height: 1.6;
-      margin-top: 32px;
+      background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px;
+      padding: 14px 16px; font-size: 11px; color: #9ca3af; line-height: 1.6; margin-top: 32px;
     }
     .disclaimer strong { color: #6b7280; }
 
-    /* ── Print styles ── */
+    /* ── Print ── */
     @media print {
-      body { padding: 16px 20px; }
+      body { padding: 14px 18px; }
       .print-btn { display: none !important; }
       table { font-size: 10px; }
-      th, td { padding: 6px 7px; }
+      th, td { padding: 5px 7px; }
       .overview-grid { grid-template-columns: 1fr 1fr; }
       .agent-notes-grid { grid-template-columns: repeat(3, 1fr); }
-      .section { margin-bottom: 20px; }
-      .overview-card, .agent-note, .disclaimer { border: 1px solid #d1d5db; }
+      .section { margin-bottom: 18px; }
+      .overview-card, .agent-note, .disclaimer, .stock-detail { border: 1px solid #d1d5db; }
+      .detail-agents-grid { grid-template-columns: repeat(5, 1fr); }
       a { text-decoration: none; color: inherit; }
-      @page {
-        margin: 12mm 14mm;
-        size: A4 landscape;
-      }
+      @page { margin: 10mm 12mm; size: A4 landscape; }
     }
   </style>
 </head>
 <body>
 
-  <!-- Print button -->
-  <button class="print-btn" onclick="window.print()">
-    &#x1F5A8;&#xFE0F; Print / Save as PDF
-  </button>
+  <button class="print-btn" onclick="window.print()">&#x1F5A8;&#xFE0F; Print / Save as PDF</button>
 
-  <!-- ── Report header ── -->
   <div class="report-header">
     <div class="report-title">AI Brain Analysis Report</div>
     <div class="report-subtitle">FinSurfing · Multi-Agent AI Stock Analysis</div>
@@ -369,7 +433,6 @@ function buildHTML(analysis, horizon) {
     </div>
   </div>
 
-  <!-- ── Market overview ── -->
   <div class="section">
     <div class="section-title">Market Overview</div>
     <div class="overview-grid">
@@ -386,44 +449,41 @@ function buildHTML(analysis, horizon) {
     </div>
   </div>
 
-  <!-- ── Agent notes ── -->
   ${agentNoteRows ? `
   <div class="section">
     <div class="section-title">Agent Market Views</div>
-    <div class="agent-notes-grid">
-      ${agentNoteRows}
-    </div>
+    <div class="agent-notes-grid">${agentNoteRows}</div>
   </div>` : ''}
 
-  <!-- ── Ranked stocks ── -->
   <div class="section">
-    <div class="section-title">
-      Ranked Stock Picks — ${escHtml(horizonLabel(horizon))} Horizon
-    </div>
+    <div class="section-title">Ranked Stock Picks — ${escHtml(horizonLabel(horizon))} Horizon</div>
     <table>
       <thead>
         <tr>
-          <th style="width:36px;">Rank</th>
-          <th style="width:60px;">Symbol</th>
+          <th style="width:34px;">Rank</th>
+          <th style="width:58px;">Symbol</th>
           <th>Name</th>
           <th>Sector</th>
-          <th style="width:46px;text-align:center;">Score</th>
-          <th style="width:96px;">Verdict</th>
-          <th style="width:80px;text-align:right;">Curr. Price</th>
-          <th style="width:80px;text-align:right;">Entry</th>
-          <th style="width:80px;text-align:right;">Target</th>
-          <th style="width:80px;text-align:right;">Stop Loss</th>
-          <th style="width:72px;text-align:right;">Return %</th>
-          <th style="width:52px;text-align:center;">Horizon</th>
+          <th style="width:44px;text-align:center;">Score</th>
+          <th style="width:90px;">Verdict</th>
+          <th style="width:76px;text-align:right;">Curr. Price</th>
+          <th style="width:110px;text-align:right;">Entry Zone</th>
+          <th style="width:110px;text-align:right;">Target Zone</th>
+          <th style="width:90px;text-align:right;">Stop Loss</th>
+          <th style="width:68px;text-align:right;">Return %</th>
+          <th style="width:58px;text-align:center;">Horizon</th>
         </tr>
       </thead>
-      <tbody>
-        ${stockRows}
-      </tbody>
+      <tbody>${stockRows}</tbody>
     </table>
   </div>
 
-  <!-- ── Disclaimer ── -->
+  ${stockDetailBlocks ? `
+  <div class="section">
+    <div class="section-title">Detailed Analysis — Fundamental · Technical · Sentiment · Macro · Risk</div>
+    ${stockDetailBlocks}
+  </div>` : ''}
+
   <div class="disclaimer">
     <strong>Disclaimer:</strong> This report is generated by AI agents for <strong>informational purposes only</strong>
     and does <strong>not</strong> constitute financial, investment, or trading advice. AI-generated scores, verdicts,
@@ -439,16 +499,6 @@ function buildHTML(analysis, horizon) {
 
 /* ── Main export ─────────────────────────────────────────── */
 
-/**
- * exportAnalysisToPDF(analysis, horizon)
- *
- * Builds a print-ready HTML page for the AI Brain analysis and opens it in a
- * new browser tab. Automatically triggers window.print() after 500 ms.
- *
- * @param {object} analysis  - AI Brain response (rankedStocks, marketRegime, …)
- * @param {string} horizon   - '3m' | '6m' | '12m'
- * @returns {Window|null}    - The new window reference, or null if blocked.
- */
 export function exportAnalysisToPDF(analysis, horizon) {
   if (!analysis) {
     console.warn('exportAnalysisToPDF: no analysis provided')
@@ -459,7 +509,6 @@ export function exportAnalysisToPDF(analysis, horizon) {
 
   const newWindow = window.open('', '_blank')
   if (!newWindow) {
-    // Popup was blocked — alert the user
     alert(
       'Pop-up blocked. Please allow pop-ups for this site and try again.\n\n' +
       'Or use your browser\'s "Print" shortcut (Ctrl+P / Cmd+P) directly.'
@@ -471,13 +520,8 @@ export function exportAnalysisToPDF(analysis, horizon) {
   newWindow.document.write(html)
   newWindow.document.close()
 
-  // Auto-trigger the print dialog after the page has rendered
   setTimeout(() => {
-    try {
-      newWindow.print()
-    } catch (e) {
-      // Some browsers disallow programmatic print from cross-origin context;
-      // the user can still use the on-page Print button.
+    try { newWindow.print() } catch (e) {
       console.warn('exportAnalysisToPDF: auto-print failed', e)
     }
   }, 500)
@@ -485,7 +529,7 @@ export function exportAnalysisToPDF(analysis, horizon) {
   return newWindow
 }
 
-/* ── Buy Signals HTML document ───────────────────────────── */
+/* ── Buy Signals HTML ────────────────────────────────────── */
 function buildBuySignalsHTML(recs) {
   const {
     recommendations = [],
@@ -518,187 +562,58 @@ function buildBuySignalsHTML(recs) {
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>AI Buy Signals Report — FinSurfing</title>
   <style>
-    /* ── Reset & base ── */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html { font-size: 14px; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-      background: #fff;
-      color: #111827;
-      line-height: 1.5;
-      padding: 32px 40px;
-      max-width: 1200px;
-      margin: 0 auto;
+      background: #fff; color: #111827; line-height: 1.5;
+      padding: 32px 40px; max-width: 1200px; margin: 0 auto;
     }
-
-    /* ── Print button (hidden on print) ── */
     .print-btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      margin-bottom: 24px;
-      padding: 8px 16px;
-      background: #1d4ed8;
-      color: #fff;
-      border: none;
-      border-radius: 6px;
-      font-size: 13px;
-      font-weight: 600;
-      cursor: pointer;
+      display: inline-flex; align-items: center; gap: 6px; margin-bottom: 24px;
+      padding: 8px 16px; background: #1d4ed8; color: #fff; border: none;
+      border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer;
     }
     .print-btn:hover { background: #1e40af; }
-
-    /* ── Header ── */
-    .report-header {
-      border-bottom: 2px solid #e5e7eb;
-      padding-bottom: 20px;
-      margin-bottom: 28px;
-    }
-    .report-title {
-      font-size: 26px;
-      font-weight: 800;
-      color: #111827;
-      letter-spacing: -0.5px;
-    }
-    .report-subtitle {
-      font-size: 13px;
-      color: #6b7280;
-      margin-top: 4px;
-    }
-    .report-meta {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 24px;
-      margin-top: 16px;
-    }
-    .meta-item {
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-    }
-    .meta-label {
-      font-size: 10px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      color: #9ca3af;
-    }
-    .meta-value {
-      font-size: 13px;
-      font-weight: 600;
-      color: #111827;
-    }
-
-    /* ── Section ── */
-    .section {
-      margin-bottom: 32px;
-    }
+    .report-header { border-bottom: 2px solid #e5e7eb; padding-bottom: 20px; margin-bottom: 28px; }
+    .report-title  { font-size: 26px; font-weight: 800; color: #111827; letter-spacing: -0.5px; }
+    .report-subtitle { font-size: 13px; color: #6b7280; margin-top: 4px; }
+    .report-meta { display: flex; flex-wrap: wrap; gap: 24px; margin-top: 16px; }
+    .meta-item { display: flex; flex-direction: column; gap: 2px; }
+    .meta-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #9ca3af; }
+    .meta-value { font-size: 13px; font-weight: 600; color: #111827; }
+    .section { margin-bottom: 32px; }
     .section-title {
-      font-size: 13px;
-      font-weight: 800;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      color: #374151;
-      padding-bottom: 8px;
-      border-bottom: 1px solid #f3f4f6;
-      margin-bottom: 16px;
+      font-size: 13px; font-weight: 800; text-transform: uppercase;
+      letter-spacing: 0.08em; color: #374151;
+      padding-bottom: 8px; border-bottom: 1px solid #f3f4f6; margin-bottom: 16px;
     }
-
-    /* ── Overview cards ── */
-    .overview-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 16px;
-    }
-    .overview-card {
-      background: #f9fafb;
-      border: 1px solid #e5e7eb;
-      border-radius: 10px;
-      padding: 16px;
-    }
-    .overview-card-title {
-      font-size: 10px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      color: #6b7280;
-      margin-bottom: 6px;
-    }
-    .overview-card-body {
-      font-size: 13px;
-      color: #111827;
-      line-height: 1.6;
-    }
-    .risks-card-body {
-      font-size: 12px;
-      color: #b45309;
-      line-height: 1.6;
-    }
-
-    /* ── Table ── */
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 12px;
-    }
+    .overview-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .overview-card { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 10px; padding: 16px; }
+    .overview-card-title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6b7280; margin-bottom: 6px; }
+    .overview-card-body  { font-size: 13px; color: #111827; line-height: 1.6; }
+    .risks-card-body     { font-size: 12px; color: #b45309; line-height: 1.6; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
     thead tr { background: #f3f4f6; }
-    th {
-      text-align: left;
-      padding: 8px 10px;
-      font-size: 10px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      color: #6b7280;
-      border-bottom: 1px solid #e5e7eb;
-    }
-    td {
-      padding: 9px 10px;
-      border-bottom: 1px solid #f3f4f6;
-      color: #111827;
-      vertical-align: top;
-    }
+    th { text-align: left; padding: 8px 10px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #6b7280; border-bottom: 1px solid #e5e7eb; }
+    td { padding: 9px 10px; border-bottom: 1px solid #f3f4f6; color: #111827; vertical-align: top; }
     tbody tr:hover { background: #f9fafb; }
     tbody tr:last-child td { border-bottom: none; }
-
-    /* ── Disclaimer ── */
-    .disclaimer {
-      background: #f9fafb;
-      border: 1px solid #e5e7eb;
-      border-radius: 8px;
-      padding: 14px 16px;
-      font-size: 11px;
-      color: #9ca3af;
-      line-height: 1.6;
-      margin-top: 32px;
-    }
+    .disclaimer { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 14px 16px; font-size: 11px; color: #9ca3af; line-height: 1.6; margin-top: 32px; }
     .disclaimer strong { color: #6b7280; }
-
-    /* ── Print styles ── */
     @media print {
       body { padding: 16px 20px; }
       .print-btn { display: none !important; }
       table { font-size: 10px; }
       th, td { padding: 6px 7px; }
-      .overview-grid { grid-template-columns: 1fr 1fr; }
-      .section { margin-bottom: 20px; }
-      .overview-card, .disclaimer { border: 1px solid #d1d5db; }
-      a { text-decoration: none; color: inherit; }
-      @page {
-        margin: 12mm 14mm;
-        size: A4 landscape;
-      }
+      @page { margin: 12mm 14mm; size: A4 landscape; }
     }
   </style>
 </head>
 <body>
 
-  <!-- Print button -->
-  <button class="print-btn" onclick="window.print()">
-    &#x1F5A8;&#xFE0F; Print / Save as PDF
-  </button>
+  <button class="print-btn" onclick="window.print()">&#x1F5A8;&#xFE0F; Print / Save as PDF</button>
 
-  <!-- ── Report header ── -->
   <div class="report-header">
     <div class="report-title">AI Buy Signals Report</div>
     <div class="report-subtitle">FinSurfing · Claude-Powered Stock, ETF &amp; Crypto Picks</div>
@@ -714,7 +629,6 @@ function buildBuySignalsHTML(recs) {
     </div>
   </div>
 
-  <!-- ── Market outlook & risks ── -->
   <div class="section">
     <div class="section-title">Market Context</div>
     <div class="overview-grid">
@@ -730,7 +644,6 @@ function buildBuySignalsHTML(recs) {
     </div>
   </div>
 
-  <!-- ── Recommendations table ── -->
   <div class="section">
     <div class="section-title">Recommendations</div>
     <table>
@@ -749,13 +662,10 @@ function buildBuySignalsHTML(recs) {
           <th>Thesis</th>
         </tr>
       </thead>
-      <tbody>
-        ${rows}
-      </tbody>
+      <tbody>${rows}</tbody>
     </table>
   </div>
 
-  <!-- ── Disclaimer ── -->
   <div class="disclaimer">
     <strong>Disclaimer:</strong> This report is generated by AI for <strong>informational purposes only</strong>
     and does <strong>not</strong> constitute financial, investment, or trading advice. AI-generated picks and
@@ -764,24 +674,11 @@ function buildBuySignalsHTML(recs) {
     adviser before making any investment decisions. FinSurfing accepts no liability for investment outcomes.
   </div>
 
-  <script>
-    setTimeout(function() {
-      try { window.print() } catch(e) {}
-    }, 500)
-  </script>
+  <script>setTimeout(function(){ try{ window.print() }catch(e){} }, 500)</script>
 </body>
 </html>`
 }
 
-/**
- * exportBuySignalsToPDF(recs)
- *
- * Builds a print-ready HTML page for AI Buy Signals and opens it in a new
- * browser tab. Automatically triggers window.print() after 500 ms.
- *
- * @param {object} recs  - Buy signals response (recommendations, marketOutlook, …)
- * @returns {Window|null} - The new window reference, or null if blocked.
- */
 export function exportBuySignalsToPDF(recs) {
   if (!recs) {
     console.warn('exportBuySignalsToPDF: no recs provided')
