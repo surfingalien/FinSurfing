@@ -68,6 +68,13 @@ function SourceBadge({ source }) {
       </span>
     )
   }
+  if (source === 'mutual-fund') {
+    return (
+      <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-teal-500/15 text-teal-400 border border-teal-500/25 shrink-0">
+        🏦 Fund
+      </span>
+    )
+  }
   return (
     <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-slate-500/15 text-slate-400 border border-slate-500/25 shrink-0">
       <Plus className="w-2.5 h-2.5" />
@@ -242,9 +249,8 @@ function EmptyState() {
       <div>
         <p className="text-white font-semibold">Your AI Watchlist is empty</p>
         <p className="text-slate-500 text-sm mt-1 max-w-sm mx-auto">
-          Save stocks from <span className="text-indigo-400 font-medium">AI Brain</span> or{' '}
-          <span className="text-mint-400 font-medium">Buy Signals</span> recommendations
-          to track them here and revisit your top picks at a glance.
+          Save stocks, ETFs, crypto, or mutual funds from <span className="text-indigo-400 font-medium">AI Brain</span>,{' '}
+          <span className="text-mint-400 font-medium">Buy Signals</span>, or add any symbol manually.
         </p>
       </div>
     </div>
@@ -276,7 +282,7 @@ function AddStockRow({ onAdd }) {
         value={val}
         onChange={e => setVal(e.target.value.toUpperCase())}
         onKeyDown={e => e.key === 'Enter' && submit()}
-        placeholder="Add any symbol — stock, ETF, or crypto (e.g. NVDA, SPY, BTC-USD)"
+        placeholder="Add any symbol — stock, ETF, crypto, or fund (e.g. NVDA, SPY, BTC-USD, FXAIX)"
         className="flex-1 bg-transparent text-sm text-white placeholder-slate-600 focus:outline-none font-mono"
       />
       {val && (
@@ -316,7 +322,7 @@ export default function AIWatchlistView({ onAnalyze }) {
           <div>
             <h1 className="text-xl font-bold text-white">AI Watchlist</h1>
             <p className="text-xs text-slate-500">
-              Stocks, ETFs &amp; Crypto from AI Brain, Buy Signals, or added manually
+              Stocks, ETFs, Crypto &amp; Mutual Funds from AI Brain, Buy Signals, or added manually
             </p>
           </div>
         </div>

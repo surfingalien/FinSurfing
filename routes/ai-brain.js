@@ -37,6 +37,7 @@ const SCAN_UNIVERSES = {
     'NVDA','MSFT','AAPL','AMZN','GOOGL','META','TSLA','JPM','LLY','CRWD',
     'PLTR','AVGO','SPY','QQQ','GLD','ARKK','BTC-USD','ETH-USD','SOL-USD','BNB-USD',
   ],
+  // ── Stock sector aliases (kept for backward compat, also used as sub-modes) ──
   tech: [
     'NVDA','MSFT','AAPL','GOOGL','META','AMZN','AMD','AVGO','CRM','ADBE',
     'SNOW','PLTR','CRWD','ANET','TSLA','SMCI','ARM','INTC','QCOM','MU',
@@ -50,16 +51,212 @@ const SCAN_UNIVERSES = {
     'BMY','MRNA','CVS','CI','HUM','MDT','ABT','TMO','DHR','BSX',
   ],
   energy: [
-    'XOM','CVX','COP','SLB','CAT','DE','HON','RTX','GE','BA',
-    'UPS','LMT','NEE','DUK','AMT','WM','PLD','WELL','O','PSA',
+    'XOM','CVX','COP','SLB','EOG','PXD','HAL','VLO','PSX','MPC',
+    'DVN','FANG','OXY','HES','BKR','MRO','APA','NOV','FTI','CHK',
+  ],
+  // ── Stocks parent + all 11 GICS sectors ─────────────────────────────────────
+  stocks: [
+    // All-sector top 20 US equities
+    'NVDA','MSFT','AAPL','AMZN','GOOGL','META','TSLA','JPM','LLY','CRWD',
+    'BRK-B','UNH','JNJ','XOM','V','AVGO','MA','PG','HD','ABBV',
+  ],
+  stocks_tech: [
+    'NVDA','MSFT','AAPL','GOOGL','META','AMZN','AMD','AVGO','CRM','ADBE',
+    'SNOW','PLTR','CRWD','ANET','TSLA','SMCI','ARM','INTC','QCOM','MU',
+  ],
+  stocks_finance: [
+    'JPM','BAC','WFC','GS','MS','V','MA','BRK-B','SCHW','AXP',
+    'C','BLK','KKR','APO','SPGI','ICE','CME','PGR','CB','MET',
+  ],
+  stocks_healthcare: [
+    'LLY','UNH','JNJ','ABBV','MRK','PFE','AMGN','ISRG','VRTX','REGN',
+    'BMY','MRNA','CVS','CI','HUM','MDT','ABT','TMO','DHR','BSX',
+  ],
+  stocks_energy: [
+    'XOM','CVX','COP','SLB','EOG','PXD','HAL','VLO','PSX','MPC',
+    'DVN','FANG','OXY','HES','BKR','MRO','APA','NOV','FTI','CHK',
+  ],
+  stocks_consumer_disc: [
+    // Consumer Discretionary
+    'AMZN','TSLA','HD','MCD','NKE','TGT','SBUX','BKNG','LOW','CMG',
+    'ABNB','ROST','TJX','YUM','DHI','LEN','F','GM','EBAY','ETSY',
+  ],
+  stocks_consumer_stap: [
+    // Consumer Staples
+    'PG','KO','PEP','WMT','COST','PM','MO','CL','EL','CHD',
+    'GIS','K','CPB','HRL','SJM','MKC','CAG','HSY','TSN','KHC',
+  ],
+  stocks_industrials: [
+    // Industrials
+    'CAT','DE','HON','RTX','GE','BA','UPS','LMT','UNP','CSX',
+    'NSC','FDX','ETN','ITW','PH','EMR','ROK','IEX','CARR','OTIS',
+  ],
+  stocks_materials: [
+    // Materials
+    'LIN','APD','ECL','FCX','NUE','VMC','MLM','IFF','PPG','EMN',
+    'DD','DOW','CF','MOS','ALB','WRK','IP','PKG','SEE','BLL',
+  ],
+  stocks_utilities: [
+    // Utilities
+    'NEE','DUK','SO','D','AEE','AWK','WEC','EXC','PEG','ES',
+    'EIX','PCG','AES','ETR','FE','CMS','NI','EVRG','PNW','ATO',
+  ],
+  stocks_realestate: [
+    // Real Estate REITs
+    'AMT','PLD','CCI','EQIX','PSA','DLR','O','WY','VTR','SPG',
+    'AVB','EQR','ARE','VICI','NNN','EXR','INVH','MAA','UDR','CPT',
+  ],
+  stocks_comms: [
+    // Communication Services
+    'GOOGL','META','DIS','NFLX','CMCSA','T','VZ','CHTR','TMUS','EA',
+    'TTWO','ATVI','WBD','FOXA','FOX','PARA','SNAP','PINS','MTCH','ZG',
   ],
   etfs: [
     'SPY','QQQ','GLD','TLT','IWM','VTI','ARKK','XLK','XLE','XLF',
     'XLV','XLI','XLY','AGG','HYG','EEM','EFA','VNQ','XLP','IBIT',
   ],
+  // ── ETF sub-categories ──────────────────────────────────────
+  etfs_sector: [
+    // SPDR sector + specialty sector ETFs
+    'XLK','XLE','XLF','XLV','XLI','XLY','XLP','XLU','XLB','XLRE',
+    'XLC','XBI','XHB','XRT','XOP','KIE','XSD','XPH','XES','XNTK',
+  ],
+  etfs_broad: [
+    // Broad market, size, and style index ETFs
+    'SPY','QQQ','VTI','IWM','DIA','MDY','VUG','VTV','VO','VB',
+    'SCHB','ITOT','SCHA','SCHX','SCHG','SCHV','MGK','MGV','SPMD','SPSM',
+  ],
+  etfs_bond: [
+    // Investment-grade, high-yield, TIPS, duration
+    'TLT','AGG','BND','HYG','LQD','SHY','IEF','TIP','VCIT','VCSH',
+    'BKLN','JNK','VGSH','VGIT','VGLT','MBB','EMB','IAGG','SGOV','STIP',
+  ],
+  etfs_intl: [
+    // Developed + emerging market international ETFs
+    'EEM','EFA','VEA','VWO','FXI','EWJ','EWZ','IEMG','MCHI','ASHR',
+    'EWU','EWG','EWY','EWT','EWA','EWC','EPOL','EWI','EWS','EDEN',
+  ],
+  etfs_commodity: [
+    // Gold, silver, oil, agriculture, miners
+    'GLD','SLV','USO','DBA','IAU','GDX','GDXJ','COPX','PDBC','UNG',
+    'CORN','SOYB','WEAT','CPER','REMX','PICK','SLX','MOO','PALL','DBB',
+  ],
+  etfs_thematic: [
+    // Innovation, AI, clean energy, cybersecurity, robotics
+    'ARKK','ARKQ','ARKG','ARKF','ARKX','ICLN','BOTZ','HACK','DRIV','ROBO',
+    'PAVE','KOMP','BLOK','FINX','IHAK','EDOC','MOON','BUZZ','METV','UFO',
+  ],
+  etfs_dividend: [
+    // Dividend growth, high yield, income
+    'VYM','SCHD','HDV','DVY','NOBL','DGRW','DGRO','VIG','SDY','SPYD',
+    'SPHD','FVD','CDL','PFF','PFFD','IDV','REET','VNQ','O','MORT',
+  ],
+  etfs_bitcoin: [
+    // Spot Bitcoin + Ethereum ETFs and crypto-linked
+    'IBIT','FBTC','GBTC','ARKB','HODL','EZBC','BTCO','BRRR','BITO','BITI',
+    'ETHA','FETH','CETH','ETHV','DEFI','WGMI','MSTR','COIN','CLSK','MARA',
+  ],
   crypto: [
     'BTC-USD','ETH-USD','SOL-USD','BNB-USD','ADA-USD','DOGE-USD','XRP-USD',
     'AVAX-USD','DOT-USD','LINK-USD','MATIC-USD','UNI-USD',
+  ],
+  // ── Crypto sub-categories ───────────────────────────────────
+  crypto_l1: [
+    // Layer 1 smart-contract chains
+    'BTC-USD','ETH-USD','SOL-USD','BNB-USD','ADA-USD','AVAX-USD','DOT-USD',
+    'ATOM-USD','NEAR-USD','APT-USD','SUI-USD','TON-USD','ICP-USD','ALGO-USD',
+    'FTM-USD','EGLD-USD','ONE-USD','WAVES-USD','HBAR-USD','EOS-USD',
+  ],
+  crypto_l2: [
+    // Layer 2 scaling solutions and rollups
+    'MATIC-USD','ARB-USD','OP-USD','IMX-USD','LRC-USD','MNT-USD',
+    'STRK-USD','ZK-USD','METIS-USD','MANTA-USD','BOBA-USD','KAVA-USD',
+    'CELO-USD','MOVR-USD','GLMR-USD','ROSE-USD','ASTR-USD','SCRT-USD',
+    'CFG-USD','ACA-USD',
+  ],
+  crypto_defi: [
+    // Decentralized finance protocols
+    'UNI-USD','AAVE-USD','MKR-USD','COMP-USD','CRV-USD','SNX-USD',
+    'YFI-USD','BAL-USD','SUSHI-USD','1INCH-USD','RUNE-USD','DYDX-USD',
+    'GMX-USD','PENDLE-USD','CVX-USD','FXS-USD','LDO-USD','RPL-USD',
+    'OSMO-USD','CAKE-USD',
+  ],
+  crypto_ai: [
+    // AI, data, and machine-learning tokens
+    'FET-USD','OCEAN-USD','AGIX-USD','RNDR-USD','WLD-USD','GRT-USD',
+    'NMR-USD','TAO-USD','AKT-USD','ALT-USD','AIOZ-USD','CTXC-USD',
+    'MATRIX-USD','DBC-USD','CLORE-USD','PAAL-USD','TURBO-USD','ARKM-USD',
+    'MYRIA-USD','NGL-USD',
+  ],
+  crypto_meme: [
+    // Meme and community-driven coins — major exchanges only
+    'DOGE-USD','SHIB-USD','PEPE-USD','BONK-USD','FLOKI-USD','WIF-USD',
+    'MEME-USD','TURBO-USD','BOME-USD','ORDI-USD','SATS-USD','NEIRO-USD',
+    'BRETT-USD','APE-USD','BLUR-USD','GALA-USD','GMT-USD','LUNC-USD',
+    'MANA-USD','SAND-USD',
+  ],
+  crypto_infra: [
+    // Infrastructure, storage, DePIN, and oracle networks
+    'LINK-USD','FIL-USD','HNT-USD','AR-USD','STORJ-USD','IOTX-USD',
+    'RLC-USD','ANKR-USD','BAND-USD','API3-USD','RPL-USD','FLUX-USD',
+    'COTI-USD','GLM-USD','CTSI-USD','NKN-USD','THETA-USD','TFUEL-USD',
+    'AKT-USD','AIOZ-USD',
+  ],
+  crypto_exchange: [
+    // Exchange tokens, payments, and major settlement networks
+    'BNB-USD','CRO-USD','XRP-USD','XLM-USD','LTC-USD','BCH-USD',
+    'XMR-USD','ZEC-USD','DASH-USD','WAVES-USD','OMG-USD','ZRX-USD',
+    'BAT-USD','ENJ-USD','CHZ-USD','GAS-USD','NEXO-USD','STX-USD',
+    'CFX-USD','NANO-USD',
+  ],
+  // ── Mutual fund category universes ──────────────────────────
+  mutualfunds: [
+    // Broad: top 20 across all categories
+    'FXAIX','VFIAX','VTSAX','FCNTX','FDGRX','PRGFX','AGTHX',
+    'PRWCX','DODGX','FSELX','FBIOX','DODFX','VBTLX','PTTAX',
+    'VWELX','FPURX','TRBCX','VWUSX','CGMFX','OAKMX',
+  ],
+  mutualfunds_index: [
+    // Best passive index funds — low cost, broad market
+    'FXAIX','VFIAX','VTSAX','FSKAX','SWTSX','SWPPX','VEXAX',
+    'FSMAX','FZROX','FZILX','FNILX','VITSX','VINIX','VBTLX',
+    'FXNAX','SWAGX','SWISX','FBIIX','VGIT','VGSH',
+  ],
+  mutualfunds_growth: [
+    // Top active growth managers
+    'FCNTX','FDGRX','FBGRX','AGTHX','PRGFX','TRBCX','VWUSX',
+    'CGMFX','FGRTX','RPMGX','MSEGX','VPMAX','AMRMX','SPECX',
+    'ANCFX','GQEPX','MXXVX','PARNX','SEQUX','BIAWX',
+  ],
+  mutualfunds_value: [
+    // Dividend-focused, deep value, and quality value
+    'DODGX','FLPSX','VIVAX','VEIPX','VDIGX','DFDVX','FVDFX',
+    'USAWX','BUFVX','AIVSX','MFVFX','VWNDX','RWGRX','HAINX',
+    'TWVLX','PYVLX','AEPGX','CWGIX','DODFX','VEIRX',
+  ],
+  mutualfunds_sector: [
+    // Sector-specific funds across all industries
+    'FSELX','FBIOX','FSUTX','FSENX','FRESX','FSCPX','FSRPX',
+    'FSCSX','FSPHX','FBSOX','FSHCX','FNARX','FSAIX','FSDCX',
+    'FSNGX','FTRNX','FWWFX','FAGIX','RYREX','FSAVX',
+  ],
+  mutualfunds_bond: [
+    // Investment-grade, high-yield, TIPS, and short-duration
+    'VBTLX','VBMFX','FBNDX','PTTAX','PTTRX','LSBRX','MWTRX',
+    'VWESX','OSTIX','DODIX','VWEAX','FBIDX','FXNAX','SWAGX',
+    'MWTIX','PTRAX','FGOVX','FLTMX','FSTFX','VFIIX',
+  ],
+  mutualfunds_intl: [
+    // Developed and emerging market international equity
+    'DODFX','VGTSX','VFWIX','FSPSX','VTMGX','PRIDX','TBGVX',
+    'FOSFX','FDIVX','FSIIX','VEUSX','VWILX','MGIEX','HAINX',
+    'AEPGX','FIENX','MSFAX','CWGIX','VIHAX','PREMX',
+  ],
+  mutualfunds_balanced: [
+    // Multi-asset allocation and balanced funds
+    'PRWCX','VWELX','VWINX','FPURX','FBALX','TRRIX','DODBX',
+    'BERIX','ABALX','PRSIX','TIBIX','GLRBX','MALOX','FMSDX',
+    'VTHRX','VFORX','VFFVX','VTIVX','VTENX','FFNOX',
   ],
 }
 
@@ -178,6 +375,7 @@ CRITICAL: When two agents disagree by 25+ points, that spread IS the primary sig
 Analyze this universe for a ${horizonLabel} horizon. Today is late May 2026.
 Universe: ${universe.join(', ')}
 Avoid holdings: ${holdingStr}
+${scanMode.startsWith('mutualfunds') ? `\nNOTE: This universe contains mutual funds (category: ${scanMode === 'mutualfunds' ? 'Broad All-Category' : scanMode.replace('mutualfunds_','').toUpperCase()}). Score each fund on: (1) Fundamental = portfolio holdings quality, manager tenure & track record, alpha vs benchmark, (2) Technical = NAV trend, momentum, and performance relative to category peers, (3) Sentiment = fund flows, retail/institutional demand, manager commentary, (4) Macro = asset-class fit for current rate/growth/inflation regime, (5) Risk = expense ratio, max drawdown, concentration risk, redemption risk. Price targets refer to NAV zones. Omit stop-loss precision — use downside risk zones only.` : ''}${scanMode.startsWith('etfs_') ? `\nNOTE: This is an ETF sub-category scan (${scanMode.replace('etfs_','').toUpperCase()}). Scoring focus: (1) Fundamental = underlying index quality, holdings composition, expense ratio vs peers, (2) Technical = ETF price trend & momentum, discount/premium to NAV, options flow if available, (3) Sentiment = fund flows, AUM trend, institutional rotation signals, (4) Macro = how well this ETF category fits the current rate/sector/growth regime, (5) Risk = liquidity, tracking error, concentration, leverage if any.` : ''}${scanMode.startsWith('crypto_') ? `\nNOTE: This is a crypto sub-category scan (${scanMode.replace('crypto_','').toUpperCase()}). Scoring focus: (1) Fundamental = protocol TVL, revenue, developer activity, tokenomics, (2) Technical = price trend vs BTC, momentum, on-chain volume signal, (3) Sentiment = social dominance, whale flows, exchange inflows/outflows, (4) Macro = correlation to BTC cycle stage, risk-on/off regime, regulatory climate, (5) Risk = smart contract risk, liquidity depth, centralization risk. Consider current crypto market cycle phase.` : ''}${scanMode.startsWith('stocks_') ? `\nNOTE: This is a stock sector scan (GICS Sector: ${scanMode.replace('stocks_','').replace(/_/g,' ').toUpperCase()}). Scoring focus: (1) Fundamental = earnings growth, margins, valuation vs sector peers, balance sheet quality, (2) Technical = price trend, relative strength vs S&P 500, breakout/breakdown levels, (3) Sentiment = analyst upgrades/downgrades, short interest, insider activity, (4) Macro = sector-specific tailwinds/headwinds in the current rate/growth regime, (5) Risk = concentration risk, regulatory exposure, competitive moat strength.` : ''}
 ${marketSnippet}
 
 ⚠️ STRICT TOKEN BUDGET — respect every word limit or the response will be truncated.

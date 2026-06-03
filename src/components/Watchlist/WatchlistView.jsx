@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { PlusCircle, X, RefreshCw, Search, Star } from 'lucide-react'
+import { PlusCircle, X, RefreshCw, Search, Star, PieChart, ChevronDown, ChevronUp } from 'lucide-react'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import { fmt, fmtPct, fmtLarge, fmtVol, fetchChart } from '../../services/api'
 import { ChangeBadge, LoadingPulse, EmptyState } from '../shared/StockCard'
@@ -29,12 +29,28 @@ function MiniSparkline({ symbol }) {
   )
 }
 
+const POPULAR_FUNDS = [
+  { symbol: 'FXAIX', name: 'Fidelity 500 Index',            category: 'Large Blend'       },
+  { symbol: 'VFIAX', name: 'Vanguard 500 Index Admiral',     category: 'Large Blend'       },
+  { symbol: 'VTSAX', name: 'Vanguard Total Stock Market',    category: 'Total Market'      },
+  { symbol: 'FSKAX', name: 'Fidelity Total Market Index',    category: 'Total Market'      },
+  { symbol: 'FSELX', name: 'Fidelity Select Semiconductors', category: 'Sector - Tech'    },
+  { symbol: 'FCNTX', name: 'Fidelity Contrafund',            category: 'Large Growth'      },
+  { symbol: 'FDGRX', name: 'Fidelity Growth Company',        category: 'Large Growth'      },
+  { symbol: 'PRGFX', name: 'T. Rowe Price Growth Stock',     category: 'Large Growth'      },
+  { symbol: 'AGTHX', name: 'American Funds Growth Fund',     category: 'Large Growth'      },
+  { symbol: 'PRWCX', name: 'T. Rowe Price Capital Apprec.', category: 'Moderate Alloc.'   },
+  { symbol: 'TRBCX', name: 'T. Rowe Price Blue Chip Growth', category: 'Large Growth'     },
+  { symbol: 'DODGX', name: 'Dodge & Cox Stock Fund',         category: 'Large Value'       },
+]
+
 export default function WatchlistView({ watchlist }) {
   const { quotes, loading, refresh, addSymbol, removeSymbol } = watchlist
   const [addQuery, setAddQuery] = useState('')
   const [searchResults, setSearchResults] = useState([])
   const [searching, setSearching] = useState(false)
   const [showSearch, setShowSearch] = useState(false)
+  const [showFunds, setShowFunds] = useState(false)
 
   const handleSearch = async (q) => {
     setAddQuery(q)
@@ -72,6 +88,14 @@ export default function WatchlistView({ watchlist }) {
             <PlusCircle className="w-3.5 h-3.5" />
             Add
           </button>
+          <button
+            onClick={() => setShowFunds(v => !v)}
+            className="btn-ghost flex items-center gap-1.5 py-1.5 text-xs text-teal-400 border border-teal-500/30 hover:bg-teal-500/10"
+          >
+            <PieChart className="w-3.5 h-3.5" />
+            Mutual Funds
+            {showFunds ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+          </button>
         </div>
       </div>
 
@@ -105,6 +129,42 @@ export default function WatchlistView({ watchlist }) {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Mutual fund quick-add panel */}
+      {showFunds && (
+        <div className="glass rounded-xl p-4 animate-slide-up space-y-3">
+          <div className="flex items-center gap-2 mb-1">
+            <PieChart className="w-3.5 h-3.5 text-teal-400" />
+            <span className="text-xs font-semibold text-teal-400">Popular Mutual Funds</span>
+            <span className="text-[10px] text-slate-500 ml-1">Click to add to watchlist</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+            {POPULAR_FUNDS.map(fund => {
+              const inList = quotes.some(q => q.symbol === fund.symbol)
+              return (
+                <button
+                  key={fund.symbol}
+                  onClick={() => !inList && addSymbol(fund.symbol)}
+                  disabled={inList}
+                  className={`flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-all text-xs ${
+                    inList
+                      ? 'bg-teal-500/10 border border-teal-500/20 cursor-default'
+                      : 'bg-white/[0.03] border border-white/[0.06] hover:bg-teal-500/10 hover:border-teal-500/20'
+                  }`}
+                >
+                  <span className={`font-mono font-bold w-12 shrink-0 ${inList ? 'text-teal-400' : 'text-white'}`}>{fund.symbol}</span>
+                  <span className="text-slate-400 truncate flex-1">{fund.name}</span>
+                  <span className="text-[10px] text-slate-600 shrink-0">{fund.category}</span>
+                  {inList
+                    ? <span className="text-[10px] text-teal-400 shrink-0">✓</span>
+                    : <PlusCircle className="w-3.5 h-3.5 text-teal-400/50 shrink-0" />
+                  }
+                </button>
+              )
+            })}
+          </div>
         </div>
       )}
 
