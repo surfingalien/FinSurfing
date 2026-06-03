@@ -123,15 +123,17 @@ function FearGreedGauge({ fg }) {
 
 /* ── Heatmap cell ────────────────────────────── */
 function HeatCell({ symbol, price, changePct, pctOfPortfolio, onClick }) {
+  const hasData = changePct != null
   const cp = changePct ?? 0
-  const bg = cp >= 4  ? 'rgba(16,185,129,0.80)'
+  const bg = !hasData ? 'rgba(100,116,139,0.12)'
+           : cp >= 4  ? 'rgba(16,185,129,0.80)'
            : cp >= 2  ? 'rgba(16,185,129,0.55)'
            : cp >= 0.5? 'rgba(52,211,153,0.30)'
            : cp >= -0.5? 'rgba(100,116,139,0.25)'
            : cp >= -2 ? 'rgba(248,113,113,0.30)'
            : cp >= -4 ? 'rgba(248,113,113,0.55)'
            :             'rgba(239,68,68,0.80)'
-  const clr = cp >= 1 ? 'text-emerald-100' : cp >= 0 ? 'text-emerald-300' : cp >= -1 ? 'text-red-300' : 'text-red-100'
+  const clr = !hasData ? 'text-slate-500' : cp >= 1 ? 'text-emerald-100' : cp >= 0 ? 'text-emerald-300' : cp >= -1 ? 'text-red-300' : 'text-red-100'
 
   return (
     <button
@@ -144,7 +146,7 @@ function HeatCell({ symbol, price, changePct, pctOfPortfolio, onClick }) {
         <div className="text-[10px] text-white/70 font-mono mt-1">${fmt(price)}</div>
       )}
       <div className={`text-xs font-bold font-mono mt-auto ${clr}`}>
-        {cp >= 0 ? '+' : ''}{cp.toFixed(2)}%
+        {hasData ? `${cp >= 0 ? '+' : ''}${cp.toFixed(2)}%` : '—'}
       </div>
     </button>
   )
@@ -161,10 +163,15 @@ function PortfolioHeatmap({ positions, quotes, onAnalyze }) {
       const q     = quotes[p.symbol]
       const price = q?.price ?? null
       const mktV  = (price ?? p.avgCost) * p.shares
+      let changePct = q?.changePct ?? null
+      // Derive changePct from prevClose when the API didn't supply it directly
+      if (changePct == null && price != null && q?.prevClose != null && q.prevClose > 0) {
+        changePct = (price - q.prevClose) / q.prevClose * 100
+      }
       return {
         symbol: p.symbol,
         price,
-        changePct: q?.changePct ?? null,
+        changePct,
         mktValue:  mktV,
         pctOfPortfolio: totalValue > 0 ? (mktV / totalValue) * 100 : 0,
       }
