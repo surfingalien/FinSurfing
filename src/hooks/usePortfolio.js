@@ -164,7 +164,7 @@ export function usePortfolio({ userId, activePortfolioId, authFetch } = {}) {
   useEffect(() => {
     if (!positions.length) return
     refresh()
-    const fullRefresh = setInterval(refresh, 5 * 60_000)
+    const fullRefresh = setInterval(refresh, 2 * 60_000)
 
     const symbols = positions.map(p => p.symbol)
     const unsub = subscribeQuotes(symbols, ({ symbol, price, change, changePct, ts }) => {
@@ -175,8 +175,10 @@ export function usePortfolio({ userId, activePortfolioId, authFetch } = {}) {
           [symbol]: {
             ...existing,
             price,
-            change,
-            changePct,
+            // Never overwrite a valid change/changePct with null from a WS tick that
+            // arrived before prevClose was populated in the server cache.
+            change:    change    ?? existing.change,
+            changePct: changePct ?? existing.changePct,
             marketTime: ts ? Math.floor(ts / 1000) : existing.marketTime,
           },
         }

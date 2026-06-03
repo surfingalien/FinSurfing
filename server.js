@@ -194,10 +194,16 @@ async function apiFetch(url, timeoutMs = 10000) {
 const _quoteCache = new Map()
 const QUOTE_TTL    = 30_000
 const CHART_TTL    = 15 * 60_000
-const CACHE_MAX    = 5_000        // LRU-style eviction above this size
+const PC_TTL       = 24 * 60 * 60_000   // prevClose only changes once per day at market open
+const CACHE_MAX    = 5_000              // LRU-style eviction above this size
+
+function _cacheTtl(key) {
+  if (key.startsWith('chart:')) return CHART_TTL
+  if (key.startsWith('pc:'))    return PC_TTL
+  return QUOTE_TTL
+}
 
 function cacheSet(key, data) {
-  // Evict oldest 10 % of entries when at capacity
   if (_quoteCache.size >= CACHE_MAX) {
     const evict = Math.ceil(CACHE_MAX * 0.1)
     const iter  = _quoteCache.keys()
@@ -211,16 +217,14 @@ function cacheSet(key, data) {
 function cacheGet(key) {
   const hit = _quoteCache.get(key)
   if (!hit) return null
-  const ttl = key.startsWith('chart:') ? CHART_TTL : QUOTE_TTL
-  if (Date.now() - hit.ts >= ttl) { _quoteCache.delete(key); return null }
+  if (Date.now() - hit.ts >= _cacheTtl(key)) { _quoteCache.delete(key); return null }
   return hit.data
 }
 // Evict stale entries every 5 minutes
 setInterval(() => {
   const now = Date.now()
   for (const [k, v] of _quoteCache) {
-    const ttl = k.startsWith('chart:') ? CHART_TTL : QUOTE_TTL
-    if (now - v.ts > ttl) _quoteCache.delete(k)
+    if (now - v.ts > _cacheTtl(k)) _quoteCache.delete(k)
   }
 }, 5 * 60_000)
 
@@ -392,16 +396,16 @@ async function getFinnhubQuotes(symbols, keys = {}) {
       if (cached) return cached
       try {
         const d = await apiFetch(fhUrl(`/quote?symbol=${encodeURIComponent(sym)}`, key), 8000)
-        // d.c === 0 happens after market hours on the free tier — fall back to d.pc (previous close)
-        const price = d?.c || d?.pc || null
-        if (!price) return { symbol: sym, regularMarketPrice: null }
-        const isStale = !d.c && !!d.pc  // using prev close when market is closed
+        // d.c === 0 means no current trade (market closed on free tier) — return null so
+        // the cascade continues to providers that have correct post-market data.
+        if (!d?.c && !d?.pc) return { symbol: sym, regularMarketPrice: null }
+        if (!d.c) return { symbol: sym, regularMarketPrice: null }
         const q = {
           symbol:                     sym,
           shortName:                  sym,
-          regularMarketPrice:         price,
-          regularMarketChange:        isStale ? 0 : (d.d   ?? null),
-          regularMarketChangePercent: isStale ? 0 : (d.dp  ?? null),
+          regularMarketPrice:         d.c,
+          regularMarketChange:        d.d   ?? null,
+          regularMarketChangePercent: d.dp  ?? null,
           regularMarketDayHigh:       d.h   ?? null,
           regularMarketDayLow:        d.l   ?? null,
           regularMarketOpen:          d.o   ?? null,
@@ -409,6 +413,9 @@ async function getFinnhubQuotes(symbols, keys = {}) {
           regularMarketTime:          d.t   ?? null,
         }
         cacheSet(ck, q)
+        // Cache prevClose separately with 24 h TTL so the WS handler can compute
+        // change/changePct even after the 30 s quote cache expires.
+        if (d.pc) cacheSet(`pc:${sym}`, d.pc)
         return q
       } catch { return { symbol: sym, regularMarketPrice: null } }
     }))
@@ -1291,15 +1298,17 @@ function _connectFhWs() {
       for (const t of msg.data) {
         const sym = t.s, price = t.p
         if (!sym || price == null) continue
-        const prev    = cacheGet(`fhq:${sym}`)
-        const pc      = prev?.regularMarketPreviousClose ?? null
-        const chg     = pc != null ? +(price - pc).toFixed(4) : null
-        const chgPct  = pc != null ? +((price - pc) / pc * 100).toFixed(4) : null
+        const prev = cacheGet(`fhq:${sym}`)
+        // Fall back to the dedicated 24h prevClose cache if the 30s quote cache has expired
+        const pc     = prev?.regularMarketPreviousClose ?? cacheGet(`pc:${sym}`) ?? null
+        const chg    = pc != null ? +(price - pc).toFixed(4) : null
+        const chgPct = pc != null ? +((price - pc) / pc * 100).toFixed(4) : null
         cacheSet(`fhq:${sym}`, {
           ...(prev || { symbol: sym, shortName: sym }),
           regularMarketPrice:         price,
           regularMarketChange:        chg,
           regularMarketChangePercent: chgPct,
+          regularMarketPreviousClose: pc,
           regularMarketTime:          t.t ? Math.floor(t.t / 1000) : null,
         })
         _sseBroadcast(sym, { symbol: sym, price, change: chg, changePct: chgPct, ts: t.t })
