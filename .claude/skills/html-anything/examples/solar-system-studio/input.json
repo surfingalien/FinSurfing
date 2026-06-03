@@ -1,0 +1,171 @@
+{
+  "title": "Solar System Studio",
+  "description": "A compact educational dataset for an interactive object-lab introduction to the eight planets.",
+  "visual_asset": "assets/planets/*.png",
+  "source_notes": [
+    "Planet order, diameters, average distance from the Sun, and orbital periods are rounded from NASA planetary fact sheets.",
+    "The visual model is intentionally compressed. Orbital spacing and planet sizes are not rendered to the same scale at the same time because the real ratios are too extreme for a readable classroom interface."
+  ],
+  "planets": [
+    {
+      "id": "mercury",
+      "name": "Mercury",
+      "kind": "Rocky planet",
+      "tagline": "Smallest planet, fastest year.",
+      "distanceAU": 0.39,
+      "diameterKm": 4879,
+      "yearDays": 88.0,
+      "dayLength": "58.6 Earth days",
+      "surface": "Cratered rock and wide temperature swings",
+      "atmosphere": "Almost none",
+      "systemRole": "Inner boundary marker for how intense sunlight becomes close to the Sun.",
+      "moons": "No natural moons",
+      "color": "#9f9285",
+      "facts": [
+        "Mercury completes one orbit in only 88 Earth days.",
+        "Its lack of a thick atmosphere means heat is not spread around the planet.",
+        "It is larger than Earth's Moon, but smaller than every other planet."
+      ]
+    },
+    {
+      "id": "venus",
+      "name": "Venus",
+      "kind": "Rocky planet",
+      "tagline": "Earth-sized, but wrapped in heat.",
+      "distanceAU": 0.72,
+      "diameterKm": 12104,
+      "yearDays": 224.7,
+      "dayLength": "243 Earth days, retrograde",
+      "surface": "Volcanic plains under dense clouds",
+      "atmosphere": "Thick carbon dioxide atmosphere",
+      "systemRole": "A warning label for greenhouse heating and atmospheric pressure.",
+      "moons": "No natural moons",
+      "color": "#d8a64f",
+      "facts": [
+        "Venus is close to Earth's size, but its surface environment is radically different.",
+        "It rotates backward relative to most planets.",
+        "A Venus day is longer than a Venus year."
+      ]
+    },
+    {
+      "id": "earth",
+      "name": "Earth",
+      "kind": "Rocky planet",
+      "tagline": "The ocean world we use as the ruler.",
+      "distanceAU": 1.0,
+      "diameterKm": 12756,
+      "yearDays": 365.2,
+      "dayLength": "23.9 hours",
+      "surface": "Liquid water, continents, ice, and active geology",
+      "atmosphere": "Nitrogen-oxygen atmosphere",
+      "systemRole": "The reference point for distance, habitability, and scale.",
+      "moons": "One large Moon",
+      "color": "#3b82f6",
+      "facts": [
+        "Earth is the only known planet with long-lived surface oceans.",
+        "Its Moon stabilizes tides and gives the Earth-Moon system unusual visual presence.",
+        "One astronomical unit is based on Earth's average distance from the Sun."
+      ]
+    },
+    {
+      "id": "mars",
+      "name": "Mars",
+      "kind": "Rocky planet",
+      "tagline": "A cold desert with old river clues.",
+      "distanceAU": 1.52,
+      "diameterKm": 6792,
+      "yearDays": 687.0,
+      "dayLength": "24.6 hours",
+      "surface": "Dusty basalt, volcanoes, canyons, polar caps",
+      "atmosphere": "Thin carbon dioxide atmosphere",
+      "systemRole": "The outer rocky planet and the most reachable world for surface exploration.",
+      "moons": "Two small moons, Phobos and Deimos",
+      "color": "#c65f3a",
+      "facts": [
+        "Mars has a day length very close to Earth's.",
+        "Its year is almost twice as long as Earth's.",
+        "Surface features preserve evidence that liquid water once shaped parts of the planet."
+      ]
+    },
+    {
+      "id": "jupiter",
+      "name": "Jupiter",
+      "kind": "Gas giant",
+      "tagline": "The gravity heavyweight.",
+      "distanceAU": 5.2,
+      "diameterKm": 142984,
+      "yearDays": 4331,
+      "dayLength": "9.9 hours",
+      "surface": "No solid surface; deep atmosphere and metallic hydrogen interior",
+      "atmosphere": "Hydrogen-helium atmosphere with storm bands",
+      "systemRole": "Dominant planet by mass, sculpting small-body orbits and holding a large moon system.",
+      "moons": "Large moon system including Io, Europa, Ganymede, and Callisto",
+      "color": "#c98f5a",
+      "facts": [
+        "Jupiter's diameter is more than eleven times Earth's.",
+        "It spins very quickly, making one day less than ten hours long.",
+        "The Galilean moons are worlds in their own right."
+      ]
+    },
+    {
+      "id": "saturn",
+      "name": "Saturn",
+      "kind": "Gas giant",
+      "tagline": "A ring system you can see as architecture.",
+      "distanceAU": 9.58,
+      "diameterKm": 120536,
+      "yearDays": 10747,
+      "dayLength": "10.7 hours",
+      "surface": "No solid surface; layered atmosphere and deep interior",
+      "atmosphere": "Hydrogen-helium atmosphere",
+      "systemRole": "The clearest example that a planet can be a system: rings, moons, gaps, and resonances.",
+      "moons": "Large moon system including Titan and Enceladus",
+      "color": "#d7bd80",
+      "facts": [
+        "Saturn's rings are broad, thin, and made mostly of icy particles.",
+        "Titan has a dense atmosphere and liquid hydrocarbon lakes.",
+        "Saturn is less dense than water on average."
+      ]
+    },
+    {
+      "id": "uranus",
+      "name": "Uranus",
+      "kind": "Ice giant",
+      "tagline": "The tilted planet.",
+      "distanceAU": 19.2,
+      "diameterKm": 51118,
+      "yearDays": 30589,
+      "dayLength": "17.2 hours, retrograde",
+      "surface": "No solid surface; icy mantle beneath atmosphere",
+      "atmosphere": "Hydrogen, helium, and methane",
+      "systemRole": "Shows how collisions and tilt can rewrite a planet's seasons.",
+      "moons": "A system of icy moons and faint rings",
+      "color": "#8ed6d6",
+      "facts": [
+        "Uranus rotates on its side, with an axial tilt near 98 degrees.",
+        "Methane in the atmosphere helps create its blue-green color.",
+        "Its long year makes seasons last for decades."
+      ]
+    },
+    {
+      "id": "neptune",
+      "name": "Neptune",
+      "kind": "Ice giant",
+      "tagline": "The outer planet with fierce weather.",
+      "distanceAU": 30.05,
+      "diameterKm": 49528,
+      "yearDays": 59800,
+      "dayLength": "16.1 hours",
+      "surface": "No solid surface; icy mantle beneath atmosphere",
+      "atmosphere": "Hydrogen, helium, and methane",
+      "systemRole": "The far giant that marks the outer edge of the classical planet set.",
+      "moons": "Moon system led by Triton",
+      "color": "#4267d9",
+      "facts": [
+        "Neptune takes about 164 Earth years to orbit the Sun.",
+        "Its winds are among the fastest measured in the solar system.",
+        "Triton orbits in the opposite direction of Neptune's rotation, hinting at capture."
+      ]
+    }
+  ]
+}

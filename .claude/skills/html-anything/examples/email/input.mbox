@@ -1,0 +1,307 @@
+From casey@northstack.dev Tue Jan 27 09:14:21 2026
+From: Casey Liu <casey@northstack.dev>
+To: Clockless Support <support@clockless.ai>
+Subject: Webhook signatures failing after rotation
+Date: Tue, 27 Jan 2026 09:14:21 -0500
+Message-ID: <ns-1701@northstack.dev>
+Content-Type: text/plain; charset=utf-8
+
+Hey team,
+
+Since we rotated our signing key on Sunday afternoon, every webhook
+from your ingest endpoint is coming back with a bad signature. We're
+seeing about 300 401s an hour against /api/v2/ingest.
+
+We followed the rotation guide step by step (paste new key into the
+Settings → Keys panel, then revoke the old one). Anything we missed
+in the rollover? Happy to send sample failing payloads.
+
+Casey
+Northstack Engineering
+
+From mira@clockless.ai Tue Jan 27 09:48:02 2026
+From: Mira Park <mira@clockless.ai>
+To: Casey Liu <casey@northstack.dev>
+Cc: Clockless Support <support@clockless.ai>
+Subject: Re: Webhook signatures failing after rotation
+Date: Tue, 27 Jan 2026 09:48:02 -0500
+Message-ID: <cl-2201@clockless.ai>
+In-Reply-To: <ns-1701@northstack.dev>
+References: <ns-1701@northstack.dev>
+Content-Type: text/plain; charset=utf-8
+
+Hi Casey,
+
+Sorry about the noise. Two things would help me narrow it down:
+
+1. Paste the X-Clockless-Signature header from one failing call.
+2. Confirm whether you also flipped the "active key id" radio on the
+   settings page after pasting the new key. There's a known foot-gun
+   where the panel saves the new secret but keeps the old key id as
+   active, so signatures keep getting computed against the previous
+   secret.
+
+If (2) is the issue we can swap it for you in seconds.
+
+Mira
+
+From casey@northstack.dev Tue Jan 27 10:11:55 2026
+From: Casey Liu <casey@northstack.dev>
+To: Mira Park <mira@clockless.ai>
+Cc: Clockless Support <support@clockless.ai>
+Subject: Re: Webhook signatures failing after rotation
+Date: Tue, 27 Jan 2026 10:11:55 -0500
+Message-ID: <ns-1702@northstack.dev>
+In-Reply-To: <cl-2201@clockless.ai>
+References: <ns-1701@northstack.dev> <cl-2201@clockless.ai>
+Content-Type: text/plain; charset=utf-8
+
+You called it. The active key id radio was still pointing at
+key_2024Q4_b. Just flipped to key_2026Q1_a and the signatures
+validate again — 401 rate dropped to zero.
+
+Thank you for the fast turnaround. Two follow-up asks:
+
+  - Could you add an alert / inline warning when the active key id
+    differs from the most-recently-saved secret? This would have
+    saved us about three hours.
+  - Is there a programmatic key-rotation endpoint we could call from
+    our deploy pipeline so we never touch the UI for this?
+
+Casey
+
+From mira@clockless.ai Tue Jan 27 11:02:31 2026
+From: Mira Park <mira@clockless.ai>
+To: Casey Liu <casey@northstack.dev>
+Subject: Re: Webhook signatures failing after rotation
+Date: Tue, 27 Jan 2026 11:02:31 -0500
+Message-ID: <cl-2202@clockless.ai>
+In-Reply-To: <ns-1702@northstack.dev>
+References: <ns-1701@northstack.dev> <cl-2201@clockless.ai> <ns-1702@northstack.dev>
+Content-Type: text/plain; charset=utf-8
+
+Glad it's fixed.
+
+On your asks:
+
+1. Inline warning — filed as CL-4117. We agree this is the right fix
+   and it's on next sprint's plate. I'll post the PR link here when
+   it lands.
+2. Rotation endpoint — already exists, just under-documented. POST
+   /api/v2/keys/rotate with {"label": "..."} returns the new secret
+   and atomically flips the active key id. I'll add a section to the
+   webhooks docs by Friday.
+
+Closing the ticket — reopen anytime if anything else looks off.
+
+Mira
+
+From casey@northstack.dev Tue Jan 27 11:09:48 2026
+From: Casey Liu <casey@northstack.dev>
+To: Mira Park <mira@clockless.ai>
+Subject: Re: Webhook signatures failing after rotation
+Date: Tue, 27 Jan 2026 11:09:48 -0500
+Message-ID: <ns-1703@northstack.dev>
+In-Reply-To: <cl-2202@clockless.ai>
+References: <ns-1701@northstack.dev> <cl-2201@clockless.ai> <ns-1702@northstack.dev> <cl-2202@clockless.ai>
+Content-Type: text/plain; charset=utf-8
+
+Perfect. Watching for the PR link.
+
+Casey
+
+From mira@clockless.ai Wed Jan 28 14:45:00 2026
+From: Mira Park <mira@clockless.ai>
+To: Jordan Reyes <jordan@clockless.ai>
+Subject: Can we move standup to 10am?
+Date: Wed, 28 Jan 2026 14:45:00 -0500
+Message-ID: <cl-2210@clockless.ai>
+Content-Type: text/plain; charset=utf-8
+
+Hey Jordan — moving deploys to first thing in the morning is killing
+me on 9am standup. Could we slide it to 10am starting next week?
+
+Mira
+
+From jordan@clockless.ai Wed Jan 28 15:02:14 2026
+From: Jordan Reyes <jordan@clockless.ai>
+To: Mira Park <mira@clockless.ai>
+Subject: Re: Can we move standup to 10am?
+Date: Wed, 28 Jan 2026 15:02:14 -0500
+Message-ID: <cl-2211@clockless.ai>
+In-Reply-To: <cl-2210@clockless.ai>
+References: <cl-2210@clockless.ai>
+Content-Type: text/plain; charset=utf-8
+
+Works for me. I'll update the calendar invite this evening.
+
+Jordan
+
+From jordan@clockless.ai Mon Feb 02 08:30:11 2026
+From: Jordan Reyes <jordan@clockless.ai>
+To: Alex Chen <alex@acme.co>
+Cc: Sam Patel <sam@acme.co>, Mira Park <mira@clockless.ai>
+Subject: Pilot kickoff next steps
+Date: Mon, 2 Feb 2026 08:30:11 -0500
+Message-ID: <cl-2301@clockless.ai>
+Content-Type: text/plain; charset=utf-8
+
+Hi Alex, Sam,
+
+Great call on Friday. Per our notes, here's the plan we landed on
+for the 6-week pilot:
+
+  - Scope: ingest pipeline + dashboards for Acme's North-1 region.
+  - Pricing: flat /mo for the pilot, credited toward year 1 if
+    you sign by April 15.
+  - Success criteria: P95 ingest latency under 200ms, alerting
+    integrated with your PagerDuty service "acme-platform".
+  - Kickoff target: Wed Feb 11.
+
+Could you confirm the kickoff date works for both teams, and forward
+the legal redlines you mentioned? Once those are in we'll
+counter-sign and start provisioning the sandbox.
+
+Jordan
+
+From alex@acme.co Mon Feb 02 11:44:20 2026
+From: Alex Chen <alex@acme.co>
+To: Jordan Reyes <jordan@clockless.ai>
+Cc: Sam Patel <sam@acme.co>, Mira Park <mira@clockless.ai>
+Subject: Re: Pilot kickoff next steps
+Date: Mon, 2 Feb 2026 11:44:20 -0500
+Message-ID: <ac-9001@acme.co>
+In-Reply-To: <cl-2301@clockless.ai>
+References: <cl-2301@clockless.ai>
+Content-Type: multipart/mixed; boundary="bound-feb02-alex"
+
+--bound-feb02-alex
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 7bit
+
+Jordan,
+
+Feb 11 works for us. Sam will run the technical kickoff; he's looped
+in on this thread.
+
+Two redlines from our legal team (attached):
+
+  - Section 7.2 — they want the data-residency commitment to
+    explicitly call out us-east-2.
+  - Section 11 — 30-day termination notice instead of 60.
+
+Otherwise the redline copy is mostly OK. Could you confirm the
+us-east-2 commitment is fine on your side? That's the longer pole
+of the two.
+
+Alex
+
+--bound-feb02-alex
+Content-Type: application/pdf; name="acme-clockless-pilot-redline-v3.pdf"
+Content-Disposition: attachment; filename="acme-clockless-pilot-redline-v3.pdf"
+Content-Transfer-Encoding: base64
+
+JVBERi0xLjQKJcfsj6IKMSAwIG9iago8PC9MaW5lYXJpemVkIDEvTCAxMjM0NS9PIDQvRSAxMjM0
+NS9OIDEvVCAxMjM0NS9IIFsgNTQgMTAwIF0+PgplbmRvYmoKMiAwIG9iago8PC9TaXplIDEwL1Jv
+b3QgMyAwIFI+PgplbmRvYmoKMyAwIG9iago8PC9UeXBlL0NhdGFsb2c+PgplbmRvYmoKJSVFT0Y=
+
+--bound-feb02-alex--
+
+From jordan@clockless.ai Mon Feb 02 16:18:55 2026
+From: Jordan Reyes <jordan@clockless.ai>
+To: Alex Chen <alex@acme.co>
+Cc: Sam Patel <sam@acme.co>, Mira Park <mira@clockless.ai>
+Subject: Re: Pilot kickoff next steps
+Date: Mon, 2 Feb 2026 16:18:55 -0500
+Message-ID: <cl-2302@clockless.ai>
+In-Reply-To: <ac-9001@acme.co>
+References: <cl-2301@clockless.ai> <ac-9001@acme.co>
+Content-Type: text/plain; charset=utf-8
+
+Alex,
+
+Got the redline — thanks. Spoke with our infra lead and us-east-2 is
+fine; we already have the residency posture in place there. I'll
+have legal counter-sign tomorrow and send the executed copy back.
+
+Mira will reach out this week with credentials for the sandbox so
+Sam can start wiring up the ingest endpoint ahead of the Feb 11
+kickoff.
+
+Jordan
+
+From mira@clockless.ai Tue Feb 03 09:50:00 2026
+From: Mira Park <mira@clockless.ai>
+To: Sam Patel <sam@acme.co>
+Cc: Alex Chen <alex@acme.co>, Jordan Reyes <jordan@clockless.ai>
+Subject: Re: Pilot kickoff next steps
+Date: Tue, 3 Feb 2026 09:50:00 -0500
+Message-ID: <cl-2303@clockless.ai>
+In-Reply-To: <cl-2302@clockless.ai>
+References: <cl-2301@clockless.ai> <ac-9001@acme.co> <cl-2302@clockless.ai>
+Content-Type: multipart/mixed; boundary="bound-feb03-mira"
+
+--bound-feb03-mira
+Content-Type: text/plain; charset=utf-8
+
+Hi Sam,
+
+Sandbox is provisioned. Credentials and the runbook are attached as
+a single PDF — ingest endpoint, signing key, and the PagerDuty
+integration walkthrough.
+
+Two things to look out for:
+
+  - The sandbox region is us-east-2 (per Alex's redline).
+  - We provisioned a separate signing key for the pilot so you can
+    rotate independently of any production setup.
+
+Ping me here once the first event lands and I'll verify on our side.
+
+Mira
+
+--bound-feb03-mira
+Content-Type: application/pdf; name="pilot-sandbox-runbook.pdf"
+Content-Disposition: attachment; filename="pilot-sandbox-runbook.pdf"
+Content-Transfer-Encoding: base64
+
+JVBERi0xLjQKJSVFT0Y=
+
+--bound-feb03-mira--
+
+From sam@acme.co Wed Feb 04 17:22:08 2026
+From: Sam Patel <sam@acme.co>
+To: Mira Park <mira@clockless.ai>
+Cc: Alex Chen <alex@acme.co>, Jordan Reyes <jordan@clockless.ai>
+Subject: Re: Pilot kickoff next steps
+Date: Wed, 4 Feb 2026 17:22:08 -0500
+Message-ID: <ac-9010@acme.co>
+In-Reply-To: <cl-2303@clockless.ai>
+References: <cl-2301@clockless.ai> <ac-9001@acme.co> <cl-2302@clockless.ai> <cl-2303@clockless.ai>
+Content-Type: text/plain; charset=utf-8
+
+First event landed at 17:18 ET — verified end-to-end on our side.
+Rates and signature both look healthy.
+
+We're going to load-test for an hour tomorrow morning around 9 ET,
+ramping from 100 to 5000 events/sec. Anything we should warn your
+side about, or are we good to push ahead?
+
+Sam
+
+From alex@acme.co Fri Feb 06 08:15:42 2026
+From: Alex Chen <alex@acme.co>
+To: Jordan Reyes <jordan@clockless.ai>
+Cc: Sam Patel <sam@acme.co>, Mira Park <mira@clockless.ai>
+Subject: Re: Pilot kickoff next steps
+Date: Fri, 6 Feb 2026 08:15:42 -0500
+Message-ID: <ac-9020@acme.co>
+In-Reply-To: <ac-9010@acme.co>
+References: <cl-2301@clockless.ai> <ac-9001@acme.co> <cl-2302@clockless.ai> <cl-2303@clockless.ai> <ac-9010@acme.co>
+Content-Type: text/plain; charset=utf-8
+
+Quick scheduling question on the kickoff itself — Sam's flight got
+moved and he'd like to push the Feb 11 call by two hours, from 10am
+ET to 12pm ET. Does that still work on your end?
+
+Alex

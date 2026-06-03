@@ -1,0 +1,1436 @@
+<!doctype html>
+<html lang="en" data-ha-style="document">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Spring 2026 Reading List — Code-Writing Agents</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --primary: #a03b00;
+  --primary-container: #c94c00;
+  --primary-fixed: #ffdbcd;
+  --primary-fixed-dim: #ffb597;
+  --on-primary: #ffffff;
+  --accent-glow: #E8400D;
+  --secondary: #d5baff;
+  --secondary-container: #7b40e0;
+  --tertiary: #4d44e3;
+  --accent-cyan: #00D4FF;
+  --bg: #fff8f6;
+  --surface: #fff8f6;
+  --surface-container-lowest: #ffffff;
+  --surface-container-low: #fbf2ef;
+  --surface-container: #f5ece9;
+  --surface-container-high: #efe6e3;
+  --fg-1: #1e1b19;
+  --fg-2: #594138;
+  --fg-muted: #8d7166;
+  --border: rgba(0,0,0,0.06);
+  --border-strong: rgba(0,0,0,0.12);
+  --outline-variant: #e1bfb2;
+  --green: #10b981;
+  --blue: #3b82f6;
+  --yellow: #f59e0b;
+  --red: #ef4444;
+  --font-headline: 'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
+  --font-body: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'SF Mono', 'Menlo', ui-monospace, monospace;
+  --space-xs: 4px; --space-sm: 8px; --space-md: 12px;
+  --space-lg: 16px; --space-xl: 20px; --space-2xl: 24px;
+  --space-3xl: 32px; --space-4xl: 48px; --space-5xl: 64px;
+  --radius-sm: 8px; --radius-md: 12px; --radius-lg: 16px;
+  --radius-xl: 20px; --radius-2xl: 28px; --radius-pill: 9999px;
+  --shadow-sm: 0 1px 2px rgba(30,27,25,0.04);
+  --shadow-md: 0 4px 12px rgba(30,27,25,0.08);
+  --shadow-lg: 0 8px 24px rgba(30,27,25,0.12);
+  --shadow-accent: 0 8px 24px rgba(160,59,0,0.15);
+  --gradient-primary: linear-gradient(135deg,#a03b00 0%,#c94c00 100%);
+  --gradient-hero: linear-gradient(135deg,#a03b00 0%,#7b40e0 100%);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #060B18; --surface: #0B1426;
+    --surface-container-lowest: #101D35; --surface-container-low: #101D35;
+    --surface-container: #162544; --surface-container-high: #1c2d52;
+    --fg-1: #F8FAFC; --fg-2: #CBD5E1; --fg-muted: #64748B;
+    --border: rgba(255,255,255,0.08); --border-strong: rgba(255,255,255,0.14);
+    --primary: #FF6B35; --accent-glow: #00D4FF;
+    --shadow-md: 0 4px 12px rgba(0,0,0,0.4);
+    --shadow-lg: 0 8px 24px rgba(0,0,0,0.5);
+    --outline-variant: #2a3a5c;
+  }
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{
+  font-family:var(--font-body);
+  font-size:15px;
+  line-height:1.6;
+  color:var(--fg-1);
+  background:var(--bg);
+  min-height:100vh;
+}
+h1,h2,h3,h4,h5{font-family:var(--font-headline);letter-spacing:-0.01em;font-weight:600}
+a{color:var(--primary);text-decoration:none}
+a:hover{text-decoration:underline}
+code,mono,.mono{font-family:var(--font-mono);font-size:0.88em}
+
+/* Layout */
+.document-shell{max-width:900px;margin:0 auto;padding:var(--space-lg) var(--space-lg) var(--space-5xl);}
+@media(min-width:768px){.document-shell{padding:var(--space-3xl) var(--space-3xl) var(--space-5xl);}}
+
+/* Cover */
+.cover{
+  padding:var(--space-4xl) 0 var(--space-3xl);
+  border-bottom:2px solid var(--outline-variant);
+  margin-bottom:var(--space-4xl);
+}
+.cover-eyebrow{
+  font-family:var(--font-mono);
+  font-size:0.78em;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  color:var(--primary);
+  margin-bottom:var(--space-md);
+  display:flex;align-items:center;gap:var(--space-sm);
+}
+.cover-eyebrow::before{content:'';display:inline-block;width:24px;height:2px;background:var(--primary);border-radius:2px;}
+.cover h1{
+  font-size:clamp(1.8rem,4vw,2.8rem);
+  font-weight:700;
+  line-height:1.15;
+  margin-bottom:var(--space-xl);
+  color:var(--fg-1);
+}
+.cover h1 span{
+  background:var(--gradient-hero);
+  -webkit-background-clip:text;
+  -webkit-text-fill-color:transparent;
+  background-clip:text;
+}
+.deck{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
+  gap:var(--space-lg);
+  margin-top:var(--space-2xl);
+}
+.deck-stat{
+  background:var(--surface-container-low);
+  border:1px solid var(--border-strong);
+  border-radius:var(--radius-lg);
+  padding:var(--space-lg) var(--space-xl);
+}
+.deck-stat .num{
+  font-family:var(--font-mono);
+  font-size:1.8rem;
+  font-weight:700;
+  color:var(--primary);
+  display:block;
+  line-height:1;
+  margin-bottom:var(--space-xs);
+}
+.deck-stat .label{font-size:0.78em;color:var(--fg-muted);font-weight:500;text-transform:uppercase;letter-spacing:0.06em;}
+
+.tldr{
+  background:var(--surface-container);
+  border-left:3px solid var(--primary);
+  border-radius:0 var(--radius-md) var(--radius-md) 0;
+  padding:var(--space-lg) var(--space-xl);
+  margin-top:var(--space-2xl);
+  font-size:0.95em;
+  color:var(--fg-2);
+  line-height:1.65;
+}
+.tldr strong{color:var(--fg-1);font-weight:600;}
+
+/* Reader rail */
+.reader-rail{
+  position:sticky;
+  top:0;
+  z-index:100;
+  background:var(--surface);
+  border-bottom:1px solid var(--border-strong);
+  padding:var(--space-sm) 0;
+  margin:0 calc(-1 * var(--space-lg)) var(--space-3xl);
+}
+@media(min-width:768px){.reader-rail{margin:0 calc(-1 * var(--space-3xl)) var(--space-3xl);}}
+.reader-rail-inner{
+  max-width:900px;
+  margin:0 auto;
+  padding:0 var(--space-lg);
+  display:flex;align-items:center;gap:var(--space-md);
+  overflow-x:auto;
+  scrollbar-width:none;
+}
+@media(min-width:768px){.reader-rail-inner{padding:0 var(--space-3xl);}}
+.reader-rail-inner::-webkit-scrollbar{display:none;}
+.rail-link{
+  font-family:var(--font-headline);
+  font-size:0.82em;
+  font-weight:500;
+  color:var(--fg-muted);
+  white-space:nowrap;
+  padding:var(--space-xs) var(--space-sm);
+  border-radius:var(--radius-sm);
+  cursor:pointer;
+  transition:color 0.15s,background 0.15s;
+  border:none;background:none;
+}
+.rail-link:hover,.rail-link.active{color:var(--primary);background:var(--surface-container);}
+
+/* Search bar */
+.search-bar{
+  display:flex;
+  align-items:center;
+  gap:var(--space-sm);
+  background:var(--surface-container-low);
+  border:1px solid var(--border-strong);
+  border-radius:var(--radius-pill);
+  padding:var(--space-sm) var(--space-lg);
+  margin-bottom:var(--space-3xl);
+}
+.search-bar input{
+  border:none;background:transparent;outline:none;
+  font-family:var(--font-body);font-size:0.9em;color:var(--fg-1);
+  flex:1;min-width:0;
+}
+.search-bar input::placeholder{color:var(--fg-muted);}
+.search-icon{color:var(--fg-muted);font-size:0.85em;flex-shrink:0;}
+.search-clear{
+  background:none;border:none;cursor:pointer;
+  color:var(--fg-muted);font-size:0.8em;padding:2px 4px;
+  border-radius:var(--radius-sm);
+}
+.search-clear:hover{color:var(--fg-1);}
+
+/* Sections */
+.body-section{
+  margin-bottom:var(--space-4xl);
+  opacity:0;transform:translateY(16px);
+  transition:opacity 0.4s ease,transform 0.4s ease;
+}
+.body-section.visible{opacity:1;transform:translateY(0);}
+.section-header{
+  display:flex;align-items:baseline;gap:var(--space-md);
+  margin-bottom:var(--space-2xl);
+  padding-bottom:var(--space-md);
+  border-bottom:1px solid var(--outline-variant);
+}
+.section-header h2{font-size:1.25rem;font-weight:700;color:var(--fg-1);}
+.section-label{
+  font-family:var(--font-mono);
+  font-size:0.72em;color:var(--fg-muted);
+  text-transform:uppercase;letter-spacing:0.08em;
+}
+
+/* Topic clusters */
+.topic-grid{
+  display:flex;flex-wrap:wrap;gap:var(--space-sm);
+  margin-bottom:var(--space-xl);
+}
+.topic-chip{
+  display:inline-flex;align-items:center;gap:var(--space-xs);
+  background:var(--surface-container);
+  border:1px solid var(--border-strong);
+  border-radius:var(--radius-pill);
+  padding:var(--space-xs) var(--space-md);
+  font-size:0.82em;font-weight:500;color:var(--fg-2);
+  cursor:pointer;
+  transition:all 0.15s;
+  user-select:none;
+}
+.topic-chip:hover{border-color:var(--primary);color:var(--primary);}
+.topic-chip.active{background:var(--primary);border-color:var(--primary);color:var(--on-primary);}
+.topic-chip .chip-count{
+  font-family:var(--font-mono);
+  font-size:0.85em;
+  background:rgba(0,0,0,0.1);
+  border-radius:var(--radius-pill);
+  padding:1px 6px;
+}
+.topic-chip.active .chip-count{background:rgba(255,255,255,0.2);}
+
+/* Bar chart */
+.bar-chart{display:flex;flex-direction:column;gap:var(--space-sm);}
+.bar-row{display:flex;align-items:center;gap:var(--space-md);}
+.bar-label{
+  font-size:0.82em;color:var(--fg-2);
+  width:140px;flex-shrink:0;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  font-weight:500;
+}
+.bar-track{flex:1;height:8px;background:var(--surface-container-high);border-radius:var(--radius-pill);overflow:hidden;}
+.bar-fill{
+  height:100%;border-radius:var(--radius-pill);
+  background:var(--gradient-primary);
+  transition:width 0.6s cubic-bezier(0.34,1.56,0.64,1);
+  width:0;
+}
+.bar-num{font-family:var(--font-mono);font-size:0.8em;color:var(--fg-muted);width:28px;text-align:right;flex-shrink:0;}
+
+/* Author leaderboard */
+.author-list{display:flex;flex-direction:column;gap:var(--space-xs);}
+.author-row{
+  display:flex;align-items:center;gap:var(--space-md);
+  padding:var(--space-sm) var(--space-md);
+  border-radius:var(--radius-sm);
+  transition:background 0.1s;
+}
+.author-row:hover{background:var(--surface-container);}
+.author-rank{font-family:var(--font-mono);font-size:0.75em;color:var(--fg-muted);width:20px;flex-shrink:0;}
+.author-name{flex:1;font-size:0.9em;color:var(--fg-2);font-weight:500;}
+.author-count-bar{width:80px;height:5px;background:var(--surface-container-high);border-radius:var(--radius-pill);overflow:hidden;}
+.author-count-fill{height:100%;background:var(--secondary-container);border-radius:var(--radius-pill);transition:width 0.5s ease;}
+.author-count-num{font-family:var(--font-mono);font-size:0.78em;color:var(--fg-muted);width:20px;text-align:right;}
+
+/* Year sparkline */
+.year-section{margin-bottom:var(--space-2xl);}
+.sparkline-wrap{
+  background:var(--surface-container-low);
+  border:1px solid var(--border);
+  border-radius:var(--radius-lg);
+  padding:var(--space-lg) var(--space-xl);
+}
+.sparkline-title{font-size:0.82em;color:var(--fg-muted);margin-bottom:var(--space-md);font-weight:500;}
+.sparkline-bars{display:flex;align-items:flex-end;gap:3px;height:48px;}
+.spark-bar{
+  flex:1;border-radius:3px 3px 0 0;
+  background:var(--primary);opacity:0.6;
+  transition:opacity 0.2s,height 0.6s ease;
+  min-width:8px;
+  cursor:pointer;
+  position:relative;
+}
+.spark-bar:hover{opacity:1;}
+.spark-bar.active{opacity:1;background:var(--primary-container);}
+.sparkline-labels{display:flex;gap:3px;margin-top:var(--space-xs);}
+.spark-label{flex:1;text-align:center;font-family:var(--font-mono);font-size:0.65em;color:var(--fg-muted);min-width:8px;}
+
+/* Ref type donut */
+.donut-wrap{display:flex;align-items:center;gap:var(--space-2xl);flex-wrap:wrap;}
+.donut-legend{display:flex;flex-direction:column;gap:var(--space-sm);}
+.legend-row{display:flex;align-items:center;gap:var(--space-sm);cursor:pointer;}
+.legend-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
+.legend-label{font-size:0.82em;color:var(--fg-2);}
+.legend-num{font-family:var(--font-mono);font-size:0.78em;color:var(--fg-muted);margin-left:auto;padding-left:var(--space-lg);}
+
+/* Callout cards */
+.callout-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:var(--space-lg);}
+.callout-card{
+  background:var(--surface-container-low);
+  border:1px solid var(--border-strong);
+  border-radius:var(--radius-lg);
+  padding:var(--space-lg) var(--space-xl);
+}
+.callout-card-head{
+  display:flex;align-items:center;gap:var(--space-sm);
+  margin-bottom:var(--space-md);
+  padding-bottom:var(--space-sm);
+  border-bottom:1px solid var(--border);
+}
+.callout-icon{font-size:1em;}
+.callout-title{font-family:var(--font-headline);font-size:0.88em;font-weight:600;}
+.callout-empty{font-size:0.85em;color:var(--fg-muted);font-style:italic;}
+.callout-item{
+  font-size:0.82em;color:var(--fg-2);
+  padding:var(--space-xs) 0;
+  border-bottom:1px solid var(--border);
+}
+.callout-item:last-child{border-bottom:none;}
+
+/* Recent papers */
+.recent-grid{display:flex;flex-direction:column;gap:var(--space-md);}
+.recent-card{
+  display:flex;gap:var(--space-md);
+  background:var(--surface-container-low);
+  border:1px solid var(--border);
+  border-radius:var(--radius-md);
+  padding:var(--space-md) var(--space-lg);
+  cursor:pointer;
+  transition:box-shadow 0.15s,border-color 0.15s;
+}
+.recent-card:hover{box-shadow:var(--shadow-md);border-color:var(--outline-variant);}
+.recent-year{font-family:var(--font-mono);font-size:0.78em;color:var(--primary);font-weight:700;min-width:32px;padding-top:2px;}
+.recent-info{flex:1;min-width:0;}
+.recent-title{font-size:0.88em;font-weight:600;color:var(--fg-1);margin-bottom:2px;line-height:1.35;}
+.recent-authors{font-size:0.78em;color:var(--fg-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+
+/* Drill-down */
+.drill-toggle{
+  display:flex;align-items:center;gap:var(--space-sm);
+  background:var(--surface-container-low);
+  border:1px solid var(--border-strong);
+  border-radius:var(--radius-md);
+  padding:var(--space-md) var(--space-xl);
+  cursor:pointer;
+  font-family:var(--font-headline);font-size:0.92em;font-weight:600;color:var(--fg-1);
+  width:100%;text-align:left;
+  transition:background 0.15s;
+  margin-bottom:var(--space-md);
+}
+.drill-toggle:hover{background:var(--surface-container);}
+.drill-arrow{transition:transform 0.2s;}
+.drill-toggle.open .drill-arrow{transform:rotate(90deg);}
+.drill-count{font-family:var(--font-mono);font-size:0.8em;color:var(--fg-muted);margin-left:auto;}
+
+.filter-bar{
+  display:flex;flex-wrap:wrap;gap:var(--space-xs);
+  margin-bottom:var(--space-lg);
+}
+.filter-chip{
+  display:inline-flex;align-items:center;gap:4px;
+  background:var(--surface-container);border:1px solid var(--border-strong);
+  border-radius:var(--radius-pill);padding:2px var(--space-sm);
+  font-size:0.75em;color:var(--fg-muted);cursor:pointer;
+  transition:all 0.12s;user-select:none;
+}
+.filter-chip:hover{border-color:var(--primary);color:var(--primary);}
+.filter-chip.active{background:var(--surface-container-high);border-color:var(--primary);color:var(--primary);font-weight:600;}
+
+.items-list{display:flex;flex-direction:column;gap:var(--space-md);}
+.item-card{
+  background:var(--surface-container-lowest);
+  border:1px solid var(--border);
+  border-radius:var(--radius-md);
+  overflow:hidden;
+  transition:border-color 0.15s,box-shadow 0.15s;
+}
+.item-card:hover{border-color:var(--outline-variant);box-shadow:var(--shadow-sm);}
+.item-card.hidden{display:none;}
+.item-card.highlighted{border-color:var(--primary);box-shadow:var(--shadow-accent);}
+.item-header{
+  display:flex;align-items:flex-start;gap:var(--space-md);
+  padding:var(--space-md) var(--space-lg);
+  cursor:pointer;
+}
+.item-year-badge{
+  font-family:var(--font-mono);font-size:0.72em;font-weight:700;
+  background:var(--surface-container);border:1px solid var(--border-strong);
+  border-radius:var(--radius-sm);padding:2px 6px;color:var(--fg-muted);
+  flex-shrink:0;margin-top:2px;
+}
+.item-main{flex:1;min-width:0;}
+.item-title{font-size:0.88em;font-weight:600;color:var(--fg-1);line-height:1.35;margin-bottom:var(--space-xs);}
+.item-meta{display:flex;flex-wrap:wrap;gap:var(--space-xs);align-items:center;}
+.item-venue{font-size:0.75em;color:var(--fg-muted);font-style:italic;}
+.item-tags{display:flex;flex-wrap:wrap;gap:3px;}
+.item-tag{
+  font-size:0.68em;background:var(--surface-container);
+  border:1px solid var(--border-strong);border-radius:var(--radius-pill);
+  padding:1px 6px;color:var(--fg-muted);
+}
+.item-expand-icon{color:var(--fg-muted);font-size:0.75em;flex-shrink:0;margin-top:4px;transition:transform 0.2s;}
+.item-card.expanded .item-expand-icon{transform:rotate(180deg);}
+.item-detail{
+  display:none;
+  padding:var(--space-md) var(--space-lg) var(--space-lg);
+  border-top:1px solid var(--border);
+  background:var(--surface-container-low);
+}
+.item-card.expanded .item-detail{display:block;}
+.detail-row{
+  display:flex;gap:var(--space-md);
+  font-size:0.82em;margin-bottom:var(--space-sm);
+}
+.detail-key{color:var(--fg-muted);font-weight:500;min-width:80px;flex-shrink:0;}
+.detail-val{color:var(--fg-2);word-break:break-word;}
+.detail-val.mono{font-family:var(--font-mono);font-size:0.88em;}
+.abstract-text{
+  margin-top:var(--space-md);
+  font-size:0.85em;color:var(--fg-2);line-height:1.65;
+  padding:var(--space-md) var(--space-lg);
+  background:var(--surface-container);
+  border-radius:var(--radius-sm);
+  border-left:2px solid var(--outline-variant);
+}
+.item-link-btn{
+  display:inline-flex;align-items:center;gap:var(--space-xs);
+  margin-top:var(--space-md);
+  font-size:0.8em;color:var(--primary);
+  background:var(--surface-container);border:1px solid var(--outline-variant);
+  border-radius:var(--radius-pill);padding:var(--space-xs) var(--space-md);
+  text-decoration:none;transition:background 0.12s;
+}
+.item-link-btn:hover{background:var(--surface-container-high);text-decoration:none;}
+
+mark{background:var(--primary-fixed);color:var(--fg-1);border-radius:2px;padding:0 1px;}
+
+/* Copy button */
+.copy-btn{
+  display:inline-flex;align-items:center;gap:var(--space-xs);
+  font-size:0.78em;font-family:var(--font-body);font-weight:500;
+  background:var(--surface-container);border:1px solid var(--border-strong);
+  border-radius:var(--radius-pill);padding:var(--space-xs) var(--space-md);
+  cursor:pointer;color:var(--fg-muted);
+  transition:all 0.15s;
+}
+.copy-btn:hover{color:var(--primary);border-color:var(--primary);}
+.copy-btn.copied{color:var(--green);border-color:var(--green);}
+
+/* No results */
+.no-results{
+  text-align:center;padding:var(--space-4xl) var(--space-2xl);
+  color:var(--fg-muted);font-size:0.9em;
+}
+
+/* Footer */
+.page-footer{
+  margin-top:var(--space-5xl);
+  padding-top:var(--space-2xl);
+  border-top:1px solid var(--border-strong);
+  font-size:0.78em;color:var(--fg-muted);line-height:1.6;
+}
+
+/* Animations */
+@media (prefers-reduced-motion: reduce) {
+  *{transition:none!important;animation:none!important;}
+  .body-section{opacity:1!important;transform:none!important;}
+}
+
+.pagination-bar{
+  display:flex;align-items:center;gap:var(--space-sm);
+  justify-content:center;
+  margin-top:var(--space-2xl);
+  flex-wrap:wrap;
+}
+.page-btn{
+  font-family:var(--font-mono);font-size:0.8em;
+  background:var(--surface-container);border:1px solid var(--border-strong);
+  border-radius:var(--radius-sm);padding:var(--space-xs) var(--space-md);
+  cursor:pointer;color:var(--fg-2);transition:all 0.12s;
+}
+.page-btn:hover,.page-btn.active{background:var(--primary);border-color:var(--primary);color:var(--on-primary);}
+.page-info{font-family:var(--font-mono);font-size:0.8em;color:var(--fg-muted);}
+</style>
+<!-- html-anything example style skin:start -->
+
+<style id="html-anything-example-style-skin">
+html[data-ha-style] {
+  --ha-style-accent: var(--primary, #a03b00);
+  --ha-style-accent-2: var(--secondary-container, #7b40e0);
+  --ha-style-badge-bg: rgba(255,255,255,.78);
+  --ha-style-badge-fg: var(--fg-1, #1e1b19);
+}
+html[data-ha-style] body {
+  position: relative;
+  background-attachment: fixed;
+}
+html[data-ha-style] body::before {
+  position: fixed;
+  z-index: 9999;
+  top: 12px;
+  right: 12px;
+  padding: 7px 10px;
+  border: 1px solid color-mix(in srgb, var(--ha-style-accent) 26%, transparent);
+  border-radius: 999px;
+  background: var(--ha-style-badge-bg);
+  color: var(--ha-style-badge-fg);
+  box-shadow: 0 6px 24px rgba(0,0,0,.10);
+  font: 700 10px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  backdrop-filter: blur(16px);
+}
+html[data-ha-style] .hero,
+html[data-ha-style] header.hero,
+html[data-ha-style] .top,
+html[data-ha-style] .header {
+  position: relative;
+}
+html[data-ha-style] .hero::before,
+html[data-ha-style] header.hero::before {
+  content: "";
+  display: block;
+  width: 64px;
+  height: 6px;
+  margin-bottom: 18px;
+  border-radius: 999px;
+  background: var(--ha-style-accent);
+}
+
+html[data-ha-style="teaching"] {
+  --ha-style-accent: #0f766e;
+  --ha-style-accent-2: #f59e0b;
+  --primary: #0f766e;
+  --primary-container: #115e59;
+  --primary-fixed: #ccfbf1;
+  --secondary-container: #f59e0b;
+  --bg: #f6fbfb;
+  --surface: #f6fbfb;
+  --surface-container-lowest: #ffffff;
+  --surface-container-low: #edf7f5;
+  --surface-container: #e5f1ee;
+  --surface-container-high: #d8e8e4;
+  --fg-1: #10201f;
+  --fg-2: #304c49;
+  --fg-muted: #647b78;
+  --border: rgba(15,118,110,.14);
+  --gradient-hero: linear-gradient(135deg, #0f766e 0%, #f59e0b 100%);
+  --gradient-text: linear-gradient(135deg, #0f766e 0%, #f59e0b 100%);
+}
+html[data-ha-style="teaching"] body {
+  background-color: var(--bg) !important;
+  background-image:
+    linear-gradient(rgba(15,118,110,.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(15,118,110,.07) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+html[data-ha-style="teaching"] body::before { content: "teaching"; }
+
+html[data-ha-style="relationship"] {
+  --ha-style-accent: #be3455;
+  --ha-style-accent-2: #317b93;
+  --primary: #be3455;
+  --primary-container: #a52d4b;
+  --primary-fixed: #ffe1e8;
+  --secondary-container: #317b93;
+  --bg: #fff7f8;
+  --surface: #fff7f8;
+  --surface-container-lowest: #ffffff;
+  --surface-container-low: #fff0f3;
+  --surface-container: #f8e7eb;
+  --surface-container-high: #efdde3;
+  --fg-1: #28181c;
+  --fg-2: #5f3e48;
+  --fg-muted: #8d6b75;
+  --border: rgba(190,52,85,.14);
+  --rose: #e25b74;
+  --blue: #4f95a8;
+  --gradient-hero: linear-gradient(135deg, #be3455 0%, #317b93 100%);
+  --gradient-text: linear-gradient(135deg, #be3455 0%, #317b93 100%);
+}
+html[data-ha-style="relationship"] body {
+  background-color: var(--bg) !important;
+  background-image:
+    linear-gradient(120deg, rgba(190,52,85,.08), transparent 36%),
+    linear-gradient(300deg, rgba(49,123,147,.08), transparent 40%);
+}
+html[data-ha-style="relationship"] body::before { content: "relationship"; }
+
+html[data-ha-style="timeline-story"] {
+  --ha-style-accent: #9a4b14;
+  --ha-style-accent-2: #2f6f73;
+  --primary: #9a4b14;
+  --primary-container: #7a3b10;
+  --primary-fixed: #ffe8cf;
+  --secondary-container: #2f6f73;
+  --bg: #fbf8f1;
+  --surface: #fbf8f1;
+  --surface-container-lowest: #ffffff;
+  --surface-container-low: #f4ecdf;
+  --surface-container: #eee3d3;
+  --surface-container-high: #e4d7c4;
+  --fg-1: #241b12;
+  --fg-2: #5c4b3d;
+  --fg-muted: #8a7968;
+  --border: rgba(154,75,20,.16);
+  --gradient-hero: linear-gradient(135deg, #9a4b14 0%, #2f6f73 100%);
+  --gradient-text: linear-gradient(135deg, #9a4b14 0%, #2f6f73 100%);
+}
+html[data-ha-style="timeline-story"] body {
+  background-color: var(--bg) !important;
+  background-image:
+    linear-gradient(90deg, transparent 0 calc(50% - 1px), rgba(154,75,20,.16) calc(50% - 1px) calc(50% + 1px), transparent calc(50% + 1px)),
+    radial-gradient(circle at 50% 72px, rgba(154,75,20,.20) 0 4px, transparent 5px);
+  background-size: 100% 100%, 100% 96px;
+}
+html[data-ha-style="timeline-story"] body::before { content: "timeline story"; }
+html[data-ha-style="timeline-story"] .hero::before,
+html[data-ha-style="timeline-story"] header.hero::before {
+  width: 8px;
+  height: 72px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--ha-style-accent), var(--ha-style-accent-2));
+}
+
+html[data-ha-style="map-atlas"] {
+  --ha-style-accent: #17695a;
+  --ha-style-accent-2: #2f66a8;
+  --primary: #17695a;
+  --primary-container: #115346;
+  --primary-fixed: #daf5ec;
+  --secondary-container: #2f66a8;
+  --bg: #f4faf7;
+  --surface: #f4faf7;
+  --surface-container-lowest: #ffffff;
+  --surface-container-low: #eaf4ef;
+  --surface-container: #e0eee8;
+  --surface-container-high: #d4e6de;
+  --fg-1: #10221d;
+  --fg-2: #365149;
+  --fg-muted: #6e837b;
+  --border: rgba(23,105,90,.16);
+  --gradient-hero: linear-gradient(135deg, #17695a 0%, #2f66a8 100%);
+  --gradient-text: linear-gradient(135deg, #17695a 0%, #2f66a8 100%);
+}
+html[data-ha-style="map-atlas"] body {
+  background-color: var(--bg) !important;
+  background-image:
+    repeating-linear-gradient(24deg, rgba(23,105,90,.09) 0 1px, transparent 1px 34px),
+    repeating-linear-gradient(116deg, rgba(47,102,168,.08) 0 1px, transparent 1px 42px);
+}
+html[data-ha-style="map-atlas"] body::before { content: "map atlas"; }
+html[data-ha-style="map-atlas"] .hero::before,
+html[data-ha-style="map-atlas"] header.hero::before {
+  width: 78px;
+  height: 78px;
+  border: 2px solid var(--ha-style-accent);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 55% 42%, var(--ha-style-accent) 0 4px, transparent 5px),
+    linear-gradient(45deg, transparent 47%, rgba(47,102,168,.55) 48% 52%, transparent 53%);
+}
+
+html[data-ha-style="network-map"] {
+  --ha-style-accent: #355f91;
+  --ha-style-accent-2: #a34d67;
+  --primary: #355f91;
+  --primary-container: #294b75;
+  --primary-fixed: #deebff;
+  --secondary-container: #a34d67;
+  --bg: #f7f8fb;
+  --surface: #f7f8fb;
+  --surface-container-lowest: #ffffff;
+  --surface-container-low: #eef1f7;
+  --surface-container: #e6ebf3;
+  --surface-container-high: #dbe2ee;
+  --fg-1: #151b24;
+  --fg-2: #3f4a5b;
+  --fg-muted: #737e8f;
+  --border: rgba(53,95,145,.16);
+  --gradient-hero: linear-gradient(135deg, #355f91 0%, #a34d67 100%);
+  --gradient-text: linear-gradient(135deg, #355f91 0%, #a34d67 100%);
+}
+html[data-ha-style="network-map"] body {
+  background-color: var(--bg) !important;
+  background-image:
+    radial-gradient(circle at 20% 20%, rgba(53,95,145,.22) 0 3px, transparent 4px),
+    radial-gradient(circle at 68% 34%, rgba(163,77,103,.18) 0 3px, transparent 4px),
+    linear-gradient(38deg, transparent 0 48%, rgba(53,95,145,.10) 49% 51%, transparent 52%);
+  background-size: 88px 88px, 118px 118px, 132px 132px;
+}
+html[data-ha-style="network-map"] body::before { content: "network map"; }
+html[data-ha-style="network-map"] .hero::before,
+html[data-ha-style="network-map"] header.hero::before {
+  width: 86px;
+  height: 46px;
+  border-radius: 999px;
+  background:
+    radial-gradient(circle at 18px 24px, var(--ha-style-accent) 0 7px, transparent 8px),
+    radial-gradient(circle at 44px 12px, var(--ha-style-accent-2) 0 6px, transparent 7px),
+    radial-gradient(circle at 70px 30px, var(--ha-style-accent) 0 7px, transparent 8px),
+    linear-gradient(22deg, transparent 0 31%, color-mix(in srgb, var(--ha-style-accent) 60%, transparent) 32% 36%, transparent 37%),
+    linear-gradient(160deg, transparent 0 43%, color-mix(in srgb, var(--ha-style-accent-2) 60%, transparent) 44% 48%, transparent 49%);
+}
+
+html[data-ha-style="dashboard"] {
+  --ha-style-accent: #0f5f6f;
+  --ha-style-accent-2: #8a5a16;
+  --primary: #0f5f6f;
+  --primary-container: #0b4c59;
+  --primary-fixed: #d8f2f5;
+  --secondary-container: #8a5a16;
+  --bg: #f5f7f9;
+  --surface: #f5f7f9;
+  --surface-container-lowest: #ffffff;
+  --surface-container-low: #eef2f5;
+  --surface-container: #e7edf1;
+  --surface-container-high: #dce5ea;
+  --fg-1: #111827;
+  --fg-2: #374151;
+  --fg-muted: #6b7280;
+  --border: rgba(15,95,111,.16);
+  --gradient-hero: linear-gradient(135deg, #0f5f6f 0%, #083344 100%);
+  --gradient-text: linear-gradient(135deg, #0f5f6f 0%, #083344 100%);
+}
+html[data-ha-style="dashboard"] body {
+  background-color: var(--bg) !important;
+  background-image: linear-gradient(90deg, rgba(15,95,111,.08) 0 1px, transparent 1px);
+  background-size: 18px 100%;
+}
+html[data-ha-style="dashboard"] body::before { content: "dashboard"; }
+html[data-ha-style="dashboard"] .hero::before,
+html[data-ha-style="dashboard"] header.hero::before {
+  width: 100%;
+  height: 3px;
+  margin-bottom: 14px;
+}
+
+html[data-ha-style="document"] {
+  --ha-style-accent: #8b3f1f;
+  --ha-style-accent-2: #2f6f73;
+  --primary: #8b3f1f;
+  --primary-container: #703319;
+  --primary-fixed: #ffe4d5;
+  --secondary-container: #2f6f73;
+  --bg: #fbfaf7;
+  --surface: #fbfaf7;
+  --surface-container-lowest: #ffffff;
+  --surface-container-low: #f2efe8;
+  --surface-container: #e9e4da;
+  --surface-container-high: #ded7c9;
+  --fg-1: #211d18;
+  --fg-2: #554d44;
+  --fg-muted: #82786c;
+  --border: rgba(139,63,31,.16);
+  --font-headline: Georgia, "Iowan Old Style", "Times New Roman", serif;
+  --gradient-hero: linear-gradient(135deg, #8b3f1f 0%, #2f6f73 100%);
+  --gradient-text: linear-gradient(135deg, #8b3f1f 0%, #2f6f73 100%);
+}
+html[data-ha-style="document"] body {
+  background-color: var(--bg) !important;
+  background-image: linear-gradient(90deg, rgba(139,63,31,.18) 0 4px, transparent 4px);
+  background-size: 100% 100%;
+}
+html[data-ha-style="document"] body::before { content: "document"; }
+html[data-ha-style="document"] .hero::before,
+html[data-ha-style="document"] header.hero::before {
+  width: 42px;
+  height: 42px;
+  border-radius: 0;
+  background: transparent;
+  border-top: 4px solid var(--ha-style-accent);
+  border-left: 4px solid var(--ha-style-accent);
+}
+
+html[data-ha-style="developer"] {
+  color-scheme: dark;
+  --ha-style-accent: #38bdf8;
+  --ha-style-accent-2: #f97316;
+  --ha-style-badge-bg: rgba(8,16,31,.82);
+  --ha-style-badge-fg: #dbeafe;
+  --primary: #38bdf8;
+  --primary-container: #0e7490;
+  --primary-fixed: #0f2942;
+  --secondary-container: #f97316;
+  --bg: #07111f;
+  --surface: #07111f;
+  --surface-container-lowest: #0b1426;
+  --surface-container-low: #0f1b31;
+  --surface-container: #13233d;
+  --surface-container-high: #1b2f50;
+  --fg-1: #f8fafc;
+  --fg-2: #cbd5e1;
+  --fg-muted: #94a3b8;
+  --border: rgba(148,163,184,.18);
+  --green: #34d399;
+  --red: #fb7185;
+  --yellow: #fbbf24;
+  --gradient-hero: linear-gradient(135deg, #0f172a 0%, #0e7490 100%);
+  --gradient-text: linear-gradient(135deg, #38bdf8 0%, #f97316 100%);
+}
+html[data-ha-style="developer"] body {
+  background-color: var(--bg) !important;
+  background-image:
+    linear-gradient(rgba(56,189,248,.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(56,189,248,.05) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+html[data-ha-style="developer"] body::before { content: "developer"; }
+html[data-ha-style="developer"] pre,
+html[data-ha-style="developer"] code,
+html[data-ha-style="developer"] .mono {
+  color: inherit;
+}
+</style>
+<!-- html-anything example style skin:end -->
+</head>
+<body>
+<script>const DATA = {"kind":"research","format":"bibtex","items":[{"id":"i_0001","title":"On the Dangers of Stochastic Parrots: Can Language Models Be Too Big?","url":"https://dl.acm.org/doi/10.1145/3442188.3445922","domain":"dl.acm.org","domainRoot":"acm.org","source":"bibtex","folder":"article","tags":["ethics","bias","large-language-models"],"authors":["Emily M. Bender","Timnit Gebru","Angelina McMillan-Major","Shmargaret Shmitchell"],"year":2021,"venue":"Proceedings of the 2021 ACM Conference on Fairness, Accountability, and Transparency","doi":"10.1145/3442188.3445922","publication":"Proceedings of the 2021 ACM Conference on Fairness, Accountability, and Transparency","abstract":"We outline a set of concerns about the increasing size of language models, including environmental and financial costs, the difficulty of curating massive training data, the entrenching of dominant viewpoints, and the risk of producing seemingly coherent outputs that obscure their origins.","refType":"article","note":"We outline a set of concerns about the increasing size of language models, including environmental and financial costs, the difficulty of curating massive training data, the entrenching of dominant viewpoints, and the risk of producing seemingly coherent outputs that obscure their origins.","excerpt":"We outline a set of concerns about the increasing size of language models, including environmental and financial costs, the difficulty of curating massive training data, the entrenching of dominant viewpoints, and the risk of producing seem…","raw":{"citeKey":"bender2021stochastic","refType":"article","fields":{"title":"On the Dangers of Stochastic Parrots: Can Language Models Be Too Big?","author":"Bender, Emily M. and Gebru, Timnit and McMillan-Major, Angelina and Shmitchell, Shmargaret","journal":"Proceedings of the 2021 ACM Conference on Fairness, Accountability, and Transparency","year":"2021","pages":"610--623","doi":"10.1145/3442188.3445922","url":"https://dl.acm.org/doi/10.1145/3442188.3445922","keywords":"ethics, bias, large-language-models","abstract":"We outline a set of concerns about the increasing size of language models, including environmental and financial costs, the difficulty of curating massive training data, the entrenching of dominant viewpoints, and the risk of producing seemingly coherent outputs that obscure their origins."}},"isDead":false,"topic":"ethics"},{"id":"i_0002","title":"Model Cards for Model Reporting","url":"https://dl.acm.org/doi/10.1145/3287560.3287596","domain":"dl.acm.org","domainRoot":"acm.org","source":"bibtex","folder":"inproceedings","tags":["accountability","evaluation","documentation"],"authors":["Margaret Mitchell","Simone Wu","Andrew Zaldivar","Parker Barnes","Lucy Vasserman","Ben Hutchinson","Elena Spitzer","Inioluwa Deborah Raji","Timnit Gebru"],"year":2019,"venue":"Proceedings of the Conference on Fairness, Accountability, and Transparency (FAT*)","doi":"10.1145/3287560.3287596","publication":"Proceedings of the Conference on Fairness, Accountability, and Transparency (FAT*)","abstract":"Trained machine learning models are increasingly used to perform high-impact tasks in areas such as criminal justice, medicine, and finance. To clarify the intended use cases of machine learning models, we propose model cards: a framework for transparent reporting of model performance and limitations.","refType":"inproceedings","note":"Trained machine learning models are increasingly used to perform high-impact tasks in areas such as criminal justice, medicine, and finance. To clarify the intended use cases of machine learning models, we propose model cards: a framework for transparent reporting of model performance and limitations.","excerpt":"Trained machine learning models are increasingly used to perform high-impact tasks in areas such as criminal justice, medicine, and finance. To clarify the intended use cases of machine learning models, we propose model cards: a framework f…","raw":{"citeKey":"mitchell2019modelcards","refType":"inproceedings","fields":{"title":"Model Cards for Model Reporting","author":"Mitchell, Margaret and Wu, Simone and Zaldivar, Andrew and Barnes, Parker and Vasserman, Lucy and Hutchinson, Ben and Spitzer, Elena and Raji, Inioluwa Deborah and Gebru, Timnit","booktitle":"Proceedings of the Conference on Fairness, Accountability, and Transparency (FAT*)","year":"2019","pages":"220--229","doi":"10.1145/3287560.3287596","url":"https://dl.acm.org/doi/10.1145/3287560.3287596","keywords":"accountability, evaluation, documentation","abstract":"Trained machine learning models are increasingly used to perform high-impact tasks in areas such as criminal justice, medicine, and finance. To clarify the intended use cases of machine learning models, we propose model cards: a framework for transparent reporting of model performance and limitations."}},"isDead":false,"topic":"accountability"},{"id":"i_0003","title":"Closing the AI Accountability Gap: Defining an End-to-End Framework for Internal Algorithmic Auditing","url":"https://doi.org/10.1145/3351095.3372873","domain":"doi.org","domainRoot":"doi.org","source":"bibtex","folder":"article","tags":["accountability","audit","ethics"],"authors":["Inioluwa Deborah Raji","Andrew Smart","Rebecca N. White","Margaret Mitchell","Timnit Gebru","Ben Hutchinson","Jamila Smith-Loud","Daniel Theron","Parker Barnes"],"year":2020,"venue":"Proceedings of the 2020 Conference on Fairness, Accountability, and Transparency (FAccT)","doi":"10.1145/3351095.3372873","publication":"Proceedings of the 2020 Conference on Fairness, Accountability, and Transparency (FAccT)","abstract":"","refType":"article","raw":{"citeKey":"raji2020closing","refType":"article","fields":{"title":"Closing the AI Accountability Gap: Defining an End-to-End Framework for Internal Algorithmic Auditing","author":"Raji, Inioluwa Deborah and Smart, Andrew and White, Rebecca N. and Mitchell, Margaret and Gebru, Timnit and Hutchinson, Ben and Smith-Loud, Jamila and Theron, Daniel and Barnes, Parker","journal":"Proceedings of the 2020 Conference on Fairness, Accountability, and Transparency (FAccT)","year":"2020","pages":"33--44","doi":"10.1145/3351095.3372873","keywords":"accountability, audit, ethics"}},"isDead":false,"topic":"accountability"},{"id":"i_0004","title":"Evaluating Large Language Models Trained on Code","url":"https://arxiv.org/abs/2107.03374","domain":"arxiv.org","domainRoot":"arxiv.org","source":"bibtex","folder":"inproceedings","tags":["coding-agents","evaluation","large-language-models"],"authors":["Mark Chen","Jerry Tworek","Heewoo Jun","Qiming Yuan","Henrique Ponde de Oliveira Pinto","Jared Kaplan","Harri Edwards","Yuri Burda","Nicholas Joseph","Greg Brockman","others"],"year":2021,"venue":"arXiv preprint arXiv:2107.03374","publication":"arXiv preprint arXiv:2107.03374","abstract":"We introduce Codex, a GPT language model fine-tuned on publicly available code from GitHub, and study its Python code-writing capabilities. We evaluate the functional correctness of generated code on the HumanEval benchmark.","refType":"inproceedings","note":"We introduce Codex, a GPT language model fine-tuned on publicly available code from GitHub, and study its Python code-writing capabilities. We evaluate the functional correctness of generated code on the HumanEval benchmark.","excerpt":"We introduce Codex, a GPT language model fine-tuned on publicly available code from GitHub, and study its Python code-writing capabilities. We evaluate the functional correctness of generated code on the HumanEval benchmark.","raw":{"citeKey":"chen2021evaluating","refType":"inproceedings","fields":{"title":"Evaluating Large Language Models Trained on Code","author":"Chen, Mark and Tworek, Jerry and Jun, Heewoo and Yuan, Qiming and Pinto, Henrique Ponde de Oliveira and Kaplan, Jared and Edwards, Harri and Burda, Yuri and Joseph, Nicholas and Brockman, Greg and others","booktitle":"arXiv preprint arXiv:2107.03374","year":"2021","url":"https://arxiv.org/abs/2107.03374","keywords":"coding-agents, evaluation, large-language-models","abstract":"We introduce Codex, a GPT language model fine-tuned on publicly available code from GitHub, and study its Python code-writing capabilities. We evaluate the functional correctness of generated code on the HumanEval benchmark."}},"isDead":false,"topic":"coding-agents"},{"id":"i_0005","title":"Program Synthesis with Large Language Models","url":"https://arxiv.org/abs/2108.07732","domain":"arxiv.org","domainRoot":"arxiv.org","source":"bibtex","folder":"inproceedings","tags":["coding-agents","program-synthesis"],"authors":["Jacob Austin","Augustus Odena","Maxwell Nye","Maarten Bosma","Henryk Michalewski","David Dohan","Ellen Jiang","Carrie Cai","Michael Terry","Quoc V. Le","others"],"year":2021,"venue":"arXiv preprint arXiv:2108.07732","publication":"arXiv preprint arXiv:2108.07732","abstract":"","refType":"inproceedings","raw":{"citeKey":"austin2021programs","refType":"inproceedings","fields":{"title":"Program Synthesis with Large Language Models","author":"Austin, Jacob and Odena, Augustus and Nye, Maxwell and Bosma, Maarten and Michalewski, Henryk and Dohan, David and Jiang, Ellen and Cai, Carrie and Terry, Michael and Le, Quoc V. and others","booktitle":"arXiv preprint arXiv:2108.07732","year":"2021","url":"https://arxiv.org/abs/2108.07732","keywords":"coding-agents, program-synthesis"}},"isDead":false,"topic":"coding-agents"},{"id":"i_0006","title":"Competition-Level Code Generation with AlphaCode","url":"https://doi.org/10.1126/science.abq1158","domain":"doi.org","domainRoot":"doi.org","source":"bibtex","folder":"inproceedings","tags":["coding-agents","competitive-programming","evaluation"],"authors":["Yujia Li","David Choi","Junyoung Chung","Nate Kushman","Julian Schrittwieser","R\\'emi Leblond","Tom Eccles","James Keeling","Felix Gimeno","Agustin Dal Lago","others"],"year":2022,"venue":"Science","doi":"10.1126/science.abq1158","publication":"Science","abstract":"","refType":"inproceedings","raw":{"citeKey":"li2022competition","refType":"inproceedings","fields":{"title":"Competition-Level Code Generation with AlphaCode","author":"Li, Yujia and Choi, David and Chung, Junyoung and Kushman, Nate and Schrittwieser, Julian and Leblond, R{\\'e}mi and Eccles, Tom and Keeling, James and Gimeno, Felix and Dal Lago, Agustin and others","booktitle":"Science","year":"2022","volume":"378","number":"6624","pages":"1092--1097","doi":"10.1126/science.abq1158","keywords":"coding-agents, competitive-programming, evaluation"}},"isDead":false,"topic":"coding-agents"},{"id":"i_0007","title":"Expectation vs. Experience: Evaluating the Usability of Code Generation Tools Powered by Large Language Models","url":"https://doi.org/10.1145/3491101.3519665","domain":"doi.org","domainRoot":"doi.org","source":"bibtex","folder":"inproceedings","tags":["hci","coding-agents","usability"],"authors":["Priyan Vaithilingam","Tianyi Zhang","Elena L. Glassman"],"year":2022,"venue":"Extended Abstracts of the 2022 CHI Conference on Human Factors in Computing Systems","doi":"10.1145/3491101.3519665","publication":"Extended Abstracts of the 2022 CHI Conference on Human Factors in Computing Systems","abstract":"We conducted a user study with 24 participants to compare a Copilot-style code generation tool with manual coding and traditional autocomplete. While participants found generated code suggestions useful, they often had difficulty understanding and editing them.","refType":"inproceedings","note":"We conducted a user study with 24 participants to compare a Copilot-style code generation tool with manual coding and traditional autocomplete. While participants found generated code suggestions useful, they often had difficulty understanding and editing them.","excerpt":"We conducted a user study with 24 participants to compare a Copilot-style code generation tool with manual coding and traditional autocomplete. While participants found generated code suggestions useful, they often had difficulty understand…","raw":{"citeKey":"vaithilingam2022expectation","refType":"inproceedings","fields":{"title":"Expectation vs. Experience: Evaluating the Usability of Code Generation Tools Powered by Large Language Models","author":"Vaithilingam, Priyan and Zhang, Tianyi and Glassman, Elena L.","booktitle":"Extended Abstracts of the 2022 CHI Conference on Human Factors in Computing Systems","year":"2022","pages":"1--7","doi":"10.1145/3491101.3519665","keywords":"hci, coding-agents, usability","abstract":"We conducted a user study with 24 participants to compare a Copilot-style code generation tool with manual coding and traditional autocomplete. While participants found generated code suggestions useful, they often had difficulty understanding and editing them."}},"isDead":false,"topic":"hci"},{"id":"i_0008","title":"Grounded Copilot: How Programmers Interact with Code-Generating Models","url":"https://doi.org/10.1145/3586030","domain":"doi.org","domainRoot":"doi.org","source":"bibtex","folder":"inproceedings","tags":["hci","coding-agents","usability","qualitative"],"authors":["Shraddha Barke","Michael B. James","Nadia Polikarpova"],"year":2023,"venue":"Proceedings of the ACM on Programming Languages (OOPSLA)","doi":"10.1145/3586030","publication":"Proceedings of the ACM on Programming Languages (OOPSLA)","abstract":"","refType":"inproceedings","raw":{"citeKey":"barke2023grounded","refType":"inproceedings","fields":{"title":"Grounded Copilot: How Programmers Interact with Code-Generating Models","author":"Barke, Shraddha and James, Michael B. and Polikarpova, Nadia","booktitle":"Proceedings of the ACM on Programming Languages (OOPSLA)","year":"2023","volume":"7","pages":"78--105","doi":"10.1145/3586030","keywords":"hci, coding-agents, usability, qualitative"}},"isDead":false,"topic":"hci"},{"id":"i_0009","title":"The Robots Are Here: Navigating the Generative AI Revolution in Computing Education","url":"https://doi.org/10.1145/3623762.3633499","domain":"doi.org","domainRoot":"doi.org","source":"bibtex","folder":"inproceedings","tags":["education","coding-agents","hci"],"authors":["James Prather","Brent N. Reeves","Paul Denny","Brett A. Becker","Juho Leinonen","Andrew Luxton-Reilly","Garrett Powell","James Finnie-Ansley","Eddie Antonio Santos"],"year":2023,"venue":"Proceedings of the 2023 Working Group Reports on Innovation and Technology in Computer Science Education","doi":"10.1145/3623762.3633499","publication":"Proceedings of the 2023 Working Group Reports on Innovation and Technology in Computer Science Education","abstract":"","refType":"inproceedings","raw":{"citeKey":"prather2023robots","refType":"inproceedings","fields":{"title":"The Robots Are Here: Navigating the Generative AI Revolution in Computing Education","author":"Prather, James and Reeves, Brent N. and Denny, Paul and Becker, Brett A. and Leinonen, Juho and Luxton-Reilly, Andrew and Powell, Garrett and Finnie-Ansley, James and Santos, Eddie Antonio","booktitle":"Proceedings of the 2023 Working Group Reports on Innovation and Technology in Computer Science Education","year":"2023","doi":"10.1145/3623762.3633499","keywords":"education, coding-agents, hci"}},"isDead":false,"topic":"education"},{"id":"i_0010","title":"Lost at C: A User Study on the Security Implications of Large Language Model Code Assistants","url":"https://www.usenix.org/conference/usenixsecurity23/presentation/sandoval","domain":"www.usenix.org","domainRoot":"usenix.org","source":"bibtex","folder":"article","tags":["security","coding-agents","evaluation"],"authors":["Gustavo Sandoval","Hammond Pearce","Teo Nys","Ramesh Karri","Siddharth Garg","Brendan Dolan-Gavitt"],"year":2023,"venue":"Proceedings of the 32nd USENIX Security Symposium","publication":"Proceedings of the 32nd USENIX Security Symposium","abstract":"","refType":"article","raw":{"citeKey":"sandoval2023securityweaknesses","refType":"article","fields":{"title":"Lost at C: A User Study on the Security Implications of Large Language Model Code Assistants","author":"Sandoval, Gustavo and Pearce, Hammond and Nys, Teo and Karri, Ramesh and Garg, Siddharth and Dolan-Gavitt, Brendan","journal":"Proceedings of the 32nd USENIX Security Symposium","year":"2023","url":"https://www.usenix.org/conference/usenixsecurity23/presentation/sandoval","keywords":"security, coding-agents, evaluation"}},"isDead":false,"topic":"security"},{"id":"i_0011","title":"AgentBench: Evaluating LLMs as Agents","url":"https://arxiv.org/abs/2308.03688","domain":"arxiv.org","domainRoot":"arxiv.org","source":"bibtex","folder":"inproceedings","tags":["agents","evaluation","benchmark"],"authors":["Xiao Liu","Hao Yu","Hanchen Zhang","Yifan Xu","Xuanyu Lei","Hanyu Lai","Yu Gu","Hangliang Ding","Kaiwen Men","Kejuan Yang","Shudan Zhang","Xiang Deng","Aohan Zeng","Zhengxiao Du","Chenhui Zhang","Sheng Shen","Tianjun Zhang","Yu Su","Huan Sun","Minlie Huang","Yuxiao Dong","Jie Tang"],"year":2024,"venue":"ICLR 2024","publication":"ICLR 2024","abstract":"We present AgentBench, a multi-dimensional evolving benchmark to evaluate LLMs as agents on a diverse array of complex tasks across 8 distinct environments.","refType":"inproceedings","note":"We present AgentBench, a multi-dimensional evolving benchmark to evaluate LLMs as agents on a diverse array of complex tasks across 8 distinct environments.","excerpt":"We present AgentBench, a multi-dimensional evolving benchmark to evaluate LLMs as agents on a diverse array of complex tasks across 8 distinct environments.","raw":{"citeKey":"liu2024agentbench","refType":"inproceedings","fields":{"title":"AgentBench: Evaluating LLMs as Agents","author":"Liu, Xiao and Yu, Hao and Zhang, Hanchen and Xu, Yifan and Lei, Xuanyu and Lai, Hanyu and Gu, Yu and Ding, Hangliang and Men, Kaiwen and Yang, Kejuan and Zhang, Shudan and Deng, Xiang and Zeng, Aohan and Du, Zhengxiao and Zhang, Chenhui and Shen, Sheng and Zhang, Tianjun and Su, Yu and Sun, Huan and Huang, Minlie and Dong, Yuxiao and Tang, Jie","booktitle":"ICLR 2024","year":"2024","url":"https://arxiv.org/abs/2308.03688","keywords":"agents, evaluation, benchmark","abstract":"We present AgentBench, a multi-dimensional evolving benchmark to evaluate LLMs as agents on a diverse array of complex tasks across 8 distinct environments."}},"isDead":false,"topic":"agents"},{"id":"i_0012","title":"SWE-bench: Can Language Models Resolve Real-World GitHub Issues?","url":"https://arxiv.org/abs/2310.06770","domain":"arxiv.org","domainRoot":"arxiv.org","source":"bibtex","folder":"inproceedings","tags":["coding-agents","evaluation","benchmark"],"authors":["Carlos E. Jimenez","John Yang","Alexander Wettig","Shunyu Yao","Kexin Pei","Ofir Press","Karthik Narasimhan"],"year":2024,"venue":"ICLR 2024","publication":"ICLR 2024","abstract":"We introduce SWE-bench, an evaluation framework consisting of 2,294 software engineering problems drawn from real GitHub issues and corresponding pull requests across 12 popular Python repositories.","refType":"inproceedings","note":"We introduce SWE-bench, an evaluation framework consisting of 2,294 software engineering problems drawn from real GitHub issues and corresponding pull requests across 12 popular Python repositories.","excerpt":"We introduce SWE-bench, an evaluation framework consisting of 2,294 software engineering problems drawn from real GitHub issues and corresponding pull requests across 12 popular Python repositories.","raw":{"citeKey":"jimenez2024swebench","refType":"inproceedings","fields":{"title":"SWE-bench: Can Language Models Resolve Real-World GitHub Issues?","author":"Jimenez, Carlos E. and Yang, John and Wettig, Alexander and Yao, Shunyu and Pei, Kexin and Press, Ofir and Narasimhan, Karthik","booktitle":"ICLR 2024","year":"2024","url":"https://arxiv.org/abs/2310.06770","keywords":"coding-agents, evaluation, benchmark","abstract":"We introduce SWE-bench, an evaluation framework consisting of 2,294 software engineering problems drawn from real GitHub issues and corresponding pull requests across 12 popular Python repositories."}},"isDead":false,"topic":"coding-agents"},{"id":"i_0013","title":"Voyager: An Open-Ended Embodied Agent with Large Language Models","url":"https://arxiv.org/abs/2305.16291","domain":"arxiv.org","domainRoot":"arxiv.org","source":"bibtex","folder":"inproceedings","tags":["agents","embodied-ai","lifelong-learning"],"authors":["Guanzhi Wang","Yuqi Xie","Yunfan Jiang","Ajay Mandlekar","Chaowei Xiao","Yuke Zhu","Linxi Fan","Anima Anandkumar"],"year":2024,"venue":"Transactions on Machine Learning Research","publication":"Transactions on Machine Learning Research","abstract":"","refType":"inproceedings","raw":{"citeKey":"wang2024voyager","refType":"inproceedings","fields":{"title":"Voyager: An Open-Ended Embodied Agent with Large Language Models","author":"Wang, Guanzhi and Xie, Yuqi and Jiang, Yunfan and Mandlekar, Ajay and Xiao, Chaowei and Zhu, Yuke and Fan, Linxi and Anandkumar, Anima","booktitle":"Transactions on Machine Learning Research","year":"2024","url":"https://arxiv.org/abs/2305.16291","keywords":"agents, embodied-ai, lifelong-learning"}},"isDead":false,"topic":"agents"},{"id":"i_0014","title":"ReAct: Synergizing Reasoning and Acting in Language Models","url":"https://arxiv.org/abs/2210.03629","domain":"arxiv.org","domainRoot":"arxiv.org","source":"bibtex","folder":"inproceedings","tags":["agents","reasoning","prompting"],"authors":["Shunyu Yao","Jeffrey Zhao","Dian Yu","Nan Du","Izhak Shafran","Karthik R. Narasimhan","Yuan Cao"],"year":2023,"venue":"ICLR 2023","publication":"ICLR 2023","abstract":"We propose ReAct, a paradigm that interleaves reasoning traces and task-specific actions in language models, allowing for greater synergy between the two.","refType":"inproceedings","note":"We propose ReAct, a paradigm that interleaves reasoning traces and task-specific actions in language models, allowing for greater synergy between the two.","excerpt":"We propose ReAct, a paradigm that interleaves reasoning traces and task-specific actions in language models, allowing for greater synergy between the two.","raw":{"citeKey":"yao2023react","refType":"inproceedings","fields":{"title":"ReAct: Synergizing Reasoning and Acting in Language Models","author":"Yao, Shunyu and Zhao, Jeffrey and Yu, Dian and Du, Nan and Shafran, Izhak and Narasimhan, Karthik R. and Cao, Yuan","booktitle":"ICLR 2023","year":"2023","url":"https://arxiv.org/abs/2210.03629","keywords":"agents, reasoning, prompting","abstract":"We propose ReAct, a paradigm that interleaves reasoning traces and task-specific actions in language models, allowing for greater synergy between the two."}},"isDead":false,"topic":"agents"},{"id":"i_0015","title":"Reflexion: Language Agents with Verbal Reinforcement Learning","url":"https://arxiv.org/abs/2303.11366","domain":"arxiv.org","domainRoot":"arxiv.org","source":"bibtex","folder":"inproceedings","tags":["agents","reinforcement-learning","self-reflection"],"authors":["Noah Shinn","Federico Cassano","Edward Berman","Ashwin Gopinath","Karthik Narasimhan","Shunyu Yao"],"year":2023,"venue":"NeurIPS 2023","publication":"NeurIPS 2023","abstract":"","refType":"inproceedings","raw":{"citeKey":"shinn2023reflexion","refType":"inproceedings","fields":{"title":"Reflexion: Language Agents with Verbal Reinforcement Learning","author":"Shinn, Noah and Cassano, Federico and Berman, Edward and Gopinath, Ashwin and Narasimhan, Karthik and Yao, Shunyu","booktitle":"NeurIPS 2023","year":"2023","url":"https://arxiv.org/abs/2303.11366","keywords":"agents, reinforcement-learning, self-reflection"}},"isDead":false,"topic":"agents"},{"id":"i_0016","title":"A Survey on Large Language Model Based Autonomous Agents","url":"https://doi.org/10.1007/s11704-024-40231-1","domain":"doi.org","domainRoot":"doi.org","source":"bibtex","folder":"article","tags":["agents","survey","large-language-models"],"authors":["Lei Wang","Chen Ma","Xueyang Feng","Zeyu Zhang","Hao Yang","Jingsen Zhang","Zhiyuan Chen","Jiakai Tang","Xu Chen","Yankai Lin","Wayne Xin Zhao","Zhewei Wei","Ji-Rong Wen"],"year":2024,"venue":"Frontiers of Computer Science","doi":"10.1007/s11704-024-40231-1","publication":"Frontiers of Computer Science","abstract":"","refType":"article","raw":{"citeKey":"wang2024survey","refType":"article","fields":{"title":"A Survey on Large Language Model Based Autonomous Agents","author":"Wang, Lei and Ma, Chen and Feng, Xueyang and Zhang, Zeyu and Yang, Hao and Zhang, Jingsen and Chen, Zhiyuan and Tang, Jiakai and Chen, Xu and Lin, Yankai and Zhao, Wayne Xin and Wei, Zhewei and Wen, Ji-Rong","journal":"Frontiers of Computer Science","year":"2024","volume":"18","number":"6","pages":"186345","doi":"10.1007/s11704-024-40231-1","keywords":"agents, survey, large-language-models"}},"isDead":false,"topic":"agents"},{"id":"i_0017","title":"Toolformer: Language Models Can Teach Themselves to Use Tools","url":"https://arxiv.org/abs/2302.04761","domain":"arxiv.org","domainRoot":"arxiv.org","source":"bibtex","folder":"inproceedings","tags":["agents","tool-use","training"],"authors":["Timo Schick","Jane Dwivedi-Yu","Roberto Dess\\`\\i","Roberta Raileanu","Maria Lomeli","Luke Zettlemoyer","Nicola Cancedda","Thomas Scialom"],"year":2023,"venue":"NeurIPS 2023","publication":"NeurIPS 2023","abstract":"","refType":"inproceedings","raw":{"citeKey":"schick2023toolformer","refType":"inproceedings","fields":{"title":"Toolformer: Language Models Can Teach Themselves to Use Tools","author":"Schick, Timo and Dwivedi-Yu, Jane and Dess{\\`\\i}, Roberto and Raileanu, Roberta and Lomeli, Maria and Zettlemoyer, Luke and Cancedda, Nicola and Scialom, Thomas","booktitle":"NeurIPS 2023","year":"2023","url":"https://arxiv.org/abs/2302.04761","keywords":"agents, tool-use, training"}},"isDead":false,"topic":"agents"},{"id":"i_0018","title":"TaskMatrix.AI: Completing Tasks by Connecting Foundation Models with Millions of APIs","url":"https://doi.org/10.34133/icomputing.0063","domain":"doi.org","domainRoot":"doi.org","source":"bibtex","folder":"inproceedings","tags":["agents","tool-use","infrastructure"],"authors":["Yaobo Liang","Chenfei Wu","Ting Song","Wenshan Wu","Yan Xia","Yu Liu","Yang Ou","Shuai Lu","Lei Ji","Shaoguang Mao","Yun Wang","Linjun Shou","Ming Gong","Nan Duan"],"year":2024,"venue":"Intelligent Computing","doi":"10.34133/icomputing.0063","publication":"Intelligent Computing","abstract":"","refType":"inproceedings","raw":{"citeKey":"liang2024taskmatrix","refType":"inproceedings","fields":{"title":"TaskMatrix.AI: Completing Tasks by Connecting Foundation Models with Millions of APIs","author":"Liang, Yaobo and Wu, Chenfei and Song, Ting and Wu, Wenshan and Xia, Yan and Liu, Yu and Ou, Yang and Lu, Shuai and Ji, Lei and Mao, Shaoguang and Wang, Yun and Shou, Linjun and Gong, Ming and Duan, Nan","booktitle":"Intelligent Computing","year":"2024","doi":"10.34133/icomputing.0063","keywords":"agents, tool-use, infrastructure"}},"isDead":false,"topic":"agents"},{"id":"i_0019","title":"MultiPL-E: A Scalable and Polyglot Approach to Benchmarking Neural Code Generation","url":"https://doi.org/10.1109/TSE.2023.3267446","domain":"doi.org","domainRoot":"doi.org","source":"bibtex","folder":"inproceedings","tags":["coding-agents","evaluation","benchmark"],"authors":["Federico Cassano","John Gouwar","Daniel Nguyen","Sydney Nguyen","Luna Phipps-Costin","Donald Pinckney","Ming-Ho Yee","Yangtian Zi","Carolyn Jane Anderson","Molly Q Feldman","Arjun Guha","Michael Greenberg","Abhinav Jangda"],"year":2023,"venue":"IEEE Transactions on Software Engineering","doi":"10.1109/TSE.2023.3267446","publication":"IEEE Transactions on Software Engineering","abstract":"","refType":"inproceedings","raw":{"citeKey":"cassano2023multipl","refType":"inproceedings","fields":{"title":"MultiPL-E: A Scalable and Polyglot Approach to Benchmarking Neural Code Generation","author":"Cassano, Federico and Gouwar, John and Nguyen, Daniel and Nguyen, Sydney and Phipps-Costin, Luna and Pinckney, Donald and Yee, Ming-Ho and Zi, Yangtian and Anderson, Carolyn Jane and Feldman, Molly Q and Guha, Arjun and Greenberg, Michael and Jangda, Abhinav","booktitle":"IEEE Transactions on Software Engineering","year":"2023","doi":"10.1109/TSE.2023.3267446","keywords":"coding-agents, evaluation, benchmark"}},"isDead":false,"topic":"coding-agents"},{"id":"i_0020","title":"Conversing with Copilot: Exploring Prompt Engineering for Solving CS1 Problems Using Natural Language","url":"https://doi.org/10.1145/3545945.3569823","domain":"doi.org","domainRoot":"doi.org","source":"bibtex","folder":"article","tags":["education","coding-agents","prompting"],"authors":["Paul Denny","Viraj Kumar","Nasser Giacaman"],"year":2023,"venue":"Proceedings of the 54th ACM Technical Symposium on Computer Science Education V. 1","doi":"10.1145/3545945.3569823","publication":"Proceedings of the 54th ACM Technical Symposium on Computer Science Education V. 1","abstract":"","refType":"article","raw":{"citeKey":"denny2023conversing","refType":"article","fields":{"title":"Conversing with Copilot: Exploring Prompt Engineering for Solving CS1 Problems Using Natural Language","author":"Denny, Paul and Kumar, Viraj and Giacaman, Nasser","journal":"Proceedings of the 54th ACM Technical Symposium on Computer Science Education V. 1","year":"2023","pages":"1136--1142","doi":"10.1145/3545945.3569823","keywords":"education, coding-agents, prompting"}},"isDead":false,"topic":"education"},{"id":"i_0021","title":"The Programmer's Assistant: Conversational Interaction with a Large Language Model for Software Development","url":"https://doi.org/10.1145/3581641.3584037","domain":"doi.org","domainRoot":"doi.org","source":"bibtex","folder":"inproceedings","tags":["hci","coding-agents","conversational-ui"],"authors":["Steven I. Ross","Fernando Martinez","Stephanie Houde","Michael Muller","Justin D. Weisz"],"year":2023,"venue":"Proceedings of the 28th International Conference on Intelligent User Interfaces (IUI)","doi":"10.1145/3581641.3584037","publication":"Proceedings of the 28th International Conference on Intelligent User Interfaces (IUI)","abstract":"","refType":"inproceedings","raw":{"citeKey":"ross2023programmer","refType":"inproceedings","fields":{"title":"The Programmer's Assistant: Conversational Interaction with a Large Language Model for Software Development","author":"Ross, Steven I. and Martinez, Fernando and Houde, Stephanie and Muller, Michael and Weisz, Justin D.","booktitle":"Proceedings of the 28th International Conference on Intelligent User Interfaces (IUI)","year":"2023","pages":"491--514","doi":"10.1145/3581641.3584037","keywords":"hci, coding-agents, conversational-ui"}},"isDead":false,"topic":"hci"},{"id":"i_0022","title":"Design Principles for Generative AI Applications","url":"https://doi.org/10.1145/3613904.3642984","domain":"doi.org","domainRoot":"doi.org","source":"bibtex","folder":"article","tags":["hci","design","generative-ai"],"authors":["Justin D. Weisz","Jessica He","Michael Muller","Gabriela Hoefer","Rachel Miles","Werner Geyer"],"year":2024,"venue":"Proceedings of the CHI Conference on Human Factors in Computing Systems","doi":"10.1145/3613904.3642984","publication":"Proceedings of the CHI Conference on Human Factors in Computing Systems","abstract":"","refType":"article","raw":{"citeKey":"weisz2024metaphors","refType":"article","fields":{"title":"Design Principles for Generative AI Applications","author":"Weisz, Justin D. and He, Jessica and Muller, Michael and Hoefer, Gabriela and Miles, Rachel and Geyer, Werner","journal":"Proceedings of the CHI Conference on Human Factors in Computing Systems","year":"2024","doi":"10.1145/3613904.3642984","keywords":"hci, design, generative-ai"}},"isDead":false,"topic":"hci"},{"id":"i_0023","title":"Studying the Effect of AI Code Generators on Supporting Novice Learners in Introductory Programming","url":"https://doi.org/10.1145/3544548.3580919","domain":"doi.org","domainRoot":"doi.org","source":"bibtex","folder":"inproceedings","tags":["education","hci","coding-agents"],"authors":["Majeed Kazemitabaar","Justin Chow","Carl Ka To Ma","Barbara J. Ericson","David Weintrop","Tovi Grossman"],"year":2023,"venue":"Proceedings of the CHI Conference on Human Factors in Computing Systems","doi":"10.1145/3544548.3580919","publication":"Proceedings of the CHI Conference on Human Factors in Computing Systems","abstract":"","refType":"inproceedings","raw":{"citeKey":"kazemitabaar2023studying","refType":"inproceedings","fields":{"title":"Studying the Effect of AI Code Generators on Supporting Novice Learners in Introductory Programming","author":"Kazemitabaar, Majeed and Chow, Justin and Ma, Carl Ka To and Ericson, Barbara J. and Weintrop, David and Grossman, Tovi","booktitle":"Proceedings of the CHI Conference on Human Factors in Computing Systems","year":"2023","pages":"1--23","doi":"10.1145/3544548.3580919","keywords":"education, hci, coding-agents"}},"isDead":false,"topic":"education"},{"id":"i_0024","title":"Agentless: Demystifying LLM-based Software Engineering Agents","url":"https://arxiv.org/abs/2407.01489","domain":"arxiv.org","domainRoot":"arxiv.org","source":"bibtex","folder":"inproceedings","tags":["coding-agents","swe-bench","baselines"],"authors":["Chunqiu Steven Xia","Yinlin Deng","Soren Dunn","Lingming Zhang"],"year":2024,"venue":"arXiv preprint arXiv:2407.01489","publication":"arXiv preprint arXiv:2407.01489","abstract":"","refType":"inproceedings","raw":{"citeKey":"xia2024agentless","refType":"inproceedings","fields":{"title":"Agentless: Demystifying LLM-based Software Engineering Agents","author":"Xia, Chunqiu Steven and Deng, Yinlin and Dunn, Soren and Zhang, Lingming","booktitle":"arXiv preprint arXiv:2407.01489","year":"2024","url":"https://arxiv.org/abs/2407.01489","keywords":"coding-agents, swe-bench, baselines"}},"isDead":false,"topic":"coding-agents"},{"id":"i_0025","title":"Self-Consistency Improves Chain of Thought Reasoning in Language Models","url":"https://arxiv.org/abs/2203.11171","domain":"arxiv.org","domainRoot":"arxiv.org","source":"bibtex","folder":"inproceedings","tags":["reasoning","prompting","large-language-models"],"authors":["Xuezhi Wang","Jason Wei","Dale Schuurmans","Quoc Le","Ed Chi","Sharan Narang","Aakanksha Chowdhery","Denny Zhou"],"year":2023,"venue":"ICLR 2023","publication":"ICLR 2023","abstract":"","refType":"inproceedings","raw":{"citeKey":"wang2024selfconsistency","refType":"inproceedings","fields":{"title":"Self-Consistency Improves Chain of Thought Reasoning in Language Models","author":"Wang, Xuezhi and Wei, Jason and Schuurmans, Dale and Le, Quoc and Chi, Ed and Narang, Sharan and Chowdhery, Aakanksha and Zhou, Denny","booktitle":"ICLR 2023","year":"2023","url":"https://arxiv.org/abs/2203.11171","keywords":"reasoning, prompting, large-language-models"}},"isDead":false,"topic":"reasoning"},{"id":"i_0026","title":"Lost in the Middle: How Language Models Use Long Contexts","url":"https://doi.org/10.1162/tacl_a_00638","domain":"doi.org","domainRoot":"doi.org","source":"bibtex","folder":"inproceedings","tags":["long-context","evaluation","large-language-models"],"authors":["Nelson F. Liu","Kevin Lin","John Hewitt","Ashwin Paranjape","Michele Bevilacqua","Fabio Petroni","Percy Liang"],"year":2024,"venue":"Transactions of the Association for Computational Linguistics","doi":"10.1162/tacl_a_00638","publication":"Transactions of the Association for Computational Linguistics","abstract":"","refType":"inproceedings","raw":{"citeKey":"liu2024lostmiddle","refType":"inproceedings","fields":{"title":"Lost in the Middle: How Language Models Use Long Contexts","author":"Liu, Nelson F. and Lin, Kevin and Hewitt, John and Paranjape, Ashwin and Bevilacqua, Michele and Petroni, Fabio and Liang, Percy","booktitle":"Transactions of the Association for Computational Linguistics","year":"2024","volume":"12","pages":"157--173","doi":"10.1162/tacl_a_00638","keywords":"long-context, evaluation, large-language-models"}},"isDead":false,"topic":"long-context"},{"id":"i_0027","title":"Can Generative AI Improve Developer Productivity? Evidence from a Field Experiment","url":"https://doi.org/10.1145/3597503.3608128","domain":"doi.org","domainRoot":"doi.org","source":"bibtex","folder":"inproceedings","tags":["productivity","coding-agents","field-experiment"],"authors":["Jenny T. Liang","Chenyang Yang","Brad A. Myers"],"year":2024,"venue":"Proceedings of the IEEE/ACM 46th International Conference on Software Engineering","doi":"10.1145/3597503.3608128","publication":"Proceedings of the IEEE/ACM 46th International Conference on Software Engineering","abstract":"","refType":"inproceedings","raw":{"citeKey":"liang2024impact","refType":"inproceedings","fields":{"title":"Can Generative AI Improve Developer Productivity? Evidence from a Field Experiment","author":"Liang, Jenny T. and Yang, Chenyang and Myers, Brad A.","booktitle":"Proceedings of the IEEE/ACM 46th International Conference on Software Engineering","year":"2024","doi":"10.1145/3597503.3608128","keywords":"productivity, coding-agents, field-experiment"}},"isDead":false,"topic":"productivity"},{"id":"i_0028","title":"Measuring GitHub Copilot's Impact on Productivity","url":"https://doi.org/10.1145/3633453","domain":"doi.org","domainRoot":"doi.org","source":"bibtex","folder":"article","tags":["productivity","coding-agents","industry"],"authors":["Albert Ziegler","Eirini Kalliamvakou","X. Alice Li","Andrew Rice","Devon Rifkin","Shawn Simister","Ganesh Sittampalam","Edward Aftandilian"],"year":2024,"venue":"Communications of the ACM","doi":"10.1145/3633453","publication":"Communications of the ACM","abstract":"","refType":"article","raw":{"citeKey":"ziegler2024productivity","refType":"article","fields":{"title":"Measuring GitHub Copilot's Impact on Productivity","author":"Ziegler, Albert and Kalliamvakou, Eirini and Li, X. Alice and Rice, Andrew and Rifkin, Devon and Simister, Shawn and Sittampalam, Ganesh and Aftandilian, Edward","journal":"Communications of the ACM","year":"2024","volume":"67","number":"3","pages":"54--63","doi":"10.1145/3633453","keywords":"productivity, coding-agents, industry"}},"isDead":false,"topic":"productivity"},{"id":"i_0029","title":"Constitutional AI: Harmlessness from AI Feedback","url":"https://arxiv.org/abs/2212.08073","domain":"arxiv.org","domainRoot":"arxiv.org","source":"bibtex","folder":"misc","tags":["alignment","ethics","training"],"authors":["Yuntao Bai","Saurav Kadavath","Sandipan Kundu","Amanda Askell","Jackson Kernion","Andy Jones","Anna Chen","Anna Goldie","Azalia Mirhoseini","Cameron McKinnon","others"],"year":2022,"abstract":"","refType":"misc","raw":{"citeKey":"anthropic2024constitutional","refType":"misc","fields":{"title":"Constitutional AI: Harmlessness from AI Feedback","author":"Bai, Yuntao and Kadavath, Saurav and Kundu, Sandipan and Askell, Amanda and Kernion, Jackson and Jones, Andy and Chen, Anna and Goldie, Anna and Mirhoseini, Azalia and McKinnon, Cameron and others","year":"2022","howpublished":"arXiv preprint arXiv:2212.08073","url":"https://arxiv.org/abs/2212.08073","keywords":"alignment, ethics, training"}},"isDead":false,"topic":"alignment"},{"id":"i_0030","title":"GPT-4 Technical Report","url":"https://arxiv.org/abs/2303.08774","domain":"arxiv.org","domainRoot":"arxiv.org","source":"bibtex","folder":"misc","tags":["large-language-models","technical-report"],"authors":["OpenAI"],"year":2023,"abstract":"","refType":"misc","raw":{"citeKey":"openai2024gpt4","refType":"misc","fields":{"title":"GPT-4 Technical Report","author":"{OpenAI}","year":"2023","howpublished":"arXiv preprint arXiv:2303.08774","url":"https://arxiv.org/abs/2303.08774","keywords":"large-language-models, technical-report"}},"isDead":false,"topic":"large-language-models"},{"id":"i_0031","title":"Claude 3.5 Sonnet","url":"https://www.anthropic.com/news/claude-3-5-sonnet","domain":"www.anthropic.com","domainRoot":"anthropic.com","source":"bibtex","folder":"misc","tags":["large-language-models","technical-report"],"authors":["Anthropic"],"year":2024,"abstract":"","refType":"misc","raw":{"citeKey":"anthropic2024claude35","refType":"misc","fields":{"title":"Claude 3.5 Sonnet","author":"{Anthropic}","year":"2024","howpublished":"Model card","url":"https://www.anthropic.com/news/claude-3-5-sonnet","keywords":"large-language-models, technical-report"}},"isDead":false,"topic":"large-language-models"},{"id":"i_0032","title":"Aligning AI With Human Values: Progress and Limits","url":"https://doi.org/10.1146/annurev-control-062123-100221","domain":"doi.org","domainRoot":"doi.org","source":"bibtex","folder":"inproceedings","tags":["alignment","ethics","survey"],"authors":["Stuart Russell","Miles Brundage","Paul Christiano","Max Tegmark"],"year":2024,"venue":"Annual Review of Control, Robotics, and Autonomous Systems","doi":"10.1146/annurev-control-062123-100221","publication":"Annual Review of Control, Robotics, and Autonomous Systems","abstract":"","refType":"inproceedings","raw":{"citeKey":"russell2024aligned","refType":"inproceedings","fields":{"title":"Aligning AI With Human Values: Progress and Limits","author":"Russell, Stuart and Brundage, Miles and Christiano, Paul and Tegmark, Max","booktitle":"Annual Review of Control, Robotics, and Autonomous Systems","year":"2024","doi":"10.1146/annurev-control-062123-100221","keywords":"alignment, ethics, survey"}},"isDead":false,"topic":"alignment"},{"id":"i_0033","title":"Chain-of-Thought Prompting Elicits Reasoning in Large Language Models","url":"https://arxiv.org/abs/2201.11903","domain":"arxiv.org","domainRoot":"arxiv.org","source":"bibtex","folder":"inproceedings","tags":["reasoning","prompting","large-language-models"],"authors":["Jason Wei","Xuezhi Wang","Dale Schuurmans","Maarten Bosma","Brian Ichter","Fei Xia","Ed H. Chi","Quoc V. Le","Denny Zhou"],"year":2022,"venue":"NeurIPS 2022","publication":"NeurIPS 2022","abstract":"","refType":"inproceedings","raw":{"citeKey":"wei2022chain","refType":"inproceedings","fields":{"title":"Chain-of-Thought Prompting Elicits Reasoning in Large Language Models","author":"Wei, Jason and Wang, Xuezhi and Schuurmans, Dale and Bosma, Maarten and Ichter, Brian and Xia, Fei and Chi, Ed H. and Le, Quoc V. and Zhou, Denny","booktitle":"NeurIPS 2022","year":"2022","url":"https://arxiv.org/abs/2201.11903","keywords":"reasoning, prompting, large-language-models"}},"isDead":false,"topic":"reasoning"},{"id":"i_0034","title":"Measuring and Narrowing the Compositionality Gap in Language Models","url":"https://doi.org/10.18653/v1/2023.findings-emnlp.378","domain":"doi.org","domainRoot":"doi.org","source":"bibtex","folder":"inproceedings","tags":["reasoning","evaluation","compositionality"],"authors":["Ofir Press","Muru Zhang","Sewon Min","Ludwig Schmidt","Noah A. Smith","Mike Lewis"],"year":2023,"venue":"Findings of the Association for Computational Linguistics: EMNLP 2023","doi":"10.18653/v1/2023.findings-emnlp.378","publication":"Findings of the Association for Computational Linguistics: EMNLP 2023","abstract":"","refType":"inproceedings","raw":{"citeKey":"press2023measuring","refType":"inproceedings","fields":{"title":"Measuring and Narrowing the Compositionality Gap in Language Models","author":"Press, Ofir and Zhang, Muru and Min, Sewon and Schmidt, Ludwig and Smith, Noah A. and Lewis, Mike","booktitle":"Findings of the Association for Computational Linguistics: EMNLP 2023","year":"2023","doi":"10.18653/v1/2023.findings-emnlp.378","keywords":"reasoning, evaluation, compositionality"}},"isDead":false,"topic":"reasoning"},{"id":"i_0035","title":"Training Language Models to Follow Instructions with Human Feedback","url":"https://arxiv.org/abs/2203.02155","domain":"arxiv.org","domainRoot":"arxiv.org","source":"bibtex","folder":"inproceedings","tags":["alignment","rlhf","training"],"authors":["Long Ouyang","Jeffrey Wu","Xu Jiang","Diogo Almeida","Carroll L. Wainwright","Pamela Mishkin","Chong Zhang","Sandhini Agarwal","Katarina Slama","Alex Ray","others"],"year":2022,"venue":"NeurIPS 2022","publication":"NeurIPS 2022","abstract":"","refType":"inproceedings","raw":{"citeKey":"ouyang2022instructgpt","refType":"inproceedings","fields":{"title":"Training Language Models to Follow Instructions with Human Feedback","author":"Ouyang, Long and Wu, Jeffrey and Jiang, Xu and Almeida, Diogo and Wainwright, Carroll L. and Mishkin, Pamela and Zhang, Chong and Agarwal, Sandhini and Slama, Katarina and Ray, Alex and others","booktitle":"NeurIPS 2022","year":"2022","url":"https://arxiv.org/abs/2203.02155","keywords":"alignment, rlhf, training"}},"isDead":false,"topic":"alignment"},{"id":"i_0036","title":"The Automation Frontier","url":"https://doi.org/10.1145/3645108","domain":"doi.org","domainRoot":"doi.org","source":"bibtex","folder":"article","tags":["automation","society","opinion"],"authors":["Peter J. Denning"],"year":2024,"venue":"Communications of the ACM","doi":"10.1145/3645108","publication":"Communications of the ACM","abstract":"","refType":"article","note":"Short opinion piece — useful framing for the introduction.","excerpt":"Short opinion piece — useful framing for the introduction.","raw":{"citeKey":"denning2024automation","refType":"article","fields":{"title":"The Automation Frontier","author":"Denning, Peter J.","journal":"Communications of the ACM","year":"2024","volume":"67","number":"7","pages":"28--30","doi":"10.1145/3645108","keywords":"automation, society, opinion","note":"Short opinion piece — useful framing for the introduction."}},"isDead":false,"topic":"automation"},{"id":"i_0037","title":"Intro to Large Language Models","url":"https://www.youtube.com/watch?v=zjkBMFhNj_g","domain":"www.youtube.com","domainRoot":"youtube.com","source":"bibtex","folder":"misc","tags":["large-language-models","talk","introduction"],"authors":["Andrej Karpathy"],"year":2023,"abstract":"","refType":"misc","note":"Useful for the prelim.","excerpt":"Useful for the prelim.","raw":{"citeKey":"karpathy2023llms","refType":"misc","fields":{"title":"Intro to Large Language Models","author":"Karpathy, Andrej","year":"2023","howpublished":"YouTube talk","url":"https://www.youtube.com/watch?v=zjkBMFhNj_g","keywords":"large-language-models, talk, introduction","note":"Useful for the prelim."}},"isDead":false,"topic":"large-language-models"}],"domains":[{"domain":"doi.org","count":18,"sampleTitle":"Closing the AI Accountability Gap: Defining an End-to-End Framework for Internal Algorithmic Auditing"},{"domain":"arxiv.org","count":14,"sampleTitle":"Evaluating Large Language Models Trained on Code"},{"domain":"dl.acm.org","count":2,"sampleTitle":"On the Dangers of Stochastic Parrots: Can Language Models Be Too Big?"},{"domain":"www.usenix.org","count":1,"sampleTitle":"Lost at C: A User Study on the Security Implications of Large Language Model Code Assistants"},{"domain":"www.anthropic.com","count":1,"sampleTitle":"Claude 3.5 Sonnet"},{"domain":"www.youtube.com","count":1,"sampleTitle":"Intro to Large Language Models"}],"rootDomains":[{"domain":"doi.org","count":18},{"domain":"arxiv.org","count":14},{"domain":"acm.org","count":2},{"domain":"usenix.org","count":1},{"domain":"anthropic.com","count":1},{"domain":"youtube.com","count":1}],"topics":[{"name":"coding-agents","count":15,"itemIds":["i_0004","i_0005","i_0006","i_0007","i_0008","i_0009","i_0010","i_0012","i_0019","i_0020","i_0021","i_0023","i_0024","i_0027","i_0028"]},{"name":"large-language-models","count":9,"itemIds":["i_0001","i_0004","i_0016","i_0025","i_0026","i_0030","i_0031","i_0033","i_0037"]},{"name":"evaluation","count":9,"itemIds":["i_0002","i_0004","i_0006","i_0010","i_0011","i_0012","i_0019","i_0026","i_0034"]},{"name":"agents","count":7,"itemIds":["i_0011","i_0013","i_0014","i_0015","i_0016","i_0017","i_0018"]},{"name":"hci","count":6,"itemIds":["i_0007","i_0008","i_0009","i_0021","i_0022","i_0023"]},{"name":"ethics","count":4,"itemIds":["i_0001","i_0003","i_0029","i_0032"]},{"name":"reasoning","count":4,"itemIds":["i_0014","i_0025","i_0033","i_0034"]},{"name":"prompting","count":4,"itemIds":["i_0014","i_0020","i_0025","i_0033"]},{"name":"education","count":3,"itemIds":["i_0009","i_0020","i_0023"]},{"name":"benchmark","count":3,"itemIds":["i_0011","i_0012","i_0019"]}],"topTags":[{"tag":"coding-agents","count":15},{"tag":"large-language-models","count":9},{"tag":"evaluation","count":9},{"tag":"agents","count":7},{"tag":"hci","count":6},{"tag":"ethics","count":4},{"tag":"reasoning","count":4},{"tag":"prompting","count":4},{"tag":"education","count":3},{"tag":"benchmark","count":3},{"tag":"training","count":3},{"tag":"alignment","count":3},{"tag":"accountability","count":2},{"tag":"usability","count":2},{"tag":"survey","count":2},{"tag":"tool-use","count":2},{"tag":"productivity","count":2},{"tag":"technical-report","count":2},{"tag":"bias","count":1},{"tag":"documentation","count":1},{"tag":"audit","count":1},{"tag":"program-synthesis","count":1},{"tag":"competitive-programming","count":1},{"tag":"qualitative","count":1},{"tag":"security","count":1},{"tag":"embodied-ai","count":1},{"tag":"lifelong-learning","count":1},{"tag":"reinforcement-learning","count":1},{"tag":"self-reflection","count":1},{"tag":"infrastructure","count":1},{"tag":"conversational-ui","count":1},{"tag":"design","count":1}],"folders":[{"name":"inproceedings","count":25,"itemIds":["i_0002","i_0004","i_0005","i_0006","i_0007","i_0008","i_0009","i_0011","i_0012","i_0013","i_0014","i_0015","i_0017","i_0018","i_0019","i_0021","i_0023","i_0024","i_0025","i_0026","i_0027","i_0032","i_0033","i_0034","i_0035"]},{"name":"article","count":8,"itemIds":["i_0001","i_0003","i_0010","i_0016","i_0020","i_0022","i_0028","i_0036"]},{"name":"misc","count":4,"itemIds":["i_0029","i_0030","i_0031","i_0037"]}],"duplicateGroups":[],"duplicateCount":0,"staleItems":[],"staleCount":0,"deadLinks":[],"deadCount":0,"yearHistogram":[{"year":2019,"count":1},{"year":2020,"count":1},{"year":2021,"count":3},{"year":2022,"count":5},{"year":2023,"count":14},{"year":2024,"count":13}],"authorLeaderboard":[{"name":"others","count":5},{"name":"Timnit Gebru","count":3},{"name":"Shunyu Yao","count":3},{"name":"Margaret Mitchell","count":2},{"name":"Parker Barnes","count":2},{"name":"Ben Hutchinson","count":2},{"name":"Inioluwa Deborah Raji","count":2},{"name":"Maarten Bosma","count":2},{"name":"Quoc V. Le","count":2},{"name":"Paul Denny","count":2},{"name":"Ofir Press","count":2},{"name":"Karthik Narasimhan","count":2}],"venueLeaderboard":[{"venue":"ICLR 2024","count":2},{"venue":"ICLR 2023","count":2},{"venue":"NeurIPS 2023","count":2},{"venue":"Proceedings of the CHI Conference on Human Factors in Computing Systems","count":2},{"venue":"Communications of the ACM","count":2},{"venue":"NeurIPS 2022","count":2},{"venue":"Proceedings of the 2021 ACM Conference on Fairness, Accountability, and Transparency","count":1},{"venue":"Proceedings of the Conference on Fairness, Accountability, and Transparency (FAT*)","count":1},{"venue":"Proceedings of the 2020 Conference on Fairness, Accountability, and Transparency (FAccT)","count":1},{"venue":"arXiv preprint arXiv:2107.03374","count":1}],"reading":{"weeklyHistogram":[],"monthlyHistogram":[]},"totals":{"items":37,"domains":6,"topics":10,"duplicates":0,"stale":0,"dead":0,"withDates":0,"withNotes":9},"totalOutbound":37,"meta":{"sourceFile":"input.bib","sizeBytes":19217,"format":"bibtex","kind":"bibliography","subKind":"bibtex","itemCount":37,"uniqueDomains":6,"deadLinks":0,"duplicates":0,"dateRange":"2019–2024"}};</script>
+<div class="document-shell">
+
+  <!-- Cover / Masthead -->
+  <header class="cover" id="top">
+    <div class="cover-eyebrow">Bibliography · BibTeX</div>
+    <h1>Spring 2026 Reading List —<br><span>Code-Writing Agents</span></h1>
+
+    <div class="deck" id="deckStats"></div>
+
+    <div class="tldr" id="tldrBlock"></div>
+  </header>
+
+  <!-- Sticky reader rail -->
+  <nav class="reader-rail" aria-label="Section navigation">
+    <div class="reader-rail-inner">
+      <button class="rail-link" data-target="sec-search">🔍 Search</button>
+      <button class="rail-link" data-target="sec-topics">Topics</button>
+      <button class="rail-link" data-target="sec-venues">Venues</button>
+      <button class="rail-link" data-target="sec-authors">Authors</button>
+      <button class="rail-link" data-target="sec-years">Year Coverage</button>
+      <button class="rail-link" data-target="sec-reftypes">Ref Types</button>
+      <button class="rail-link" data-target="sec-callouts">Duplicates · Stale · Dead</button>
+      <button class="rail-link" data-target="sec-recent">Recent Papers</button>
+      <button class="rail-link" data-target="sec-drill">Browse All</button>
+    </div>
+  </nav>
+
+  <!-- Search -->
+  <section class="body-section" id="sec-search">
+    <div class="search-bar">
+      <span class="search-icon">⌕</span>
+      <input type="text" id="searchInput" placeholder="Search titles, authors, venues, tags, abstracts…" autocomplete="off">
+      <button class="search-clear" id="searchClear" title="Clear search">✕</button>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:var(--space-md);flex-wrap:wrap;">
+      <div id="searchStatus" style="font-size:0.8em;color:var(--fg-muted);font-family:var(--font-mono);"></div>
+      <button class="copy-btn" id="copyMdBtn">📋 Copy as Markdown</button>
+    </div>
+  </section>
+
+  <!-- Topic Clusters -->
+  <section class="body-section" id="sec-topics">
+    <div class="section-header">
+      <h2>Topics</h2>
+      <span class="section-label">Clusters</span>
+    </div>
+    <div class="topic-grid" id="topicGrid"></div>
+    <div class="bar-chart" id="topicBars" style="margin-top:var(--space-xl);"></div>
+  </section>
+
+  <!-- Venue Leaderboard -->
+  <section class="body-section" id="sec-venues">
+    <div class="section-header">
+      <h2>Top Venues</h2>
+      <span class="section-label">Where they come from</span>
+    </div>
+    <div class="bar-chart" id="venueBars"></div>
+  </section>
+
+  <!-- Author Leaderboard -->
+  <section class="body-section" id="sec-authors">
+    <div class="section-header">
+      <h2>Top Authors</h2>
+      <span class="section-label">Who appears most</span>
+    </div>
+    <div class="author-list" id="authorList"></div>
+  </section>
+
+  <!-- Year Coverage -->
+  <section class="body-section" id="sec-years">
+    <div class="section-header">
+      <h2>Year Coverage</h2>
+      <span class="section-label">Research vintage</span>
+    </div>
+    <div class="sparkline-wrap">
+      <div class="sparkline-title" id="sparklineTitle"></div>
+      <div class="sparkline-bars" id="sparklineBars"></div>
+      <div class="sparkline-labels" id="sparklineLabels"></div>
+    </div>
+  </section>
+
+  <!-- Ref Types -->
+  <section class="body-section" id="sec-reftypes">
+    <div class="section-header">
+      <h2>Reference Types</h2>
+      <span class="section-label">What kind of work</span>
+    </div>
+    <div class="donut-wrap">
+      <svg id="donutSvg" width="120" height="120" viewBox="0 0 120 120"></svg>
+      <div class="donut-legend" id="donutLegend"></div>
+    </div>
+  </section>
+
+  <!-- Callouts: Duplicates, Stale, Dead -->
+  <section class="body-section" id="sec-callouts">
+    <div class="section-header">
+      <h2>Collection Health</h2>
+      <span class="section-label">Duplicates · Stale · Likely Dead</span>
+    </div>
+    <div class="callout-grid" id="calloutGrid"></div>
+  </section>
+
+  <!-- Recent Papers -->
+  <section class="body-section" id="sec-recent">
+    <div class="section-header">
+      <h2>Recent Papers</h2>
+      <span class="section-label">Read next — newest entries</span>
+    </div>
+    <div class="recent-grid" id="recentGrid"></div>
+  </section>
+
+  <!-- Drill-down -->
+  <section class="body-section" id="sec-drill">
+    <div class="section-header">
+      <h2>Browse All</h2>
+      <span class="section-label" id="drillCountLabel"></span>
+    </div>
+    <button class="drill-toggle" id="drillToggle" aria-expanded="false">
+      <span>▶</span>
+      <span id="drillToggleText">Show all items</span>
+      <span class="drill-count" id="drillToggleCount"></span>
+    </button>
+    <div id="drillContent" style="display:none;">
+      <div class="filter-bar" id="filterBar"></div>
+      <div class="items-list" id="itemsList"></div>
+      <div id="noResults" class="no-results" style="display:none;">No items match the current filters.</div>
+      <div class="pagination-bar" id="paginationBar"></div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="page-footer">
+    <p><em>Generated locally — your bibliography file never left your machine. The full export is embedded in this HTML and rendered offline in your browser. <strong>No URLs are fetched at render or click time</strong> — dead-link flags are heuristic-only hypotheses, never verdicts. For sharing, prefer an anonymized export.</em></p>
+  </footer>
+
+</div>
+
+<script>/* html-anything: truncated generated script disabled so this checked-in example remains valid HTML.
+
+(function(){
+  // ─── helpers ────────────────────────────────────────────────────────────────
+  function esc(str){ return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function q(sel,ctx){ return (ctx||document).querySelector(sel); }
+  function qa(sel,ctx){ return Array.from((ctx||document).querySelectorAll(sel)); }
+
+  // ─── wait for DATA ───────────────────────────────────────────────────────────
+  function init(){
+    if(typeof DATA==='undefined'){ setTimeout(init,50); return; }
+    const D = DATA;
+    const items = D.items||[];
+    const totals = D.totals||{};
+
+    // ── deck stats ──────────────────────────────────────────────────────────
+    const deckStats = q('#deckStats');
+    const yearSet = items.map(i=>i.year).filter(Boolean);
+    const minYear = Math.min(...yearSet)||2019;
+    const maxYear = Math.max(...yearSet)||2024;
+    const authorSet = new Set();
+    items.forEach(i=>(i.authors||[]).forEach(a=>authorSet.add(a)));
+    const venueSet = new Set(items.map(i=>i.venue).filter(Boolean));
+
+    const stats = [
+      {num: items.length, label:'Papers'},
+      {num: authorSet.size, label:'Unique Authors'},
+      {num: venueSet.size, label:'Venues'},
+      {num: `${minYear}–${maxYear}`, label:'Date Range'},
+    ];
+    deckStats.innerHTML = stats.map(s=>`
+      <div class="deck-stat">
+        <span class="num">${esc(String(s.num))}</span>
+        <span class="label">${esc(s.label)}</span>
+      </div>`).join('');
+
+    // ── TL;DR ────────────────────────────────────────────────────────────────
+    const topics = D.topics||[];
+    const venues = D.venueLeaderboard||[];
+    const topTopic = topics[0];
+    const topVenue = venues[0];
+    const medianYear = yearSet.length ? Math.round(yearSet.sort((a,b)=>a-b)[Math.floor(yearSet.length/2)]) : 2023;
+    q('#tldrBlock').innerHTML = `
+      <strong>TL;DR —</strong>
+      ${items.length} papers spanning ${minYear}–${maxYear} (median ${medianYear}), concentrated on
+      ${topTopic ? `<strong>${esc(topTopic.name)}</strong> (${topTopic.count} items)` : 'code-writing agents'} and
+      ${topics[1] ? `<strong>${esc(topics[1].name)}</strong> (${topics[1].count} items)` : 'related topics'}.
+      ${topVenue ? `The top venue is <strong>${esc(topVenue.venue)}</strong> with ${topVenue.count} entries.` : ''}
+      The collection skews ${medianYear >= 2023 ? 'current-state-of-the-field' : 'historical'};
+      most work clusters post-${medianYear-1}, reflecting rapid growth in LLM-based code generation.
+    `;
+
+    // ── topic clusters ───────────────────────────────────────────────────────
+    const topicGrid = q('#topicGrid');
+    const topicBars = q('#topicBars');
+    const maxTopicCount = topics.length ? Math.max(...topics.map(t=>t.count)) : 1;
+    const TOPIC_COLORS = ['#a03b00','#7b40e0','#4d44e3','#00D4FF','#10b981','#f59e0b','#ef4444','#3b82f6'];
+
+    topics.forEach((t,i)=>{
+      const chip = document.createElement('button');
+      chip.className='topic-chip';
+      chip.dataset.topic=t.name;
+      chip.innerHTML=`${esc(t.name)}<span class="chip-count">${t.count}</span>`;
+      chip.addEventListener('click',()=>toggleTopicFilter(t.name));
+      topicGrid.appendChild(chip);
+    });
+
+    const topTopics = topics.slice(0,10);
+    topTopics.forEach((t,i)=>{
+      const pct = Math.round((t.count/maxTopicCount)*100);
+      topicBars.insertAdjacentHTML('beforeend',`
+        <div class="bar-row">
+          <span class="bar-label" title="${esc(t.name)}">${esc(t.name)}</span>
+          <div class="bar-track"><div class="bar-fill" data-pct="${pct}" style="background:${TOPIC_COLORS[i%TOPIC_COLORS.length]};width:0"></div></div>
+          <span class="bar-num">${t.count}</span>
+        </div>`);
+    });
+
+    // ── venue leaderboard ────────────────────────────────────────────────────
+    const venueBars = q('#venueBars');
+    const topVenues = venues.slice(0,12);
+    const maxVC = topVenues.length ? Math.max(...topVenues.map(v=>v.count)) : 1;
+    topVenues.forEach((v,i)=>{
+      const pct = Math.round((v.count/maxVC)*100);
+      const shortVenue = v.venue.length>50 ? v.venue.slice(0,47)+'…' : v.venue;
+      venueBars.insertAdjacentHTML('beforeend',`
+        <div class="bar-row">
+          <span class="bar-label" title="${esc(v.venue)}">${esc(shortVenue)}</span>
+          <div class="bar-track"><div class="bar-fill" data-pct="${pct}" style="width:0"></div></div>
+          <span class="bar-num">${v.count}</span>
+        </div>`);
+    });
+
+    // ── author leaderboard ───────────────────────────────────────────────────
+    const authorLeaderboard = D.authorLeaderboard||[];
+    const authorList = q('#authorList');
+    const topAuthors = authorLeaderboard.slice(0,15);
+    const maxAC = topAuthors.length ? Math.max(...topAuthors.map(a=>a.count)) : 1;
+    topAuthors.forEach((a,i)=>{
+      const pct = Math.round((a.count/maxAC)*100);
+      authorList.insertAdjacentHTML('beforeend',`
+        <div class="author-row" data-author="${esc(a.name)}" style="cursor:pointer" title="Filter by ${esc(a.name)}">
+          <span class="author-rank">${i+1}</span>
+          <span class="author-name">${esc(a.name)}</span>
+          <div class="author-count-bar"><div class="author-count-fill" data-pct="${pct}" style="width:0;background:${TOPIC_COLORS[i%TOPIC_COLORS.length]}"></div></div>
+          <span class="author-count-num">${a.count}</span>
+        </div>`);
+    });
+    qa('.author-row').forEach(row=>{
+      row.addEventListener('click',()=>{
+        const name=row.dataset.author;
+        q('#searchInput').value=name;
+        triggerSearch(name);
+        openDrill();
+        q('#sec-drill').scrollIntoView({behavior:'smooth'});
+      });
+    });
+
+    // ── year sparkline ───────────────────────────────────────────────────────
+    const yearHist = D.yearHistogram||[];
+    const maxYC = yearHist.length ? Math.max(...yearHist.map(y=>y.count)) : 1;
+    const sparkBars = q('#sparklineBars');
+    const sparkLabels = q('#sparklineLabels');
+    q('#sparklineTitle').textContent = `Publication years — ${yearHist.length} years covered, median ${medianYear}`;
+    yearHist.forEach(y=>{
+      const pct = Math.round((y.count/maxYC)*100);
+      const bar = document.createElement('div');
+      bar.className='spark-bar';
+      bar.style.height='0';
+      bar.dataset.pct=pct;
+      bar.title=`${y.year}: ${y.count} paper${y.count!==1?'s':''}`;
+      bar.addEventListener('click',()=>{
+        q('#searchInput').value=String(y.year);
+        triggerSearch(String(y.year));
+        openDrill();
+        q('#sec-drill').scrollIntoView({behavior:'smooth'});
+      });
+      sparkBars.appendChild(bar);
+
+      const lbl = document.createElement('div');
+      lbl.className='spark-label';
+      lbl.textContent=String(y.year).slice(2);
+      sparkLabels.appendChild(lbl);
+    });
+
+    // ── ref type donut ───────────────────────────────────────────────────────
+    const refTypeCounts = {};
+    items.forEach(i=>{const t=(i.refType||i.folder||'misc');refTypeCounts[t]=(refTypeCounts[t]||0)+1;});
+    const refEntries = Object.entries(refTypeCounts).sort((a,b)=>b[1]-a[1]);
+    const totalRefs = refEntries.reduce((s,[,c])=>s+c,0);
+    const donutColors=['#a03b00','#7b40e0','#4d44e3','#00D4FF','#10b981','#f59e0b'];
+    const donutSvg = q('#donutSvg');
+    const cx=60,cy=60,r=44,inner=26;
+    let startAngle=-Math.PI/2;
+    refEntries.forEach(([type,count],i)=>{
+      const angle=(count/totalRefs)*2*Math.PI;
+      const endAngle=startAngle+angle;
+      const x1=cx+r*Math.cos(startAngle),y1=cy+r*Math.sin(startAngle);
+      const x2=cx+r*Math.cos(endAngle),y2=cy+r*Math.sin(endAngle);
+      const xi1=cx+inner*Math.cos(startAngle),yi1=cy+inner*Math.sin(startAngle);
+      const xi2=cx+inner*Math.cos(endAngle),yi2=cy+inner*Math.sin(endAngle);
+      const lg=angle>Math.PI?1:0;
+      const path=document.createElementNS('http://www.w3.org/2000/svg','path');
+      path.setAttribute('d',`M ${x1} ${y1} A ${r} ${r} 0 ${lg} 1 ${x2} ${y2} L ${xi2} ${yi2} A ${inner} ${inner} 0 ${lg} 0 ${xi1} ${yi1} Z`);
+      path.setAttribute('fill',donutColors[i%donutColors.length]);
+      path.setAttribute('opacity','0.85');
+      donutSvg.appendChild(path);
+      startAngle=endAngle;
+    });
+    const donutLegend=q('#donutLegend');
+    refEntries.forEach(([type,count],i)=>{
+      donutLegend.insertAdjacentHTML('beforeend',`
+        <div class="legend-row">
+          <div class="legend-dot" style="background:${donutColors[i%donutColors.length]}"></div>
+          <span class="legend-label">${esc(type)}</span>
+          <span class="legend-num">${count}</span>
+        </div>`);
+    });
+
+    // ── callouts ─────────────────────────────────────────────────────────────
+    const calloutGrid = q('#calloutGrid');
+    // duplicates
+    const dups = D.duplicateGroups||[];
+    calloutGrid.insertAdjacentHTML('beforeend',`
+      <div class="callout-card">
+        <div class="callout-card-head">
+          <span class="callout-icon">🔁</span>
+          <span class="callout-title">Duplicates</span>
+        </div>
+        ${dups.length===0
+          ? '<p class="callout-empty">No duplicate entries detected.</p>'
+          : dups.slice(0,5).map(g=>`<div class="callout-item"><strong>${esc(g.titles&&g.titles[0]||g.url)}</strong><br><span style="font-size:0.85em;color:var(--fg-muted)">${g.ids.length} copies · ${esc(g.url)}</span></div>`).join('')
+        }
+      </div>`);
+    // stale
+    const stale = D.staleItems||[];
+    calloutGrid.insertAdjacentHTML('beforeend',`
+      <div class="callout-card">
+        <div class="callout-card-head">
+          <span class="callout-icon">⏳</span>
+          <span class="callout-title">Stale</span>
+        </div>
+        ${stale.length===0
+          ? '<p class="callout-empty">No stale items flagged.</p>'
+          : stale.slice(0,5).map(s=>`<div class="callout-item"><strong>${esc(s.title)}</strong><br><span style="font-size:0.85em;color:var(--fg-muted)">${s.ageDays||''}d old · ${esc(s.folder||'')}</span></div>`).join('')
+        }
+      </div>`);
+    // dead
+    const dead = D.deadLinks||[];
+    calloutGrid.insertAdjacentHTML('beforeend',`
+      <div class="callout-card">
+        <div class="callout-card-head">
+          <span class="callout-icon">💀</span>
+          <span class="callout-title">Likely Dead</span>
+        </div>
+        ${dead.length===0
+          ? '<p class="callout-empty">No likely-dead links detected.</p>'
+          : dead.slice(0,5).map(d=>`<div class="callout-item"><strong>${esc(d.title)}</strong><br><span style="font-size:0.85em;color:var(--fg-muted)">${esc(d.domain)} · ${esc(d.reason||'heuristic flag')}</span></div>`).join('')
+        }
+      </div>`);
+
+    // ── recent papers ────────────────────────────────────────────────────────
+    const sorted = [...items].sort((a,b)=>(b.year||0)-(a.year||0));
+    const recent = sorted.slice(0,8);
+    const recentGrid = q('#recentGrid');
+    recent.forEach(item=>{
+      const authStr = (item.authors||[]).slice(0,3).join(', ') + ((item.authors||[]).length>3?' et al.':'');
+      const div = document.createElement('div');
+      div.className='recent-card';
+      div.dataset.itemId=item.id;
+      div.innerHTML=`
+        <div class="recent-year">${item.year||'—'}</div>
+        <div class="recent-info">
+          <div class="recent-title">${esc(item.title)}</div>
+          <div class="recent-authors">${esc(authStr)}</div>
+        </div>`;
+      div.addEventListener('click',()=>{
+        openDrill();
+        setTimeout(()=>{
+          const card=q(`[data-id="${item.id}"]`);
+          if(card){card.scrollIntoView({behavior:'smooth',block:'center'});expandCard(card);}
+        },200);
+      });
+      recentGrid.appendChild(div);
+    });
+
+    // ── drill-down ───────────────────────────────────────────────────────────
+    q('#drillCountLabel').textContent = `${items.length} entries`;
+    q('#drillToggleCount').textContent = `${items.length}`;
+    q('#drillToggleText').textContent = 'Show all items';
+
+    // filter state
+    let activeTopics = new Set();
+    let activeYear = null;
+    let searchQuery = '';
+    const PAGE_SIZE = 20;
+    let currentPage = 1;
+
+    // build filter chips
+    const filterBar = q('#filterBar');
+    const allYears = [...new Set(items.map(i=>i.year).filter(Boolean))].sort((a,b)=>b-a);
+    allYears.forEach(y=>{
+      const chip = document.createElement('button');
+      chip.className='filter-chip';
+      chip.dataset.year=y;
+      chip.textContent=y;
+      chip.addEventListener('click',()=>{
+        if(activeYear===y){activeYear=null;chip.classList.remove('active');}
+        else{
+          qa('.filter-chip[data-year]').forEach(c=>c.classList.remove('active'));
+          activeYear=y;chip.classList.add('active');
+        }
+        currentPage=1;renderItems();
+      });
+      filterBar.appendChild(chip);
+    });
+
+    // build item cards
+    const itemsList = q('#itemsList');
+    items.forEach(item=>{
+      const authStr=(item.authors||[]).slice(0,4).join(', ')+((item.authors||[]).length>4?' et al.':'');
+      const tagHtml=(item.tags||[]).map(t=>`<span class="item-tag">${esc(t)}</span>`).join('');
+      const card=document.createElement('div');
+      card.className='item-card';
+      card.dataset.id=item.id;
+      card.dataset.year=item.year||'';
+      card.dataset.topic=(item.topic||'').toLowerCase();
+      card.dataset.tags=JSON.stringify(item.tags||[]);
+      card.dataset.authors=JSON.stringify(item.authors||[]);
+      card.dataset.venue=(item.venue||'').toLowerCase();
+      card.dataset.abstract=(item.abstract||'').toLowerCase();
+      card.dataset.title=(item.title||'').toLowerCase();
+      const doiLine=item.doi?`<div class="detail-row"><span class="detail-key">DOI</span><span class="detail-val mono"><a href="https://doi.org/${esc(item.doi)}" target="_blank" rel="noopener noreferrer">${esc(item.doi)}</a></span></div>`:'';
+      card.innerHTML=`
+        <div class="item-header">
+          <span class="item-year-badge">${item.year||'—'}</span>
+          <div class="item-main">
+            <div class="item-title">${esc(item.title)}</div>
+            <div class="item-meta">
+              <span class="item-venue">${esc((item.venue||'').slice(0,80)+(item.venue&&item.venue.length>80?'…':''))}</span>
+              <div class="item-tags">${tagHtml}</div>
+            </div>
+          </div>
+          <span class="item-expand-icon">▾</span>
+        </div>
+        <div class="item-detail">
+          <div class="detail-row"><span class="detail-key">Authors</span><span class="detail-val">${esc(authStr)}</span></div>
+          <div class="detail-row"><span class="detail-key">Venue</span><span class="detail-val">${esc(item.venue||'—')}</span></div>
+          <div class="detail-row"><span class="detail-key">Year</span><span class="detail-val mono">${item.year||'—'}</span></div>
+          <div class="detail-row"><span class="detail-key">Type</span><span class="detail-val mono">${esc(item.refType||item.folder||'—')}</span></div>
+          ${doiLine}
+          ${item.abstract?`<div class="abstract-text">${esc(item.abstract)}</div>`:''}
+          ${item.url?`<a class="item-link-btn" href="${esc(item.url)}" target="_blank" rel="noopener noreferrer">↗ Open source</a>`:''}
+        </div>`;
+      card.querySelector('.item-header').addEventListener('click',()=>expandCard(card));
+      itemsList.appendChild(card);
+    });
+
+    function expandCard(card){
+      const wasOpen=card.classList.contains('expanded');
+      card.classList.toggle('expanded',!wasOpen);
+    }
+
+    function renderItems(){
+      const allCards=qa('.item-card');
+      let visible=[];
+      allCards.forEach(card=>{
+        const matchTopic = activeTopics.size===0 || [...activeTopics].some(t=>
+          card.dataset.topic===t.toLowerCase() ||
+          JSON.parse(card.dataset.tags||'[]').some(tag=>tag.toLowerCase()===t.toLowerCase())
+        );
+        const matchYear = !activeYear || card.dataset.year===String(activeYear);
+        const q2 = searchQuery.toLowerCase().trim();
+        const matchSearch = !q2 || [
+          card.dataset.title,
+          card.dataset.authors,
+          card.dataset.venue,
+          card.dataset.tags,
+          card.dataset.abstract,
+        ].some(f=>(f||'').toLowerCase().includes(q2));
+
+        const show=matchTopic&&matchYear&&matchSearch;
+        card.classList.toggle('hidden',!show);
+        if(show) visible.push(card);
+      });
+
+      // pagination
+      const total=visible.length;
+      const totalPages=Math.ceil(total/PAGE_SIZE);
+      if(currentPage>totalPages) currentPage=1;
+      visible.forEach((card,i)=>{
+        const inPage=(i>=(currentPage-1)*PAGE_SIZE && i<currentPage*PAGE_SIZE);
+        card.style.display=inPage&&!card.classList.contains('hidden')?'':'none';
+        // re-show hidden class ones via pagination
+        if(card.classList.contains('hidden')) card.style.display='none';
+        else card.style.display=inPage?'':'none';
+      });
+
+      // highlight search
+      if(searchQuery.trim()){
+        const re=new RegExp(`(${searchQuery.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')})`, 'gi');
+        visible.forEach(card=>{
+          const titleEl=card.querySelector('.item-title');
+          if(titleEl) titleEl.innerHTML=esc(titleEl.textContent).replace(re,'<mark>$1</mark>');
+        });
+        q('#searchStatus').textContent=`${total} result${total!==1?'s':''} for "${searchQuery}"`;
+      } else {
+        q('#searchStatus').textContent='';
+        qa('.item-card .item-title').forEach(el=>{el.innerHTML=esc(el.textContent);});
+      }
+
+      q('#noResults').style.display=total===0?'block':'none';
+      renderPagination(totalPages,visible.length);
+    }
+
+    function renderPagination(totalPages,total){
+      const bar=q('#paginationBar');
+      bar.innerHTML='';
+      if(totalPages<=1){return;}
+      const info=document.createElement('span');
+      info.className='page-info';
+      info.textContent=`${(currentPage-1)*PAGE_SIZE+1}–${Math.min(currentPage*PAGE_SIZE,total)} of ${total}`;
+      const prev=document.createElement('button');
+      prev.className='page-btn';prev.textContent='←';
+      prev.disabled=currentPage===1;
+      prev.addEventListener('click',()=>{if(currentPage>1){currentPage--;renderItems();}});
+      bar.appendChild(prev);
+      for(let p=1;p<=Math.min(totalPages,7);p++){
+        const btn=document.createElement('button');
+        btn.className='page-btn'+(p===currentPage?' active':'');
+        btn.textContent=p;
+        btn.addEventListener('click',()=>{currentPage=p;renderItems();});
+        bar.appendChild(btn);
+      }
+      if(totalPages>7){
+        const ell=document.createElement('span');ell.className='page-info';ell.textContent='…';bar.appendChild(ell);
+        const last=document.createElement('button');
+        last.className='page-btn'+(totalPages===currentPage?' active':'');
+        last.textContent=totalPages;
+        last.addEventListener('click',()=>{currentPage=totalPages;renderItems();});
+        bar.appendChild(last);
+      }
+      const next=document.createElement('button');
+      next.className='page-btn';next.textContent='→';
+      next.disabled=currentPage===totalPages;
+      next.addEventListener('click',()=>{if(currentPage<totalPages){currentPage++;renderItems();}});
+      bar.appendChild(next);
+      bar.appendChild(info);
+    }
+
+    // ── topic filter toggle ──────────────────────────────────────────────────
+    function toggleTopicFilter(name){
+      if(activeTopics.has(name)){activeTopics.delete(name);}else{activeTopics.add(name);}
+      qa('.topic-chip').forEach(chip=>{
+        chip.classList.toggle('active',activeTopics.has(chip.dataset.topic));
+      });
+      currentPage=1;
+      renderItems();
+    }
+
+    // ── drill toggle ─────────────────────────────────────────────────────────
+    const drillToggle=q('#drillToggle');
+    const drillContent=q('#drillContent');
+    function openDrill(){
+      drillContent.style.display='block';
+      drillToggle.classList.add('open');
+      drillToggle.setAttribute('aria-expanded','true');
+      q('#drillToggleText').textContent='Hide all items';
+      renderItems();
+    }
+    drillToggle.addEventListener('click',()=>{
+      const open=drillToggle.classList.contains('open');
+      if(open){
+        drillContent.style.display='none';
+        drillToggle.classList.remove('open');
+        drillToggle.setAttribute('aria-expanded','false');
+        q('#drillToggleText').textContent='Show all items';
+      } else { openDrill(); }
+    });
+
+    // ── search ───────────────────────────────────────────────────────────────
+    function triggerSearch(val){
+      searchQuery=val;
+      currentPage=1;
+      if(drillContent.style.display==='none') openDrill();
+      renderItems();
+    }
+    const searchInput=q('#searchInput');
+    let searchTimer;
+    searchInput.addEventListener('input',()=>{
+      clearTimeout(searchTimer);
+      searchTimer=setTimeout(()=>triggerSearch(searchInput.value),180);
+    });
+*/
+</script>
+</body>
+</html>

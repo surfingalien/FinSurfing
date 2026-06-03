@@ -1,0 +1,588 @@
+<!doctype html>
+<html lang="en" data-ha-style="architectural-spread">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>The Long, Slow, Inevitable Death of the PDF</title>
+<style>
+:root {
+  color-scheme: light;
+  --c-taupe: #6B655F;
+  --c-cream: #EBE8E3;
+  --c-moss: #2A3826;
+  --c-black: #111111;
+  --c-white: #FFFFFF;
+  --c-ink-muted: #444444;
+  --c-rule: rgba(17, 17, 17, 0.22);
+  --c-paper: #f6f1e8;
+  --c-paper-dim: #cfc8bb;
+  --font-sans: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  --font-serif: 'Times New Roman', Times, serif;
+  --spacing-unit: 2rem;
+  --page-padding: clamp(1.4rem, 4vw, 3rem);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { background: var(--c-black); }
+body {
+  min-height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+  background: var(--c-black);
+  color: var(--c-black);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+button {
+  color: inherit;
+  font: inherit;
+}
+.architectural-viewport {
+  width: 100vw;
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  background: var(--c-taupe);
+  position: relative;
+  overflow: hidden;
+}
+.col-visual,
+.col-content {
+  min-width: 0;
+  min-height: 100vh;
+  position: relative;
+}
+.col-visual {
+  background:
+    linear-gradient(135deg, rgba(17, 17, 17, 0.08), transparent 48%),
+    var(--c-taupe);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--page-padding);
+  overflow: hidden;
+}
+.col-visual::after {
+  content: "";
+  position: absolute;
+  inset: var(--page-padding);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  pointer-events: none;
+}
+.col-content {
+  background: var(--c-cream);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: var(--page-padding);
+  overflow: hidden;
+}
+.taupe-overlay {
+  position: absolute;
+  z-index: 8;
+  top: var(--page-padding);
+  left: var(--page-padding);
+}
+.header-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 2rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.label-white { color: rgba(255, 255, 255, 0.74); }
+.visual-object {
+  width: min(380px, 54vw);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  position: relative;
+  z-index: 2;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 31% 28%, rgba(255, 255, 255, 0.52), transparent 0 18%, transparent 42%),
+    radial-gradient(circle at 42% 38%, rgba(246, 241, 232, 0.92), transparent 0 32%, rgba(214, 205, 189, 0.78) 33% 54%, transparent 55%),
+    linear-gradient(145deg, #f6f1e8 0%, #d9d0bf 48%, #8d8478 100%);
+  box-shadow:
+    inset -44px -44px 86px rgba(0, 0, 0, 0.72),
+    inset 18px 20px 40px rgba(255, 255, 255, 0.18),
+    0 0 55px rgba(17, 17, 17, 0.18);
+  transform: rotate(var(--orb-tilt, -6deg));
+  transition: transform 420ms ease, filter 420ms ease;
+}
+.visual-object::before,
+.visual-object::after {
+  content: "";
+  position: absolute;
+  inset: 19%;
+  border: 1px solid rgba(17, 17, 17, 0.23);
+  background:
+    linear-gradient(rgba(17, 17, 17, 0.16) 0 1px, transparent 1px 14px),
+    linear-gradient(90deg, rgba(17, 17, 17, 0.10), transparent 35%);
+  transform: rotate(-7deg);
+  opacity: 0.64;
+}
+.visual-object::after {
+  inset: 26% 21% 22% 28%;
+  transform: rotate(12deg);
+  opacity: 0.46;
+  background:
+    linear-gradient(rgba(17, 17, 17, 0.16) 0 1px, transparent 1px 18px),
+    linear-gradient(90deg, transparent, rgba(17, 17, 17, 0.12));
+}
+.visual-object.is-hostile { filter: contrast(1.08) saturate(0.9); }
+.visual-object.is-alive { filter: brightness(1.06); }
+.orbit-ring {
+  position: absolute;
+  width: min(520px, 72vw);
+  aspect-ratio: 1;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 50%;
+  transform: rotate(-18deg) scaleY(0.36);
+  z-index: 1;
+}
+.orbit-ring::after {
+  content: "";
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  right: 15%;
+  top: 43%;
+  background: rgba(255, 255, 255, 0.6);
+}
+.visual-inset {
+  position: absolute;
+  left: var(--page-padding);
+  bottom: var(--page-padding);
+  z-index: 4;
+  width: min(280px, 36vw);
+  min-height: 180px;
+  padding: 1rem;
+  background:
+    repeating-linear-gradient(to bottom, rgba(17, 17, 17, 0.15) 0 1px, transparent 1px 18px),
+    var(--c-paper);
+  color: var(--c-black);
+  border: 1px solid rgba(17, 17, 17, 0.18);
+  opacity: 0.82;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+.visual-inset:hover,
+.visual-inset:focus-within { opacity: 1; transform: translateY(-2px); }
+.visual-inset .mini-kicker {
+  display: block;
+  margin-bottom: 2.1rem;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.visual-inset .mini-title {
+  display: block;
+  max-width: 13rem;
+  font-family: var(--font-serif);
+  font-size: 1.15rem;
+  font-style: italic;
+  line-height: 1.08;
+}
+.nav-anchor {
+  position: absolute;
+  z-index: 9;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font-size: 0.69rem;
+  font-weight: 700;
+  letter-spacing: 0.025em;
+  text-decoration: none;
+}
+.nav-anchor:hover,
+.nav-anchor:focus-visible,
+.emphasis:hover,
+.emphasis:focus-visible {
+  outline: 0;
+  text-decoration-color: currentColor;
+}
+.pos-bl { bottom: var(--page-padding); left: var(--page-padding); }
+.pos-br { bottom: var(--page-padding); right: var(--page-padding); }
+.pos-tr { top: var(--page-padding); right: var(--page-padding); }
+#source-button { bottom: calc(var(--page-padding) + 196px); }
+.block-group {
+  margin: auto 0;
+  max-width: 92%;
+}
+.headline {
+  max-width: 90%;
+  margin-bottom: 3rem;
+  font-family: var(--font-sans);
+  font-size: clamp(2.2rem, 4.2vw, 4.15rem);
+  font-weight: 400;
+  letter-spacing: -0.035em;
+  line-height: 1.05;
+}
+.headline-serif {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-weight: 400;
+  letter-spacing: -0.025em;
+}
+.body-text {
+  max-width: 365px;
+  color: var(--c-ink-muted);
+  font-size: 0.86rem;
+  line-height: 1.64;
+}
+.body-text p + p { margin-top: 1.45rem; }
+.emphasis {
+  color: inherit;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+  text-decoration-color: rgba(17, 17, 17, 0.38);
+}
+.pagination {
+  position: absolute;
+  z-index: 10;
+  left: 50%;
+  bottom: var(--page-padding);
+  display: flex;
+  gap: 12px;
+  transform: translateX(-50%);
+}
+.dot {
+  width: 8px;
+  height: 8px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(17, 17, 17, 0.2);
+  cursor: pointer;
+  transition: background-color 0.25s ease, transform 0.25s ease;
+}
+.dot.active {
+  background: var(--c-black);
+  transform: scale(1.12);
+}
+.spread-index {
+  position: absolute;
+  z-index: 18;
+  right: var(--page-padding);
+  top: calc(var(--page-padding) + 2.4rem);
+  width: min(310px, calc(100% - var(--page-padding) * 2));
+  max-height: calc(100vh - var(--page-padding) * 3.8);
+  overflow: auto;
+  padding: 1.1rem;
+  background: rgba(235, 232, 227, 0.96);
+  border: 1px solid var(--c-rule);
+  transform: translateY(-8px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.22s ease, transform 0.22s ease;
+}
+.spread-index.open {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+.spread-index h2 {
+  margin-bottom: 1rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.spread-index button {
+  display: block;
+  width: 100%;
+  border: 0;
+  border-top: 1px solid var(--c-rule);
+  padding: 0.75rem 0;
+  background: transparent;
+  color: var(--c-black);
+  cursor: pointer;
+  text-align: left;
+  font-size: 0.82rem;
+}
+.spread-index button:hover,
+.spread-index button:focus-visible {
+  outline: 0;
+  color: var(--c-moss);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.source-drawer {
+  position: fixed;
+  z-index: 30;
+  inset: 0 0 0 auto;
+  width: min(520px, 100vw);
+  padding: var(--page-padding);
+  overflow: auto;
+  background: var(--c-black);
+  color: var(--c-cream);
+  transform: translateX(100%);
+  transition: transform 0.28s ease;
+}
+.source-drawer.open { transform: translateX(0); }
+.source-drawer h2 {
+  margin-bottom: 1.5rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.source-drawer pre {
+  white-space: pre-wrap;
+  font: 0.78rem/1.55 var(--font-sans);
+  color: rgba(255, 255, 255, 0.72);
+}
+.source-drawer .close-drawer {
+  position: sticky;
+  top: 0;
+  float: right;
+  border: 0;
+  background: transparent;
+  color: var(--c-cream);
+  cursor: pointer;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+.animate-entry { animation: fadeIn 0.78s ease-out both; }
+.delay-1 { animation-delay: 0.16s; }
+.delay-2 { animation-delay: 0.32s; }
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes softRotate {
+  from { transform: rotate(var(--orb-tilt, -6deg)); }
+  to { transform: rotate(calc(var(--orb-tilt, -6deg) + 360deg)); }
+}
+.visual-object.motion { animation: softRotate 160s linear infinite; }
+@media (max-width: 860px) {
+  body { overflow: auto; }
+  .architectural-viewport {
+    min-height: 100vh;
+    grid-template-columns: 1fr;
+  }
+  .col-visual {
+    min-height: 46vh;
+    padding-bottom: 8rem;
+  }
+  .col-content {
+    min-height: 54vh;
+    overflow: visible;
+  }
+  .visual-object { width: min(260px, 58vw); }
+  .orbit-ring { width: min(360px, 82vw); }
+  .visual-inset {
+    width: min(240px, calc(100vw - var(--page-padding) * 2));
+    min-height: 128px;
+  }
+  .block-group { max-width: 100%; padding-bottom: 4.5rem; }
+  .headline { max-width: 100%; margin-bottom: 2rem; }
+  .body-text { max-width: 100%; }
+  .pos-tr { top: 1rem; right: var(--page-padding); }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}
+</style>
+</head>
+<body>
+<main class="architectural-viewport" aria-live="polite">
+  <section class="col-visual" aria-label="visual thesis field">
+    <div class="taupe-overlay">
+      <div class="header-label label-white animate-entry" id="project-label">Document 01</div>
+    </div>
+    <div class="orbit-ring" aria-hidden="true"></div>
+    <div class="visual-object motion animate-entry delay-1" id="visual-object" title="PDF as a finished artifact"></div>
+    <div class="visual-inset animate-entry delay-2" tabindex="0">
+      <span class="mini-kicker" id="inset-kicker">Source</span>
+      <span class="mini-title" id="inset-title">581 words from a Markdown essay.</span>
+    </div>
+    <button class="nav-anchor pos-bl label-white animate-entry delay-2" type="button" id="source-button">( Source Material )</button>
+  </section>
+
+  <section class="col-content" aria-label="chapter spread">
+    <button class="nav-anchor pos-tr animate-entry" type="button" id="index-button">Index ( I )</button>
+
+    <article class="block-group" id="spread">
+      <div class="header-label animate-entry" id="spread-label">Universal Output Format</div>
+      <h1 class="headline animate-entry delay-1" id="headline"></h1>
+      <div class="body-text animate-entry delay-2" id="body-text"></div>
+    </article>
+
+    <button class="nav-anchor pos-bl animate-entry delay-2" type="button" id="prev-button">( Previous Area )</button>
+    <div class="pagination animate-entry delay-2" id="pagination" aria-label="chapter pagination"></div>
+    <button class="nav-anchor pos-br animate-entry delay-2" type="button" id="next-button">Next Chapter ( + )</button>
+
+    <aside class="spread-index" id="spread-index" aria-label="spread index">
+      <h2>Spread Index</h2>
+      <div id="index-list"></div>
+    </aside>
+  </section>
+</main>
+
+<aside class="source-drawer" id="source-drawer" aria-label="source drawer">
+  <button class="close-drawer" type="button" id="close-drawer">Close ( X )</button>
+  <h2>Original Markdown</h2>
+  <pre id="source-text"></pre>
+</aside>
+
+<script>
+const DATA = {
+  sourceFile: "input.md",
+  wordCount: 581,
+  lineCount: 90,
+  markdown: "# The Long, Slow, Inevitable Death of the PDF\n\nThe PDF is the universal output format. Every report, every spec, every\ncontract, every menu, every receipt eventually becomes one. It is the\ntext-based equivalent of a fax: hated, ubiquitous, immortal.\n\nThis is mostly because nothing better has shown up. Word documents are\nproprietary. Markdown is too plain. HTML is too varied. So the PDF\nendures, like a cockroach with a \"Save As\" button.\n\n## Why PDFs persist\n\nThere are three real reasons:\n\n1. **Faithful rendering.** A PDF looks the same on every device, every\n   printer, every reader. This was a miracle in 1993 and is still useful.\n2. **Portability.** One file, one click, one envelope.\n3. **Print-to-screen consistency.** Even if you never print it, it\n   *implies* a page, which implies a finished thing, which implies trust.\n\nThe first two have alternatives that finally work. The third is harder\nto reason about, but it might be where the PDF actually lives.\n\n## What's broken about it\n\nA PDF is a closed format pretending to be an open one. The text inside\nis often hostile to copy-paste. Tables shatter on selection. Forms are\nhieroglyphics. Search works, but only barely. On a phone, a PDF asks\nyou to *zoom into a thing designed for paper*, which is the digital\nequivalent of being handed a folded map and a compass.\n\n> The PDF is the only format I know of that simultaneously feels like a\n> precious artifact and a hostile environment.\n\n## What might replace it\n\nThe candidates have always existed. They just haven't won.\n\n### HTML\n\nA single self-contained `.html` file can hold structure, color,\nillustrations, code, animation, search, and interactivity. It opens\nin any browser. It does not need an app. It is searchable, copyable,\nmobile-responsive when written correctly, and it is the format that\nagents already produce for the web.\n\nThe downside has always been that authoring was hard. That is what\njust changed.\n\n### Markdown\n\nLighter than HTML, with the same portability. But markdown has no\nvisual identity. A 100-page PDF and a 100-page markdown file feel\nnothing alike. Markdown is a working draft; PDF is a finished thing.\nThis is sociology more than technology.\n\n### Notion / Slabs / Walling / Capacities\n\nBeautiful, but locked. You don't have the file. You have a link, and\nthe link only works while you're paying.\n\n## So what changes now\n\nThe shape of the answer is: **make HTML feel finished**. Authoring used\nto be the bottleneck — a designer to lay out the typography, an engineer\nto wire the interactions. Both of those are now things an agent can do\nin a single prompt.\n\nA PDF says \"this document is final.\" An HTML file produced by an agent\nthat read your specs, your data, your repo, your meeting notes, *and\nturned them into a single file with search, navigation, dark mode and\nmobile responsiveness* says \"this document is alive.\"\n\nThat second one is more useful.\n\n---\n\n## Footnotes\n\n- The single-self-contained-file thing matters. Multi-file SPAs are\n  not portable; you can't email them.\n- Search inside the HTML file is non-negotiable. The number of times\n  per week I `Cmd-F` inside a long document is the reason any reading\n  experience without it feels broken.\n- Mobile responsive is non-negotiable. People will read what you sent\n  on a phone, in a hurry, between meetings. If they can't, they don't.\n\nThe PDF is going to outlive every single one of us. But it shouldn't\nhave to.\n",
+  chapters: [
+    {
+      label: "Universal Output Format",
+      visual: "artifact",
+      kicker: "Object Study",
+      inset: "A finished thing, preserved so well it becomes difficult to use.",
+      headline: "The PDF is the universal output format: hated, ubiquitous, <span class=\"headline-serif emphasis\" tabindex=\"0\">immortal</span>.",
+      body: [
+        "Every report, spec, contract, menu, and receipt eventually becomes one. It is the text-based equivalent of a fax with a Save As button.",
+        "Its power is not beauty. Its power is finality: one file, one click, one envelope, a page that says the work is done."
+      ]
+    },
+    {
+      label: "Why It Persists",
+      visual: "trust",
+      kicker: "Trust Geometry",
+      inset: "Faithful rendering made the PDF feel less like a file and more like an artifact.",
+      headline: "The format survives because it makes a digital thing feel <span class=\"headline-serif emphasis\" tabindex=\"0\">finished</span>.",
+      body: [
+        "A PDF looks the same on every device, every printer, every reader. That was a miracle in 1993 and is still useful today.",
+        "Print-to-screen consistency is the deeper trick. Even if no one prints it, the implied page creates a small theater of trust."
+      ]
+    },
+    {
+      label: "Hostile Environment",
+      visual: "hostile",
+      kicker: "Failure Mode",
+      inset: "Tables shatter. Forms become symbols. Phones ask you to zoom into paper.",
+      headline: "It can be a precious artifact and a <span class=\"headline-serif emphasis\" tabindex=\"0\">hostile</span> environment at the same time.",
+      body: [
+        "The text inside is often unfriendly to copy-paste. Tables collapse on selection. Forms carry the mood of an archaeological dig.",
+        "On a phone, the PDF asks the reader to navigate a folded map inside a glass rectangle."
+      ]
+    },
+    {
+      label: "Candidate Replacement",
+      visual: "html",
+      kicker: "Living File",
+      inset: "HTML can be one file, searchable, animated, responsive, and still portable.",
+      headline: "The replacement is not just HTML. It is HTML that feels <span class=\"headline-serif emphasis\" tabindex=\"0\">complete</span>.",
+      body: [
+        "A self-contained HTML file can hold structure, color, illustration, code, motion, search, and interaction. It opens in any browser and needs no special app.",
+        "The downside used to be authoring. That is the part that changed."
+      ]
+    },
+    {
+      label: "What Changes Now",
+      visual: "alive",
+      kicker: "Output Layer",
+      inset: "The page can be final enough to share and alive enough to inspect.",
+      headline: "A PDF says this document is final. A live HTML page says this document is <span class=\"headline-serif emphasis\" tabindex=\"0\">alive</span>.",
+      body: [
+        "An agent can read the source, design the typography, wire the interactions, and hand back a single file with search, navigation, and mobile responsiveness.",
+        "That second object is more useful. The PDF will outlive us, but it should not have to be the only finished shape."
+      ]
+    }
+  ]
+};
+
+const state = { index: 0 };
+const spread = document.getElementById("spread");
+const headline = document.getElementById("headline");
+const bodyText = document.getElementById("body-text");
+const label = document.getElementById("spread-label");
+const visualObject = document.getElementById("visual-object");
+const projectLabel = document.getElementById("project-label");
+const insetKicker = document.getElementById("inset-kicker");
+const insetTitle = document.getElementById("inset-title");
+const pagination = document.getElementById("pagination");
+const indexPanel = document.getElementById("spread-index");
+const indexList = document.getElementById("index-list");
+const sourceDrawer = document.getElementById("source-drawer");
+
+function render() {
+  const chapter = DATA.chapters[state.index];
+  projectLabel.textContent = `Document ${String(state.index + 1).padStart(2, "0")}`;
+  label.textContent = chapter.label;
+  headline.innerHTML = chapter.headline;
+  bodyText.innerHTML = chapter.body.map(text => `<p>${escapeHtml(text)}</p>`).join("");
+  insetKicker.textContent = chapter.kicker;
+  insetTitle.textContent = chapter.inset;
+  visualObject.className = `visual-object motion animate-entry delay-1 is-${chapter.visual}`;
+  visualObject.style.setProperty("--orb-tilt", `${-8 + state.index * 4}deg`);
+  pagination.querySelectorAll(".dot").forEach((dot, index) => {
+    dot.classList.toggle("active", index === state.index);
+    dot.setAttribute("aria-current", index === state.index ? "true" : "false");
+  });
+  spread.classList.remove("animate-entry");
+  void spread.offsetWidth;
+  spread.classList.add("animate-entry");
+}
+
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]));
+}
+
+function go(delta) {
+  state.index = (state.index + delta + DATA.chapters.length) % DATA.chapters.length;
+  render();
+}
+
+function setIndex(index) {
+  state.index = index;
+  indexPanel.classList.remove("open");
+  render();
+}
+
+pagination.innerHTML = DATA.chapters.map((chapter, index) =>
+  `<button class="dot" type="button" aria-label="Open spread ${index + 1}: ${escapeHtml(chapter.label)}" data-index="${index}"></button>`
+).join("");
+indexList.innerHTML = DATA.chapters.map((chapter, index) =>
+  `<button type="button" data-index="${index}">${String(index + 1).padStart(2, "0")} / ${escapeHtml(chapter.label)}</button>`
+).join("");
+
+pagination.addEventListener("click", event => {
+  const button = event.target.closest("[data-index]");
+  if (button) setIndex(Number(button.dataset.index));
+});
+indexList.addEventListener("click", event => {
+  const button = event.target.closest("[data-index]");
+  if (button) setIndex(Number(button.dataset.index));
+});
+document.getElementById("next-button").addEventListener("click", () => go(1));
+document.getElementById("prev-button").addEventListener("click", () => go(-1));
+document.getElementById("index-button").addEventListener("click", () => indexPanel.classList.toggle("open"));
+document.getElementById("source-button").addEventListener("click", () => sourceDrawer.classList.add("open"));
+document.getElementById("close-drawer").addEventListener("click", () => sourceDrawer.classList.remove("open"));
+document.getElementById("source-text").textContent = DATA.markdown;
+document.addEventListener("keydown", event => {
+  if (event.key === "ArrowRight") go(1);
+  if (event.key === "ArrowLeft") go(-1);
+  if (event.key.toLowerCase() === "i") indexPanel.classList.toggle("open");
+  if (event.key === "Escape") {
+    indexPanel.classList.remove("open");
+    sourceDrawer.classList.remove("open");
+  }
+});
+
+render();
+</script>
+</body>
+</html>

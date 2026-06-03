@@ -1,0 +1,30 @@
+Test,Panel,Value,Unit,Reference Low,Reference High,Reference,Collected,Ordering Provider,Lab
+WBC,CBC,5.8,K/uL,4.0,11.0,4.0-11.0,2026-01-15,Dr. Avery Lin,Demo Diagnostics
+RBC,CBC,4.7,M/uL,4.2,5.9,4.2-5.9,2026-01-15,Dr. Avery Lin,Demo Diagnostics
+Hemoglobin,CBC,14.2,g/dL,13.5,17.5,13.5-17.5,2026-01-15,Dr. Avery Lin,Demo Diagnostics
+Hematocrit,CBC,42.1,%,38.8,50.0,38.8-50.0,2026-01-15,Dr. Avery Lin,Demo Diagnostics
+Platelets,CBC,238,K/uL,150,450,150-450,2026-01-15,Dr. Avery Lin,Demo Diagnostics
+Glucose (fasting),CMP,108,mg/dL,70,99,70-99,2026-01-15,Dr. Avery Lin,Demo Diagnostics
+BUN,CMP,16,mg/dL,7,20,7-20,2026-01-15,Dr. Avery Lin,Demo Diagnostics
+Creatinine,CMP,0.92,mg/dL,0.7,1.3,0.7-1.3,2026-01-15,Dr. Avery Lin,Demo Diagnostics
+Sodium,CMP,140,mmol/L,135,145,135-145,2026-01-15,Dr. Avery Lin,Demo Diagnostics
+Potassium,CMP,4.2,mmol/L,3.5,5.1,3.5-5.1,2026-01-15,Dr. Avery Lin,Demo Diagnostics
+Total Cholesterol,Lipid Panel,231,mg/dL,,200,<200,2026-01-15,Dr. Avery Lin,Demo Diagnostics
+LDL Cholesterol,Lipid Panel,162,mg/dL,,100,<100,2026-01-15,Dr. Avery Lin,Demo Diagnostics
+HDL Cholesterol,Lipid Panel,38,mg/dL,40,,>40,2026-01-15,Dr. Avery Lin,Demo Diagnostics
+Triglycerides,Lipid Panel,178,mg/dL,,150,<150,2026-01-15,Dr. Avery Lin,Demo Diagnostics
+Hemoglobin A1c,A1c,7.4,%,4.0,5.7,4.0-5.7,2026-01-15,Dr. Avery Lin,Demo Diagnostics
+TSH,Thyroid,2.1,uIU/mL,0.4,4.5,0.4-4.5,2026-01-15,Dr. Avery Lin,Demo Diagnostics
+Free T4,Thyroid,1.2,ng/dL,0.8,1.8,0.8-1.8,2026-01-15,Dr. Avery Lin,Demo Diagnostics
+Vitamin D,Vitamins,28,ng/mL,30,100,30-100,2026-01-15,Dr. Avery Lin,Demo Diagnostics
+Total Cholesterol,Lipid Panel,196,mg/dL,,200,<200,2026-04-08,Dr. Avery Lin,Demo Diagnostics
+LDL Cholesterol,Lipid Panel,118,mg/dL,,100,<100,2026-04-08,Dr. Avery Lin,Demo Diagnostics
+HDL Cholesterol,Lipid Panel,42,mg/dL,40,,>40,2026-04-08,Dr. Avery Lin,Demo Diagnostics
+Triglycerides,Lipid Panel,144,mg/dL,,150,<150,2026-04-08,Dr. Avery Lin,Demo Diagnostics
+Hemoglobin A1c,A1c,7.1,%,4.0,5.7,4.0-5.7,2026-04-08,Dr. Avery Lin,Demo Diagnostics
+Glucose (fasting),CMP,102,mg/dL,70,99,70-99,2026-04-08,Dr. Avery Lin,Demo Diagnostics
+Creatinine,CMP,0.95,mg/dL,0.7,1.3,0.7-1.3,2026-04-08,Dr. Avery Lin,Demo Diagnostics
+Vitamin D,Vitamins,34,ng/mL,30,100,30-100,2026-04-08,Dr. Avery Lin,Demo Diagnostics
+Ferritin,Iron studies,42,ng/mL,,,,2026-04-08,Dr. Avery Lin,Demo Diagnostics
+ALT,Liver,28,U/L,7,55,7-55,2026-04-08,Dr. Avery Lin,Demo Diagnostics
+AST,Liver,24,U/L,8,48,8-48,2026-04-08,Dr. Avery Lin,Demo Diagnostics

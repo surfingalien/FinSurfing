@@ -7,5 +7,54 @@
         "API_KEY": "your-21st-dev-api-key-here"
       }
     }
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "tool == \"Edit\" || tool == \"Write\"",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$HOME/.claude/pro-workflow/scripts/secret-scan.js\""
+          }
+        ],
+        "description": "Scan for hardcoded secrets before any file write or edit"
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Bash(git commit*)",
+            "command": "node \"$HOME/.claude/pro-workflow/scripts/pre-commit-check.js\""
+          }
+        ],
+        "description": "Quality gate before git commits"
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$HOME/.claude/pro-workflow/scripts/learn-capture.js\""
+          }
+        ],
+        "description": "Auto-capture [LEARN] blocks from responses into SQLite store"
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$HOME/.claude/pro-workflow/scripts/session-start.js\""
+          }
+        ],
+        "description": "Load learned patterns and previous session context from SQLite store"
+      }
+    ]
   }
 }

@@ -1,0 +1,118 @@
+Notes:
+"When exporting your connection data, you may notice that some fields (such as email addresses) are blank for connections who have not synced their address with LinkedIn."
+
+First Name,Last Name,URL,Email Address,Company,Position,Connected On
+Otto,Aoki,https://www.linkedin.com/in/synthetic-otto-aoki-00001,,Linewood Studio,Design Lead,3 Apr 2014
+Hugo,Schmidt,https://www.linkedin.com/in/synthetic-hugo-schmidt-00002,hugo.s@aurora-talent-part.example.com,Aurora Talent Partners,Talent Partner,6 Jun 2014
+Kai,Foster,https://www.linkedin.com/in/synthetic-kai-foster-00003,,,Self-employed,16 Sep 2014
+Iris,Nakamura,https://www.linkedin.com/in/synthetic-iris-nakamura-00004,iris.n@northwind-mutual.example.com,Northwind Mutual,Portfolio Manager,13 Apr 2015
+Eitan,Adesanya,https://www.linkedin.com/in/synthetic-eitan-adesanya-00005,,Caldera Health,Clinical Research Coordinator,14 Aug 2015
+Ola,Acharya,https://www.linkedin.com/in/synthetic-ola-acharya-00006,,Hartwell Legal,Compliance Manager,24 Sep 2015
+Hugo,Tikhonov,https://www.linkedin.com/in/synthetic-hugo-tikhonov-00007,hugo.t@caldera-health.example.com,Caldera Health,Healthcare Operations Manager,25 Dec 2015
+Selma,Lévesque,https://www.linkedin.com/in/synthetic-selma-le-vesque-00008,,Northwind Mutual,Investment Associate,2 Jan 2016
+Ezra,Eriksson,https://www.linkedin.com/in/synthetic-ezra-eriksson-00009,,Caldera Health,Healthcare Operations Manager,14 Jan 2016
+Linus,Donovan,https://www.linkedin.com/in/synthetic-linus-donovan-00010,,Riverline Consulting,Consultant,15 Apr 2016
+Cyrus,Brennan,https://www.linkedin.com/in/synthetic-cyrus-brennan-00011,,Hartwell Legal,Paralegal,11 May 2016
+Mira,Rasheed,https://www.linkedin.com/in/synthetic-mira-rasheed-00012,,Pearwood & Co.,Marketing Manager,19 May 2016
+Kofi,Olsen,https://www.linkedin.com/in/synthetic-kofi-olsen-00013,,Verdant Press,Columnist,12 Mar 2017
+Mira,Whittaker,https://www.linkedin.com/in/synthetic-mira-whittaker-00014,,Aurora Talent Partners,Head of Talent,11 Jun 2017
+Suri,Schmidt,https://www.linkedin.com/in/synthetic-suri-schmidt-00015,,Solo / freelance,,1 Aug 2017
+Selma,Mehta,https://www.linkedin.com/in/synthetic-selma-mehta-00016,,Northwind Mutual,Partner,12 Aug 2017
+Yusuf,Whittaker,https://www.linkedin.com/in/synthetic-yusuf-whittaker-00017,yusuf.w@northwind-mutual.example.com,Northwind Mutual,Investment Analyst,23 Sep 2017
+Mira,Brennan,https://www.linkedin.com/in/synthetic-mira-brennan-00018,,Northwind Mutual,Portfolio Manager,18 Dec 2017
+Saoirse,Marchetti,https://www.linkedin.com/in/synthetic-saoirse-marchetti-00019,saoirs.m@hartwell-legal.example.com,Hartwell Legal,Paralegal,17 Apr 2018
+Noor,Khoury,https://www.linkedin.com/in/synthetic-noor-khoury-00020,,Acme Industries,Program Manager,25 Apr 2018
+Cyrus,Tindall,https://www.linkedin.com/in/synthetic-cyrus-tindall-00021,cyrus.t@hartwell-legal.example.com,Hartwell Legal,Attorney,3 May 2018
+Kofi,Quinn,https://www.linkedin.com/in/synthetic-kofi-quinn-00022,,Linewood Studio,Design Manager,24 Jun 2018
+Reza,Tindall,https://www.linkedin.com/in/synthetic-reza-tindall-00023,,,Independent Consultant,11 Aug 2018
+Felix,Wallace,https://www.linkedin.com/in/synthetic-felix-wallace-00024,,Pearwood & Co.,Marketing Manager,20 Oct 2018
+Soraya,Brennan,https://www.linkedin.com/in/synthetic-soraya-brennan-00025,,Verdant Press,Senior Editor,2 Nov 2018
+Noor,Kapoor,https://www.linkedin.com/in/synthetic-noor-kapoor-00026,noor.k@private.example.net,,Growth Marketing Manager,25 Nov 2018
+Indira,Whittaker,https://www.linkedin.com/in/synthetic-indira-whittaker-00027,,,Senior Technical Recruiter,11 Mar 2019
+Kai,Gallego,https://www.linkedin.com/in/synthetic-kai-gallego-00028,kai.g@mail.example.com,,Senior Operations Lead,13 Mar 2019
+Indira,Hassan,https://www.linkedin.com/in/synthetic-indira-hassan-00029,,Linewood Studio,Senior Product Designer,1 Jul 2019
+Imani,Lévesque,https://www.linkedin.com/in/synthetic-imani-le-vesque-00030,,Acme Industries,Project Manager,11 Jul 2019
+Hugo,Acharya,https://www.linkedin.com/in/synthetic-hugo-acharya-00031,,Acme Industries,Program Manager,11 Jul 2019
+Nia,Vasquez,https://www.linkedin.com/in/synthetic-nia-vasquez-00032,nia.v@salt-pier-capital.example.com,Salt Pier Capital,Partner,21 Jul 2019
+Noor,Nyström,https://www.linkedin.com/in/synthetic-noor-nystro-m-00033,noor.n@solare-global.example.com,Solare Global,Site Reliability Engineer,22 Aug 2019
+Wren,Acharya,https://www.linkedin.com/in/synthetic-wren-acharya-00034,,Northwind Mutual,Investment Associate,26 Aug 2019
+Nia,Ibarra,https://www.linkedin.com/in/synthetic-nia-ibarra-00035,,,Independent Consultant,23 Dec 2019
+Theo,Costa,https://www.linkedin.com/in/synthetic-theo-costa-00036,theo.c@private.example.net,,Self-employed,3 Feb 2020
+Anya,Sandström,https://www.linkedin.com/in/synthetic-anya-sandstro-m-00037,,Solare Global,Software Engineer II,23 Feb 2020
+Ngozi,Costa,https://www.linkedin.com/in/synthetic-ngozi-costa-00038,,Aurora Talent Partners,Head of Talent,19 Mar 2020
+Soraya,Donovan,https://www.linkedin.com/in/synthetic-soraya-donovan-00039,,Pearwood & Co.,Brand Marketing Lead,18 Apr 2020
+Otto,Jansen,https://www.linkedin.com/in/synthetic-otto-jansen-00040,,Caldera Health,Healthcare Operations Manager,12 Jun 2020
+Dara,Petrov,https://www.linkedin.com/in/synthetic-dara-petrov-00041,dara.p@hartwell-legal.example.com,Hartwell Legal,Paralegal,12 Aug 2020
+Amani,Aoki,https://www.linkedin.com/in/synthetic-amani-aoki-00042,,Solare Global,Software Engineer II,25 Aug 2020
+Sahar,Mehta,https://www.linkedin.com/in/synthetic-sahar-mehta-00043,sahar.m@hartwell-legal.example.com,Hartwell Legal,Attorney,11 Oct 2020
+Ola,Ito,https://www.linkedin.com/in/synthetic-ola-ito-00044,,Acme Industries,Program Manager,16 Oct 2020
+Zane,Tikhonov,https://www.linkedin.com/in/synthetic-zane-tikhonov-00045,,Salt Pier Capital,Principal,7 Nov 2020
+Aaron,Reyes,https://www.linkedin.com/in/synthetic-aaron-reyes-00046,aaron.r@salt-pier-capital.example.com,Salt Pier Capital,Investment Associate,14 Dec 2020
+Yusuf,Tindall,https://www.linkedin.com/in/synthetic-yusuf-tindall-00047,yusuf.t@riverline-consulti.example.com,Riverline Consulting,Strategy Director,7 Jan 2021
+Linus,Petrov,https://www.linkedin.com/in/synthetic-linus-petrov-00048,,Solare Global,Data Scientist,27 Mar 2021
+Beatriz,Nyström,https://www.linkedin.com/in/synthetic-beatriz-nystro-m-00049,,Salt Pier Capital,Investment Associate,17 May 2021
+Maeve,Olsen,https://www.linkedin.com/in/synthetic-maeve-olsen-00050,maeve.o@hartwell-legal.example.com,Hartwell Legal,Attorney,20 May 2021
+Nia,Brennan,https://www.linkedin.com/in/synthetic-nia-brennan-00051,,Aurora Talent Partners,People Operations Lead,1 Jul 2021
+Suri,Rasheed,https://www.linkedin.com/in/synthetic-suri-rasheed-00052,,Riverline Consulting,Engagement Manager,20 Oct 2021
+Lila,Yamada,https://www.linkedin.com/in/synthetic-lila-yamada-00053,,Northwind Mutual,Partner,17 Nov 2021
+Esme,Sandström,https://www.linkedin.com/in/synthetic-esme-sandstro-m-00054,esme.s@acme-industries.example.com,Acme Industries,Senior Operations Lead,7 Dec 2021
+Indira,Foster,https://www.linkedin.com/in/synthetic-indira-foster-00055,indira.f@solo-freelance.example.com,Solo / freelance,Independent Consultant,9 Dec 2021
+Anders,Khoury,https://www.linkedin.com/in/synthetic-anders-khoury-00056,,Solare Global,Software Engineer II,11 Dec 2021
+Zane,Aoki,https://www.linkedin.com/in/synthetic-zane-aoki-00057,,Riverline Consulting,Strategy Director,2 Jan 2022
+Eitan,Kapoor,https://www.linkedin.com/in/synthetic-eitan-kapoor-00058,,Salt Pier Capital,Investment Analyst,3 Jan 2022
+Kavya,Ibarra,https://www.linkedin.com/in/synthetic-kavya-ibarra-00059,,Northshore University,Associate Professor,13 Jan 2022
+Otto,Kapoor,https://www.linkedin.com/in/synthetic-otto-kapoor-00060,,Riverline Consulting,Strategy Director,10 Mar 2022
+Otto,Vasquez,https://www.linkedin.com/in/synthetic-otto-vasquez-00061,,,,27 Apr 2022
+Nuria,Khoury,https://www.linkedin.com/in/synthetic-nuria-khoury-00062,,,Independent Consultant,12 May 2022
+Kenji,Sandström,https://www.linkedin.com/in/synthetic-kenji-sandstro-m-00063,kenji.s@mail.example.com,,Project Manager,20 May 2022
+Esme,Park,https://www.linkedin.com/in/synthetic-esme-park-00064,,Riverline Consulting,Consultant,4 Jun 2022
+Noor,Rasheed,https://www.linkedin.com/in/synthetic-noor-rasheed-00065,noor.r@riverline-consulti.example.com,Riverline Consulting,Strategy Director,22 Dec 2022
+Reza,Jansen,https://www.linkedin.com/in/synthetic-reza-jansen-00066,reza.j@caldera-health.example.com,Caldera Health,Nurse Practitioner,28 Feb 2023
+Nia,Acharya,https://www.linkedin.com/in/synthetic-nia-acharya-00067,nia.a@solare-global.example.com,Solare Global,Site Reliability Engineer,21 Mar 2023
+Indira,Gallego,https://www.linkedin.com/in/synthetic-indira-gallego-00068,,Linewood Studio,,24 Mar 2023
+Wren,Gallego,https://www.linkedin.com/in/synthetic-wren-gallego-00069,,Caldera Health,Physician,1 May 2023
+Kavya,Morais,https://www.linkedin.com/in/synthetic-kavya-morais-00070,,Acme Industries,Senior Operations Lead,14 Jun 2023
+Reza,Rasheed,https://www.linkedin.com/in/synthetic-reza-rasheed-00071,,Hartwell Legal,Senior Counsel,17 Jul 2023
+Priya,Kapoor,https://www.linkedin.com/in/synthetic-priya-kapoor-00072,priya.k@acme-industries.example.com,Acme Industries,Project Manager,21 Jan 2024
+Amani,Eriksson,https://www.linkedin.com/in/synthetic-amani-eriksson-00073,,Pearwood & Co.,Marketing Manager,22 Feb 2024
+Selma,Vasquez,https://www.linkedin.com/in/synthetic-selma-vasquez-00074,,,Program Manager,14 Apr 2024
+Kai,Petrov,https://www.linkedin.com/in/synthetic-kai-petrov-00075,,Aurora Talent Partners,Head of Talent,8 May 2024
+Saoirse,Costa,https://www.linkedin.com/in/synthetic-saoirse-costa-00076,saoirs.c@mail.example.com,,Self-employed,11 Jul 2024
+Otto,Whittaker,https://www.linkedin.com/in/synthetic-otto-whittaker-00077,,,Self-employed,16 Aug 2024
+Suri,Aoki,https://www.linkedin.com/in/synthetic-suri-aoki-00078,,Aurora Talent Partners,Talent Partner,18 Aug 2024
+Kavya,Adesanya,https://www.linkedin.com/in/synthetic-kavya-adesanya-00079,kavya.a@solare-global.example.com,Solare Global,Engineering Manager,27 Oct 2024
+Felix,Aoki,https://www.linkedin.com/in/synthetic-felix-aoki-00080,felix.a@brookline-manufact.example.com,Brookline Manufacturing Co.,Senior Operations Lead,12 Mar 2025
+Amani,Jansen,https://www.linkedin.com/in/synthetic-amani-jansen-00081,,Northshore University,Associate Professor,14 May 2025
+Ngozi,Schmidt,https://www.linkedin.com/in/synthetic-ngozi-schmidt-00082,,Solare Global,Machine Learning Engineer,8 Aug 2025
+Noor,Schmidt,https://www.linkedin.com/in/synthetic-noor-schmidt-00083,noor.s@acme-industries.example.com,Acme Industries,Chief Operating Officer,20 Aug 2025
+Maeve,Nyström,https://www.linkedin.com/in/synthetic-maeve-nystro-m-00084,maeve.n@caldera-health.example.com,Caldera Health,Nurse Practitioner,27 Aug 2025
+Indira,Rasheed,https://www.linkedin.com/in/synthetic-indira-rasheed-00085,,Linewood Studio,Design Lead,25 Nov 2025
+Kofi,Schmidt,https://www.linkedin.com/in/synthetic-kofi-schmidt-00086,kofi.s@northwind-mutual.example.com,Northwind Mutual,Investment Associate,18 Oct 2024
+Mateo,Ueno,https://www.linkedin.com/in/synthetic-mateo-ueno-00087,,Pearwood & Co.,Brand Marketing Lead,19 Oct 2024
+Kofi,Zayd,https://www.linkedin.com/in/synthetic-kofi-zayd-00088,kofi.z@pearwood-co.example.com,Pearwood & Co.,Growth Marketing Manager,14 Oct 2024
+Mateo,Brennan,https://www.linkedin.com/in/synthetic-mateo-brennan-00089,,Riverline Consulting,Strategy Director,18 Oct 2024
+Kenji,Brennan,https://www.linkedin.com/in/synthetic-kenji-brennan-00090,kenji.b@northwind-mutual.example.com,Northwind Mutual,Principal,15 Oct 2024
+Kavya,Park,https://www.linkedin.com/in/synthetic-kavya-park-00091,kavya.p@salt-pier-capital.example.com,Salt Pier Capital,Investment Associate,16 Oct 2024
+Lila,Saito,https://www.linkedin.com/in/synthetic-lila-saito-00092,,Salt Pier Capital,Partner,19 Oct 2024
+Priya,Hassan,https://www.linkedin.com/in/synthetic-priya-hassan-00093,,Salt Pier Capital,Investment Analyst,20 Oct 2024
+Hana,Vasquez,https://www.linkedin.com/in/synthetic-hana-vasquez-00094,hana.v@pearwood-co.example.com,Pearwood & Co.,Brand Marketing Lead,20 Oct 2024
+Dara,Zayd,https://www.linkedin.com/in/synthetic-dara-zayd-00095,dara.z@private.example.net,,Independent Consultant,14 Oct 2024
+Alma,Rasheed,https://www.linkedin.com/in/synthetic-alma-rasheed-00096,,Salt Pier Capital,Investment Associate,17 Oct 2024
+Anders,Wallace,https://www.linkedin.com/in/synthetic-anders-wallace-00097,anders.w@pearwood-co.example.com,Pearwood & Co.,Content Strategist,17 Oct 2024
+Selma,Bekele,https://www.linkedin.com/in/synthetic-selma-bekele-00098,selma.b@pearwood-co.example.com,Pearwood & Co.,SEO Specialist,20 Oct 2024
+Linus,Eriksson,https://www.linkedin.com/in/synthetic-linus-eriksson-00099,,Salt Pier Capital,Partner,15 Oct 2024
+Maeve,Iyer,https://www.linkedin.com/in/synthetic-maeve-iyer-00100,maeve.i@northwind-mutual.example.com,Northwind Mutual,Partner,14 Oct 2024
+Noor,Eriksson,https://www.linkedin.com/in/synthetic-noor-eriksson-00101,noor.e@private.example.net,,Independent Consultant,16 Oct 2024
+Mira,Hassan,https://www.linkedin.com/in/synthetic-mira-hassan-00102,mira.h@private.example.net,,Self-employed,16 Oct 2024
+Amani,Gallego,https://www.linkedin.com/in/synthetic-amani-gallego-00103,amani.g@salt-pier-capital.example.com,Salt Pier Capital,Partner,20 Oct 2024
+Hana,Sandström,https://www.linkedin.com/in/synthetic-hana-sandstro-m-00104,,Aurora Talent Partners,Head of Talent,28 Apr 2026
+Maeve,Ueno,https://www.linkedin.com/in/synthetic-maeve-ueno-00105,,Aurora Talent Partners,Head of Talent,24 Apr 2026
+Beatriz,Wallace,https://www.linkedin.com/in/synthetic-beatriz-wallace-00106,,Acme Industries,Project Manager,19 Apr 2026
+Maeve,Yamada,https://www.linkedin.com/in/synthetic-maeve-yamada-00107,maeve.y@solo-freelance.example.com,Solo / freelance,Self-employed,12 Apr 2026
+Alex,Chen,https://www.linkedin.com/in/synthetic-alex-chen-00108,,Brookline Manufacturing Co.,Chief Operating Officer,14 May 2017
+Alex,Chen,https://www.linkedin.com/in/synthetic-alex-chen-00109,alex.c@solo-freelance.example.com,Solo / freelance,Self-employed,9 Jul 2024
+Marisol,Park,https://www.linkedin.com/in/synthetic-shared-profile-99099,mariso.p@aurora-talent-part.example.com,Aurora Talent Partners,People Operations Lead,3 Nov 2019
+Marisol,Park,https://www.linkedin.com/in/synthetic-shared-profile-99099,,Aurora Talent Partners,Head of Talent,18 Feb 2023
+Hugo,Voss,https://www.linkedin.com/in/synthetic-hugo-voss-00112,,,,1 Aug 2016
+Selma,Larsson,https://www.linkedin.com/in/synthetic-selma-larsson-00113,,,,22 Mar 2018
+Otto,Eriksson,https://www.linkedin.com/in/synthetic-otto-eriksson-00114,,,,11 Dec 2015
