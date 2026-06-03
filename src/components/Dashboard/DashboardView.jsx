@@ -606,7 +606,23 @@ export default function DashboardView({ portfolio, onAnalyze }) {
             <h3 className="text-sm font-semibold text-white flex items-center gap-2">
               <Layers className="w-3.5 h-3.5 text-mint-400" /> Portfolio Heatmap
             </h3>
-            <span className="text-[10px] text-slate-600">Click a tile to analyze · Color = day % change</span>
+            <div className="flex items-center gap-3">
+              {portfolio?.lastUpdated && (
+                <span className="text-[10px] text-slate-600 hidden sm:inline">
+                  Updated {portfolio.lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                </span>
+              )}
+              <button
+                onClick={handleRefresh}
+                disabled={refreshing || portfolio?.loading}
+                className="btn-ghost flex items-center gap-1 text-xs py-1 px-2 disabled:opacity-50"
+                title="Refresh prices"
+              >
+                <RefreshCw className={`w-3 h-3 ${refreshing || portfolio?.loading ? 'animate-spin' : ''}`} />
+                <span className="hidden sm:inline">Refresh</span>
+              </button>
+              <span className="text-[10px] text-slate-600 hidden md:inline">Click tile to analyze · Color = day %</span>
+            </div>
           </div>
           <PortfolioHeatmap positions={positions} quotes={quotes} onAnalyze={onAnalyze} />
         </div>
