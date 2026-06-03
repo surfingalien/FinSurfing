@@ -1583,69 +1583,85 @@ app.get('/api/quote', async (req, res) => {
       : Promise.resolve([])
 
     // ── Stocks/ETFs: Finnhub → AISA → FMP → AV → Twelve Data → cache ─────────
-    // Each provider fills only the symbols it can price; cascade continues for
-    // the rest. This ensures mutual funds (Finnhub=null) reach FMP.
+    // resultMap tracks per-symbol results. Two kinds of "pending":
+    //   • noPricePending  — symbol has no price yet
+    //   • changePending   — symbol has price but Finnhub returned null for both
+    //                       changePct and prevClose (free-tier gap); needs FMP
     const stockPromise = stockSyms.length
       ? (async () => {
-          // 0th: instant caches — build result map, cascade only for what's missing
           const resultMap = {}
+
+          // Merge a provider's result array into resultMap.
+          // enrich=true: if a symbol already has price but no prevClose, patch it in
+          // and compute change/changePct; also warm pc: cache so WS ticks work.
+          const merge = (results, enrich = false) => {
+            if (!results) return
+            for (const r of results) {
+              if (!r?.symbol) continue
+              const ex = resultMap[r.symbol]
+              if (!ex) {
+                if (r.regularMarketPrice != null) resultMap[r.symbol] = r
+              } else if (enrich && r.regularMarketPreviousClose != null && ex.regularMarketPreviousClose == null) {
+                const pc = r.regularMarketPreviousClose, p = ex.regularMarketPrice
+                const enriched = {
+                  ...ex,
+                  regularMarketPreviousClose: pc,
+                  regularMarketChange:        ex.regularMarketChange        ?? r.regularMarketChange        ?? (pc ? +(p - pc).toFixed(4)             : null),
+                  regularMarketChangePercent: ex.regularMarketChangePercent ?? r.regularMarketChangePercent ?? (pc ? +((p - pc) / pc * 100).toFixed(4) : null),
+                }
+                resultMap[r.symbol] = enriched
+                cacheSet(`fhq:${r.symbol}`, enriched)   // warm so next hit is complete
+                cacheSet(`pc:${r.symbol}`, pc)           // warm so WS ticks compute changePct
+              }
+            }
+          }
+
+          // Helpers for the two kinds of pending
+          const noPrice     = () => stockSyms.filter(s => !resultMap[s])
+          const needsChange = () => stockSyms.filter(s => {
+            const r = resultMap[s]
+            return r?.regularMarketPrice != null
+              && r.regularMarketChangePercent == null
+              && r.regularMarketPreviousClose == null
+          })
+
+          // 0th: instant caches
           for (const sym of stockSyms) {
             const cached = cacheGet(`fhq:${sym}`)
               || cacheGet(`aisaq:${sym}`)
               || (() => { const p = getPriceFromChartCache(sym); return p != null ? { symbol: sym, shortName: sym, regularMarketPrice: p } : null })()
             if (cached) resultMap[sym] = cached
           }
-          let pending = stockSyms.filter(s => !resultMap[s])
-          if (!pending.length) return stockSyms.map(s => resultMap[s])
+          if (!noPrice().length && !needsChange().length) return stockSyms.map(s => resultMap[s])
 
           // 1st: Finnhub REST (parallel, fastest for US stocks/ETFs)
-          const fh = await getFinnhubQuotes(pending, keys)
-          if (fh) {
-            for (const r of fh) { if (r?.regularMarketPrice != null) resultMap[r.symbol] = r }
-            pending = stockSyms.filter(s => !resultMap[s])
-          }
-          if (!pending.length) return stockSyms.map(s => resultMap[s])
+          merge(await getFinnhubQuotes(noPrice(), keys))
+          if (!noPrice().length && !needsChange().length) return stockSyms.map(s => resultMap[s])
 
-          // 2nd: AISA (serial, 6 s budget)
-          const aisa = await Promise.race([
-            getAISAQuotes(pending, keys).catch(() => null),
-            new Promise(r => setTimeout(() => r(null), 6000)),
-          ])
-          if (aisa) {
-            for (const r of aisa) { if (r?.regularMarketPrice != null) resultMap[r.symbol] = r }
-            pending = stockSyms.filter(s => !resultMap[s])
+          // 2nd: AISA (serial, 6 s budget) — only for symbols still missing a price
+          if (noPrice().length) {
+            const aisa = await Promise.race([
+              getAISAQuotes(noPrice(), keys).catch(() => null),
+              new Promise(r => setTimeout(() => r(null), 6000)),
+            ])
+            merge(aisa)
           }
-          if (!pending.length) return stockSyms.map(s => resultMap[s])
+          if (!noPrice().length && !needsChange().length) return stockSyms.map(s => resultMap[s])
 
-          // 3rd: FMP (covers mutual funds via NAV quotes)
-          const fmp = await getFMPQuotes(pending, keys)
-          if (fmp) {
-            for (const r of fmp) { if (r?.regularMarketPrice != null) resultMap[r.symbol] = r }
-            pending = stockSyms.filter(s => !resultMap[s])
-          }
-          if (!pending.length) return stockSyms.map(s => resultMap[s])
+          // 3rd: FMP — covers mutual funds (NAV) + enriches prevClose for partial Finnhub results
+          merge(await getFMPQuotes([...new Set([...noPrice(), ...needsChange()])], keys), true)
+          if (!noPrice().length) return stockSyms.map(s => resultMap[s])
 
           // 4th: Alpha Vantage
-          const av = await getAVQuotes(pending, keys)
-          if (av) {
-            for (const r of av) { if (r?.regularMarketPrice != null) resultMap[r.symbol] = r }
-            pending = stockSyms.filter(s => !resultMap[s])
-          }
-          if (!pending.length) return stockSyms.map(s => resultMap[s])
+          merge(await getAVQuotes(noPrice(), keys))
+          if (!noPrice().length) return stockSyms.map(s => resultMap[s])
 
           // 5th: Nasdaq.com (free, no key — covers all US stocks/ETFs in real-time)
-          const nasdaqQ = await getNasdaqQuotes(pending).catch(() => null)
-          if (nasdaqQ) {
-            for (const r of nasdaqQ) { if (r?.regularMarketPrice != null) resultMap[r.symbol] = r }
-            pending = stockSyms.filter(s => !resultMap[s])
-          }
-          if (!pending.length) return stockSyms.map(s => resultMap[s])
+          merge(await getNasdaqQuotes(noPrice()).catch(() => null))
+          if (!noPrice().length) return stockSyms.map(s => resultMap[s])
 
           // 6th: Twelve Data
-          const td = await Promise.all(pending.map(s => getTwelveDataQuote(s, keys).catch(() => null)))
-          if (td) {
-            for (const r of td) { if (r?.regularMarketPrice != null) resultMap[r.symbol] = r }
-          }
+          merge(await Promise.all(noPrice().map(s => getTwelveDataQuote(s, keys).catch(() => null))))
 
           // Final: chart-price cache or null for anything still missing
           for (const sym of stockSyms) {
