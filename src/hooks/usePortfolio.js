@@ -314,7 +314,7 @@ export function usePortfolio({ userId, activePortfolioId, authFetch } = {}) {
     loading,
     lastUpdated,
     apiError,
-    refresh:        apiMode ? loadFromApi : refresh,
+    refresh:        refresh,
     addPosition,
     removePosition,
     updatePosition,
