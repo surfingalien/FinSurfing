@@ -5,12 +5,18 @@
  * AI-powered trading analysis routes:
  *   POST /analyze — fetch OHLCV, compute TA indicators, call Claude for structured signal
  *   POST /chat    — SSE streaming chat with chart context memory
+ *   GET  /memory/:symbol — prior analyses for a symbol (authenticated)
  */
 
 const express   = require('express')
 const Anthropic  = require('@anthropic-ai/sdk')
+const { optionalAuth, requireAuth } = require('../middleware/auth')
+const { recallMemory, saveMemory, searchMemory } = require('../db/ai_memory')
 
 const router = express.Router()
+
+// Attach user context when a valid JWT is present (never rejects guests)
+router.use(optionalAuth)
 
 // ── Crypto detection (mirrors server.js isCryptoSymbol) ───────────────────────
 const CRYPTO_TICKERS = new Set([
@@ -217,6 +223,49 @@ function tvToYahoo(tvSymbol) {
 
   // Default: strip exchange prefix and return the symbol part
   return symUpper
+}
+
+// ── StockTwits retail sentiment ───────────────────────────────────────────────
+
+async function fetchStockTwits(symbol) {
+  const base = symbol.replace(/-[A-Z]+$/, '').replace(/[^A-Z0-9]/g, '')
+  if (!base) return null
+  try {
+    const r = await fetch(
+      `https://api.stocktwits.com/api/2/streams/symbol/${base}.json`,
+      { headers: { 'User-Agent': 'FinSurfing/1.0' }, signal: AbortSignal.timeout(4000) }
+    )
+    if (!r.ok) return null
+    const { messages = [] } = await r.json()
+    if (!messages.length) return null
+    let bullish = 0, bearish = 0, neutral = 0
+    const snippets = []
+    for (const m of messages.slice(0, 30)) {
+      const sent = m?.entities?.sentiment?.basic
+      if (sent === 'Bullish') bullish++
+      else if (sent === 'Bearish') bearish++
+      else neutral++
+      if (snippets.length < 3 && m.body)
+        snippets.push(`[${sent ?? 'Neutral'}] ${m.body.slice(0, 80).replace(/\n/g, ' ')}`)
+    }
+    const labeled = bullish + bearish
+    const bullishPct = labeled > 0 ? Math.round((bullish / labeled) * 100) : null
+    return { bullish, bearish, neutral, total: messages.length, snippets, bullishPct }
+  } catch { return null }
+}
+
+function getSourceAlignment(bullishPcts) {
+  if (!bullishPcts || bullishPcts.length === 0) return 'No data'
+  if (bullishPcts.length === 1) return 'Single source'
+  const min = Math.min(...bullishPcts)
+  const max = Math.max(...bullishPcts)
+  const avg = bullishPcts.reduce((s, v) => s + v, 0) / bullishPcts.length
+  const spread = max - min
+  if (spread <= 12 && avg >= 60) return 'Bullish alignment'
+  if (spread <= 12 && avg <= 40) return 'Bearish alignment'
+  if (spread <= 12) return 'Tight alignment'
+  if (spread >= 25) return 'Wide divergence'
+  return 'Mixed'
 }
 
 // ── Interval conversion: TradingView → Yahoo interval + range ─────────────────
@@ -665,7 +714,7 @@ function volumeAnalysis(volumes) {
 
 // ── Analysis prompt builder ────────────────────────────────────────────────────
 
-function buildAnalysisPrompt(symbol, interval, price, indicators, patterns, vol, priceLabel = 'last bar close') {
+function buildAnalysisPrompt(symbol, interval, price, indicators, patterns, vol, priceLabel = 'last bar close', sentiment = null, priorMemories = []) {
   const { rsi, macd, ema9, ema21, ema50, ema200, bb, atr, stochRsi, vwap, obv, sr } = indicators
 
   const rsiInterp = rsi == null ? 'N/A'
@@ -699,7 +748,19 @@ function buildAnalysisPrompt(symbol, interval, price, indicators, patterns, vol,
 
   const patternsStr = patterns && patterns.length ? patterns.join(', ') : 'none detected'
 
-  const prompt = `You are an expert quantitative trading analyst. Analyze the following technical data for ${symbol} on the ${interval} timeframe and generate a structured trading signal.
+  const sentimentSection = sentiment
+    ? `\nRETAIL SENTIMENT (StockTwits — last ${sentiment.total} posts):\nBullish: ${sentiment.bullish} | Bearish: ${sentiment.bearish} | Neutral: ${sentiment.neutral}${sentiment.snippets.length ? '\nSample posts:\n' + sentiment.snippets.join('\n') : ''}\n`
+    : ''
+
+  const memoryBlock = priorMemories.length
+    ? `\nPRIOR ANALYSES FOR ${symbol} (your past signals — note any trend changes):\n` +
+      priorMemories.map(m => {
+        const date = new Date(m.created_at).toLocaleDateString()
+        return `• [${date}] ${m.signal ?? '—'} @ $${m.price ?? '?'} (${m.confidence ?? '?'}% conf) — ${m.summary?.slice(0, 150) ?? 'no summary'}`
+      }).join('\n') + '\n'
+    : ''
+
+  const prompt = `You are an expert quantitative trading analyst.${memoryBlock ? '\n' + memoryBlock : ''} Analyze the following technical data for ${symbol} on the ${interval} timeframe and generate a structured trading signal.
 
 MARKET DATA:
 - Symbol: ${symbol}
@@ -872,13 +933,21 @@ router.post('/analyze', async (req, res) => {
 
     const indicators = { rsi, macd, ema9, ema21, ema50, ema200, bb, atr, stochRsi, vwap, obv, sr, patterns, volume: vol }
 
+    // Fetch StockTwits sentiment (fire-and-forget, non-blocking on failure)
+    const sentiment = await fetchStockTwits(sym)
+    if (sentiment) console.log(`[trading-analysis] ${sym} StockTwits: ${sentiment.bullish}B ${sentiment.bearish}Be ${sentiment.neutral}N / ${sentiment.total}`)
+
+    // Recall prior analyses for this user+symbol (no-op if DB unavailable)
+    const priorMemories = await recallMemory(req.user?.userId, sym)
+    if (priorMemories.length) console.log(`[trading-analysis] ${sym} memory: ${priorMemories.length} prior analyses injected`)
+
     // Build prompt and call Claude
-    const analysisPrompt = buildAnalysisPrompt(sym, interval, price, indicators, patterns, vol, priceLabel)
+    const analysisPrompt = buildAnalysisPrompt(sym, interval, price, indicators, patterns, vol, priceLabel, sentiment, priorMemories)
 
     const anthropic = new Anthropic({ apiKey })
     const msg = await anthropic.messages.create({
       model:      'claude-sonnet-4-6',
-      max_tokens: 1024,
+      max_tokens: 2048,
       messages:   [{ role: 'user', content: analysisPrompt }],
     })
 
@@ -904,6 +973,9 @@ router.post('/analyze', async (req, res) => {
       }
     }
 
+    // Persist analysis to memory (fire-and-forget — never blocks response)
+    if (req.user?.userId) saveMemory(req.user.userId, sym, yInterval, price, analysis)
+
     // Candles: last 200 bars for charting
     const candleSlice = bars.slice(-200)
     const candles = candleSlice.map(b => ({
@@ -915,6 +987,12 @@ router.post('/analyze', async (req, res) => {
       volume: b.v,
     }))
 
+    // Compute multi-source sentiment alignment
+    const bullishPcts = []
+    if (sentiment?.bullishPct != null) bullishPcts.push(sentiment.bullishPct)
+    if (analysis?.bullishProbability != null) bullishPcts.push(analysis.bullishProbability)
+    const sentimentAlignment = getSourceAlignment(bullishPcts)
+
     return res.json({
       symbol:    sym,
       interval,
@@ -922,6 +1000,8 @@ router.post('/analyze', async (req, res) => {
       analysis,
       indicators,
       candles,
+      sentiment: sentiment ? { bullish: sentiment.bullish, bearish: sentiment.bearish, neutral: sentiment.neutral, total: sentiment.total, bullishPct: sentiment.bullishPct, snippets: sentiment.snippets } : null,
+      sentimentAlignment,
       timestamp: new Date().toISOString(),
     })
   } catch (err) {
@@ -930,6 +1010,25 @@ router.post('/analyze', async (req, res) => {
     console.error('[trading-analysis/analyze]', err.message)
     return res.status(500).json({ error: 'Analysis failed: ' + err.message })
   }
+})
+
+// ── GET /memory/search?q=... ──────────────────────────────────────────────────
+
+router.get('/memory/search', requireAuth, async (req, res) => {
+  const { q, limit = 10 } = req.query
+  if (!q) return res.status(400).json({ error: 'q is required' })
+  const rows = await searchMemory(req.user.userId, String(q), parseInt(limit, 10))
+  res.json({ results: rows })
+})
+
+// ── GET /memory/:symbol ───────────────────────────────────────────────────────
+
+router.get('/memory/:symbol', requireAuth, async (req, res) => {
+  const sym   = req.params.symbol?.toUpperCase()
+  const limit = Math.min(parseInt(req.query.limit, 10) || 10, 50)
+  if (!sym) return res.status(400).json({ error: 'symbol is required' })
+  const rows = await recallMemory(req.user.userId, sym, limit)
+  res.json({ symbol: sym, history: rows })
 })
 
 // ── POST /chat (SSE streaming) ────────────────────────────────────────────────
