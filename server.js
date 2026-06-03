@@ -192,7 +192,7 @@ async function apiFetch(url, timeoutMs = 10000) {
 
 // ── Server-side quote cache (30 s TTL for quotes, 15 min for charts) ─────────
 const _quoteCache = new Map()
-const QUOTE_TTL    = 30_000
+const QUOTE_TTL    = 15_000
 const CHART_TTL    = 15 * 60_000
 const PC_TTL       = 24 * 60 * 60_000   // prevClose only changes once per day at market open
 const CACHE_MAX    = 5_000              // LRU-style eviction above this size
@@ -1465,6 +1465,61 @@ app.get('/api/stream/quotes', (req, res) => {
   req.on('close', close)
 })
 
+// ── SSE proactive price push ───────────────────────────────────────────────────
+// Every 5 s: (1) broadcast currently-cached prices to all SSE clients so the UI
+// always sees fresh data even when no WS trade tick has fired (after-hours, WS down,
+// mutual funds, ETFs). (2) For symbols whose cache has expired, fetch fresh quotes
+// from the internal /api/quote cascade and broadcast the result.
+let _sseRefreshing = false
+setInterval(async () => {
+  if (!_sseClients.size) return
+
+  const allSyms = [...new Set([..._sseClients.values()].flatMap(c => [...c.symbols]))]
+  if (!allSyms.length) return
+
+  // Push whatever is in cache right now — no API call, instant
+  for (const sym of allSyms) {
+    const q = cacheGet(`fhq:${sym}`) || cacheGet(`aisaq:${sym}`)
+    if (!q?.regularMarketPrice) continue
+    _sseBroadcast(sym, {
+      symbol:    sym,
+      price:     q.regularMarketPrice,
+      change:    q.regularMarketChange     ?? null,
+      changePct: q.regularMarketChangePercent ?? null,
+      ts:        q.regularMarketTime ? q.regularMarketTime * 1000 : null,
+    })
+  }
+
+  // For stale (cache-expired) non-crypto symbols, fetch fresh and broadcast
+  const stale = allSyms.filter(s => !isCryptoSymbol(s) && !cacheGet(`fhq:${s}`) && !cacheGet(`aisaq:${s}`))
+  if (!stale.length || _sseRefreshing) return
+
+  _sseRefreshing = true
+  try {
+    const port = process.env.PORT || 3001
+    const r = await fetch(
+      `http://127.0.0.1:${port}/api/quote?symbols=${stale.map(encodeURIComponent).join(',')}`,
+      { signal: AbortSignal.timeout(12000) }
+    )
+    if (!r.ok) return
+    const data = await r.json()
+    for (const q of (data?.quoteResponse?.result ?? [])) {
+      if (!q?.symbol || q.regularMarketPrice == null) continue
+      _sseBroadcast(q.symbol, {
+        symbol:    q.symbol,
+        price:     q.regularMarketPrice,
+        change:    q.regularMarketChange     ?? null,
+        changePct: q.regularMarketChangePercent ?? null,
+        ts:        q.regularMarketTime ? q.regularMarketTime * 1000 : null,
+      })
+    }
+  } catch (e) {
+    console.warn('[SSE refresh]', e.message)
+  } finally {
+    _sseRefreshing = false
+  }
+}, 5000)
+
 
 /* ── Health (includes DB status + demo mode) ───── */
 app.get('/health', async (_req, res) => {
@@ -1495,8 +1550,11 @@ app.get('/api/quote', async (req, res) => {
   if (!symbols.length) return res.status(400).json({ error: 'symbols required' })
   const keys = extractKeys(req)
 
-  // Subscribe symbols to Finnhub WS — warms fhq: cache for subsequent calls
-  for (const sym of symbols) _fhEnsureSub(sym)
+  // Subscribe to WS — warms cache for subsequent calls
+  for (const sym of symbols) {
+    if (isCryptoSymbol(sym)) _binEnsureSub(sym)
+    else _fhEnsureSub(sym)
+  }
 
   try {
     // Split into crypto (Binance/CoinGecko) and non-crypto (Finnhub→AISA→FMP→AV→TD)
