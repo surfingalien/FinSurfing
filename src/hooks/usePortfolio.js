@@ -164,7 +164,7 @@ export function usePortfolio({ userId, activePortfolioId, authFetch } = {}) {
   useEffect(() => {
     if (!positions.length) return
     refresh()
-    const fullRefresh = setInterval(refresh, 2 * 60_000)
+    const fullRefresh = setInterval(refresh, 30_000)
 
     const symbols = positions.map(p => p.symbol)
     const unsub = subscribeQuotes(symbols, ({ symbol, price, change, changePct, ts }) => {
@@ -186,7 +186,15 @@ export function usePortfolio({ userId, activePortfolioId, authFetch } = {}) {
       setLastUpdated(new Date())
     })
 
-    return () => { clearInterval(fullRefresh); unsub() }
+    // Refresh immediately when the user returns to the tab
+    const onVisible = () => { if (document.visibilityState === 'visible') refresh() }
+    document.addEventListener('visibilitychange', onVisible)
+
+    return () => {
+      clearInterval(fullRefresh)
+      unsub()
+      document.removeEventListener('visibilitychange', onVisible)
+    }
   }, [refresh]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Mutations ──────────────────────────────────────────────────────────────

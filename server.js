@@ -930,6 +930,7 @@ async function getBinanceSingleQuote(symbol) {
     const prev  = parseFloat(d.prevClosePrice) || price
     const chg   = +(price - prev).toFixed(6)
     console.log(`[Binance] quote OK: ${symbol} → ${binSym} $${price}`)
+    const base = symbol.includes('-') ? symbol.split('-')[0] : symbol
     return {
       symbol,
       shortName:                  base,
@@ -1327,6 +1328,87 @@ function _connectFhWs() {
 // Delay 6 s so REST health check fires first (which warms the cache)
 setTimeout(() => { if (FH_KEY()) _connectFhWs() }, 6000)
 
+// ── Binance WebSocket — real-time crypto trade stream ─────────────────────────
+// Covers BTC-USD, ETH-USD, SOL-USD etc. (Finnhub WS doesn't understand these)
+let   _binWs          = null
+let   _binWsDelay     = 1000
+const _binSubscribed  = new Set()      // lowercase stream names e.g. "btcusdt@trade"
+const _binToOriginal  = new Map()      // BTCUSDT → Set<'BTC-USD', ...>
+
+function _binSend(obj) {
+  if (_binWs?.readyState === WebSocket.OPEN) _binWs.send(JSON.stringify(obj))
+}
+
+function _binEnsureSub(symbol) {
+  const pair      = toBinancePair(symbol).toUpperCase()
+  const stream    = pair.toLowerCase() + '@trade'
+  if (!_binToOriginal.has(pair)) _binToOriginal.set(pair, new Set())
+  _binToOriginal.get(pair).add(symbol)
+  if (_binSubscribed.has(stream)) return
+  _binSubscribed.add(stream)
+  _binSend({ method: 'SUBSCRIBE', params: [stream], id: Date.now() })
+}
+
+function _binUnsubIfUnused(symbol) {
+  const pair   = toBinancePair(symbol).toUpperCase()
+  const stream = pair.toLowerCase() + '@trade'
+  const needed = [..._sseClients.values()].some(c => c.symbols.has(symbol))
+  if (!needed) {
+    _binToOriginal.get(pair)?.delete(symbol)
+    if (!_binToOriginal.get(pair)?.size) {
+      _binSubscribed.delete(stream)
+      _binSend({ method: 'UNSUBSCRIBE', params: [stream], id: Date.now() })
+    }
+  }
+}
+
+function _connectBinWs() {
+  _binWs = new WebSocket('wss://stream.binance.com:9443/ws')
+
+  _binWs.on('open', () => {
+    console.log('[Binance WS] connected')
+    _binWsDelay = 1000
+    const streams = [..._binSubscribed]
+    if (streams.length) _binSend({ method: 'SUBSCRIBE', params: streams, id: 1 })
+  })
+
+  _binWs.on('message', raw => {
+    try {
+      const msg = JSON.parse(raw)
+      if (msg.e !== 'trade' || !msg.s || msg.p == null) return
+      const price    = parseFloat(msg.p)
+      if (!price) return
+      const originals = _binToOriginal.get(msg.s.toUpperCase())
+      if (!originals?.size) return
+      for (const sym of originals) {
+        const prev   = cacheGet(`fhq:${sym}`)
+        const pc     = prev?.regularMarketPreviousClose ?? cacheGet(`pc:${sym}`) ?? null
+        const chg    = pc != null ? +(price - pc).toFixed(6) : null
+        const chgPct = pc != null ? +((price - pc) / pc * 100).toFixed(4) : null
+        cacheSet(`fhq:${sym}`, {
+          ...(prev || { symbol: sym, shortName: sym }),
+          regularMarketPrice:         price,
+          regularMarketChange:        chg,
+          regularMarketChangePercent: chgPct,
+          regularMarketPreviousClose: pc,
+          regularMarketTime:          msg.T ? Math.floor(msg.T / 1000) : null,
+        })
+        _sseBroadcast(sym, { symbol: sym, price, change: chg, changePct: chgPct, ts: msg.T })
+      }
+    } catch {}
+  })
+
+  _binWs.on('close', () => {
+    console.warn('[Binance WS] closed — reconnect in', _binWsDelay, 'ms')
+    setTimeout(() => { _binWsDelay = Math.min(_binWsDelay * 2, 30_000); _connectBinWs() }, _binWsDelay)
+  })
+
+  _binWs.on('error', e => console.warn('[Binance WS] error:', e.message))
+}
+
+// Connect Binance WS at startup (free, no key needed)
+setTimeout(() => _connectBinWs(), 8000)
+
 /* ── SSE: real-time quote stream ───────────────────────────────────────────── */
 // GET /api/stream/quotes?symbols=AAPL,MSFT
 // Sends: data: {"symbol":"AAPL","price":182.5,"change":1.2,"changePct":0.66,"ts":1234567890000}
@@ -1348,8 +1430,11 @@ app.get('/api/stream/quotes', (req, res) => {
   const symSet = new Set(symbols)
   _sseClients.set(id, { res, symbols: symSet })
 
-  // Subscribe these symbols on the Finnhub WS
-  for (const sym of symbols) _fhEnsureSub(sym)
+  // Route crypto → Binance WS, stocks/ETFs → Finnhub WS
+  for (const sym of symbols) {
+    if (isCryptoSymbol(sym)) _binEnsureSub(sym)
+    else _fhEnsureSub(sym)
+  }
 
   // Immediately flush any cached price so the UI isn't blank while waiting for the next trade
   for (const sym of symbols) {
@@ -1372,7 +1457,10 @@ app.get('/api/stream/quotes', (req, res) => {
   function close() {
     clearInterval(hb)
     _sseClients.delete(id)
-    for (const sym of symbols) _fhUnsubIfUnused(sym)
+    for (const sym of symbols) {
+      if (isCryptoSymbol(sym)) _binUnsubIfUnused(sym)
+      else _fhUnsubIfUnused(sym)
+    }
   }
   req.on('close', close)
 })
