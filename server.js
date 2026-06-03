@@ -3,6 +3,7 @@ const cors         = require('cors')
 const path         = require('path')
 const fs           = require('fs')
 const helmet       = require('helmet')
+const compression  = require('compression')
 const cookieParser = require('cookie-parser')
 const rateLimit    = require('express-rate-limit')
 
@@ -68,6 +69,16 @@ const app  = express()
 const PORT = parseInt(process.env.PORT, 10) || 3001
 const PROD = process.env.NODE_ENV === 'production'
 
+// ── Compression (gzip/brotli — skip SSE streams) ─────────────────────────────
+app.use(compression({
+  level: 6,
+  threshold: 1024,
+  filter: (req, res) => {
+    if (req.path.startsWith('/api/stream/')) return false
+    return compression.filter(req, res)
+  },
+}))
+
 // ── Security headers (OWASP-recommended) ─────────
 app.use(helmet({
   contentSecurityPolicy: {
@@ -127,7 +138,21 @@ const authForgotLimit = rateLimit({
   message: { error: 'Too many password reset requests — try again in 1 hour' },
 })
 
+// Tighter limits for market data endpoints that hit paid external APIs
+const marketDataLimit = rateLimit({
+  windowMs: 60 * 1000, max: 60, standardHeaders: true, legacyHeaders: false,
+  message: { error: 'Market data rate limit exceeded — try again shortly' },
+})
+
+const chartLimit = rateLimit({
+  windowMs: 60 * 1000, max: 30, standardHeaders: true, legacyHeaders: false,
+  message: { error: 'Chart data rate limit exceeded — try again shortly' },
+})
+
 app.use('/api', baseLimit)
+app.use('/api/quote',                marketDataLimit)
+app.use('/api/chart',                chartLimit)
+app.use('/api/search',               marketDataLimit)
 app.use('/api/auth/login',           authLoginLimit)
 app.use('/api/auth/register',        authRegisterLimit)
 app.use('/api/auth/forgot-password', authForgotLimit)
@@ -167,17 +192,30 @@ async function apiFetch(url, timeoutMs = 10000) {
 
 // ── Server-side quote cache (30 s TTL for quotes, 15 min for charts) ─────────
 const _quoteCache = new Map()
-const QUOTE_TTL = 30_000
-const CHART_TTL = 15 * 60_000   // 15 minutes — chart data rarely changes intraday
+const QUOTE_TTL    = 30_000
+const CHART_TTL    = 15 * 60_000
+const CACHE_MAX    = 5_000        // LRU-style eviction above this size
 
-function cacheSet(key, data) { _quoteCache.set(key, { data, ts: Date.now() }) }
+function cacheSet(key, data) {
+  // Evict oldest 10 % of entries when at capacity
+  if (_quoteCache.size >= CACHE_MAX) {
+    const evict = Math.ceil(CACHE_MAX * 0.1)
+    const iter  = _quoteCache.keys()
+    for (let i = 0; i < evict; i++) {
+      const k = iter.next().value
+      if (k !== undefined) _quoteCache.delete(k)
+    }
+  }
+  _quoteCache.set(key, { data, ts: Date.now() })
+}
 function cacheGet(key) {
   const hit = _quoteCache.get(key)
   if (!hit) return null
   const ttl = key.startsWith('chart:') ? CHART_TTL : QUOTE_TTL
-  return Date.now() - hit.ts < ttl ? hit.data : null
+  if (Date.now() - hit.ts >= ttl) { _quoteCache.delete(key); return null }
+  return hit.data
 }
-// Evict stale entries every 5 minutes to prevent unbounded memory growth
+// Evict stale entries every 5 minutes
 setInterval(() => {
   const now = Date.now()
   for (const [k, v] of _quoteCache) {

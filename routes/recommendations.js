@@ -38,6 +38,53 @@ function fwdKeys(req) {
   return h
 }
 
+// Validate recommendation response schema (guards against malformed Groq output)
+function validateRecommendations(data) {
+  if (!Array.isArray(data?.recommendations) || !data.recommendations.length)
+    throw new Error('Missing or empty recommendations array')
+  for (const [i, rec] of data.recommendations.entries()) {
+    for (const f of ['symbol', 'entryPrice', 'targetReturn', 'stopLoss', 'thesis']) {
+      if (rec[f] == null) throw new Error(`rec[${i}] missing field: ${f}`)
+    }
+    if (typeof rec.entryPrice !== 'number' || rec.entryPrice <= 0)
+      throw new Error(`rec[${i}] invalid entryPrice: ${rec.entryPrice}`)
+    if (typeof rec.targetReturn !== 'number' || rec.targetReturn <= 0 || rec.targetReturn > 500)
+      throw new Error(`rec[${i}] targetReturn out of range: ${rec.targetReturn}`)
+  }
+}
+
+// Fetch upcoming earnings dates and recent news sentiment for context
+async function fetchCatalystContext(symbols, fwdHeaders, port) {
+  if (!symbols.length) return { earningsSnippet: '', sentimentSnippet: '' }
+  const syms = symbols.slice(0, 20).join(',')
+  const [earningsRes, sentimentRes] = await Promise.allSettled([
+    fetch(`http://127.0.0.1:${port}/api/earnings/calendar?symbols=${encodeURIComponent(syms)}`,
+      { headers: fwdHeaders, signal: AbortSignal.timeout(8000) }).then(r => r.json()),
+    fetch(`http://127.0.0.1:${port}/api/sentiment/portfolio?symbols=${encodeURIComponent(syms)}`,
+      { headers: fwdHeaders, signal: AbortSignal.timeout(8000) }).then(r => r.json()),
+  ])
+
+  let earningsSnippet = ''
+  if (earningsRes.status === 'fulfilled') {
+    const items = Array.isArray(earningsRes.value) ? earningsRes.value : (earningsRes.value?.calendar ?? [])
+    const upcoming = items
+      .filter(e => e?.symbol && e?.nextEarningsDate)
+      .map(e => `${e.symbol}: ${e.nextEarningsDate}${e.epsEstimate != null ? ` (EPS est. $${e.epsEstimate})` : ''}`)
+    if (upcoming.length) earningsSnippet = '\nUPCOMING EARNINGS (avoid entries 48h before report):\n' + upcoming.join(', ')
+  }
+
+  let sentimentSnippet = ''
+  if (sentimentRes.status === 'fulfilled') {
+    const items = Array.isArray(sentimentRes.value) ? sentimentRes.value : (sentimentRes.value?.results ?? [])
+    const scored = items
+      .filter(s => s?.symbol && s?.sentiment)
+      .map(s => `${s.symbol}: ${s.sentiment}${s.score != null ? ` (${s.score}/10)` : ''}`)
+    if (scored.length) sentimentSnippet = '\nNEWS SENTIMENT (last 5 days):\n' + scored.join(', ')
+  }
+
+  return { earningsSnippet, sentimentSnippet }
+}
+
 // Fetch live quotes from the internal /api/quote endpoint
 async function fetchLiveQuotes(symbols, fwdHeaders) {
   if (!symbols.length) return {}
@@ -70,12 +117,14 @@ router.post('/', recLimit, async (req, res) => {
   const holdingStr = holdings.length    ? holdings.join(', ') : 'none'
   const focusStr   = focusSymbols.length ? focusSymbols.join(', ') : ''
   const fwdHeaders = fwdKeys(req)
+  const port       = process.env.PORT || 3001
 
-  // ── Step 1: Pre-fetch live prices for focus symbols ──────────────────────────
-  let preLivePrices = {}
-  if (focusSymbols.length) {
-    preLivePrices = await fetchLiveQuotes(focusSymbols, fwdHeaders)
-  }
+  // ── Step 1: Pre-fetch live prices + catalyst context in parallel ─────────────
+  const symbolsForContext = focusSymbols.length ? focusSymbols : []
+  const [preLivePrices, { earningsSnippet, sentimentSnippet }] = await Promise.all([
+    focusSymbols.length ? fetchLiveQuotes(focusSymbols, fwdHeaders) : Promise.resolve({}),
+    fetchCatalystContext(symbolsForContext, fwdHeaders, port),
+  ])
 
   const livePriceSnippet = Object.keys(preLivePrices).length
     ? '\nLIVE PRICES (use these exact values for entryPrice — do not guess):\n' +
@@ -98,7 +147,7 @@ router.post('/', recLimit, async (req, res) => {
   const prompt = `You are a senior portfolio strategist. Provide specific actionable buy recommendations for a retail investor.
 
 Current portfolio holdings (avoid overlap): ${holdingStr}${focusInstructions}
-${livePriceSnippet}
+${livePriceSnippet}${earningsSnippet}${sentimentSnippet}
 
 ${countInstructions}
 
@@ -199,8 +248,10 @@ Respond ONLY with a JSON object — no markdown, no explanation, just the JSON:
     }
 
     const data = JSON.parse(match[0])
-    if (!Array.isArray(data.recommendations) || !data.recommendations.length)
-      return res.status(500).json({ error: 'Empty recommendations from AI' })
+    try { validateRecommendations(data) } catch (valErr) {
+      console.error('[recommendations] Schema validation failed:', valErr.message)
+      return res.status(500).json({ error: 'AI response did not match expected format — please try again' })
+    }
 
     // ── Re-anchor prices to live market data ─────────────────────────────────
     const recSymbols     = data.recommendations.map(r => r.symbol).filter(Boolean)

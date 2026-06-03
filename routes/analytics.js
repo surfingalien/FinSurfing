@@ -45,6 +45,49 @@ function dailyReturns(closes) {
   return out
 }
 
+// ── Risk metrics ──────────────────────────────────────────────────────────────
+const RISK_FREE_ANNUAL = 0.045   // ~4.5% T-bill rate
+
+function sharpeRatio(returns) {
+  if (returns.length < 20) return null
+  const avg = returns.reduce((s, v) => s + v, 0) / returns.length
+  const variance = returns.reduce((s, v) => s + (v - avg) ** 2, 0) / returns.length
+  const stdDev = Math.sqrt(variance)
+  if (stdDev === 0) return null
+  const annualReturn = avg * 252
+  const annualStdDev = stdDev * Math.sqrt(252)
+  return (annualReturn - RISK_FREE_ANNUAL) / annualStdDev
+}
+
+function sortinoRatio(returns) {
+  if (returns.length < 20) return null
+  const avg = returns.reduce((s, v) => s + v, 0) / returns.length
+  const downside = returns.filter(r => r < 0)
+  if (downside.length === 0) return null
+  const downsideVariance = downside.reduce((s, v) => s + v ** 2, 0) / returns.length
+  const downsideStd = Math.sqrt(downsideVariance) * Math.sqrt(252)
+  if (downsideStd === 0) return null
+  return (avg * 252 - RISK_FREE_ANNUAL) / downsideStd
+}
+
+function maxDrawdown(closes) {
+  if (closes.length < 2) return null
+  let peak = closes[0], maxDD = 0
+  for (const c of closes) {
+    if (c > peak) peak = c
+    const dd = (c - peak) / peak
+    if (dd < maxDD) maxDD = dd
+  }
+  return maxDD  // negative number, e.g. -0.23 = -23%
+}
+
+function annualizedReturn(closes) {
+  if (closes.length < 2) return null
+  const totalReturn = (closes[closes.length - 1] - closes[0]) / closes[0]
+  const years = closes.length / 252
+  return (1 + totalReturn) ** (1 / years) - 1
+}
+
 // ── Pearson correlation ───────────────────────────────────────────────────────
 function pearson(a, b) {
   const n   = Math.min(a.length, b.length)
@@ -188,14 +231,67 @@ router.get('/portfolio', async (req, res) => {
     weight: totalHoldings > 0 ? +((count / totalHoldings) * 100).toFixed(1) : 0,
   })).sort((a, b) => b.weight - a.weight)
 
+  // ── Portfolio risk metrics (Sharpe, Sortino, Max Drawdown) ───────────────
+  // Build equal-weighted portfolio daily returns for risk calculations
+  const riskMetrics = {}
+  try {
+    const alignedLength = Math.min(...symsToFetch.map(s => closeMap[s].length))
+    if (alignedLength >= 20 && symsToFetch.length > 0) {
+      // Equal-weighted portfolio return series
+      const portReturns = []
+      for (let i = 1; i < alignedLength; i++) {
+        let ret = 0
+        for (const sym of symsToFetch) {
+          const closes = closeMap[sym].map(p => p.close)
+          const offset = closes.length - alignedLength
+          ret += (closes[offset + i] - closes[offset + i - 1]) / closes[offset + i - 1]
+        }
+        portReturns.push(ret / symsToFetch.length)
+      }
+
+      // Per-holding risk metrics
+      const holdingRisk = {}
+      for (const sym of symsToFetch) {
+        const closes = closeMap[sym].map(p => p.close)
+        const ret    = dailyReturns(closes)
+        holdingRisk[sym] = {
+          sharpe:         sharpeRatio(ret)    != null ? +sharpeRatio(ret).toFixed(3)    : null,
+          maxDrawdown:    maxDrawdown(closes) != null ? +(maxDrawdown(closes) * 100).toFixed(2) : null,
+          annualReturn:   annualizedReturn(closes) != null ? +(annualizedReturn(closes) * 100).toFixed(2) : null,
+        }
+      }
+
+      riskMetrics.portfolio = {
+        sharpe:       sharpeRatio(portReturns)  != null ? +sharpeRatio(portReturns).toFixed(3)  : null,
+        sortino:      sortinoRatio(portReturns) != null ? +sortinoRatio(portReturns).toFixed(3) : null,
+        maxDrawdown:  null,
+        annualReturn: null,
+      }
+
+      // SPY benchmark metrics for comparison
+      riskMetrics.benchmark = {
+        sharpe:       sharpeRatio(spyRet)  != null ? +sharpeRatio(spyRet).toFixed(3)  : null,
+        sortino:      sortinoRatio(spyRet) != null ? +sortinoRatio(spyRet).toFixed(3) : null,
+        maxDrawdown:  maxDrawdown(spyData.map(p => p.close)) != null
+          ? +(maxDrawdown(spyData.map(p => p.close)) * 100).toFixed(2) : null,
+        annualReturn: annualizedReturn(spyData.map(p => p.close)) != null
+          ? +(annualizedReturn(spyData.map(p => p.close)) * 100).toFixed(2) : null,
+      }
+      riskMetrics.holdings = holdingRisk
+    }
+  } catch (e) {
+    console.warn('[analytics] risk metrics error:', e.message)
+  }
+
   return res.json({
-    symbols:      symsToFetch,
+    symbols:       symsToFetch,
     portfolioBeta: portfolioBeta != null ? +portfolioBeta.toFixed(3) : null,
-    betas:        Object.fromEntries(
+    betas:         Object.fromEntries(
       Object.entries(betas).map(([k, v]) => [k, v != null ? +v.toFixed(3) : null])
     ),
     correlations,
     sectors,
+    riskMetrics,
     benchmark: 'SPY',
   })
 })
