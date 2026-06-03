@@ -1,0 +1,1028 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//html-anything//founder-calendar synthetic//EN
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+X-WR-CALNAME:Sam Reyes — Founder calendar
+X-WR-TIMEZONE:America/Los_Angeles
+BEGIN:VEVENT
+UID:eng-standup-w1-mon@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260427T163000Z
+DTEND:20260427T164500Z
+SUMMARY:Engineering standup
+ORGANIZER;CN=Alex Rivera:mailto:alex@startup.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Alex Rivera:mailto:alex@startup.example
+ATTENDEE;CN=Mira Chen:mailto:mira@startup.example
+ATTENDEE;CN=Devon Park:mailto:devon@startup.example
+ATTENDEE;CN=Jordan Tate:mailto:jordan@startup.example
+LOCATION:Zoom
+DESCRIPTION:Daily 15-minute eng sync. Blockers + ship goals.
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:cardinal-followup@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260427T170000Z
+DTEND:20260427T174500Z
+SUMMARY:Investor follow-up — Cardinal Ventures
+ORGANIZER;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Aman Sharma:mailto:aman@cardinalvc.example
+LOCATION:Zoom
+DESCRIPTION:Walk through the term sheet markup; confirm board observer language.
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:pricing-deepwork-1@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260427T180000Z
+DTEND:20260427T190000Z
+SUMMARY:Deep work — Pricing V2 brief
+ORGANIZER;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+LOCATION:Office — focus room
+DESCRIPTION:Draft the pricing memo for Mira and Sarah by EOW.
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:cofounder-lunch-1@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260427T200000Z
+DTEND:20260427T210000Z
+SUMMARY:Cofounder lunch — Mira
+ORGANIZER;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Mira Chen:mailto:mira@startup.example
+LOCATION:Café Marlow
+DESCRIPTION:Weekly cofounder catch-up — usually open agenda.
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:loma-onboard@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260427T213000Z
+DTEND:20260427T220000Z
+SUMMARY:Customer — Loma Foods onboarding check
+ORGANIZER;CN=Sarah Kim:mailto:sarah@startup.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Sarah Kim:mailto:sarah@startup.example
+ATTENDEE;CN=Sara Pham:mailto:sara.pham@lomafoods.example
+ATTENDEE;CN=Ricky Ortiz:mailto:ricky.ortiz@lomafoods.example
+LOCATION:Zoom
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:northwind-feedback@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260427T220000Z
+DTEND:20260427T223000Z
+SUMMARY:Customer — Northwind Co feedback
+ORGANIZER;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Tania Iwu:mailto:tania.iwu@northwind.example
+LOCATION:Zoom
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:devon-1on1@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260427T230000Z
+DTEND:20260427T233000Z
+SUMMARY:1:1 — Devon Park
+ORGANIZER;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Devon Park:mailto:devon@startup.example
+LOCATION:Office — corner room
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:eng-standup-w1-tue@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260428T163000Z
+DTEND:20260428T164500Z
+SUMMARY:Engineering standup
+ORGANIZER;CN=Alex Rivera:mailto:alex@startup.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Alex Rivera:mailto:alex@startup.example
+ATTENDEE;CN=Mira Chen:mailto:mira@startup.example
+ATTENDEE;CN=Devon Park:mailto:devon@startup.example
+ATTENDEE;CN=Jordan Tate:mailto:jordan@startup.example
+LOCATION:Zoom
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:mira-1on1-w1@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260428T170000Z
+DTEND:20260428T173000Z
+SUMMARY:1:1 — Mira Chen (cofounder)
+ORGANIZER;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Mira Chen:mailto:mira@startup.example
+LOCATION:Office — focus room
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:pitch-rehearsal-w1@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260428T173000Z
+DTEND:20260428T183000Z
+SUMMARY:Pitch rehearsal (board prep)
+ORGANIZER;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Mira Chen:mailto:mira@startup.example
+ATTENDEE;CN=Sarah Kim:mailto:sarah@startup.example
+LOCATION:Office — board room
+DESCRIPTION:Run the deck end-to-end; trim from 24 to 18 slides.
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:hightower-pitch@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260428T183000Z
+DTEND:20260428T193000Z
+SUMMARY:Investor — Hightower Capital pitch
+ORGANIZER;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Jenna Liu:mailto:jenna.liu@hightower.example
+LOCATION:Zoom
+DESCRIPTION:Series A first meeting; Jenna brings 2 partners.
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:advisor-lunch-mark@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260428T193000Z
+DTEND:20260428T203000Z
+SUMMARY:Advisor lunch — Mark Reeve
+ORGANIZER;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Mark Reeve:mailto:mark@ankr.example
+LOCATION:Tartine — Mission
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:drey-logistics-call@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260428T203000Z
+DTEND:20260428T210000Z
+SUMMARY:Customer — Drey Logistics
+ORGANIZER;CN=Sarah Kim:mailto:sarah@startup.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Sarah Kim:mailto:sarah@startup.example
+ATTENDEE;CN=Henri Chen:mailto:henri@dreylogistics.example
+LOCATION:Zoom
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:solare-call-w1@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260428T210000Z
+DTEND:20260428T213000Z
+SUMMARY:Customer — Solare Global
+ORGANIZER;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Ana Quintero:mailto:ana@solareglobal.example
+LOCATION:Zoom
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:brewline-call-w1@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260428T213000Z
+DTEND:20260428T220000Z
+SUMMARY:Customer — Brewline support sync
+ORGANIZER;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Olu Adeyemi:mailto:olu@brewline.example
+LOCATION:Zoom
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:okr-review-q2@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260428T223000Z
+DTEND:20260428T233000Z
+SUMMARY:Q2 OKR review (all-hands)
+ORGANIZER;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Mira Chen:mailto:mira@startup.example
+ATTENDEE;CN=Alex Rivera:mailto:alex@startup.example
+ATTENDEE;CN=Sarah Kim:mailto:sarah@startup.example
+ATTENDEE;CN=Devon Park:mailto:devon@startup.example
+ATTENDEE;CN=Jordan Tate:mailto:jordan@startup.example
+LOCATION:Office — all-hands room
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:office-hours-w1@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260429T000000Z
+DTEND:20260429T010000Z
+SUMMARY:Office hours — candidates
+ORGANIZER;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+LOCATION:Zoom
+DESCRIPTION:Three back-to-back 20-min slots with VP-Eng candidates.
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:eng-standup-w1-wed@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260429T163000Z
+DTEND:20260429T164500Z
+SUMMARY:Engineering standup
+ORGANIZER;CN=Alex Rivera:mailto:alex@startup.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Alex Rivera:mailto:alex@startup.example
+ATTENDEE;CN=Mira Chen:mailto:mira@startup.example
+ATTENDEE;CN=Devon Park:mailto:devon@startup.example
+ATTENDEE;CN=Jordan Tate:mailto:jordan@startup.example
+LOCATION:Zoom
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:sprint-review-w1@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260429T170000Z
+DTEND:20260429T173000Z
+SUMMARY:Sprint review
+ORGANIZER;CN=Alex Rivera:mailto:alex@startup.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Alex Rivera:mailto:alex@startup.example
+ATTENDEE;CN=Mira Chen:mailto:mira@startup.example
+ATTENDEE;CN=Devon Park:mailto:devon@startup.example
+ATTENDEE;CN=Jordan Tate:mailto:jordan@startup.example
+LOCATION:Zoom
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:alex-1on1-w1@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260429T180000Z
+DTEND:20260429T183000Z
+SUMMARY:1:1 — Alex Rivera (head of eng)
+ORGANIZER;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Alex Rivera:mailto:alex@startup.example
+LOCATION:Office — focus room
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:cardinal-intro-david@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260429T183000Z
+DTEND:20260429T190000Z
+SUMMARY:Investor — Cardinal Ventures (David Lee intro)
+ORGANIZER;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=David Lee:mailto:david.lee@cardinalvc.example
+LOCATION:Zoom
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:pricing-deepwork-2@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260429T200000Z
+DTEND:20260429T210000Z
+SUMMARY:Deep work — Pricing V2 brief
+ORGANIZER;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+LOCATION:Office — focus room
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:aguilar-pham-call@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260429T210000Z
+DTEND:20260429T220000Z
+SUMMARY:Customer — Aguilar & Pham (legal vertical)
+ORGANIZER;CN=Sarah Kim:mailto:sarah@startup.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Sarah Kim:mailto:sarah@startup.example
+ATTENDEE;CN=Maria Aguilar:mailto:maria@aguilarpham.example
+LOCATION:Zoom
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:healthcare-dpc-discovery@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260429T220000Z
+DTEND:20260429T230000Z
+SUMMARY:Customer — Healthcare DPC discovery
+ORGANIZER;CN=Sarah Kim:mailto:sarah@startup.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Sarah Kim:mailto:sarah@startup.example
+ATTENDEE;CN=Tan Park:mailto:tan.park@healthcaredpc.example
+LOCATION:Zoom
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:hiring-debrief-w1@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260429T233000Z
+DTEND:20260430T003000Z
+SUMMARY:Hiring panel debrief — VP Eng round 1
+ORGANIZER;CN=Talia Brown:mailto:talia@startup.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Talia Brown:mailto:talia@startup.example
+ATTENDEE;CN=Mira Chen:mailto:mira@startup.example
+ATTENDEE;CN=Alex Rivera:mailto:alex@startup.example
+LOCATION:Office — board room
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:eng-standup-w1-thu@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260430T163000Z
+DTEND:20260430T164500Z
+SUMMARY:Engineering standup
+ORGANIZER;CN=Alex Rivera:mailto:alex@startup.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Alex Rivera:mailto:alex@startup.example
+ATTENDEE;CN=Mira Chen:mailto:mira@startup.example
+ATTENDEE;CN=Devon Park:mailto:devon@startup.example
+ATTENDEE;CN=Jordan Tate:mailto:jordan@startup.example
+LOCATION:Zoom
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:recruiter-sync-w1@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260430T170000Z
+DTEND:20260430T180000Z
+SUMMARY:Recruiter sync — Talia
+ORGANIZER;CN=Talia Brown:mailto:talia@startup.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Talia Brown:mailto:talia@startup.example
+LOCATION:Zoom
+DESCRIPTION:Pipeline review and VP-Eng outreach plan.
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:sarah-1on1-w1@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260430T180000Z
+DTEND:20260430T183000Z
+SUMMARY:1:1 — Sarah Kim (head of sales)
+ORGANIZER;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Sarah Kim:mailto:sarah@startup.example
+LOCATION:Office — focus room
+STATUS:CANCELLED
+DESCRIPTION:Sarah out sick — rescheduling to next Tue.
+END:VEVENT
+BEGIN:VEVENT
+UID:ma-vertical-call@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260430T183000Z
+DTEND:20260430T190000Z
+SUMMARY:Customer — M&A vertical (Joe Patel)
+ORGANIZER;CN=Sarah Kim:mailto:sarah@startup.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Sarah Kim:mailto:sarah@startup.example
+ATTENDEE;CN=Joe Patel:mailto:joe@mavertical.example
+LOCATION:Zoom
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:advisor-lunch-helena@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260430T190000Z
+DTEND:20260430T200000Z
+SUMMARY:Advisor lunch — Helena Frank
+ORGANIZER;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Helena Frank:mailto:helena@frankadvisors.example
+LOCATION:Café Marlow
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:marquee-pitch@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260430T210000Z
+DTEND:20260430T220000Z
+SUMMARY:Investor — Marquee Capital pitch
+ORGANIZER;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Priya Shah:mailto:priya@marqueecap.example
+ATTENDEE;CN=Tom Bradley:mailto:tom@marqueecap.example
+LOCATION:Marquee Capital — Embarcadero
+DESCRIPTION:Partner meeting; bring laptop + 1-pager handouts.
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:hightower-followup@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260430T220000Z
+DTEND:20260430T224500Z
+SUMMARY:Investor — Hightower term sheet follow-up
+ORGANIZER;CN=Jenna Liu:mailto:jenna.liu@hightower.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Jenna Liu:mailto:jenna.liu@hightower.example
+LOCATION:Zoom
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:product-demo-prep-w1@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260430T230000Z
+DTEND:20260501T000000Z
+SUMMARY:Deep work — Product demo prep
+ORGANIZER;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+LOCATION:Office — focus room
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:eng-standup-w1-fri@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260501T163000Z
+DTEND:20260501T164500Z
+SUMMARY:Engineering standup
+ORGANIZER;CN=Alex Rivera:mailto:alex@startup.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Alex Rivera:mailto:alex@startup.example
+ATTENDEE;CN=Mira Chen:mailto:mira@startup.example
+ATTENDEE;CN=Devon Park:mailto:devon@startup.example
+ATTENDEE;CN=Jordan Tate:mailto:jordan@startup.example
+LOCATION:Zoom
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:board-prep-block@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260501T170000Z
+DTEND:20260501T190000Z
+SUMMARY:Deep work — Board prep block
+ORGANIZER;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+LOCATION:Office — board room
+DESCRIPTION:Lock the deck, fact-check the pipeline numbers, finalize the asks.
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:friday-show-and-tell-w1@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260501T193000Z
+DTEND:20260501T203000Z
+SUMMARY:Friday show-and-tell (all-hands demo)
+ORGANIZER;CN=Mira Chen:mailto:mira@startup.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Mira Chen:mailto:mira@startup.example
+ATTENDEE;CN=Alex Rivera:mailto:alex@startup.example
+ATTENDEE;CN=Sarah Kim:mailto:sarah@startup.example
+ATTENDEE;CN=Devon Park:mailto:devon@startup.example
+ATTENDEE;CN=Jordan Tate:mailto:jordan@startup.example
+LOCATION:Office — all-hands room
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:cardinal-partner-meeting@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260501T210000Z
+DTEND:20260501T220000Z
+SUMMARY:Investor — Cardinal Ventures partner meeting
+ORGANIZER;CN=Aman Sharma:mailto:aman@cardinalvc.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Aman Sharma:mailto:aman@cardinalvc.example
+ATTENDEE;CN=David Lee:mailto:david.lee@cardinalvc.example
+LOCATION:Cardinal Ventures — Sand Hill
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:eng-standup-w2-mon@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260504T163000Z
+DTEND:20260504T164500Z
+SUMMARY:Engineering standup
+ORGANIZER;CN=Alex Rivera:mailto:alex@startup.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Alex Rivera:mailto:alex@startup.example
+ATTENDEE;CN=Mira Chen:mailto:mira@startup.example
+ATTENDEE;CN=Devon Park:mailto:devon@startup.example
+ATTENDEE;CN=Jordan Tate:mailto:jordan@startup.example
+LOCATION:Zoom
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:hightower-termsheet-review@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260504T170000Z
+DTEND:20260504T173000Z
+SUMMARY:Investor — Hightower term sheet review
+ORGANIZER;CN=Jenna Liu:mailto:jenna.liu@hightower.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Jenna Liu:mailto:jenna.liu@hightower.example
+LOCATION:Zoom
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:pricing-deepwork-3@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260504T180000Z
+DTEND:20260504T190000Z
+SUMMARY:Deep work — Pricing V2 brief
+ORGANIZER;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+LOCATION:Office — focus room
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:realestate-call-w2@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260504T193000Z
+DTEND:20260504T203000Z
+SUMMARY:Customer — Realestate fund (Solano)
+ORGANIZER;CN=Sarah Kim:mailto:sarah@startup.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Sarah Kim:mailto:sarah@startup.example
+ATTENDEE;CN=Maria Solano:mailto:maria@solanofund.example
+LOCATION:Zoom
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:investment-call-w2@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260504T210000Z
+DTEND:20260504T213000Z
+SUMMARY:Customer — Investment fund (Adit Patel)
+ORGANIZER;CN=Sarah Kim:mailto:sarah@startup.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Sarah Kim:mailto:sarah@startup.example
+ATTENDEE;CN=Adit Patel:mailto:adit@investmentpartners.example
+LOCATION:Zoom
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:vp-eng-interview-1@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260504T220000Z
+DTEND:20260504T230000Z
+SUMMARY:VP Eng interview — Naomi Wells
+ORGANIZER;CN=Talia Brown:mailto:talia@startup.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Naomi Wells:mailto:naomi.wells@candidate.example
+LOCATION:Zoom
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:vp-eng-interview-2@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260504T230000Z
+DTEND:20260505T000000Z
+SUMMARY:VP Eng interview — Sebastian Park
+ORGANIZER;CN=Talia Brown:mailto:talia@startup.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Sebastian Park:mailto:sebastian.park@candidate.example
+LOCATION:Zoom
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:eng-standup-w2-tue@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260505T163000Z
+DTEND:20260505T164500Z
+SUMMARY:Engineering standup
+ORGANIZER;CN=Alex Rivera:mailto:alex@startup.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Alex Rivera:mailto:alex@startup.example
+ATTENDEE;CN=Mira Chen:mailto:mira@startup.example
+ATTENDEE;CN=Devon Park:mailto:devon@startup.example
+ATTENDEE;CN=Jordan Tate:mailto:jordan@startup.example
+LOCATION:Zoom
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:mira-1on1-w2@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260505T170000Z
+DTEND:20260505T173000Z
+SUMMARY:1:1 — Mira Chen (cofounder)
+ORGANIZER;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Mira Chen:mailto:mira@startup.example
+LOCATION:Office — focus room
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:press-call-anya@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260505T173000Z
+DTEND:20260505T180000Z
+SUMMARY:Press / PR call — Anya Voss (TechCrunch)
+ORGANIZER;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Anya Voss:mailto:anya@techcrunch.example
+LOCATION:Zoom
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:solare-success-w2@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260505T180000Z
+DTEND:20260505T183000Z
+SUMMARY:Customer — Solare Global success review
+ORGANIZER;CN=Sarah Kim:mailto:sarah@startup.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Sarah Kim:mailto:sarah@startup.example
+ATTENDEE;CN=Ana Quintero:mailto:ana@solareglobal.example
+LOCATION:Zoom
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:marquee-followup@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260505T183000Z
+DTEND:20260505T190000Z
+SUMMARY:Investor — Marquee Capital follow-up
+ORGANIZER;CN=Priya Shah:mailto:priya@marqueecap.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Priya Shah:mailto:priya@marqueecap.example
+LOCATION:Zoom
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:loma-upsell-w2@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260505T190000Z
+DTEND:20260505T193000Z
+SUMMARY:Customer — Loma Foods upsell
+ORGANIZER;CN=Sarah Kim:mailto:sarah@startup.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Sarah Kim:mailto:sarah@startup.example
+ATTENDEE;CN=Sara Pham:mailto:sara.pham@lomafoods.example
+LOCATION:Zoom
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:brewline-renewal@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260505T193000Z
+DTEND:20260505T200000Z
+SUMMARY:Customer — Brewline renewal
+ORGANIZER;CN=Sarah Kim:mailto:sarah@startup.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Sarah Kim:mailto:sarah@startup.example
+ATTENDEE;CN=Olu Adeyemi:mailto:olu@brewline.example
+LOCATION:Zoom
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:drey-expansion-w2@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260505T200000Z
+DTEND:20260505T203000Z
+SUMMARY:Customer — Drey Logistics expansion
+ORGANIZER;CN=Sarah Kim:mailto:sarah@startup.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Sarah Kim:mailto:sarah@startup.example
+ATTENDEE;CN=Henri Chen:mailto:henri@dreylogistics.example
+LOCATION:Zoom
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:sales-pipeline-w2@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260505T203000Z
+DTEND:20260505T210000Z
+SUMMARY:Sales pipeline review
+ORGANIZER;CN=Sarah Kim:mailto:sarah@startup.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Sarah Kim:mailto:sarah@startup.example
+LOCATION:Office — focus room
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:healthcare-dpc-pilot@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260505T210000Z
+DTEND:20260505T213000Z
+SUMMARY:Customer — Healthcare DPC pilot kickoff
+ORGANIZER;CN=Sarah Kim:mailto:sarah@startup.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Sarah Kim:mailto:sarah@startup.example
+ATTENDEE;CN=Tan Park:mailto:tan.park@healthcaredpc.example
+LOCATION:Zoom
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:aguilar-pham-referral@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260505T213000Z
+DTEND:20260505T220000Z
+SUMMARY:Customer — Aguilar & Pham referral chat
+ORGANIZER;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Maria Aguilar:mailto:maria@aguilarpham.example
+LOCATION:Zoom
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:octopus-warm-intro@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260505T220000Z
+DTEND:20260505T223000Z
+SUMMARY:Investor — Octopus warm intro (David Choi)
+ORGANIZER;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=David Choi:mailto:david.choi@octopusvc.example
+LOCATION:Zoom
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:sarah-1on1-w2-rescheduled@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260505T223000Z
+DTEND:20260505T230000Z
+SUMMARY:1:1 — Sarah Kim (rescheduled)
+ORGANIZER;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Sarah Kim:mailto:sarah@startup.example
+LOCATION:Office — focus room
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:recruiting-backfill-w2@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260505T230000Z
+DTEND:20260506T000000Z
+SUMMARY:Recruiting — backfill ICs (Talia)
+ORGANIZER;CN=Talia Brown:mailto:talia@startup.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Talia Brown:mailto:talia@startup.example
+LOCATION:Zoom
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:founder-dinner-helen@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260506T003000Z
+DTEND:20260506T023000Z
+SUMMARY:Founder dinner — Helen Yu (advisor) & Mira
+ORGANIZER;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Helen Yu:mailto:helen@yuadvisors.example
+ATTENDEE;CN=Mira Chen:mailto:mira@startup.example
+LOCATION:State Bird Provisions
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:eng-standup-w2-wed@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260506T163000Z
+DTEND:20260506T164500Z
+SUMMARY:Engineering standup
+ORGANIZER;CN=Alex Rivera:mailto:alex@startup.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Alex Rivera:mailto:alex@startup.example
+ATTENDEE;CN=Mira Chen:mailto:mira@startup.example
+ATTENDEE;CN=Devon Park:mailto:devon@startup.example
+ATTENDEE;CN=Jordan Tate:mailto:jordan@startup.example
+LOCATION:Zoom
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:sprint-review-w2@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260506T170000Z
+DTEND:20260506T173000Z
+SUMMARY:Sprint review
+ORGANIZER;CN=Alex Rivera:mailto:alex@startup.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Alex Rivera:mailto:alex@startup.example
+ATTENDEE;CN=Mira Chen:mailto:mira@startup.example
+ATTENDEE;CN=Devon Park:mailto:devon@startup.example
+ATTENDEE;CN=Jordan Tate:mailto:jordan@startup.example
+LOCATION:Zoom
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:alex-1on1-w2@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260506T180000Z
+DTEND:20260506T183000Z
+SUMMARY:1:1 — Alex Rivera (head of eng)
+ORGANIZER;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Alex Rivera:mailto:alex@startup.example
+LOCATION:Office — focus room
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:ma-vertical-onboarding@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260506T190000Z
+DTEND:20260506T200000Z
+SUMMARY:Customer — M&A vertical onboarding
+ORGANIZER;CN=Sarah Kim:mailto:sarah@startup.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Sarah Kim:mailto:sarah@startup.example
+ATTENDEE;CN=Joe Patel:mailto:joe@mavertical.example
+LOCATION:Zoom
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:closing-call-w2@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260506T203000Z
+DTEND:20260506T213000Z
+SUMMARY:Investor — Series A closing call
+ORGANIZER;CN=Aman Sharma:mailto:aman@cardinalvc.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Aman Sharma:mailto:aman@cardinalvc.example
+ATTENDEE;CN=Jenna Liu:mailto:jenna.liu@hightower.example
+LOCATION:Zoom
+DESCRIPTION:Co-investor walk-through; sign next week if all green.
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:vp-eng-debrief-w2@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260506T220000Z
+DTEND:20260506T230000Z
+SUMMARY:VP Eng panel debrief
+ORGANIZER;CN=Talia Brown:mailto:talia@startup.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Talia Brown:mailto:talia@startup.example
+ATTENDEE;CN=Mira Chen:mailto:mira@startup.example
+ATTENDEE;CN=Alex Rivera:mailto:alex@startup.example
+LOCATION:Office — board room
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:all-hands-w2@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260506T230000Z
+DTEND:20260507T000000Z
+SUMMARY:All-hands
+ORGANIZER;CN=Mira Chen:mailto:mira@startup.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Mira Chen:mailto:mira@startup.example
+ATTENDEE;CN=Alex Rivera:mailto:alex@startup.example
+ATTENDEE;CN=Sarah Kim:mailto:sarah@startup.example
+ATTENDEE;CN=Devon Park:mailto:devon@startup.example
+ATTENDEE;CN=Jordan Tate:mailto:jordan@startup.example
+LOCATION:Office — all-hands room
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:eng-standup-w2-thu@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260507T163000Z
+DTEND:20260507T164500Z
+SUMMARY:Engineering standup
+ORGANIZER;CN=Alex Rivera:mailto:alex@startup.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Alex Rivera:mailto:alex@startup.example
+ATTENDEE;CN=Mira Chen:mailto:mira@startup.example
+ATTENDEE;CN=Devon Park:mailto:devon@startup.example
+ATTENDEE;CN=Jordan Tate:mailto:jordan@startup.example
+LOCATION:Zoom
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:northwind-qbr@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260507T170000Z
+DTEND:20260507T173000Z
+SUMMARY:Customer — Northwind quarterly review
+ORGANIZER;CN=Sarah Kim:mailto:sarah@startup.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Sarah Kim:mailto:sarah@startup.example
+ATTENDEE;CN=Tania Iwu:mailto:tania.iwu@northwind.example
+LOCATION:Zoom
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:board-meeting-prep@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260507T180000Z
+DTEND:20260507T190000Z
+SUMMARY:Deep work — Board meeting prep
+ORGANIZER;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+LOCATION:Office — board room
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:board-meeting-q2@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260507T210000Z
+DTEND:20260507T230000Z
+SUMMARY:Board meeting — Q2 review
+ORGANIZER;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Mira Chen:mailto:mira@startup.example
+ATTENDEE;CN=Helen Yu:mailto:helen@yuadvisors.example
+ATTENDEE;CN=Aman Sharma:mailto:aman@cardinalvc.example
+ATTENDEE;CN=Jenna Liu:mailto:jenna.liu@hightower.example
+ATTENDEE;CN=Mark Reeve:mailto:mark@ankr.example
+LOCATION:Office — board room
+DESCRIPTION:Q2 numbers, fundraising update, hiring plan, Pricing V2 commitment.
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:board-reception@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260507T230000Z
+DTEND:20260508T000000Z
+SUMMARY:Board reception
+ORGANIZER;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Mira Chen:mailto:mira@startup.example
+ATTENDEE;CN=Helen Yu:mailto:helen@yuadvisors.example
+ATTENDEE;CN=Aman Sharma:mailto:aman@cardinalvc.example
+ATTENDEE;CN=Jenna Liu:mailto:jenna.liu@hightower.example
+ATTENDEE;CN=Mark Reeve:mailto:mark@ankr.example
+LOCATION:Office — rooftop
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:board-dinner@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260508T010000Z
+DTEND:20260508T030000Z
+SUMMARY:Board dinner
+ORGANIZER;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Mira Chen:mailto:mira@startup.example
+ATTENDEE;CN=Helen Yu:mailto:helen@yuadvisors.example
+ATTENDEE;CN=Aman Sharma:mailto:aman@cardinalvc.example
+ATTENDEE;CN=Jenna Liu:mailto:jenna.liu@hightower.example
+ATTENDEE;CN=Mark Reeve:mailto:mark@ankr.example
+LOCATION:Quince — Jackson Square
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:eng-standup-w2-fri@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260508T163000Z
+DTEND:20260508T164500Z
+SUMMARY:Engineering standup
+ORGANIZER;CN=Alex Rivera:mailto:alex@startup.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Alex Rivera:mailto:alex@startup.example
+ATTENDEE;CN=Mira Chen:mailto:mira@startup.example
+ATTENDEE;CN=Devon Park:mailto:devon@startup.example
+ATTENDEE;CN=Jordan Tate:mailto:jordan@startup.example
+LOCATION:Zoom
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:board-debrief@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260508T170000Z
+DTEND:20260508T180000Z
+SUMMARY:Board feedback debrief — leadership
+ORGANIZER;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Mira Chen:mailto:mira@startup.example
+ATTENDEE;CN=Alex Rivera:mailto:alex@startup.example
+ATTENDEE;CN=Sarah Kim:mailto:sarah@startup.example
+LOCATION:Office — board room
+DESCRIPTION:What landed, what didn't; what to fix before next quarter.
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:friday-show-and-tell-w2@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260508T183000Z
+DTEND:20260508T193000Z
+SUMMARY:Friday show-and-tell (all-hands demo)
+ORGANIZER;CN=Mira Chen:mailto:mira@startup.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Mira Chen:mailto:mira@startup.example
+ATTENDEE;CN=Alex Rivera:mailto:alex@startup.example
+ATTENDEE;CN=Sarah Kim:mailto:sarah@startup.example
+ATTENDEE;CN=Devon Park:mailto:devon@startup.example
+ATTENDEE;CN=Jordan Tate:mailto:jordan@startup.example
+LOCATION:Office — all-hands room
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:pricing-deepwork-4@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260508T200000Z
+DTEND:20260508T210000Z
+SUMMARY:Deep work — Pricing V2 brief
+ORGANIZER;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+LOCATION:Office — focus room
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:closing-followup@calendar.example
+DTSTAMP:20260420T120000Z
+DTSTART:20260508T213000Z
+DTEND:20260508T220000Z
+SUMMARY:Investor — closing follow-up (Aman)
+ORGANIZER;CN=Aman Sharma:mailto:aman@cardinalvc.example
+ATTENDEE;CN=Sam Reyes:mailto:sam@startup.example
+ATTENDEE;CN=Aman Sharma:mailto:aman@cardinalvc.example
+LOCATION:Zoom
+STATUS:CONFIRMED
+END:VEVENT
+END:VCALENDAR

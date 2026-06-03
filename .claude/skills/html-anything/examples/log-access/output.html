@@ -1,0 +1,1621 @@
+<!doctype html>
+<html lang="en" data-ha-style="dashboard">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nginx access log — shop.example, 90 minutes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --primary: #a03b00;
+  --primary-container: #c94c00;
+  --primary-fixed: #ffdbcd;
+  --primary-fixed-dim: #ffb597;
+  --on-primary: #ffffff;
+  --accent-glow: #E8400D;
+  --secondary: #d5baff;
+  --secondary-container: #7b40e0;
+  --tertiary: #4d44e3;
+  --accent-cyan: #00D4FF;
+  --bg: #fff8f6;
+  --surface: #fff8f6;
+  --surface-container-lowest: #ffffff;
+  --surface-container-low: #fbf2ef;
+  --surface-container: #f5ece9;
+  --surface-container-high: #efe6e3;
+  --fg-1: #1e1b19;
+  --fg-2: #594138;
+  --fg-muted: #8d7166;
+  --border: rgba(0,0,0,0.06);
+  --border-strong: rgba(0,0,0,0.12);
+  --outline-variant: #e1bfb2;
+  --green: #10b981;
+  --blue: #3b82f6;
+  --yellow: #f59e0b;
+  --red: #ef4444;
+  --font-headline: 'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
+  --font-body: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'SF Mono', 'Menlo', ui-monospace, monospace;
+  --space-xs: 4px; --space-sm: 8px; --space-md: 12px;
+  --space-lg: 16px; --space-xl: 20px; --space-2xl: 24px;
+  --space-3xl: 32px; --space-4xl: 48px; --space-5xl: 64px;
+  --radius-sm: 8px; --radius-md: 12px; --radius-lg: 16px;
+  --radius-xl: 20px; --radius-2xl: 28px; --radius-pill: 9999px;
+  --shadow-sm: 0 1px 2px rgba(30,27,25,0.04);
+  --shadow-md: 0 4px 12px rgba(30,27,25,0.08);
+  --shadow-lg: 0 8px 24px rgba(30,27,25,0.12);
+  --shadow-accent: 0 8px 24px rgba(160,59,0,0.15);
+  --gradient-primary: linear-gradient(135deg,#a03b00 0%,#c94c00 100%);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #060B18;
+    --surface: #0B1426;
+    --surface-container-lowest: #101D35;
+    --surface-container-low: #101D35;
+    --surface-container: #162544;
+    --surface-container-high: #1c2d52;
+    --fg-1: #F8FAFC;
+    --fg-2: #CBD5E1;
+    --fg-muted: #64748B;
+    --border: rgba(255,255,255,0.08);
+    --border-strong: rgba(255,255,255,0.14);
+    --primary: #FF6B35;
+    --accent-glow: #00D4FF;
+    --shadow-md: 0 4px 12px rgba(0,0,0,0.4);
+    --shadow-lg: 0 8px 24px rgba(0,0,0,0.5);
+    --outline-variant: #2a3a5c;
+  }
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: var(--font-body);
+  background: var(--bg);
+  color: var(--fg-1);
+  font-size: 14px;
+  line-height: 1.55;
+  min-height: 100vh;
+}
+
+/* ── Ops Shell ── */
+.ops-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+/* ── Command Bar ── */
+.command-bar {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: var(--surface-container-low);
+  border-bottom: 1px solid var(--border-strong);
+  padding: var(--space-sm) var(--space-lg);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+  box-shadow: var(--shadow-sm);
+}
+.command-bar-title {
+  font-family: var(--font-headline);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--fg-1);
+  white-space: nowrap;
+}
+.command-bar-title span {
+  color: var(--primary);
+}
+.command-bar-meta {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--fg-muted);
+  white-space: nowrap;
+}
+.command-bar-spacer { flex: 1; }
+.cmd-search-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.cmd-search-wrap svg {
+  position: absolute;
+  left: 8px;
+  width: 13px;
+  height: 13px;
+  color: var(--fg-muted);
+  pointer-events: none;
+}
+#globalSearch {
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  padding: 5px 10px 5px 28px;
+  background: var(--surface-container);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  color: var(--fg-1);
+  width: 180px;
+  outline: none;
+  transition: border-color 0.15s, width 0.2s;
+}
+#globalSearch:focus {
+  border-color: var(--primary);
+  width: 220px;
+}
+.cmd-btn {
+  font-family: var(--font-body);
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 5px 12px;
+  background: var(--surface-container);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  color: var(--fg-2);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+.cmd-btn:hover { background: var(--primary); color: var(--on-primary); border-color: var(--primary); }
+
+/* ── Main content ── */
+.ops-content {
+  flex: 1;
+  padding: var(--space-lg);
+  max-width: 1280px;
+  margin: 0 auto;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
+/* ── Stream card ── */
+.stream-card {
+  background: var(--surface-container-low);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-lg) var(--space-xl);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-md) var(--space-xl);
+  box-shadow: var(--shadow-sm);
+}
+.stream-badge {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
+  background: var(--primary-fixed);
+  color: var(--primary-container);
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+@media (prefers-color-scheme: dark) {
+  .stream-badge { background: rgba(255,107,53,0.15); color: var(--primary); }
+}
+.stream-summary {
+  font-size: 13px;
+  color: var(--fg-2);
+  flex: 1;
+  min-width: 200px;
+  line-height: 1.5;
+}
+.stream-summary strong { color: var(--fg-1); }
+.stream-error-rate {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--red);
+  white-space: nowrap;
+}
+.stream-error-rate small { font-size: 11px; color: var(--fg-muted); display: block; font-family: var(--font-body); font-weight: 400; }
+
+/* ── KPI Rail ── */
+.kpi-rail {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: var(--space-sm);
+}
+.kpi-cell {
+  background: var(--surface-container-low);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-md) var(--space-lg);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  box-shadow: var(--shadow-sm);
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 0.3s, transform 0.3s;
+}
+.kpi-cell.revealed { opacity: 1; transform: translateY(0); }
+.kpi-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+}
+.kpi-value {
+  font-family: var(--font-mono);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--fg-1);
+  line-height: 1.1;
+}
+.kpi-value.accent { color: var(--primary); }
+.kpi-value.danger { color: var(--red); }
+.kpi-value.success { color: var(--green); }
+.kpi-sub {
+  font-size: 11px;
+  color: var(--fg-muted);
+}
+
+/* ── Work Surface (2-col on wide) ── */
+.work-surface {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-lg);
+}
+@media (min-width: 768px) {
+  .work-surface { grid-template-columns: 1fr 200px; }
+}
+
+/* ── Panel ── */
+.ops-panel {
+  background: var(--surface-container-low);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+.ops-panel-header {
+  padding: var(--space-md) var(--space-lg);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  background: var(--surface-container);
+}
+.ops-panel-title {
+  font-family: var(--font-headline);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+  flex: 1;
+}
+.ops-panel-body {
+  padding: var(--space-lg);
+}
+
+/* ── Volume histogram ── */
+.histogram-wrap {
+  width: 100%;
+  overflow-x: auto;
+}
+#histSvg {
+  display: block;
+  width: 100%;
+  min-width: 320px;
+}
+
+/* ── Status donut ── */
+.donut-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-lg);
+}
+#donutSvg { display: block; }
+.donut-legend {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+.donut-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-size: 12px;
+}
+.donut-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+.donut-row-label { color: var(--fg-2); flex: 1; }
+.donut-row-count { font-family: var(--font-mono); font-size: 11px; color: var(--fg-muted); }
+.donut-row-pct { font-family: var(--font-mono); font-size: 11px; font-weight: 600; color: var(--fg-1); min-width: 38px; text-align: right; }
+
+/* ── 2-col grid ── */
+.two-col {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-lg);
+}
+@media (min-width: 640px) {
+  .two-col { grid-template-columns: 1fr 1fr; }
+}
+.three-col {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-lg);
+}
+@media (min-width: 640px) {
+  .three-col { grid-template-columns: 1fr 1fr; }
+}
+@media (min-width: 960px) {
+  .three-col { grid-template-columns: 1fr 1fr 1fr; }
+}
+
+/* ── Severity breakdown ── */
+.filter-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  padding: var(--space-md) var(--space-lg);
+  border-bottom: 1px solid var(--border);
+}
+.filter-chip {
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 3px 11px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border-strong);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--surface-container);
+  color: var(--fg-2);
+  user-select: none;
+}
+.filter-chip .chip-count {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+}
+.filter-chip.active { border-color: var(--primary); background: var(--primary); color: #fff; }
+.filter-chip[data-sev="error"].active { background: var(--red); border-color: var(--red); }
+.filter-chip[data-sev="warn"].active { background: var(--yellow); border-color: var(--yellow); color: #1e1b19; }
+.filter-chip[data-sev="info"].active { background: var(--green); border-color: var(--green); }
+.filter-chip[data-sev="all"].active { background: var(--primary); border-color: var(--primary); }
+
+/* ── Category bars ── */
+.cat-bar-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+.cat-bar-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+.cat-bar-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--fg-2);
+  min-width: 80px;
+  flex-shrink: 0;
+}
+.cat-bar-track {
+  flex: 1;
+  height: 8px;
+  background: var(--surface-container-high);
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+}
+.cat-bar-fill {
+  height: 100%;
+  border-radius: var(--radius-pill);
+  transition: width 0.6s cubic-bezier(.4,0,.2,1);
+}
+.cat-bar-pct {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--fg-muted);
+  min-width: 38px;
+  text-align: right;
+}
+
+/* ── Outlier / flag queue ── */
+.flag-queue {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-sm);
+}
+@media (min-width: 640px) {
+  .flag-queue { grid-template-columns: 1fr 1fr; }
+}
+@media (min-width: 960px) {
+  .flag-queue { grid-template-columns: repeat(3, 1fr); }
+}
+.flag-card {
+  background: var(--surface-container);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-md) var(--space-lg);
+  border-left: 3px solid var(--border-strong);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.flag-card:hover { box-shadow: var(--shadow-md); }
+.flag-card.burst { border-left-color: var(--yellow); }
+.flag-card.top-error { border-left-color: var(--red); }
+.flag-card.top-source { border-left-color: var(--blue); }
+.flag-card.rare { border-left-color: var(--secondary-container); }
+.flag-kind {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+  margin-bottom: var(--space-xs);
+}
+.flag-label {
+  font-family: var(--font-headline);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg-1);
+  margin-bottom: 3px;
+}
+.flag-detail {
+  font-size: 11.5px;
+  color: var(--fg-2);
+}
+.flag-ts {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--fg-muted);
+  margin-top: var(--space-xs);
+}
+
+/* ── Leaderboard ── */
+.leaderboard-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.lb-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: 5px var(--space-sm);
+  border-radius: var(--radius-sm);
+  transition: background 0.12s;
+}
+.lb-row:hover { background: var(--surface-container); }
+.lb-rank {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--fg-muted);
+  min-width: 18px;
+  text-align: right;
+}
+.lb-label {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--fg-2);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lb-bar-track {
+  width: 60px;
+  height: 5px;
+  background: var(--surface-container-high);
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.lb-bar-fill {
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: var(--primary);
+  transition: width 0.5s;
+}
+.lb-count {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--fg-1);
+  font-weight: 600;
+  min-width: 28px;
+  text-align: right;
+}
+.lb-pct {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--fg-muted);
+  min-width: 38px;
+  text-align: right;
+}
+.lb-badge {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: var(--radius-pill);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+.lb-badge.abuse { background: rgba(239,68,68,0.12); color: var(--red); }
+.lb-badge.err { background: rgba(239,68,68,0.12); color: var(--red); }
+.lb-err-rate {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--red);
+  min-width: 40px;
+  text-align: right;
+}
+
+/* ── UA cloud ── */
+.ua-chip-cloud {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+}
+.ua-chip {
+  font-size: 11px;
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-container);
+  border: 1px solid var(--border-strong);
+  color: var(--fg-2);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.ua-chip-pct {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--fg-muted);
+}
+
+/* ── Data grid / drill-down ── */
+.data-grid-section {
+  background: var(--surface-container-low);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+.data-grid-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-md) var(--space-lg);
+  background: var(--surface-container);
+  border: none;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  font-family: var(--font-headline);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+  text-align: left;
+}
+.data-grid-toggle:hover { color: var(--fg-1); }
+.toggle-arrow {
+  margin-left: auto;
+  transition: transform 0.25s;
+  color: var(--fg-muted);
+}
+.data-grid-toggle[aria-expanded="true"] .toggle-arrow {
+  transform: rotate(180deg);
+}
+.data-grid-inner { display: none; }
+.data-grid-inner.open { display: block; }
+.grid-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-lg);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-container-lowest);
+}
+.grid-search-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 160px;
+}
+.grid-search-wrap svg {
+  position: absolute;
+  left: 8px;
+  width: 12px; height: 12px;
+  color: var(--fg-muted);
+  pointer-events: none;
+}
+#gridSearch {
+  font-family: var(--font-body);
+  font-size: 12px;
+  padding: 5px 8px 5px 26px;
+  background: var(--surface-container);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  color: var(--fg-1);
+  width: 100%;
+  outline: none;
+}
+#gridSearch:focus { border-color: var(--primary); }
+.grid-sev-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.grid-chip {
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 2px 9px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border-strong);
+  cursor: pointer;
+  transition: 0.15s;
+  background: var(--surface-container);
+  color: var(--fg-muted);
+  user-select: none;
+}
+.grid-chip.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+.grid-chip[data-filter="error"].active { background: var(--red); border-color: var(--red); }
+.grid-chip[data-filter="warn"].active { background: var(--yellow); border-color: var(--yellow); color: #1e1b19; }
+.grid-chip[data-filter="info"].active { background: var(--green); border-color: var(--green); }
+.grid-count {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--fg-muted);
+  margin-left: auto;
+  white-space: nowrap;
+}
+.table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+table.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+table.data-table th {
+  font-family: var(--font-headline);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+  padding: var(--space-sm) var(--space-md);
+  text-align: left;
+  background: var(--surface-container);
+  border-bottom: 1px solid var(--border-strong);
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+}
+table.data-table th:hover { color: var(--fg-1); }
+table.data-table th .sort-icon { margin-left: 3px; opacity: 0.4; font-size: 9px; }
+table.data-table th.sorted .sort-icon { opacity: 1; color: var(--primary); }
+table.data-table td {
+  padding: 6px var(--space-md);
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+  color: var(--fg-2);
+  max-width: 300px;
+}
+table.data-table tr:last-child td { border-bottom: none; }
+table.data-table tr.row-error td { background: rgba(239,68,68,0.04); border-left: 2px solid var(--red); }
+table.data-table tr.row-warn td { border-left: 2px solid var(--yellow); }
+table.data-table tr:hover td { background: var(--surface-container); cursor: pointer; }
+table.data-table tr.row-expanded td { background: var(--surface-container); }
+.row-detail {
+  background: var(--surface-container-lowest);
+  border-bottom: 1px solid var(--border-strong);
+}
+.row-detail td {
+  padding: var(--space-md) var(--space-lg);
+  background: var(--surface-container-lowest) !important;
+}
+.raw-line {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--fg-2);
+  background: var(--surface-container-high);
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-sm);
+  word-break: break-all;
+  white-space: pre-wrap;
+  margin-bottom: var(--space-sm);
+}
+.field-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs) var(--space-lg);
+}
+.field-pair {
+  display: flex;
+  gap: 5px;
+  align-items: baseline;
+  font-size: 11px;
+}
+.field-key { color: var(--fg-muted); font-family: var(--font-mono); }
+.field-val { color: var(--fg-1); font-family: var(--font-mono); font-weight: 600; }
+.td-mono { font-family: var(--font-mono); font-size: 11.5px; }
+.td-ts { white-space: nowrap; }
+.td-status { font-family: var(--font-mono); font-size: 12px; font-weight: 700; }
+.s2xx { color: var(--green); }
+.s3xx { color: var(--blue); }
+.s4xx { color: var(--yellow); }
+.s5xx { color: var(--red); }
+.td-path { font-family: var(--font-mono); font-size: 11px; color: var(--fg-1); max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.highlight { background: rgba(248,159,0,0.25); border-radius: 2px; }
+.load-more-wrap {
+  padding: var(--space-md) var(--space-lg);
+  text-align: center;
+  border-top: 1px solid var(--border);
+}
+.load-more-btn {
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 20px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border-strong);
+  background: var(--surface-container);
+  color: var(--fg-2);
+  cursor: pointer;
+  transition: 0.15s;
+}
+.load-more-btn:hover { background: var(--primary); color: #fff; border-color: var(--primary); }
+
+/* ── Footer ── */
+.ops-footer {
+  border-top: 1px solid var(--border);
+  background: var(--surface-container-low);
+  padding: var(--space-md) var(--space-lg);
+  text-align: center;
+  font-size: 11px;
+  color: var(--fg-muted);
+  font-style: italic;
+}
+
+/* ── Toast ── */
+.toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  background: var(--fg-1);
+  color: var(--bg);
+  font-size: 12.5px;
+  font-weight: 500;
+  padding: 9px 18px;
+  border-radius: var(--radius-pill);
+  box-shadow: var(--shadow-lg);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s;
+  z-index: 9999;
+}
+.toast.show { opacity: 1; }
+
+/* ── Animations ── */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.fade-up { animation: fadeUp 0.35s ease both; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--outline-variant); border-radius: 3px; }
+
+.section-label {
+  font-family: var(--font-headline);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+  padding: 0 0 var(--space-sm) 0;
+}
+</style>
+<!-- html-anything example style skin:start -->
+
+<style id="html-anything-example-style-skin">
+html[data-ha-style] {
+  --ha-style-accent: var(--primary, #a03b00);
+  --ha-style-accent-2: var(--secondary-container, #7b40e0);
+  --ha-style-badge-bg: rgba(255,255,255,.78);
+  --ha-style-badge-fg: var(--fg-1, #1e1b19);
+}
+html[data-ha-style] body {
+  position: relative;
+  background-attachment: fixed;
+}
+html[data-ha-style] body::before {
+  position: fixed;
+  z-index: 9999;
+  top: 12px;
+  right: 12px;
+  padding: 7px 10px;
+  border: 1px solid color-mix(in srgb, var(--ha-style-accent) 26%, transparent);
+  border-radius: 999px;
+  background: var(--ha-style-badge-bg);
+  color: var(--ha-style-badge-fg);
+  box-shadow: 0 6px 24px rgba(0,0,0,.10);
+  font: 700 10px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  backdrop-filter: blur(16px);
+}
+html[data-ha-style] .hero,
+html[data-ha-style] header.hero,
+html[data-ha-style] .top,
+html[data-ha-style] .header {
+  position: relative;
+}
+html[data-ha-style] .hero::before,
+html[data-ha-style] header.hero::before {
+  content: "";
+  display: block;
+  width: 64px;
+  height: 6px;
+  margin-bottom: 18px;
+  border-radius: 999px;
+  background: var(--ha-style-accent);
+}
+
+html[data-ha-style="teaching"] {
+  --ha-style-accent: #0f766e;
+  --ha-style-accent-2: #f59e0b;
+  --primary: #0f766e;
+  --primary-container: #115e59;
+  --primary-fixed: #ccfbf1;
+  --secondary-container: #f59e0b;
+  --bg: #f6fbfb;
+  --surface: #f6fbfb;
+  --surface-container-lowest: #ffffff;
+  --surface-container-low: #edf7f5;
+  --surface-container: #e5f1ee;
+  --surface-container-high: #d8e8e4;
+  --fg-1: #10201f;
+  --fg-2: #304c49;
+  --fg-muted: #647b78;
+  --border: rgba(15,118,110,.14);
+  --gradient-hero: linear-gradient(135deg, #0f766e 0%, #f59e0b 100%);
+  --gradient-text: linear-gradient(135deg, #0f766e 0%, #f59e0b 100%);
+}
+html[data-ha-style="teaching"] body {
+  background-color: var(--bg) !important;
+  background-image:
+    linear-gradient(rgba(15,118,110,.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(15,118,110,.07) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+html[data-ha-style="teaching"] body::before { content: "teaching"; }
+
+html[data-ha-style="relationship"] {
+  --ha-style-accent: #be3455;
+  --ha-style-accent-2: #317b93;
+  --primary: #be3455;
+  --primary-container: #a52d4b;
+  --primary-fixed: #ffe1e8;
+  --secondary-container: #317b93;
+  --bg: #fff7f8;
+  --surface: #fff7f8;
+  --surface-container-lowest: #ffffff;
+  --surface-container-low: #fff0f3;
+  --surface-container: #f8e7eb;
+  --surface-container-high: #efdde3;
+  --fg-1: #28181c;
+  --fg-2: #5f3e48;
+  --fg-muted: #8d6b75;
+  --border: rgba(190,52,85,.14);
+  --rose: #e25b74;
+  --blue: #4f95a8;
+  --gradient-hero: linear-gradient(135deg, #be3455 0%, #317b93 100%);
+  --gradient-text: linear-gradient(135deg, #be3455 0%, #317b93 100%);
+}
+html[data-ha-style="relationship"] body {
+  background-color: var(--bg) !important;
+  background-image:
+    linear-gradient(120deg, rgba(190,52,85,.08), transparent 36%),
+    linear-gradient(300deg, rgba(49,123,147,.08), transparent 40%);
+}
+html[data-ha-style="relationship"] body::before { content: "relationship"; }
+
+html[data-ha-style="timeline-story"] {
+  --ha-style-accent: #9a4b14;
+  --ha-style-accent-2: #2f6f73;
+  --primary: #9a4b14;
+  --primary-container: #7a3b10;
+  --primary-fixed: #ffe8cf;
+  --secondary-container: #2f6f73;
+  --bg: #fbf8f1;
+  --surface: #fbf8f1;
+  --surface-container-lowest: #ffffff;
+  --surface-container-low: #f4ecdf;
+  --surface-container: #eee3d3;
+  --surface-container-high: #e4d7c4;
+  --fg-1: #241b12;
+  --fg-2: #5c4b3d;
+  --fg-muted: #8a7968;
+  --border: rgba(154,75,20,.16);
+  --gradient-hero: linear-gradient(135deg, #9a4b14 0%, #2f6f73 100%);
+  --gradient-text: linear-gradient(135deg, #9a4b14 0%, #2f6f73 100%);
+}
+html[data-ha-style="timeline-story"] body {
+  background-color: var(--bg) !important;
+  background-image:
+    linear-gradient(90deg, transparent 0 calc(50% - 1px), rgba(154,75,20,.16) calc(50% - 1px) calc(50% + 1px), transparent calc(50% + 1px)),
+    radial-gradient(circle at 50% 72px, rgba(154,75,20,.20) 0 4px, transparent 5px);
+  background-size: 100% 100%, 100% 96px;
+}
+html[data-ha-style="timeline-story"] body::before { content: "timeline story"; }
+html[data-ha-style="timeline-story"] .hero::before,
+html[data-ha-style="timeline-story"] header.hero::before {
+  width: 8px;
+  height: 72px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--ha-style-accent), var(--ha-style-accent-2));
+}
+
+html[data-ha-style="map-atlas"] {
+  --ha-style-accent: #17695a;
+  --ha-style-accent-2: #2f66a8;
+  --primary: #17695a;
+  --primary-container: #115346;
+  --primary-fixed: #daf5ec;
+  --secondary-container: #2f66a8;
+  --bg: #f4faf7;
+  --surface: #f4faf7;
+  --surface-container-lowest: #ffffff;
+  --surface-container-low: #eaf4ef;
+  --surface-container: #e0eee8;
+  --surface-container-high: #d4e6de;
+  --fg-1: #10221d;
+  --fg-2: #365149;
+  --fg-muted: #6e837b;
+  --border: rgba(23,105,90,.16);
+  --gradient-hero: linear-gradient(135deg, #17695a 0%, #2f66a8 100%);
+  --gradient-text: linear-gradient(135deg, #17695a 0%, #2f66a8 100%);
+}
+html[data-ha-style="map-atlas"] body {
+  background-color: var(--bg) !important;
+  background-image:
+    repeating-linear-gradient(24deg, rgba(23,105,90,.09) 0 1px, transparent 1px 34px),
+    repeating-linear-gradient(116deg, rgba(47,102,168,.08) 0 1px, transparent 1px 42px);
+}
+html[data-ha-style="map-atlas"] body::before { content: "map atlas"; }
+html[data-ha-style="map-atlas"] .hero::before,
+html[data-ha-style="map-atlas"] header.hero::before {
+  width: 78px;
+  height: 78px;
+  border: 2px solid var(--ha-style-accent);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 55% 42%, var(--ha-style-accent) 0 4px, transparent 5px),
+    linear-gradient(45deg, transparent 47%, rgba(47,102,168,.55) 48% 52%, transparent 53%);
+}
+
+html[data-ha-style="network-map"] {
+  --ha-style-accent: #355f91;
+  --ha-style-accent-2: #a34d67;
+  --primary: #355f91;
+  --primary-container: #294b75;
+  --primary-fixed: #deebff;
+  --secondary-container: #a34d67;
+  --bg: #f7f8fb;
+  --surface: #f7f8fb;
+  --surface-container-lowest: #ffffff;
+  --surface-container-low: #eef1f7;
+  --surface-container: #e6ebf3;
+  --surface-container-high: #dbe2ee;
+  --fg-1: #151b24;
+  --fg-2: #3f4a5b;
+  --fg-muted: #737e8f;
+  --border: rgba(53,95,145,.16);
+  --gradient-hero: linear-gradient(135deg, #355f91 0%, #a34d67 100%);
+  --gradient-text: linear-gradient(135deg, #355f91 0%, #a34d67 100%);
+}
+html[data-ha-style="network-map"] body {
+  background-color: var(--bg) !important;
+  background-image:
+    radial-gradient(circle at 20% 20%, rgba(53,95,145,.22) 0 3px, transparent 4px),
+    radial-gradient(circle at 68% 34%, rgba(163,77,103,.18) 0 3px, transparent 4px),
+    linear-gradient(38deg, transparent 0 48%, rgba(53,95,145,.10) 49% 51%, transparent 52%);
+  background-size: 88px 88px, 118px 118px, 132px 132px;
+}
+html[data-ha-style="network-map"] body::before { content: "network map"; }
+html[data-ha-style="network-map"] .hero::before,
+html[data-ha-style="network-map"] header.hero::before {
+  width: 86px;
+  height: 46px;
+  border-radius: 999px;
+  background:
+    radial-gradient(circle at 18px 24px, var(--ha-style-accent) 0 7px, transparent 8px),
+    radial-gradient(circle at 44px 12px, var(--ha-style-accent-2) 0 6px, transparent 7px),
+    radial-gradient(circle at 70px 30px, var(--ha-style-accent) 0 7px, transparent 8px),
+    linear-gradient(22deg, transparent 0 31%, color-mix(in srgb, var(--ha-style-accent) 60%, transparent) 32% 36%, transparent 37%),
+    linear-gradient(160deg, transparent 0 43%, color-mix(in srgb, var(--ha-style-accent-2) 60%, transparent) 44% 48%, transparent 49%);
+}
+
+html[data-ha-style="dashboard"] {
+  --ha-style-accent: #0f5f6f;
+  --ha-style-accent-2: #8a5a16;
+  --primary: #0f5f6f;
+  --primary-container: #0b4c59;
+  --primary-fixed: #d8f2f5;
+  --secondary-container: #8a5a16;
+  --bg: #f5f7f9;
+  --surface: #f5f7f9;
+  --surface-container-lowest: #ffffff;
+  --surface-container-low: #eef2f5;
+  --surface-container: #e7edf1;
+  --surface-container-high: #dce5ea;
+  --fg-1: #111827;
+  --fg-2: #374151;
+  --fg-muted: #6b7280;
+  --border: rgba(15,95,111,.16);
+  --gradient-hero: linear-gradient(135deg, #0f5f6f 0%, #083344 100%);
+  --gradient-text: linear-gradient(135deg, #0f5f6f 0%, #083344 100%);
+}
+html[data-ha-style="dashboard"] body {
+  background-color: var(--bg) !important;
+  background-image: linear-gradient(90deg, rgba(15,95,111,.08) 0 1px, transparent 1px);
+  background-size: 18px 100%;
+}
+html[data-ha-style="dashboard"] body::before { content: "dashboard"; }
+html[data-ha-style="dashboard"] .hero::before,
+html[data-ha-style="dashboard"] header.hero::before {
+  width: 100%;
+  height: 3px;
+  margin-bottom: 14px;
+}
+
+html[data-ha-style="document"] {
+  --ha-style-accent: #8b3f1f;
+  --ha-style-accent-2: #2f6f73;
+  --primary: #8b3f1f;
+  --primary-container: #703319;
+  --primary-fixed: #ffe4d5;
+  --secondary-container: #2f6f73;
+  --bg: #fbfaf7;
+  --surface: #fbfaf7;
+  --surface-container-lowest: #ffffff;
+  --surface-container-low: #f2efe8;
+  --surface-container: #e9e4da;
+  --surface-container-high: #ded7c9;
+  --fg-1: #211d18;
+  --fg-2: #554d44;
+  --fg-muted: #82786c;
+  --border: rgba(139,63,31,.16);
+  --font-headline: Georgia, "Iowan Old Style", "Times New Roman", serif;
+  --gradient-hero: linear-gradient(135deg, #8b3f1f 0%, #2f6f73 100%);
+  --gradient-text: linear-gradient(135deg, #8b3f1f 0%, #2f6f73 100%);
+}
+html[data-ha-style="document"] body {
+  background-color: var(--bg) !important;
+  background-image: linear-gradient(90deg, rgba(139,63,31,.18) 0 4px, transparent 4px);
+  background-size: 100% 100%;
+}
+html[data-ha-style="document"] body::before { content: "document"; }
+html[data-ha-style="document"] .hero::before,
+html[data-ha-style="document"] header.hero::before {
+  width: 42px;
+  height: 42px;
+  border-radius: 0;
+  background: transparent;
+  border-top: 4px solid var(--ha-style-accent);
+  border-left: 4px solid var(--ha-style-accent);
+}
+
+html[data-ha-style="developer"] {
+  color-scheme: dark;
+  --ha-style-accent: #38bdf8;
+  --ha-style-accent-2: #f97316;
+  --ha-style-badge-bg: rgba(8,16,31,.82);
+  --ha-style-badge-fg: #dbeafe;
+  --primary: #38bdf8;
+  --primary-container: #0e7490;
+  --primary-fixed: #0f2942;
+  --secondary-container: #f97316;
+  --bg: #07111f;
+  --surface: #07111f;
+  --surface-container-lowest: #0b1426;
+  --surface-container-low: #0f1b31;
+  --surface-container: #13233d;
+  --surface-container-high: #1b2f50;
+  --fg-1: #f8fafc;
+  --fg-2: #cbd5e1;
+  --fg-muted: #94a3b8;
+  --border: rgba(148,163,184,.18);
+  --green: #34d399;
+  --red: #fb7185;
+  --yellow: #fbbf24;
+  --gradient-hero: linear-gradient(135deg, #0f172a 0%, #0e7490 100%);
+  --gradient-text: linear-gradient(135deg, #38bdf8 0%, #f97316 100%);
+}
+html[data-ha-style="developer"] body {
+  background-color: var(--bg) !important;
+  background-image:
+    linear-gradient(rgba(56,189,248,.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(56,189,248,.05) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+html[data-ha-style="developer"] body::before { content: "developer"; }
+html[data-ha-style="developer"] pre,
+html[data-ha-style="developer"] code,
+html[data-ha-style="developer"] .mono {
+  color: inherit;
+}
+</style>
+<!-- html-anything example style skin:end -->
+</head>
+<body>
+<script>const DATA = {"events":[{"id":"e_000001","ts":"2026-04-12 14:00:01","date":"2026-04-12","time":"14:00:01","tsEpoch":1776002401000,"severity":"info","category":"GET 2xx","source":"203.0.113.42","message":"GET / → 200","fields":{"ip":"203.0.113.42","method":"GET","path":"/","protocol":"HTTP/1.1","status":200,"bytes":4128,"referrer":"-","user_agent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15"},"raw":"203.0.113.42 - - [12/Apr/2026:14:00:01 +0000] \"GET / HTTP/1.1\" 200 4128 \"-\" \"Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15\""},{"id":"e_000002","ts":"2026-04-12 14:00:04","date":"2026-04-12","time":"14:00:04","tsEpoch":1776002404000,"severity":"info","category":"GET 2xx","source":"198.51.100.18","message":"GET /static/main.css → 200","fields":{"ip":"198.51.100.18","method":"GET","path":"/static/main.css","protocol":"HTTP/1.1","status":200,"bytes":12842,"referrer":"https://shop.example/","user_agent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15"},"raw":"198.51.100.18 - - [12/Apr/2026:14:00:04 +0000] \"GET /static/main.css HTTP/1.1\" 200 12842 \"https://shop.example/\" \"Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15\""},{"id":"e_000003","ts":"2026-04-12 14:00:04","date":"2026-04-12","time":"14:00:04","tsEpoch":1776002404000,"severity":"info","category":"GET 2xx","source":"198.51.100.18","message":"GET /static/app.js → 200","fields":{"ip":"198.51.100.18","method":"GET","path":"/static/app.js","protocol":"HTTP/1.1","status":200,"bytes":78421,"referrer":"https://shop.example/","user_agent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15"},"raw":"198.51.100.18 - - [12/Apr/2026:14:00:04 +0000] \"GET /static/app.js HTTP/1.1\" 200 78421 \"https://shop.example/\" \"Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15\""},{"id":"e_000004","ts":"2026-04-12 14:00:08","date":"2026-04-12","time":"14:00:08","tsEpoch":1776002408000,"severity":"info","category":"GET 2xx","source":"203.0.113.42","message":"GET /api/products → 200","fields":{"ip":"203.0.113.42","method":"GET","path":"/api/products","protocol":"HTTP/1.1","status":200,"bytes":18421,"referrer":"https://shop.example/","user_agent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15"},"raw":"203.0.113.42 - - [12/Apr/2026:14:00:08 +0000] \"GET /api/products HTTP/1.1\" 200 18421 \"https://shop.example/\" \"Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15\""},{"id":"e_000005","ts":"2026-04-12 14:00:12","date":"2026-04-12","time":"14:00:12","tsEpoch":1776002412000,"severity":"info","category":"GET 2xx","source":"198.51.100.42","message":"GET / → 200","fields":{"ip":"198.51.100.42","method":"GET","path":"/","protocol":"HTTP/1.1","status":200,"bytes":4128,"referrer":"-","user_agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"},"raw":"198.51.100.42 - - [12/Apr/2026:14:00:12 +0000] \"GET / HTTP/1.1\" 200 4128 \"-\" \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36\""},{"id":"e_000006","ts":"2026-04-12 14:00:13","date":"2026-04-12","time":"14:00:13","tsEpoch":1776002413000,"severity":"info","category":"GET 3xx","source":"198.51.100.42","message":"GET /static/main.css → 304","fields":{"ip":"198.51.100.42","method":"GET","path":"/static/main.css","protocol":"HTTP/1.1","status":304,"bytes":0,"referrer":"https://shop.example/","user_agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"},"raw":"198.51.100.42 - - [12/Apr/2026:14:00:13 +0000] \"GET /static/main.css HTTP/1.1\" 304 0 \"https://shop.example/\" \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36\""},{"id":"e_000007","ts":"2026-04-12 14:00:13","date":"2026-04-12","time":"14:00:13","tsEpoch":1776002413000,"severity":"info","category":"GET 3xx","source":"198.51.100.42","message":"GET /static/app.js → 304","fields":{"ip":"198.51.100.42","method":"GET","path":"/static/app.js","protocol":"HTTP/1.1","status":304,"bytes":0,"referrer":"https://shop.example/","user_agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"},"raw":"198.51.100.42 - - [12/Apr/2026:14:00:13 +0000] \"GET /static/app.js HTTP/1.1\" 304 0 \"https://shop.example/\" \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36\""},{"id":"e_000008","ts":"2026-04-12 14:00:18","date":"2026-04-12","time":"14:00:18","tsEpoch":1776002418000,"severity":"info","category":"GET 2xx","source":"203.0.113.99","message":"GET /api/products → 200","fields":{"ip":"203.0.113.99","method":"GET","path":"/api/products","protocol":"HTTP/1.1","status":200,"bytes":18421,"referrer":"https://shop.example/","user_agent":"Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1"},"raw":"203.0.113.99 - - [12/Apr/2026:14:00:18 +0000] \"GET /api/products HTTP/1.1\" 200 18421 \"https://shop.example/\" \"Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1\""},{"id":"e_000009","ts":"2026-04-12 14:00:21","date":"2026-04-12","time":"14:00:21","tsEpoch":1776002421000,"severity":"info","category":"GET 2xx","source":"203.0.113.99","message":"GET /api/products/p_842 → 200","fields":{"ip":"203.0.113.99","method":"GET","path":"/api/products/p_842","protocol":"HTTP/1.1","status":200,"bytes":2418,"referrer":"https://shop.example/products","user_agent":"Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1"},"raw":"203.0.113.99 - - [12/Apr/2026:14:00:21 +0000] \"GET /api/products/p_842 HTTP/1.1\" 200 2418 \"https://shop.example/products\" \"Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1\""},{"id":"e_000010","ts":"2026-04-12 14:01:02","date":"2026-04-12","time":"14:01:02","tsEpoch":1776002462000,"severity":"info","category":"POST 2xx","source":"203.0.113.42","message":"POST /api/login → 200","fields":{"ip":"203.0.113.42","method":"POST","path":"/api/login","protocol":"HTTP/1.1","status":200,"bytes":412,"referrer":"https://shop.example/login","user_agent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15"},"raw":"203.0.113.42 - - [12/Apr/2026:14:01:02 +0000] \"POST /api/login HTTP/1.1\" 200 412 \"https://shop.example/login\" \"Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15\""},{"id":"e_000011","ts":"2026-04-12 14:01:08","date":"2026-04-12","time":"14:01:08","tsEpoch":1776002468000,"severity":"info","category":"GET 2xx","source":"203.0.113.42","message":"GET /api/cart → 200","fields":{"ip":"203.0.113.42","method":"GET","path":"/api/cart","protocol":"HTTP/1.1","status":200,"bytes":612,"referrer":"https://shop.example/cart","user_agent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15"},"raw":"203.0.113.42 - - [12/Apr/2026:14:01:08 +0000] \"GET /api/cart HTTP/1.1\" 200 612 \"https://shop.example/cart\" \"Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15\""},{"id":"e_000012","ts":"2026-04-12 14:01:12","date":"2026-04-12","time":"14:01:12","tsEpoch":1776002472000,"severity":"info","category":"GET 2xx","source":"192.0.2.42","message":"GET /api/products → 200","fields":{"ip":"192.0.2.42","method":"GET","path":"/api/products","protocol":"HTTP/1.1","status":200,"bytes":18421,"referrer":"-","user_agent":"curl/8.4.0"},"raw":"192.0.2.42 - - [12/Apr/2026:14:01:12 +0000] \"GET /api/products HTTP/1.1\" 200 18421 \"-\" \"curl/8.4.0\""},{"id":"e_000013","ts":"2026-04-12 14:01:14","date":"2026-04-12","time":"14:01:14","tsEpoch":1776002474000,"severity":"info","category":"GET 2xx","source":"192.0.2.42","message":"GET /api/products?category=audio → 200","fields":{"ip":"192.0.2.42","method":"GET","path":"/api/products?category=audio","protocol":"HTTP/1.1","status":200,"bytes":8412,"referrer":"-","user_agent":"curl/8.4.0"},"raw":"192.0.2.42 - - [12/Apr/2026:14:01:14 +0000] \"GET /api/products?category=audio HTTP/1.1\" 200 8412 \"-\" \"curl/8.4.0\""},{"id":"e_000014","ts":"2026-04-12 14:01:16","date":"2026-04-12","time":"14:01:16","tsEpoch":1776002476000,"severity":"info","category":"GET 2xx","source":"192.0.2.42","message":"GET /api/products?category=video → 200","fields":{"ip":"192.0.2.42","method":"GET","path":"/api/products?category=video","protocol":"HTTP/1.1","status":200,"bytes":7218,"referrer":"-","user_agent":"curl/8.4.0"},"raw":"192.0.2.42 - - [12/Apr/2026:14:01:16 +0000] \"GET /api/products?category=video HTTP/1.1\" 200 7218 \"-\" \"curl/8.4.0\""},{"id":"e_000015","ts":"2026-04-12 14:01:18","date":"2026-04-12","time":"14:01:18","tsEpoch":1776002478000,"severity":"info","category":"GET 2xx","source":"192.0.2.42","message":"GET /api/products?category=accessories → 200","fields":{"ip":"192.0.2.42","method":"GET","path":"/api/products?category=accessories","protocol":"HTTP/1.1","status":200,"bytes":4128,"referrer":"-","user_agent":"curl/8.4.0"},"raw":"192.0.2.42 - - [12/Apr/2026:14:01:18 +0000] \"GET /api/products?category=accessories HTTP/1.1\" 200 4128 \"-\" \"curl/8.4.0\""},{"id":"e_000016","ts":"2026-04-12 14:01:20","date":"2026-04-12","time":"14:01:20","tsEpoch":1776002480000,"severity":"info","category":"GET 2xx","source":"192.0.2.42","message":"GET /api/products?page=2 → 200","fields":{"ip":"192.0.2.42","method":"GET","path":"/api/products?page=2","protocol":"HTTP/1.1","status":200,"bytes":16842,"referrer":"-","user_agent":"curl/8.4.0"},"raw":"192.0.2.42 - - [12/Apr/2026:14:01:20 +0000] \"GET /api/products?page=2 HTTP/1.1\" 200 16842 \"-\" \"curl/8.4.0\""},{"id":"e_000017","ts":"2026-04-12 14:01:22","date":"2026-04-12","time":"14:01:22","tsEpoch":1776002482000,"severity":"info","category":"GET 2xx","source":"192.0.2.42","message":"GET /api/products?page=3 → 200","fields":{"ip":"192.0.2.42","method":"GET","path":"/api/products?page=3","protocol":"HTTP/1.1","status":200,"bytes":14218,"referrer":"-","user_agent":"curl/8.4.0"},"raw":"192.0.2.42 - - [12/Apr/2026:14:01:22 +0000] \"GET /api/products?page=3 HTTP/1.1\" 200 14218 \"-\" \"curl/8.4.0\""},{"id":"e_000018","ts":"2026-04-12 14:01:24","date":"2026-04-12","time":"14:01:24","tsEpoch":1776002484000,"severity":"info","category":"GET 2xx","source":"192.0.2.42","message":"GET /api/products?page=4 → 200","fields":{"ip":"192.0.2.42","method":"GET","path":"/api/products?page=4","protocol":"HTTP/1.1","status":200,"bytes":12842,"referrer":"-","user_agent":"curl/8.4.0"},"raw":"192.0.2.42 - - [12/Apr/2026:14:01:24 +0000] \"GET /api/products?page=4 HTTP/1.1\" 200 12842 \"-\" \"curl/8.4.0\""},{"id":"e_000019","ts":"2026-04-12 14:01:26","date":"2026-04-12","time":"14:01:26","tsEpoch":1776002486000,"severity":"info","category":"GET 2xx","source":"192.0.2.42","message":"GET /api/products?page=5 → 200","fields":{"ip":"192.0.2.42","method":"GET","path":"/api/products?page=5","protocol":"HTTP/1.1","status":200,"bytes":11218,"referrer":"-","user_agent":"curl/8.4.0"},"raw":"192.0.2.42 - - [12/Apr/2026:14:01:26 +0000] \"GET /api/products?page=5 HTTP/1.1\" 200 11218 \"-\" \"curl/8.4.0\""},{"id":"e_000020","ts":"2026-04-12 14:02:01","date":"2026-04-12","time":"14:02:01","tsEpoch":1776002521000,"severity":"info","category":"POST 2xx","source":"198.51.100.18","message":"POST /api/cart → 200","fields":{"ip":"198.51.100.18","method":"POST","path":"/api/cart","protocol":"HTTP/1.1","status":200,"bytes":218,"referrer":"https://shop.example/products","user_agent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15"},"raw":"198.51.100.18 - - [12/Apr/2026:14:02:01 +0000] \"POST /api/cart HTTP/1.1\" 200 218 \"https://shop.example/products\" \"Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15\""},{"id":"e_000021","ts":"2026-04-12 14:02:11","date":"2026-04-12","time":"14:02:11","tsEpoch":1776002531000,"severity":"info","category":"GET 2xx","source":"198.51.100.18","message":"GET /api/checkout → 200","fields":{"ip":"198.51.100.18","method":"GET","path":"/api/checkout","protocol":"HTTP/1.1","status":200,"bytes":1842,"referrer":"https://shop.example/cart","user_agent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15"},"raw":"198.51.100.18 - - [12/Apr/2026:14:02:11 +0000] \"GET /api/checkout HTTP/1.1\" 200 1842 \"https://shop.example/cart\" \"Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15\""},{"id":"e_000022","ts":"2026-04-12 14:02:42","date":"2026-04-12","time":"14:02:42","tsEpoch":1776002562000,"severity":"info","category":"POST 2xx","source":"198.51.100.18","message":"POST /api/checkout → 200","fields":{"ip":"198.51.100.18","method":"POST","path":"/api/checkout","protocol":"HTTP/1.1","status":200,"bytes":412,"referrer":"https://shop.example/checkout","user_agent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15"},"raw":"198.51.100.18 - - [12/Apr/2026:14:02:42 +0000] \"POST /api/checkout HTTP/1.1\" 200 412 \"https://shop.example/checkout\" \"Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15\""},{"id":"e_000023","ts":"2026-04-12 14:03:01","date":"2026-04-12","time":"14:03:01","tsEpoch":1776002581000,"severity":"info","category":"GET 2xx","source":"192.0.2.42","message":"GET /api/products/p_001 → 200","fields":{"ip":"192.0.2.42","method":"GET","path":"/api/products/p_001","protocol":"HTTP/1.1","status":200,"bytes":2418,"referrer":"-","user_agent":"curl/8.4.0"},"raw":"192.0.2.42 - - [12/Apr/2026:14:03:01 +0000] \"GET /api/products/p_001 HTTP/1.1\" 200 2418 \"-\" \"curl/8.4.0\""},{"id":"e_000024","ts":"2026-04-12 14:03:02","date":"2026-04-12","time":"14:03:02","tsEpoch":1776002582000,"severity":"info","category":"GET 2xx","source":"192.0.2.42","message":"GET /api/products/p_002 → 200","fields":{"ip":"192.0.2.42","method":"GET","path":"/api/products/p_002","protocol":"HTTP/1.1","status":200,"bytes":2218,"referrer":"-","user_agent":"curl/8.4.0"},"raw":"192.0.2.42 - - [12/Apr/2026:14:03:02 +0000] \"GET /api/products/p_002 HTTP/1.1\" 200 2218 \"-\" \"curl/8.4.0\""},{"id":"e_000025","ts":"2026-04-12 14:03:03","date":"2026-04-12","time":"14:03:03","tsEpoch":1776002583000,"severity":"info","category":"GET 2xx","source":"192.0.2.42","message":"GET /api/products/p_003 → 200","fields":{"ip":"192.0.2.42","method":"GET","path":"/api/products/p_003","protocol":"HTTP/1.1","status":200,"bytes":2618,"referrer":"-","user_agent":"curl/8.4.0"},"raw":"192.0.2.42 - - [12/Apr/2026:14:03:03 +0000] \"GET /api/products/p_003 HTTP/1.1\" 200 2618 \"-\" \"curl/8.4.0\""},{"id":"e_000026","ts":"2026-04-12 14:03:04","date":"2026-04-12","time":"14:03:04","tsEpoch":1776002584000,"severity":"info","category":"GET 2xx","source":"192.0.2.42","message":"GET /api/products/p_004 → 200","fields":{"ip":"192.0.2.42","method":"GET","path":"/api/products/p_004","protocol":"HTTP/1.1","status":200,"bytes":2118,"referrer":"-","user_agent":"curl/8.4.0"},"raw":"192.0.2.42 - - [12/Apr/2026:14:03:04 +0000] \"GET /api/products/p_004 HTTP/1.1\" 200 2118 \"-\" \"curl/8.4.0\""},{"id":"e_000027","ts":"2026-04-12 14:03:05","date":"2026-04-12","time":"14:03:05","tsEpoch":1776002585000,"severity":"info","category":"GET 2xx","source":"192.0.2.42","message":"GET /api/products/p_005 → 200","fields":{"ip":"192.0.2.42","method":"GET","path":"/api/products/p_005","protocol":"HTTP/1.1","status":200,"bytes":2418,"referrer":"-","user_agent":"curl/8.4.0"},"raw":"192.0.2.42 - - [12/Apr/2026:14:03:05 +0000] \"GET /api/products/p_005 HTTP/1.1\" 200 2418 \"-\" \"curl/8.4.0\""},{"id":"e_000028","ts":"2026-04-12 14:03:06","date":"2026-04-12","time":"14:03:06","tsEpoch":1776002586000,"severity":"info","category":"GET 2xx","source":"192.0.2.42","message":"GET /api/products/p_006 → 200","fields":{"ip":"192.0.2.42","method":"GET","path":"/api/products/p_006","protocol":"HTTP/1.1","status":200,"bytes":2718,"referrer":"-","user_agent":"curl/8.4.0"},"raw":"192.0.2.42 - - [12/Apr/2026:14:03:06 +0000] \"GET /api/products/p_006 HTTP/1.1\" 200 2718 \"-\" \"curl/8.4.0\""},{"id":"e_000029","ts":"2026-04-12 14:03:07","date":"2026-04-12","time":"14:03:07","tsEpoch":1776002587000,"severity":"info","category":"GET 2xx","source":"192.0.2.42","message":"GET /api/products/p_007 → 200","fields":{"ip":"192.0.2.42","method":"GET","path":"/api/products/p_007","protocol":"HTTP/1.1","status":200,"bytes":2218,"referrer":"-","user_agent":"curl/8.4.0"},"raw":"192.0.2.42 - - [12/Apr/2026:14:03:07 +0000] \"GET /api/products/p_007 HTTP/1.1\" 200 2218 \"-\" \"curl/8.4.0\""},{"id":"e_000030","ts":"2026-04-12 14:03:08","date":"2026-04-12","time":"14:03:08","tsEpoch":1776002588000,"severity":"info","category":"GET 2xx","source":"192.0.2.42","message":"GET /api/products/p_008 → 200","fields":{"ip":"192.0.2.42","method":"GET","path":"/api/products/p_008","protocol":"HTTP/1.1","status":200,"bytes":2818,"referrer":"-","user_agent":"curl/8.4.0"},"raw":"192.0.2.42 - - [12/Apr/2026:14:03:08 +0000] \"GET /api/products/p_008 HTTP/1.1\" 200 2818 \"-\" \"curl/8.4.0\""},{"id":"e_000031","ts":"2026-04-12 14:03:09","date":"2026-04-12","time":"14:03:09","tsEpoch":1776002589000,"severity":"info","category":"GET 2xx","source":"192.0.2.42","message":"GET /api/products/p_009 → 200","fields":{"ip":"192.0.2.42","method":"GET","path":"/api/products/p_009","protocol":"HTTP/1.1","status":200,"bytes":2418,"referrer":"-","user_agent":"curl/8.4.0"},"raw":"192.0.2.42 - - [12/Apr/2026:14:03:09 +0000] \"GET /api/products/p_009 HTTP/1.1\" 200 2418 \"-\" \"curl/8.4.0\""},{"id":"e_000032","ts":"2026-04-12 14:03:10","date":"2026-04-12","time":"14:03:10","tsEpoch":1776002590000,"severity":"info","category":"GET 2xx","source":"192.0.2.42","message":"GET /api/products/p_010 → 200","fields":{"ip":"192.0.2.42","method":"GET","path":"/api/products/p_010","protocol":"HTTP/1.1","status":200,"bytes":2618,"referrer":"-","user_agent":"curl/8.4.0"},"raw":"192.0.2.42 - - [12/Apr/2026:14:03:10 +0000] \"GET /api/products/p_010 HTTP/1.1\" 200 2618 \"-\" \"curl/8.4.0\""},{"id":"e_000033","ts":"2026-04-12 14:04:18","date":"2026-04-12","time":"14:04:18","tsEpoch":1776002658000,"severity":"info","category":"GET 2xx","source":"203.0.113.99","message":"GET /api/cart → 200","fields":{"ip":"203.0.113.99","method":"GET","path":"/api/cart","protocol":"HTTP/1.1","status":200,"bytes":218,"referrer":"https://shop.example/cart","user_agent":"Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1"},"raw":"203.0.113.99 - - [12/Apr/2026:14:04:18 +0000] \"GET /api/cart HTTP/1.1\" 200 218 \"https://shop.example/cart\" \"Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1\""},{"id":"e_000034","ts":"2026-04-12 14:05:02","date":"2026-04-12","time":"14:05:02","tsEpoch":1776002702000,"severity":"info","category":"POST 2xx","source":"203.0.113.99","message":"POST /api/cart → 200","fields":{"ip":"203.0.113.99","method":"POST","path":"/api/cart","protocol":"HTTP/1.1","status":200,"bytes":218,"referrer":"https://shop.example/products/p_842","user_agent":"Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1"},"raw":"203.0.113.99 - - [12/Apr/2026:14:05:02 +0000] \"POST /api/cart HTTP/1.1\" 200 218 \"https://shop.example/products/p_842\" \"Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1\""},{"id":"e_000035","ts":"2026-04-12 14:06:18","date":"2026-04-12","time":"14:06:18","tsEpoch":1776002778000,"severity":"info","category":"GET 2xx","source":"198.51.100.99","message":"GET / → 200","fields":{"ip":"198.51.100.99","method":"GET","path":"/","protocol":"HTTP/1.1","status":200,"bytes":4128,"referrer":"-","user_agent":"Mozilla/5.0 (Linux; Android 14) Chrome/124.0 Mobile Safari/537.36"},"raw":"198.51.100.99 - - [12/Apr/2026:14:06:18 +0000] \"GET / HTTP/1.1\" 200 4128 \"-\" \"Mozilla/5.0 (Linux; Android 14) Chrome/124.0 Mobile Safari/537.36\""},{"id":"e_000036","ts":"2026-04-12 14:06:21","date":"2026-04-12","time":"14:06:21","tsEpoch":1776002781000,"severity":"info","category":"GET 2xx","source":"198.51.100.99","message":"GET /api/products → 200","fields":{"ip":"198.51.100.99","method":"GET","path":"/api/products","protocol":"HTTP/1.1","status":200,"bytes":18421,"referrer":"https://shop.example/","user_agent":"Mozilla/5.0 (Linux; Android 14) Chrome/124.0 Mobile Safari/537.36"},"raw":"198.51.100.99 - - [12/Apr/2026:14:06:21 +0000] \"GET /api/products HTTP/1.1\" 200 18421 \"https://shop.example/\" \"Mozilla/5.0 (Linux; Android 14) Chrome/124.0 Mobile Safari/537.36\""},{"id":"e_000037","ts":"2026-04-12 14:06:42","date":"2026-04-12","time":"14:06:42","tsEpoch":1776002802000,"severity":"warn","category":"GET 4xx","source":"198.51.100.99","message":"GET /products/p_421 → 404","fields":{"ip":"198.51.100.99","method":"GET","path":"/products/p_421","protocol":"HTTP/1.1","status":404,"bytes":218,"referrer":"https://shop.example/","user_agent":"Mozilla/5.0 (Linux; Android 14) Chrome/124.0 Mobile Safari/537.36"},"raw":"198.51.100.99 - - [12/Apr/2026:14:06:42 +0000] \"GET /products/p_421 HTTP/1.1\" 404 218 \"https://shop.example/\" \"Mozilla/5.0 (Linux; Android 14) Chrome/124.0 Mobile Safari/537.36\""},{"id":"e_000038","ts":"2026-04-12 14:07:01","date":"2026-04-12","time":"14:07:01","tsEpoch":1776002821000,"severity":"info","category":"GET 2xx","source":"192.0.2.42","message":"GET /api/products/p_011 → 200","fields":{"ip":"192.0.2.42","method":"GET","path":"/api/products/p_011","protocol":"HTTP/1.1","status":200,"bytes":2418,"referrer":"-","user_agent":"curl/8.4.0"},"raw":"192.0.2.42 - - [12/Apr/2026:14:07:01 +0000] \"GET /api/products/p_011 HTTP/1.1\" 200 2418 \"-\" \"curl/8.4.0\""},{"id":"e_000039","ts":"2026-04-12 14:07:03","date":"2026-04-12","time":"14:07:03","tsEpoch":1776002823000,"severity":"info","category":"GET 2xx","source":"192.0.2.42","message":"GET /api/products/p_012 → 200","fields":{"ip":"192.0.2.42","method":"GET","path":"/api/products/p_012","protocol":"HTTP/1.1","status":200,"bytes":2618,"referrer":"-","user_agent":"curl/8.4.0"},"raw":"192.0.2.42 - - [12/Apr/2026:14:07:03 +0000] \"GET /api/products/p_012 HTTP/1.1\" 200 2618 \"-\" \"curl/8.4.0\""},{"id":"e_000040","ts":"2026-04-12 14:07:05","date":"2026-04-12","time":"14:07:05","tsEpoch":1776002825000,"severity":"info","category":"GET 2xx","source":"192.0.2.42","message":"GET /api/products/p_013 → 200","fields":{"ip":"192.0.2.42","method":"GET","path":"/api/products/p_013","protocol":"HTTP/1.1","status":200,"bytes":2218,"referrer":"-","user_agent":"curl/8.4.0"},"raw":"192.0.2.42 - - [12/Apr/2026:14:07:05 +0000] \"GET /api/products/p_013 HTTP/1.1\" 200 2218 \"-\" \"curl/8.4.0\""},{"id":"e_000041","ts":"2026-04-12 14:07:07","date":"2026-04-12","time":"14:07:07","tsEpoch":1776002827000,"severity":"info","category":"GET 2xx","source":"192.0.2.42","message":"GET /api/products/p_014 → 200","fields":{"ip":"192.0.2.42","method":"GET","path":"/api/products/p_014","protocol":"HTTP/1.1","status":200,"bytes":2818,"referrer":"-","user_agent":"curl/8.4.0"},"raw":"192.0.2.42 - - [12/Apr/2026:14:07:07 +0000] \"GET /api/products/p_014 HTTP/1.1\" 200 2818 \"-\" \"curl/8.4.0\""},{"id":"e_000042","ts":"2026-04-12 14:07:09","date":"2026-04-12","time":"14:07:09","tsEpoch":1776002829000,"severity":"info","category":"GET 2xx","source":"192.0.2.42","message":"GET /api/products/p_015 → 200","fields":{"ip":"192.0.2.42","method":"GET","path":"/api/products/p_015","protocol":"HTTP/1.1","status":200,"bytes":2418,"referrer":"-","user_agent":"curl/8.4.0"},"raw":"192.0.2.42 - - [12/Apr/2026:14:07:09 +0000] \"GET /api/products/p_015 HTTP/1.1\" 200 2418 \"-\" \"curl/8.4.0\""},{"id":"e_000043","ts":"2026-04-12 14:07:11","date":"2026-04-12","time":"14:07:11","tsEpoch":1776002831000,"severity":"info","category":"GET 2xx","source":"192.0.2.42","message":"GET /api/products/p_016 → 200","fields":{"ip":"192.0.2.42","method":"GET","path":"/api/products/p_016","protocol":"HTTP/1.1","status":200,"bytes":2618,"referrer":"-","user_agent":"curl/8.4.0"},"raw":"192.0.2.42 - - [12/Apr/2026:14:07:11 +0000] \"GET /api/products/p_016 HTTP/1.1\" 200 2618 \"-\" \"curl/8.4.0\""},{"id":"e_000044","ts":"2026-04-12 14:07:13","date":"2026-04-12","time":"14:07:13","tsEpoch":1776002833000,"severity":"info","category":"GET 2xx","source":"192.0.2.42","message":"GET /api/products/p_017 → 200","fields":{"ip":"192.0.2.42","method":"GET","path":"/api/products/p_017","protocol":"HTTP/1.1","status":200,"bytes":2218,"referrer":"-","user_agent":"curl/8.4.0"},"raw":"192.0.2.42 - - [12/Apr/2026:14:07:13 +0000] \"GET /api/products/p_017 HTTP/1.1\" 200 2218 \"-\" \"curl/8.4.0\""},{"id":"e_000045","ts":"2026-04-12 14:07:15","date":"2026-04-12","time":"14:07:15","tsEpoch":1776002835000,"severity":"info","category":"GET 2xx","source":"192.0.2.42","message":"GET /api/products/p_018 → 200","fields":{"ip":"192.0.2.42","method":"GET","path":"/api/products/p_018","protocol":"HTTP/1.1","status":200,"bytes":2718,"referrer":"-","user_agent":"curl/8.4.0"},"raw":"192.0.2.42 - - [12/Apr/2026:14:07:15 +0000] \"GET /api/products/p_018 HTTP/1.1\" 200 2718 \"-\" \"curl/8.4.0\""},{"id":"e_000046","ts":"2026-04-12 14:08:21","date":"2026-04-12","time":"14:08:21","tsEpoch":1776002901000,"severity":"info","category":"GET 2xx","source":"198.51.100.42","message":"GET /api/products → 200","fields":{"ip":"198.51.100.42","method":"GET","path":"/api/products","protocol":"HTTP/1.1","status":200,"bytes":18421,"referrer":"https://shop.example/","user_agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"},"raw":"198.51.100.42 - - [12/Apr/2026:14:08:21 +0000] \"GET /api/products HTTP/1.1\" 200 18421 \"https://shop.example/\" \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36\""},{"id":"e_000047","ts":"2026-04-12 14:08:42","date":"2026-04-12","time":"14:08:42","tsEpoch":1776002922000,"severity":"info","category":"GET 2xx","source":"198.51.100.42","message":"GET /api/products/p_142 → 200","fields":{"ip":"198.51.100.42","method":"GET","path":"/api/products/p_142","protocol":"HTTP/1.1","status":200,"bytes":2418,"referrer":"https://shop.example/products","user_agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"},"raw":"198.51.100.42 - - [12/Apr/2026:14:08:42 +0000] \"GET /api/products/p_142 HTTP/1.1\" 200 2418 \"https://shop.example/products\" \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36\""},{"id":"e_000048","ts":"2026-04-12 14:09:18","date":"2026-04-12","time":"14:09:18","tsEpoch":1776002958000,"severity":"info","category":"POST 2xx","source":"198.51.100.42","message":"POST /api/cart → 200","fields":{"ip":"198.51.100.42","method":"POST","path":"/api/cart","protocol":"HTTP/1.1","status":200,"bytes":218,"referrer":"https://shop.example/products/p_142","user_agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"},"raw":"198.51.100.42 - - [12/Apr/2026:14:09:18 +0000] \"POST /api/cart HTTP/1.1\" 200 218 \"https://shop.example/products/p_142\" \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36\""},{"id":"e_000049","ts":"2026-04-12 14:09:42","date":"2026-04-12","time":"14:09:42","tsEpoch":1776002982000,"severity":"info","category":"POST 2xx","source":"198.51.100.42","message":"POST /api/checkout → 200","fields":{"ip":"198.51.100.42","method":"POST","path":"/api/checkout","protocol":"HTTP/1.1","status":200,"bytes":412,"referrer":"https://shop.example/checkout","user_agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"},"raw":"198.51.100.42 - - [12/Apr/2026:14:09:42 +0000] \"POST /api/checkout HTTP/1.1\" 200 412 \"https://shop.example/checkout\" \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36\""},{"id":"e_000050","ts":"2026-04-12 14:11:01","date":"2026-04-12","time":"14:11:01","tsEpoch":1776003061000,"severity":"info","category":"GET 2xx","source":"203.0.113.18","message":"GET / → 200","fields":{"ip":"203.0.113.18","method":"GET","path":"/","protocol":"HTTP/1.1","status":200,"bytes":4128,"referrer":"-","user_agent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"},"raw":"203.0.113.18 - - [12/Apr/2026:14:11:01 +0000] \"GET / HTTP/1.1\" 200 4128 \"-\" \"Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36\""},{"id":"e_000051","ts":"2026-04-12 14:11:08","date":"2026-04-12","time":"14:11:08","tsEpoch":1776003068000,"severity":"info","category":"GET 2xx","source":"203.0.113.18","message":"GET /robots.txt → 200","fields":{"ip":"203.0.113.18","method":"GET","path":"/robots.txt","protocol":"HTTP/1.1","status":200,"bytes":142,"referrer":"-","user_agent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"},"raw":"203.0.113.18 - - [12/Apr/2026:14:11:08 +0000] \"GET /robots.txt HTTP/1.1\" 200 142 \"-\" \"Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36\""},{"id":"e_000052","ts":"2026-04-12 14:11:42","date":"2026-04-12","time":"14:11:42","tsEpoch":1776003102000,"severity":"info","category":"GET 2xx","source":"203.0.113.18","message":"GET /api/products → 200","fields":{"ip":"203.0.113.18","method":"GET","path":"/api/products","protocol":"HTTP/1.1","status":200,"bytes":18421,"referrer":"https://shop.example/","user_agent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"},"raw":"203.0.113.18 - - [12/Apr/2026:14:11:42 +0000] \"GET /api/products HTTP/1.1\" 200 18421 \"https://shop.example/\" \"Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36\""},{"id":"e_000053","ts":"2026-04-12 14:12:01","date":"2026-04-12","time":"14:12:01","tsEpoch":1776003121000,"severity":"info","category":"GET 2xx","source":"192.0.2.42","message":"GET /api/products/p_019 → 200","fields":{"ip":"192.0.2.42","method":"GET","path":"/api/products/p_019","protocol":"HTTP/1.1","status":200,"bytes":2418,"referrer":"-","user_agent":"curl/8.4.0"},"raw":"192.0.2.42 - - [12/Apr/2026:14:12:01 +0000] \"GET /api/products/p_019 HTTP/1.1\" 200 2418 \"-\" \"curl/8.4.0\""},{"id":"e_000054","ts":"2026-04-12 14:12:03","date":"2026-04-12","time":"14:12:03","tsEpoch":1776003123000,"severity":"info","category":"GET 2xx","source":"192.0.2.42","message":"GET /api/products/p_020 → 200","fields":{"ip":"192.0.2.42","method":"GET","path":"/api/products/p_020","protocol":"HTTP/1.1","status":200,"bytes":2618,"referrer":"-","user_agent":"curl/8.4.0"},"raw":"192.0.2.42 - - [12/Apr/2026:14:12:03 +0000] \"GET /api/products/p_020 HTTP/1.1\" 200 2618 \"-\" \"curl/8.4.0\""},{"id":"e_000055","ts":"2026-04-12 14:12:05","date":"2026-04-12","time":"14:12:05","tsEpoch":1776003125000,"severity":"info","category":"GET 2xx","source":"192.0.2.42","message":"GET /api/products/p_021 → 200","fields":{"ip":"192.0.2.42","method":"GET","path":"/api/products/p_021","protocol":"HTTP/1.1","status":200,"bytes":2218,"referrer":"-","user_agent":"curl/8.4.0"},"raw":"192.0.2.42 - - [12/Apr/2026:14:12:05 +0000] \"GET /api/products/p_021 HTTP/1.1\" 200 2218 \"-\" \"curl/8.4.0\""},{"id":"e_000056","ts":"2026-04-12 14:12:07","date":"2026-04-12","time":"14:12:07","tsEpoch":1776003127000,"severity":"info","category":"GET 2xx","source":"192.0.2.42","message":"GET /api/products/p_022 → 200","fields":{"ip":"192.0.2.42","method":"GET","path":"/api/products/p_022","protocol":"HTTP/1.1","status":200,"bytes":2818,"referrer":"-","user_agent":"curl/8.4.0"},"raw":"192.0.2.42 - - [12/Apr/2026:14:12:07 +0000] \"GET /api/products/p_022 HTTP/1.1\" 200 2818 \"-\" \"curl/8.4.0\""},{"id":"e_000057","ts":"2026-04-12 14:12:09","date":"2026-04-12","time":"14:12:09","tsEpoch":1776003129000,"severity":"info","category":"GET 2xx","source":"192.0.2.42","message":"GET /api/products/p_023 → 200","fields":{"ip":"192.0.2.42","method":"GET","path":"/api/products/p_023","protocol":"HTTP/1.1","status":200,"bytes":2418,"referrer":"-","user_agent":"curl/8.4.0"},"raw":"192.0.2.42 - - [12/Apr/2026:14:12:09 +0000] \"GET /api/products/p_023 HTTP/1.1\" 200 2418 \"-\" \"curl/8.4.0\""},{"id":"e_000058","ts":"2026-04-12 14:12:11","date":"2026-04-12","time":"14:12:11","tsEpoch":1776003131000,"severity":"info","category":"GET 2xx","source":"192.0.2.42","message":"GET /api/products/p_024 → 200","fields":{"ip":"192.0.2.42","method":"GET","path":"/api/products/p_024","protocol":"HTTP/1.1","status":200,"bytes":2618,"referrer":"-","user_agent":"curl/8.4.0"},"raw":"192.0.2.42 - - [12/Apr/2026:14:12:11 +0000] \"GET /api/products/p_024 HTTP/1.1\" 200 2618 \"-\" \"curl/8.4.0\""},{"id":"e_000059","ts":"2026-04-12 14:12:13","date":"2026-04-12","time":"14:12:13","tsEpoch":1776003133000,"severity":"info","category":"GET 2xx","source":"192.0.2.42","message":"GET /api/products/p_025 → 200","fields":{"ip":"192.0.2.42","method":"GET","path":"/api/products/p_025","protocol":"HTTP/1.1","status":200,"bytes":2218,"referrer":"-","user_agent":"curl/8.4.0"},"raw":"192.0.2.42 - - [12/Apr/2026:14:12:13 +0000] \"GET /api/products/p_025 HTTP/1.1\" 200 2218 \"-\" \"curl/8.4.0\""},{"id":"e_000060","ts":"2026-04-12 14:14:21","date":"2026-04-12","time":"14:14:21","tsEpoch":1776003261000,"severity":"info","category":"GET 2xx","source":"198.51.100.18","message":"GET /account/orders → 200","fields":{"ip":"198.51.100.18","method":"GET","path":"/account/orders","protocol":"HTTP/1.1","status":200,"bytes":8412,"referrer":"https://shop.example/account","user_agent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15"},"raw":"198.51.100.18 - - [12/Apr/2026:14:14:21 +0000] \"GET /account/orders HTTP/1.1\" 200 8412 \"https://shop.example/account\" \"Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15\""},{"id":"e_000061","ts":"2026-04-12 14:14:42","date":"2026-04-12","time":"14:14:42","tsEpoch":1776003282000,"severity":"info","category":"GET 2xx","source":"198.51.100.18","message":"GET /account/orders/o_19842 → 200","fields":{"ip":"198.51.100.18","method":"GET","path":"/account/orders/o_19842","protocol":"HTTP/1.1","status":200,"bytes":4218,"referrer":"https://shop.example/account/orders","user_agent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15"},"raw":"198.51.100.18 - - [12/Apr/2026:14:14:42 +0000] \"GET /account/orders/o_19842 HTTP/1.1\" 200 4218 \"https://shop.example/account/orders\" \"Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15\""},{"id":"e_000062","ts":"2026-04-12 14:18:01","date":"2026-04-12","time":"14:18:01","tsEpoch":1776003481000,"severity":"info","category":"GET 2xx","source":"203.0.113.99","message":"GET /api/cart → 200","fields":{"ip":"203.0.113.99","method":"GET","path":"/api/cart","protocol":"HTTP/1.1","status":200,"bytes":218,"referrer":"https://shop.example/","user_agent":"Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1"},"raw":"203.0.113.99 - - [12/Apr/2026:14:18:01 +0000] \"GET /api/cart HTTP/1.1\" 200 218 \"https://shop.example/\" \"Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1\""},{"id":"e_000063","ts":"2026-04-12 14:18:42","date":"2026-04-12","time":"14:18:42","tsEpoch":1776003522000,"severity":"error","category":"POST 5xx","source":"203.0.113.99","message":"POST /api/checkout → 503","fields":{"ip":"203.0.113.99","method":"POST","path":"/api/checkout","protocol":"HTTP/1.1","status":503,"bytes":218,"referrer":"https://shop.example/checkout","user_agent":"Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1"},"raw":"203.0.113.99 - - [12/Apr/2026:14:18:42 +0000] \"POST /api/checkout HTTP/1.1\" 503 218 \"https://shop.example/checkout\" \"Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1\""},{"id":"e_000064","ts":"2026-04-12 14:19:01","date":"2026-04-12","time":"14:19:01","tsEpoch":1776003541000,"severity":"error","category":"POST 5xx","source":"198.51.100.42","message":"POST /api/checkout → 503","fields":{"ip":"198.51.100.42","method":"POST","path":"/api/checkout","protocol":"HTTP/1.1","status":503,"bytes":218,"referrer":"https://shop.example/checkout","user_agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"},"raw":"198.51.100.42 - - [12/Apr/2026:14:19:01 +0000] \"POST /api/checkout HTTP/1.1\" 503 218 \"https://shop.example/checkout\" \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36\""},{"id":"e_000065","ts":"2026-04-12 14:19:18","date":"2026-04-12","time":"14:19:18","tsEpoch":1776003558000,"severity":"error","category":"POST 5xx","source":"203.0.113.42","message":"POST /api/checkout → 503","fields":{"ip":"203.0.113.42","method":"POST","path":"/api/checkout","protocol":"HTTP/1.1","status":503,"bytes":218,"referrer":"https://shop.example/checkout","user_agent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15"},"raw":"203.0.113.42 - - [12/Apr/2026:14:19:18 +0000] \"POST /api/checkout HTTP/1.1\" 503 218 \"https://shop.example/checkout\" \"Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15\""},{"id":"e_000066","ts":"2026-04-12 14:19:42","date":"2026-04-12","time":"14:19:42","tsEpoch":1776003582000,"severity":"error","category":"POST 5xx","source":"198.51.100.99","message":"POST /api/checkout → 503","fields":{"ip":"198.51.100.99","method":"POST","path":"/api/checkout","protocol":"HTTP/1.1","status":503,"bytes":218,"referrer":"https://shop.example/checkout","user_agent":"Mozilla/5.0 (Linux; Android 14) Chrome/124.0 Mobile Safari/537.36"},"raw":"198.51.100.99 - - [12/Apr/2026:14:19:42 +0000] \"POST /api/checkout HTTP/1.1\" 503 218 \"https://shop.example/checkout\" \"Mozilla/5.0 (Linux; Android 14) Chrome/124.0 Mobile Safari/537.36\""},{"id":"e_000067","ts":"2026-04-12 14:20:01","date":"2026-04-12","time":"14:20:01","tsEpoch":1776003601000,"severity":"error","category":"POST 5xx","source":"203.0.113.18","message":"POST /api/checkout → 503","fields":{"ip":"203.0.113.18","method":"POST","path":"/api/checkout","protocol":"HTTP/1.1","status":503,"bytes":218,"referrer":"https://shop.example/checkout","user_agent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"},"raw":"203.0.113.18 - - [12/Apr/2026:14:20:01 +0000] \"POST /api/checkout HTTP/1.1\" 503 218 \"https://shop.example/checkout\" \"Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36\""},{"id":"e_000068","ts":"2026-04-12 14:20:18","date":"2026-04-12","time":"14:20:18","tsEpoch":1776003618000,"severity":"error","category":"POST 5xx","source":"203.0.113.42","message":"POST /api/checkout → 503","fields":{"ip":"203.0.113.42","method":"POST","path":"/api/checkout","protocol":"HTTP/1.1","status":503,"bytes":218,"referrer":"https://shop.example/checkout","user_agent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15"},"raw":"203.0.113.42 - - [12/Apr/2026:14:20:18 +0000] \"POST /api/checkout HTTP/1.1\" 503 218 \"https://shop.example/checkout\" \"Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15\""},{"id":"e_000069","ts":"2026-04-12 14:20:42","date":"2026-04-12","time":"14:20:42","tsEpoch":1776003642000,"severity":"error","category":"POST 5xx","source":"198.51.100.42","message":"POST /api/checkout → 503","fields":{"ip":"198.51.100.42","method":"POST","path":"/api/checkout","protocol":"HTTP/1.1","status":503,"bytes":218,"referrer":"https://shop.example/checkout","user_agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"},"raw":"198.51.100.42 - - [12/Apr/2026:14:20:42 +0000] \"POST /api/checkout HTTP/1.1\" 503 218 \"https://shop.example/checkout\" \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36\""},{"id":"e_000070","ts":"2026-04-12 14:21:01","date":"2026-04-12","time":"14:21:01","tsEpoch":1776003661000,"severity":"error","category":"POST 5xx","source":"203.0.113.99","message":"POST /api/checkout → 503","fields":{"ip":"203.0.113.99","method":"POST","path":"/api/checkout","protocol":"HTTP/1.1","status":503,"bytes":218,"referrer":"https://shop.example/checkout","user_agent":"Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1"},"raw":"203.0.113.99 - - [12/Apr/2026:14:21:01 +0000] \"POST /api/checkout HTTP/1.1\" 503 218 \"https://shop.example/checkout\" \"Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1\""},{"id":"e_000071","ts":"2026-04-12 14:21:18","date":"2026-04-12","time":"14:21:18","tsEpoch":1776003678000,"severity":"info","category":"POST 2xx","source":"198.51.100.18","message":"POST /api/checkout → 200","fields":{"ip":"198.51.100.18","method":"POST","path":"/api/checkout","protocol":"HTTP/1.1","status":200,"bytes":412,"referrer":"https://shop.example/checkout","user_agent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15"},"raw":"198.51.100.18 - - [12/Apr/2026:14:21:18 +0000] \"POST /api/checkout HTTP/1.1\" 200 412 \"https://shop.example/checkout\" \"Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15\""},{"id":"e_000072","ts":"2026-04-12 14:21:42","date":"2026-04-12","time":"14:21:42","tsEpoch":1776003702000,"severity":"info","category":"POST 2xx","source":"203.0.113.18","message":"POST /api/checkout → 200","fields":{"ip":"203.0.113.18","method":"POST","path":"/api/checkout","protocol":"HTTP/1.1","status":200,"bytes":412,"referrer":"https://shop.example/checkout","user_agent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"},"raw":"203.0.113.18 - - [12/Apr/2026:14:21:42 +0000] \"POST /api/checkout HTTP/1.1\" 200 412 \"https://shop.example/checkout\" \"Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36\""},{"id":"e_000073","ts":"2026-04-12 14:22:01","date":"2026-04-12","time":"14:22:01","tsEpoch":1776003721000,"severity":"info","category":"POST 2xx","source":"198.51.100.42","message":"POST /api/checkout → 200","fields":{"ip":"198.51.100.42","method":"POST","path":"/api/checkout","protocol":"HTTP/1.1","status":200,"bytes":412,"referrer":"https://shop.example/checkout","user_agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"},"raw":"198.51.100.42 - - [12/Apr/2026:14:22:01 +0000] \"POST /api/checkout HTTP/1.1\" 200 412 \"https://shop.example/checkout\" \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36\""},{"id":"e_000074","ts":"2026-04-12 14:24:01","date":"2026-04-12","time":"14:24:01","tsEpoch":1776003841000,"severity":"info","category":"GET 2xx","source":"192.0.2.42","message":"GET /api/products/p_026 → 200","fields":{"ip":"192.0.2.42","method":"GET","path":"/api/products/p_026","protocol":"HTTP/1.1","status":200,"bytes":2418,"referrer":"-","user_agent":"curl/8.4.0"},"raw":"192.0.2.42 - - [12/Apr/2026:14:24:01 +0000] \"GET /api/products/p_026 HTTP/1.1\" 200 2418 \"-\" \"curl/8.4.0\""},{"id":"e_000075","ts":"2026-04-12 14:24:03","date":"2026-04-12","time":"14:24:03","tsEpoch":1776003843000,"severity":"info","category":"GET 2xx","source":"192.0.2.42","message":"GET /api/products/p_027 → 200","fields":{"ip":"192.0.2.42","method":"GET","path":"/api/products/p_027","protocol":"HTTP/1.1","status":200,"bytes":2618,"referrer":"-","user_agent":"curl/8.4.0"},"raw":"192.0.2.42 - - [12/Apr/2026:14:24:03 +0000] \"GET /api/products/p_027 HTTP/1.1\" 200 2618 \"-\" \"curl/8.4.0\""},{"id":"e_000076","ts":"2026-04-12 14:24:05","date":"2026-04-12","time":"14:24:05","tsEpoch":1776003845000,"severity":"info","category":"GET 2xx","source":"192.0.2.42","message":"GET /api/products/p_028 → 200","fields":{"ip":"192.0.2.42","method":"GET","path":"/api/products/p_028","protocol":"HTTP/1.1","status":200,"bytes":2218,"referrer":"-","user_agent":"curl/8.4.0"},"raw":"192.0.2.42 - - [12/Apr/2026:14:24:05 +0000] \"GET /api/products/p_028 HTTP/1.1\" 200 2218 \"-\" \"curl/8.4.0\""},{"id":"e_000077","ts":"2026-04-12 14:24:07","date":"2026-04-12","time":"14:24:07","tsEpoch":1776003847000,"severity":"info","category":"GET 2xx","source":"192.0.2.42","message":"GET /api/products/p_029 → 200","fields":{"ip":"192.0.2.42","method":"GET","path":"/api/products/p_029","protocol":"HTTP/1.1","status":200,"bytes":2818,"referrer":"-","user_agent":"curl/8.4.0"},"raw":"192.0.2.42 - - [12/Apr/2026:14:24:07 +0000] \"GET /api/products/p_029 HTTP/1.1\" 200 2818 \"-\" \"curl/8.4.0\""},{"id":"e_000078","ts":"2026-04-12 14:24:09","date":"2026-04-12","time":"14:24:09","tsEpoch":1776003849000,"severity":"info","category":"GET 2xx","source":"192.0.2.42","message":"GET /api/products/p_030 → 200","fields":{"ip":"192.0.2.42","method":"GET","path":"/api/products/p_030","protocol":"HTTP/1.1","status":200,"bytes":2418,"referrer":"-","user_agent":"curl/8.4.0"},"raw":"192.0.2.42 - - [12/Apr/2026:14:24:09 +0000] \"GET /api/products/p_030 HTTP/1.1\" 200 2418 \"-\" \"curl/8.4.0\""},{"id":"e_000079","ts":"2026-04-12 14:24:11","date":"2026-04-12","time":"14:24:11","tsEpoch":1776003851000,"severity":"info","category":"GET 2xx","source":"192.0.2.42","message":"GET /api/products/p_031 → 200","fields":{"ip":"192.0.2.42","method":"GET","path":"/api/products/p_031","protocol":"HTTP/1.1","status":200,"bytes":2618,"referrer":"-","user_agent":"curl/8.4.0"},"raw":"192.0.2.42 - - [12/Apr/2026:14:24:11 +0000] \"GET /api/products/p_031 HTTP/1.1\" 200 2618 \"-\" \"curl/8.4.0\""},{"id":"e_000080","ts":"2026-04-12 14:24:13","date":"2026-04-12","time":"14:24:13","tsEpoch":1776003853000,"severity":"info","category":"GET 2xx","source":"192.0.2.42","message":"GET /api/products/p_032 → 200","fields":{"ip":"192.0.2.42","method":"GET","path":"/api/products/p_032","protocol":"HTTP/1.1","status":200,"bytes":2218,"referrer":"-","user_agent":"curl/8.4.0"},"raw":"192.0.2.42 - - [12/Apr/2026:14:24:13 +0000] \"GET /api/products/p_032 HTTP/1.1\" 200 2218 \"-\" \"curl/8.4.0\""},{"id":"e_000081","ts":"2026-04-12 14:24:15","date":"2026-04-12","time":"14:24:15","tsEpoch":1776003855000,"severity":"info","category":"GET 2xx","source":"192.0.2.42","message":"GET /api/products/p_033 → 200","fields":{"ip":"192.0.2.42","method":"GET","path":"/api/products/p_033","protocol":"HTTP/1.1","status":200,"bytes":2718,"referrer":"-","user_agent":"curl/8.4.0"},"raw":"192.0.2.42 - - [12/Apr/2026:14:24:15 +0000] \"GET /api/products/p_033 HTTP/1.1\" 200 2718 \"-\" \"curl/8.4.0\""},{"id":"e_000082","ts":"2026-04-12 14:24:17","date":"2026-04-12","time":"14:24:17","tsEpoch":1776003857000,"severity":"info","category":"GET 2xx","source":"192.0.2.42","message":"GET /api/products/p_034 → 200","fields":{"ip":"192.0.2.42","method":"GET","path":"/api/products/p_034","protocol":"HTTP/1.1","status":200,"bytes":2418,"referrer":"-","user_agent":"curl/8.4.0"},"raw":"192.0.2.42 - - [12/Apr/2026:14:24:17 +0000] \"GET /api/products/p_034 HTTP/1.1\" 200 2418 \"-\" \"curl/8.4.0\""},{"id":"e_000083","ts":"2026-04-12 14:25:01","date":"2026-04-12","time":"14:25:01","tsEpoch":1776003901000,"severity":"info","category":"GET 2xx","source":"198.51.100.99","message":"GET / → 200","fields":{"ip":"198.51.100.99","method":"GET","path":"/","protocol":"HTTP/1.1","status":200,"bytes":4128,"referrer":"-","user_agent":"Mozilla/5.0 (Linux; Android 14) Chrome/124.0 Mobile Safari/537.36"},"raw":"198.51.100.99 - - [12/Apr/2026:14:25:01 +0000] \"GET / HTTP/1.1\" 200 4128 \"-\" \"Mozilla/5.0 (Linux; Android 14) Chrome/124.0 Mobile Safari/537.36\""},{"id":"e_000084","ts":"2026-04-12 14:25:18","date":"2026-04-12","time":"14:25:18","tsEpoch":1776003918000,"severity":"info","category":"GET 2xx","source":"198.51.100.99","message":"GET /api/products → 200","fields":{"ip":"198.51.100.99","method":"GET","path":"/api/products","protocol":"HTTP/1.1","status":200,"bytes":18421,"referrer":"https://shop.example/","user_agent":"Mozilla/5.0 (Linux; Android 14) Chrome/124.0 Mobile Safari/537.36"},"raw":"198.51.100.99 - - [12/Apr/2026:14:25:18 +0000] \"GET /api/products HTTP/1.1\" 200 18421 \"https://shop.example/\" \"Mozilla/5.0 (Linux; Android 14) Chrome/124.0 Mobile Safari/537.36\""},{"id":"e_000085","ts":"2026-04-12 14:25:42","date":"2026-04-12","time":"14:25:42","tsEpoch":1776003942000,"severity":"info","category":"POST 2xx","source":"198.51.100.99","message":"POST /api/cart → 200","fields":{"ip":"198.51.100.99","method":"POST","path":"/api/cart","protocol":"HTTP/1.1","status":200,"bytes":218,"referrer":"https://shop.example/products","user_agent":"Mozilla/5.0 (Linux; Android 14) Chrome/124.0 Mobile Safari/537.36"},"raw":"198.51.100.99 - - [12/Apr/2026:14:25:42 +0000] \"POST /api/cart HTTP/1.1\" 200 218 \"https://shop.example/products\" \"Mozilla/5.0 (Linux; Android 14) Chrome/124.0 Mobile Safari/537.36\""},{"id":"e_000086","ts":"2026-04-12 14:26:01","date":"2026-04-12","time":"14:26:01","tsEpoch":1776003961000,"severity":"info","category":"POST 2xx","source":"198.51.100.99","message":"POST /api/checkout → 200","fields":{"ip":"198.51.100.99","method":"POST","path":"/api/checkout","protocol":"HTTP/1.1","status":200,"bytes":412,"referrer":"https://shop.example/checkout","user_agent":"Mozilla/5.0 (Linux; Android 14) Chrome/124.0 Mobile Safari/537.36"},"raw":"198.51.100.99 - - [12/Apr/2026:14:26:01 +0000] \"POST /api/checkout HTTP/1.1\" 200 412 \"https://shop.example/checkout\" \"Mozilla/5.0 (Linux; Android 14) Chrome/124.0 Mobile Safari/537.36\""},{"id":"e_000087","ts":"2026-04-12 14:28:01","date":"2026-04-12","time":"14:28:01","tsEpoch":1776004081000,"severity":"info","category":"GET 2xx","source":"203.0.113.42","message":"GET / → 200","fields":{"ip":"203.0.113.42","method":"GET","path":"/","protocol":"HTTP/1.1","status":200,"bytes":4128,"referrer":"-","user_agent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15"},"raw":"203.0.113.42 - - [12/Apr/2026:14:28:01 +0000] \"GET / HTTP/1.1\" 200 4128 \"-\" \"Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15\""},{"id":"e_000088","ts":"2026-04-12 14:28:42","date":"2026-04-12","time":"14:28:42","tsEpoch":1776004122000,"severity":"info","category":"GET 2xx","source":"203.0.113.42","message":"GET /account/orders → 200","fields":{"ip":"203.0.113.42","method":"GET","path":"/account/orders","protocol":"HTTP/1.1","status":200,"bytes":8412,"referrer":"https://shop.example/account","user_agent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15"},"raw":"203.0.113.42 - - [12/Apr/2026:14:28:42 +0000] \"GET /account/orders HTTP/1.1\" 200 8412 \"https://shop.example/account\" \"Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15\""},{"id":"e_000089","ts":"2026-04-12 14:31:01","date":"2026-04-12","time":"14:31:01","tsEpoch":1776004261000,"severity":"info","category":"GET 2xx","source":"198.51.100.18","message":"GET /api/products → 200","fields":{"ip":"198.51.100.18","method":"GET","path":"/api/products","protocol":"HTTP/1.1","status":200,"bytes":18421,"referrer":"https://shop.example/","user_agent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15"},"raw":"198.51.100.18 - - [12/Apr/2026:14:31:01 +0000] \"GET /api/products HTTP/1.1\" 200 18421 \"https://shop.example/\" \"Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15\""},{"id":"e_000090","ts":"2026-04-12 14:31:18","date":"2026-04-12","time":"14:31:18","tsEpoch":1776004278000,"severity":"info","category":"POST 2xx","source":"198.51.100.18","message":"POST /api/cart → 200","fields":{"ip":"198.51.100.18","method":"POST","path":"/api/cart","protocol":"HTTP/1.1","status":200,"bytes":218,"referrer":"https://shop.example/products","user_agent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15"},"raw":"198.51.100.18 - - [12/Apr/2026:14:31:18 +0000] \"POST /api/cart HTTP/1.1\" 200 218 \"https://shop.example/products\" \"Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15\""},{"id":"e_000091","ts":"2026-04-12 14:31:42","date":"2026-04-12","time":"14:31:42","tsEpoch":1776004302000,"severity":"info","category":"POST 2xx","source":"198.51.100.18","message":"POST /api/checkout → 200","fields":{"ip":"198.51.100.18","method":"POST","path":"/api/checkout","protocol":"HTTP/1.1","status":200,"bytes":412,"referrer":"https://shop.example/checkout","user_agent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15"},"raw":"198.51.100.18 - - [12/Apr/2026:14:31:42 +0000] \"POST /api/checkout HTTP/1.1\" 200 412 \"https://shop.example/checkout\" \"Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15\""},{"id":"e_000092","ts":"2026-04-12 14:34:01","date":"2026-04-12","time":"14:34:01","tsEpoch":1776004441000,"severity":"info","category":"GET 2xx","source":"192.0.2.42","message":"GET /api/products/p_035 → 200","fields":{"ip":"192.0.2.42","method":"GET","path":"/api/products/p_035","protocol":"HTTP/1.1","status":200,"bytes":2418,"referrer":"-","user_agent":"curl/8.4.0"},"raw":"192.0.2.42 - - [12/Apr/2026:14:34:01 +0000] \"GET /api/products/p_035 HTTP/1.1\" 200 2418 \"-\" \"curl/8.4.0\""},{"id":"e_000093","ts":"2026-04-12 14:34:03","date":"2026-04-12","time":"14:34:03","tsEpoch":1776004443000,"severity":"info","category":"GET 2xx","source":"192.0.2.42","message":"GET /api/products/p_036 → 200","fields":{"ip":"192.0.2.42","method":"GET","path":"/api/products/p_036","protocol":"HTTP/1.1","status":200,"bytes":2618,"referrer":"-","user_agent":"curl/8.4.0"},"raw":"192.0.2.42 - - [12/Apr/2026:14:34:03 +0000] \"GET /api/products/p_036 HTTP/1.1\" 200 2618 \"-\" \"curl/8.4.0\""},{"id":"e_000094","ts":"2026-04-12 14:34:05","date":"2026-04-12","time":"14:34:05","tsEpoch":1776004445000,"severity":"info","category":"GET 2xx","source":"192.0.2.42","message":"GET /api/products/p_037 → 200","fields":{"ip":"192.0.2.42","method":"GET","path":"/api/products/p_037","protocol":"HTTP/1.1","status":200,"bytes":2218,"referrer":"-","user_agent":"curl/8.4.0"},"raw":"192.0.2.42 - - [12/Apr/2026:14:34:05 +0000] \"GET /api/products/p_037 HTTP/1.1\" 200 2218 \"-\" \"curl/8.4.0\""},{"id":"e_000095","ts":"2026-04-12 14:34:07","date":"2026-04-12","time":"14:34:07","tsEpoch":1776004447000,"severity":"info","category":"GET 2xx","source":"192.0.2.42","message":"GET /api/products/p_038 → 200","fields":{"ip":"192.0.2.42","method":"GET","path":"/api/products/p_038","protocol":"HTTP/1.1","status":200,"bytes":2818,"referrer":"-","user_agent":"curl/8.4.0"},"raw":"192.0.2.42 - - [12/Apr/2026:14:34:07 +0000] \"GET /api/products/p_038 HTTP/1.1\" 200 2818 \"-\" \"curl/8.4.0\""},{"id":"e_000096","ts":"2026-04-12 14:34:09","date":"2026-04-12","time":"14:34:09","tsEpoch":1776004449000,"severity":"info","category":"GET 2xx","source":"192.0.2.42","message":"GET /api/products/p_039 → 200","fields":{"ip":"192.0.2.42","method":"GET","path":"/api/products/p_039","protocol":"HTTP/1.1","status":200,"bytes":2418,"referrer":"-","user_agent":"curl/8.4.0"},"raw":"192.0.2.42 - - [12/Apr/2026:14:34:09 +0000] \"GET /api/products/p_039 HTTP/1.1\" 200 2418 \"-\" \"curl/8.4.0\""},{"id":"e_000097","ts":"2026-04-12 14:34:11","date":"2026-04-12","time":"14:34:11","tsEpoch":1776004451000,"severity":"info","category":"GET 2xx","source":"192.0.2.42","message":"GET /api/products/p_040 → 200","fields":{"ip":"192.0.2.42","method":"GET","path":"/api/products/p_040","protocol":"HTTP/1.1","status":200,"bytes":2618,"referrer":"-","user_agent":"curl/8.4.0"},"raw":"192.0.2.42 - - [12/Apr/2026:14:34:11 +0000] \"GET /api/products/p_040 HTTP/1.1\" 200 2618 \"-\" \"curl/8.4.0\""},{"id":"e_000098","ts":"2026-04-12 14:34:13","date":"2026-04-12","time":"14:34:13","tsEpoch":1776004453000,"severity":"info","category":"GET 2xx","source":"192.0.2.42","message":"GET /api/products/p_041 → 200","fields":{"ip":"192.0.2.42","method":"GET","path":"/api/products/p_041","protocol":"HTTP/1.1","status":200,"bytes":2218,"referrer":"-","user_agent":"curl/8.4.0"},"raw":"192.0.2.42 - - [12/Apr/2026:14:34:13 +0000] \"GET /api/products/p_041 HTTP/1.1\" 200 2218 \"-\" \"curl/8.4.0\""},{"id":"e_000099","ts":"2026-04-12 14:38:01","date":"2026-04-12","time":"14:38:01","tsEpoch":1776004681000,"severity":"info","category":"GET 2xx","source":"198.51.100.42","message":"GET /api/products → 200","fields":{"ip":"198.51.100.42","method":"GET","path":"/api/products","protocol":"HTTP/1.1","status":200,"bytes":18421,"referrer":"https://shop.example/","user_agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"},"raw":"198.51.100.42 - - [12/Apr/2026:14:38:01 +0000] \"GET /api/products HTTP/1.1\" 200 18421 \"https://shop.example/\" \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36\""},{"id":"e_000100","ts":"2026-04-12 14:38:18","date":"2026-04-12","time":"14:38:18","tsEpoch":1776004698000,"severity":"warn","category":"GET 4xx","source":"198.51.100.42","message":"GET /api/products/p_242 → 404","fields":{"ip":"198.51.100.42","method":"GET","path":"/api/products/p_242","protocol":"HTTP/1.1","status":404,"bytes":218,"referrer":"https://shop.example/products","user_agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"},"raw":"198.51.100.42 - - [12/Apr/2026:14:38:18 +0000] \"GET /api/products/p_242 HTTP/1.1\" 404 218 \"https://shop.example/products\" \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36\""},{"id":"e_000101","ts":"2026-04-12 14:38:42","date":"2026-04-12","time":"14:38:42","tsEpoch":1776004722000,"severity":"info","category":"GET 2xx","source":"198.51.100.42","message":"GET /api/products/p_142 → 200","fields":{"ip":"198.51.100.42","method":"GET","path":"/api/products/p_142","protocol":"HTTP/1.1","status":200,"bytes":2418,"referrer":"https://shop.example/products","user_agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"},"raw":"198.51.100.42 - - [12/Apr/2026:14:38:42 +0000] \"GET /api/products/p_142 HTTP/1.1\" 200 2418 \"https://shop.example/products\" \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36\""},{"id":"e_000102","ts":"2026-04-12 14:42:01","date":"2026-04-12","time":"14:42:01","tsEpoch":1776004921000,"severity":"info","category":"GET 2xx","source":"203.0.113.18","message":"GET / → 200","fields":{"ip":"203.0.113.18","method":"GET","path":"/","protocol":"HTTP/1.1","status":200,"bytes":4128,"referrer":"-","user_agent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"},"raw":"203.0.113.18 - - [12/Apr/2026:14:42:01 +0000] \"GET / HTTP/1.1\" 200 4128 \"-\" \"Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36\""},{"id":"e_000103","ts":"2026-04-12 14:42:18","date":"2026-04-12","time":"14:42:18","tsEpoch":1776004938000,"severity":"info","category":"GET 2xx","source":"203.0.113.18","message":"GET /api/products → 200","fields":{"ip":"203.0.113.18","method":"GET","path":"/api/products","protocol":"HTTP/1.1","status":200,"bytes":18421,"referrer":"https://shop.example/","user_agent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"},"raw":"203.0.113.18 - - [12/Apr/2026:14:42:18 +0000] \"GET /api/products HTTP/1.1\" 200 18421 \"https://shop.example/\" \"Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36\""},{"id":"e_000104","ts":"2026-04-12 14:42:42","date":"2026-04-12","time":"14:42:42","tsEpoch":1776004962000,"severity":"info","category":"GET 2xx","source":"203.0.113.18","message":"GET /api/products?page=2 → 200","fields":{"ip":"203.0.113.18","method":"GET","path":"/api/products?page=2","protocol":"HTTP/1.1","status":200,"bytes":16842,"referrer":"https://shop.example/","user_agent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"},"raw":"203.0.113.18 - - [12/Apr/2026:14:42:42 +0000] \"GET /api/products?page=2 HTTP/1.1\" 200 16842 \"https://shop.example/\" \"Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36\""},{"id":"e_000105","ts":"2026-04-12 14:45:01","date":"2026-04-12","time":"14:45:01","tsEpoch":1776005101000,"severity":"info","category":"POST 2xx","source":"198.51.100.99","message":"POST /api/cart → 200","fields":{"ip":"198.51.100.99","method":"POST","path":"/api/cart","protocol":"HTTP/1.1","status":200,"bytes":218,"referrer":"https://shop.example/products","user_agent":"Mozilla/5.0 (Linux; Android 14) Chrome/124.0 Mobile Safari/537.36"},"raw":"198.51.100.99 - - [12/Apr/2026:14:45:01 +0000] \"POST /api/cart HTTP/1.1\" 200 218 \"https://shop.example/products\" \"Mozilla/5.0 (Linux; Android 14) Chrome/124.0 Mobile Safari/537.36\""},{"id":"e_000106","ts":"2026-04-12 14:45:42","date":"2026-04-12","time":"14:45:42","tsEpoch":1776005142000,"severity":"info","category":"POST 2xx","source":"198.51.100.99","message":"POST /api/checkout → 200","fields":{"ip":"198.51.100.99","method":"POST","path":"/api/checkout","protocol":"HTTP/1.1","status":200,"bytes":412,"referrer":"https://shop.example/checkout","user_agent":"Mozilla/5.0 (Linux; Android 14) Chrome/124.0 Mobile Safari/537.36"},"raw":"198.51.100.99 - - [12/Apr/2026:14:45:42 +0000] \"POST /api/checkout HTTP/1.1\" 200 412 \"https://shop.example/checkout\" \"Mozilla/5.0 (Linux; Android 14) Chrome/124.0 Mobile Safari/537.36\""},{"id":"e_000107","ts":"2026-04-12 14:48:01","date":"2026-04-12","time":"14:48:01","tsEpoch":1776005281000,"severity":"info","category":"GET 2xx","source":"192.0.2.42","message":"GET /api/products/p_042 → 200","fields":{"ip":"192.0.2.42","method":"GET","path":"/api/products/p_042","protocol":"HTTP/1.1","status":200,"bytes":2418,"referrer":"-","user_agent":"curl/8.4.0"},"raw":"192.0.2.42 - - [12/Apr/2026:14:48:01 +0000] \"GET /api/products/p_042 HTTP/1.1\" 200 2418 \"-\" \"curl/8.4.0\""},{"id":"e_000108","ts":"2026-04-12 14:48:03","date":"2026-04-12","time":"14:48:03","tsEpoch":1776005283000,"severity":"info","category":"GET 2xx","source":"192.0.2.42","message":"GET /api/products/p_043 → 200","fields":{"ip":"192.0.2.42","method":"GET","path":"/api/products/p_043","protocol":"HTTP/1.1","status":200,"bytes":2618,"referrer":"-","user_agent":"curl/8.4.0"},"raw":"192.0.2.42 - - [12/Apr/2026:14:48:03 +0000] \"GET /api/products/p_043 HTTP/1.1\" 200 2618 \"-\" \"curl/8.4.0\""},{"id":"e_000109","ts":"2026-04-12 14:48:05","date":"2026-04-12","time":"14:48:05","tsEpoch":1776005285000,"severity":"info","category":"GET 2xx","source":"192.0.2.42","message":"GET /api/products/p_044 → 200","fields":{"ip":"192.0.2.42","method":"GET","path":"/api/products/p_044","protocol":"HTTP/1.1","status":200,"bytes":2218,"referrer":"-","user_agent":"curl/8.4.0"},"raw":"192.0.2.42 - - [12/Apr/2026:14:48:05 +0000] \"GET /api/products/p_044 HTTP/1.1\" 200 2218 \"-\" \"curl/8.4.0\""},{"id":"e_000110","ts":"2026-04-12 14:48:07","date":"2026-04-12","time":"14:48:07","tsEpoch":1776005287000,"severity":"info","category":"GET 2xx","source":"192.0.2.42","message":"GET /api/products/p_045 → 200","fields":{"ip":"192.0.2.42","method":"GET","path":"/api/products/p_045","protocol":"HTTP/1.1","status":200,"bytes":2818,"referrer":"-","user_agent":"curl/8.4.0"},"raw":"192.0.2.42 - - [12/Apr/2026:14:48:07 +0000] \"GET /api/products/p_045 HTTP/1.1\" 200 2818 \"-\" \"curl/8.4.0\""},{"id":"e_000111","ts":"2026-04-12 14:48:09","date":"2026-04-12","time":"14:48:09","tsEpoch":1776005289000,"severity":"info","category":"GET 2xx","source":"192.0.2.42","message":"GET /api/products/p_046 → 200","fields":{"ip":"192.0.2.42","method":"GET","path":"/api/products/p_046","protocol":"HTTP/1.1","status":200,"bytes":2418,"referrer":"-","user_agent":"curl/8.4.0"},"raw":"192.0.2.42 - - [12/Apr/2026:14:48:09 +0000] \"GET /api/products/p_046 HTTP/1.1\" 200 2418 \"-\" \"curl/8.4.0\""},{"id":"e_000112","ts":"2026-04-12 14:52:01","date":"2026-04-12","time":"14:52:01","tsEpoch":1776005521000,"severity":"info","category":"GET 2xx","source":"198.51.100.18","message":"GET / → 200","fields":{"ip":"198.51.100.18","method":"GET","path":"/","protocol":"HTTP/1.1","status":200,"bytes":4128,"referrer":"-","user_agent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15"},"raw":"198.51.100.18 - - [12/Apr/2026:14:52:01 +0000] \"GET / HTTP/1.1\" 200 4128 \"-\" \"Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15\""},{"id":"e_000113","ts":"2026-04-12 14:52:18","date":"2026-04-12","time":"14:52:18","tsEpoch":1776005538000,"severity":"info","category":"GET 2xx","source":"198.51.100.18","message":"GET /api/cart → 200","fields":{"ip":"198.51.100.18","method":"GET","path":"/api/cart","protocol":"HTTP/1.1","status":200,"bytes":218,"referrer":"https://shop.example/","user_agent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15"},"raw":"198.51.100.18 - - [12/Apr/2026:14:52:18 +0000] \"GET /api/cart HTTP/1.1\" 200 218 \"https://shop.example/\" \"Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15\""},{"id":"e_000114","ts":"2026-04-12 14:55:01","date":"2026-04-12","time":"14:55:01","tsEpoch":1776005701000,"severity":"info","category":"GET 2xx","source":"203.0.113.99","message":"GET /api/products → 200","fields":{"ip":"203.0.113.99","method":"GET","path":"/api/products","protocol":"HTTP/1.1","status":200,"bytes":18421,"referrer":"https://shop.example/","user_agent":"Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1"},"raw":"203.0.113.99 - - [12/Apr/2026:14:55:01 +0000] \"GET /api/products HTTP/1.1\" 200 18421 \"https://shop.example/\" \"Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1\""},{"id":"e_000115","ts":"2026-04-12 14:55:42","date":"2026-04-12","time":"14:55:42","tsEpoch":1776005742000,"severity":"info","category":"POST 2xx","source":"203.0.113.99","message":"POST /api/cart → 200","fields":{"ip":"203.0.113.99","method":"POST","path":"/api/cart","protocol":"HTTP/1.1","status":200,"bytes":218,"referrer":"https://shop.example/products","user_agent":"Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1"},"raw":"203.0.113.99 - - [12/Apr/2026:14:55:42 +0000] \"POST /api/cart HTTP/1.1\" 200 218 \"https://shop.example/products\" \"Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1\""},{"id":"e_000116","ts":"2026-04-12 14:56:01","date":"2026-04-12","time":"14:56:01","tsEpoch":1776005761000,"severity":"info","category":"POST 2xx","source":"203.0.113.99","message":"POST /api/checkout → 200","fields":{"ip":"203.0.113.99","method":"POST","path":"/api/checkout","protocol":"HTTP/1.1","status":200,"bytes":412,"referrer":"https://shop.example/checkout","user_agent":"Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1"},"raw":"203.0.113.99 - - [12/Apr/2026:14:56:01 +0000] \"POST /api/checkout HTTP/1.1\" 200 412 \"https://shop.example/checkout\" \"Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1\""}],"timeBuckets":[{"bucket":"2026-04-12T14:00","label":"14:00","count":9,"errorCount":0},{"bucket":"2026-04-12T14:01","label":"14:01","count":10,"errorCount":0},{"bucket":"2026-04-12T14:02","label":"14:02","count":3,"errorCount":0},{"bucket":"2026-04-12T14:03","label":"14:03","count":10,"errorCount":0},{"bucket":"2026-04-12T14:04","label":"14:04","count":1,"errorCount":0},{"bucket":"2026-04-12T14:05","label":"14:05","count":1,"errorCount":0},{"bucket":"2026-04-12T14:06","label":"14:06","count":3,"errorCount":0},{"bucket":"2026-04-12T14:07","label":"14:07","count":8,"errorCount":0},{"bucket":"2026-04-12T14:08","label":"14:08","count":2,"errorCount":0},{"bucket":"2026-04-12T14:09","label":"14:09","count":2,"errorCount":0},{"bucket":"2026-04-12T14:10","label":"14:10","count":0,"errorCount":0},{"bucket":"2026-04-12T14:11","label":"14:11","count":3,"errorCount":0},{"bucket":"2026-04-12T14:12","label":"14:12","count":7,"errorCount":0},{"bucket":"2026-04-12T14:13","label":"14:13","count":0,"errorCount":0},{"bucket":"2026-04-12T14:14","label":"14:14","count":2,"errorCount":0},{"bucket":"2026-04-12T14:15","label":"14:15","count":0,"errorCount":0},{"bucket":"2026-04-12T14:16","label":"14:16","count":0,"errorCount":0},{"bucket":"2026-04-12T14:17","label":"14:17","count":0,"errorCount":0},{"bucket":"2026-04-12T14:18","label":"14:18","count":2,"errorCount":1},{"bucket":"2026-04-12T14:19","label":"14:19","count":3,"errorCount":3},{"bucket":"2026-04-12T14:20","label":"14:20","count":3,"errorCount":3},{"bucket":"2026-04-12T14:21","label":"14:21","count":3,"errorCount":1},{"bucket":"2026-04-12T14:22","label":"14:22","count":1,"errorCount":0},{"bucket":"2026-04-12T14:23","label":"14:23","count":0,"errorCount":0},{"bucket":"2026-04-12T14:24","label":"14:24","count":9,"errorCount":0},{"bucket":"2026-04-12T14:25","label":"14:25","count":3,"errorCount":0},{"bucket":"2026-04-12T14:26","label":"14:26","count":1,"errorCount":0},{"bucket":"2026-04-12T14:27","label":"14:27","count":0,"errorCount":0},{"bucket":"2026-04-12T14:28","label":"14:28","count":2,"errorCount":0},{"bucket":"2026-04-12T14:29","label":"14:29","count":0,"errorCount":0},{"bucket":"2026-04-12T14:30","label":"14:30","count":0,"errorCount":0},{"bucket":"2026-04-12T14:31","label":"14:31","count":3,"errorCount":0},{"bucket":"2026-04-12T14:32","label":"14:32","count":0,"errorCount":0},{"bucket":"2026-04-12T14:33","label":"14:33","count":0,"errorCount":0},{"bucket":"2026-04-12T14:34","label":"14:34","count":7,"errorCount":0},{"bucket":"2026-04-12T14:35","label":"14:35","count":0,"errorCount":0},{"bucket":"2026-04-12T14:36","label":"14:36","count":0,"errorCount":0},{"bucket":"2026-04-12T14:37","label":"14:37","count":0,"errorCount":0},{"bucket":"2026-04-12T14:38","label":"14:38","count":3,"errorCount":0},{"bucket":"2026-04-12T14:39","label":"14:39","count":0,"errorCount":0},{"bucket":"2026-04-12T14:40","label":"14:40","count":0,"errorCount":0},{"bucket":"2026-04-12T14:41","label":"14:41","count":0,"errorCount":0},{"bucket":"2026-04-12T14:42","label":"14:42","count":3,"errorCount":0},{"bucket":"2026-04-12T14:43","label":"14:43","count":0,"errorCount":0},{"bucket":"2026-04-12T14:44","label":"14:44","count":0,"errorCount":0},{"bucket":"2026-04-12T14:45","label":"14:45","count":2,"errorCount":0},{"bucket":"2026-04-12T14:46","label":"14:46","count":0,"errorCount":0},{"bucket":"2026-04-12T14:47","label":"14:47","count":0,"errorCount":0},{"bucket":"2026-04-12T14:48","label":"14:48","count":5,"errorCount":0},{"bucket":"2026-04-12T14:49","label":"14:49","count":0,"errorCount":0},{"bucket":"2026-04-12T14:50","label":"14:50","count":0,"errorCount":0},{"bucket":"2026-04-12T14:51","label":"14:51","count":0,"errorCount":0},{"bucket":"2026-04-12T14:52","label":"14:52","count":2,"errorCount":0},{"bucket":"2026-04-12T14:53","label":"14:53","count":0,"errorCount":0},{"bucket":"2026-04-12T14:54","label":"14:54","count":0,"errorCount":0},{"bucket":"2026-04-12T14:55","label":"14:55","count":2,"errorCount":0},{"bucket":"2026-04-12T14:56","label":"14:56","count":1,"errorCount":0},{"bucket":"2026-04-12T14:57","label":"14:57","count":0,"errorCount":0}],"severityCounts":{"error":16,"warn":4,"info":106,"debug":0,"trace":0,"other":0},"categoryCounts":[{"category":"GET 2xx","count":87,"share":75},{"category":"POST 2xx","count":17,"share":14.7},{"category":"POST 5xx","count":8,"share":6.9},{"category":"GET 3xx","count":2,"share":1.7},{"category":"GET 4xx","count":2,"share":1.7}],"topMessages":[{"message":"GET /api/products → 200","count":11,"share":9.5},{"message":"POST /api/checkout → 200","count":9,"share":7.8},{"message":"GET / → 200","count":8,"share":6.9},{"message":"POST /api/checkout → 503","count":8,"share":6.9},{"message":"POST /api/cart → 200","count":7,"share":6},{"message":"GET /api/cart → 200","count":4,"share":3.4},{"message":"GET /api/products?page=2 → 200","count":2,"share":1.7},{"message":"GET /api/products/p_142 → 200","count":2,"share":1.7},{"message":"GET /account/orders → 200","count":2,"share":1.7},{"message":"GET /static/main.css → 200","count":1,"share":0.9},{"message":"GET /static/app.js → 200","count":1,"share":0.9},{"message":"GET /static/main.css → 304","count":1,"share":0.9},{"message":"GET /static/app.js → 304","count":1,"share":0.9},{"message":"GET /api/products/p_842 → 200","count":1,"share":0.9},{"message":"POST /api/login → 200","count":1,"share":0.9},{"message":"GET /api/products?category=audio → 200","count":1,"share":0.9},{"message":"GET /api/products?category=video → 200","count":1,"share":0.9},{"message":"GET /api/products?category=accessories → 200","count":1,"share":0.9},{"message":"GET /api/products?page=3 → 200","count":1,"share":0.9},{"message":"GET /api/products?page=4 → 200","count":1,"share":0.9},{"message":"GET /api/products?page=5 → 200","count":1,"share":0.9},{"message":"GET /api/checkout → 200","count":1,"share":0.9},{"message":"GET /api/products/p_001 → 200","count":1,"share":0.9},{"message":"GET /api/products/p_002 → 200","count":1,"share":0.9},{"message":"GET /api/products/p_003 → 200","count":1,"share":0.9}],"topSources":[{"source":"192.0.2.42","count":54,"share":46.6},{"source":"198.51.100.18","count":13,"share":11.2},{"source":"198.51.100.42","count":13,"share":11.2},{"source":"203.0.113.99","count":10,"share":8.6},{"source":"198.51.100.99","count":10,"share":8.6},{"source":"203.0.113.42","count":8,"share":6.9},{"source":"203.0.113.18","count":8,"share":6.9}],"topErrors":[{"message":"POST /api/checkout → 503","count":8,"firstTs":"2026-04-12 14:18:42","lastTs":"2026-04-12 14:21:01"}],"outliers":[{"kind":"burst","label":"Volume spike at 14:01","detail":"10 events vs median 1","ts":"2026-04-12T14:01"},{"kind":"burst","label":"Volume spike at 14:03","detail":"10 events vs median 1","ts":"2026-04-12T14:03"},{"kind":"top-error","label":"POST /api/checkout → 503","detail":"8× from 2026-04-12 14:18:42 to 2026-04-12 14:21:01","ts":"2026-04-12 14:18:42"},{"kind":"top-source","label":"Dominant source: 192.0.2.42","detail":"54 events (46.6% of all)","ts":null},{"kind":"top-error","label":"HTTP 503","detail":"8× across the stream","ts":null},{"kind":"top-error","label":"HTTP 404","detail":"2× across the stream","ts":null}],"timeRange":"2026-04-12 14:00:01 → 2026-04-12 14:56:01","durationLabel":"56m","errorCount":16,"errorRate":13.79,"bucketSize":"1m","sourceCount":7,"accessExtras":{"statusClasses":[{"class":"2xx","count":104,"share":89.7},{"class":"3xx","count":2,"share":1.7},{"class":"4xx","count":2,"share":1.7},{"class":"5xx","count":8,"share":6.9}],"topEndpoints":[{"path":"/api/products","count":19,"share":16.4,"errorRate":0},{"path":"/api/checkout","count":18,"share":15.5,"errorRate":44.4},{"path":"/api/cart","count":11,"share":9.5,"errorRate":0},{"path":"/","count":8,"share":6.9,"errorRate":0},{"path":"/static/main.css","count":2,"share":1.7,"errorRate":0},{"path":"/static/app.js","count":2,"share":1.7,"errorRate":0},{"path":"/api/products/p_142","count":2,"share":1.7,"errorRate":0},{"path":"/account/orders","count":2,"share":1.7,"errorRate":0},{"path":"/api/products/p_842","count":1,"share":0.9,"errorRate":0},{"path":"/api/login","count":1,"share":0.9,"errorRate":0},{"path":"/api/products/p_001","count":1,"share":0.9,"errorRate":0},{"path":"/api/products/p_002","count":1,"share":0.9,"errorRate":0},{"path":"/api/products/p_003","count":1,"share":0.9,"errorRate":0},{"path":"/api/products/p_004","count":1,"share":0.9,"errorRate":0},{"path":"/api/products/p_005","count":1,"share":0.9,"errorRate":0}],"topIps":[{"ip":"192.0.2.42","count":54,"share":46.6,"isPrivate":false},{"ip":"198.51.100.18","count":13,"share":11.2,"isPrivate":false},{"ip":"198.51.100.42","count":13,"share":11.2,"isPrivate":false},{"ip":"203.0.113.99","count":10,"share":8.6,"isPrivate":false},{"ip":"198.51.100.99","count":10,"share":8.6,"isPrivate":false},{"ip":"203.0.113.42","count":8,"share":6.9,"isPrivate":false},{"ip":"203.0.113.18","count":8,"share":6.9,"isPrivate":false}],"topUserAgents":[{"userAgent":"curl/8.4.0","count":54,"share":46.6},{"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15","count":21,"share":18.1},{"userAgent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36","count":13,"share":11.2},{"userAgent":"Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1","count":10,"share":8.6},{"userAgent":"Mozilla/5.0 (Linux; Android 14) Chrome/124.0 Mobile Safari/537.36","count":10,"share":8.6},{"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36","count":8,"share":6.9}],"latency":null},"sourceFile":"input.log","sizeBytes":19300,"format":"access-log","eventCount":116};</script>
+<div class="ops-shell">
+
+  <!-- Command Bar -->
+  <header class="command-bar">
+    <div class="command-bar-title">Nginx · <span>shop.example</span></div>
+    <div class="command-bar-meta" id="cmdMeta">access-log</div>
+    <div class="command-bar-spacer"></div>
+    <div class="cmd-search-wrap">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="7" cy="7" r="4.5"/><line x1="10.5" y1="10.5" x2="14" y2="14"/></svg>
+      <input id="globalSearch" type="search" placeholder="Search events…" autocomplete="off">
+    </div>
+    <button class="cmd-btn" id="copyMdBtn">Copy MD summary</button>
+  </header>
+
+  <main class="ops-content">
+
+    <!-- Stream card -->
+    <div class="stream-card fade-up">
+      <span class="stream-badge" id="formatBadge">access-log</span>
+      <p class="stream-summary" id="streamSummary">Loading…</p>
+      <div class="stream-error-rate"><span id="errorRateNum">—</span>%<small>error rate</small></div>
+    </div>
+
+    <!-- KPI Rail -->
+    <div class="kpi-rail" id="kpiRail"></div>
+
+    <!-- Work surface: histogram + donut -->
+    <div class="work-surface">
+      <div class="ops-panel fade-up" style="animation-delay:0.08s">
+        <div class="ops-panel-header">
+          <span class="ops-panel-title">Volume over time</span>
+          <span id="bucketSizeLabel" style="font-family:var(--font-mono);font-size:10px;color:var(--fg-muted);"></span>
+        </div>
+        <div class="ops-panel-body" style="padding:var(--space-md)">
+          <div class="histogram-wrap">
+            <svg id="histSvg" height="140"></svg>
+          </div>
+        </div>
+      </div>
+      <div class="ops-panel fade-up" style="animation-delay:0.12s">
+        <div class="ops-panel-header">
+          <span class="ops-panel-title">Status codes</span>
+        </div>
+        <div class="donut-wrap" id="donutWrap"></div>
+      </div>
+    </div>
+
+    <!-- Severity + Category breakdown -->
+    <div class="two-col">
+      <div class="ops-panel fade-up" style="animation-delay:0.14s">
+        <div class="ops-panel-header"><span class="ops-panel-title">Severity / Levels</span></div>
+        <div class="filter-strip" id="sevChips"></div>
+        <div class="ops-panel-body">
+          <div class="cat-bar-list" id="sevBars"></div>
+        </div>
+      </div>
+      <div class="ops-panel fade-up" style="animation-delay:0.16s">
+        <div class="ops-panel-header"><span class="ops-panel-title">Categories</span></div>
+        <div class="ops-panel-body">
+          <div class="cat-bar-list" id="catBars"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Outliers / Anomalies -->
+    <div class="ops-panel fade-up" style="animation-delay:0.18s">
+      <div class="ops-panel-header"><span class="ops-panel-title">Outliers / Anomalies</span></div>
+      <div class="ops-panel-body">
+        <div class="flag-queue" id="flagQueue"></div>
+      </div>
+    </div>
+
+    <!-- Three leaderboards -->
+    <div class="three-col">
+      <div class="ops-panel fade-up" style="animation-delay:0.20s">
+        <div class="ops-panel-header"><span class="ops-panel-title">Top Endpoints</span></div>
+        <div class="ops-panel-body" id="topEndpoints"></div>
+      </div>
+      <div class="ops-panel fade-up" style="animation-delay:0.22s">
+        <div class="ops-panel-header"><span class="ops-panel-title">Top IPs</span></div>
+        <div class="ops-panel-body" id="topIps"></div>
+      </div>
+      <div class="ops-panel fade-up" style="animation-delay:0.24s">
+        <div class="ops-panel-header"><span class="ops-panel-title">Top Messages / Leaderboard</span></div>
+        <div class="ops-panel-body" id="topMessages"></div>
+      </div>
+    </div>
+
+    <!-- User Agents -->
+    <div class="ops-panel fade-up" style="animation-delay:0.26s">
+      <div class="ops-panel-header"><span class="ops-panel-title">User-Agent breakdown</span></div>
+      <div class="ops-panel-body" id="uaPanel"></div>
+    </div>
+
+    <!-- Data Grid drill-down -->
+    <div class="data-grid-section fade-up" style="animation-delay:0.28s">
+      <button class="data-grid-toggle" id="gridToggle" aria-expanded="false">
+        <span id="gridToggleLabel">Browse all events</span>
+        <svg class="toggle-arrow" width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="2,4 7,10 12,4"/></svg>
+      </button>
+      <div class="data-grid-inner" id="gridInner">
+        <div class="grid-controls">
+          <div class="grid-search-wrap">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="7" cy="7" r="4.5"/><line x1="10.5" y1="10.5" x2="14" y2="14"/></svg>
+            <input id="gridSearch" type="search" placeholder="Filter events…" autocomplete="off">
+          </div>
+          <div class="grid-sev-chips" id="gridSevChips"></div>
+          <span class="grid-count" id="gridCount"></span>
+        </div>
+        <div class="table-scroll">
+          <table class="data-table" id="dataTable">
+            <thead>
+              <tr>
+                <th data-col="ts" class="sorted">Time <span class="sort-icon">↑</span></th>
+                <th data-col="status">Status <span class="sort-icon">↕</span></th>
+                <th data-col="method">Method <span class="sort-icon">↕</span></th>
+                <th data-col="path">Path <span class="sort-icon">↕</span></th>
+                <th data-col="source">IP <span class="sort-icon">↕</span></th>
+                <th data-col="bytes">Bytes <span class="sort-icon">↕</span></th>
+              </tr>
+            </thead>
+            <tbody id="tableBody"></tbody>
+          </table>
+        </div>
+        <div class="load-more-wrap" id="loadMoreWrap" style="display:none">
+          <button class="load-more-btn" id="loadMoreBtn">Load more rows</button>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <footer class="ops-footer">
+    <em>Generated locally — your event stream never left your machine. The full log is embedded in this HTML and rendered in your browser. For sharing, prefer an anonymized export.</em>
+  </footer>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>/* html-anything: truncated generated script disabled so this checked-in example remains valid HTML.
+
+(function(){
+'use strict';
+
+// ── helpers ──────────────────────────────────────────────────────────────
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function showToast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),2200);
+}
+function statusClass(s){
+  if(s>=500) return 's5xx';
+  if(s>=400) return 's4xx';
+  if(s>=300) return 's3xx';
+  return 's2xx';
+}
+function statusColorHex(cls){
+  const map={'s2xx':'#10b981','s3xx':'#3b82f6','s4xx':'#f59e0b','s5xx':'#ef4444'};
+  return map[cls]||'#8d7166';
+}
+function getStatusFromEvent(e){
+  if(e.fields && e.fields.status) return e.fields.status;
+  const m = e.message && e.message.match(/→\s*(\d{3})/);
+  return m ? parseInt(m[1]) : null;
+}
+function getMethodFromEvent(e){
+  if(e.fields && e.fields.method) return e.fields.method;
+  const m = e.message && e.message.match(/^([A-Z]+)\s/);
+  return m ? m[1] : (e.category||'').split(' ')[0]||'';
+}
+function getPathFromEvent(e){
+  if(e.fields && e.fields.path) return e.fields.path;
+  const m = e.message && e.message.match(/^[A-Z]+ (\S+)/);
+  return m ? m[1] : '';
+}
+function getBytesFromEvent(e){
+  if(e.fields && e.fields.bytes != null) return e.fields.bytes;
+  return null;
+}
+function fmtBytes(b){
+  if(b==null||b===0) return '0';
+  if(b<1024) return b+'B';
+  if(b<1048576) return (b/1024).toFixed(1)+'KB';
+  return (b/1048576).toFixed(1)+'MB';
+}
+function countUpEl(el, target, duration){
+  const start=performance.now();
+  function step(now){
+    const p=Math.min((now-start)/duration,1);
+    const ease=1-Math.pow(1-p,3);
+    el.textContent=Math.round(ease*target).toLocaleString();
+    if(p<1) requestAnimationFrame(step);
+    else el.textContent=target.toLocaleString();
+  }
+  requestAnimationFrame(step);
+}
+function highlight(text, term){
+  if(!term) return esc(text);
+  const escaped = term.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+  return esc(text).replace(new RegExp(escaped.replace(/&amp;/g,'&amp;|&lt;/g','<'),'gi'),m=>`<mark class="highlight">${m}</mark>`);
+}
+function highlightRaw(text, term){
+  if(!term) return esc(text);
+  const escaped = term.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+  const re = new RegExp('('+escaped+')','gi');
+  return esc(text).replace(re,'<mark class="highlight">$1</mark>');
+}
+
+// ── boot ─────────────────────────────────────────────────────────────────
+const D = DATA;
+
+// header meta
+document.getElementById('cmdMeta').textContent = (D.format||'access-log')+' · '+D.timeRange;
+document.getElementById('formatBadge').textContent = D.format||'access-log';
+document.getElementById('bucketSizeLabel').textContent = 'bucket: '+(D.bucketSize||'1m');
+
+// stream summary
+document.getElementById('errorRateNum').textContent = (D.errorRate||0).toFixed(2);
+const errPct = D.errorRate||0;
+let summaryText;
+if(D.accessExtras && D.accessExtras.statusClasses){
+  const sc2 = D.accessExtras.statusClasses.find(x=>x.class==='2xx');
+  const sc5 = D.accessExtras.statusClasses.find(x=>x.class==='5xx');
+  const pct2 = sc2 ? sc2.share.toFixed(1) : 0;
+  const pct5 = sc5 ? sc5.share.toFixed(1) : 0;
+  const top5err = D.topErrors && D.topErrors[0];
+  const topIpEntry = D.accessExtras.topIps && D.accessExtras.topIps[0];
+  const topIpPart = topIpEntry ? ` One IP — <strong>${esc(topIpEntry.ip)}</strong> — generated ${topIpEntry.share}% of all requests.` : '';
+  const errPart = top5err ? ` The dominant error is <strong>${esc(top5err.message)}</strong> (${top5err.count}×, ${top5err.firstTs} – ${top5err.lastTs}).` : '';
+  summaryText = `<strong>${D.eventCount}</strong> requests over <strong>${D.durationLabel||'56m'}</strong> — ${pct2}% success (2xx), ${pct5}% server errors (5xx).${errPart}${topIpPart}`;
+} else {
+  summaryText = `<strong>${D.eventCount}</strong> events over <strong>${D.durationLabel||'56m'}</strong> — error rate <strong>${errPct.toFixed(2)}%</strong> (${D.errorCount} errors).`;
+}
+document.getElementById('streamSummary').innerHTML = summaryText;
+
+// ── KPI Rail ──────────────────────────────────────────────────────────────
+const kpiData = [
+  {label:'Total Requests', value: D.eventCount, fmt:'num', mod:''},
+  {label:'Errors', value: D.errorCount, fmt:'num', mod:'danger'},
+  {label:'Error Rate', value: (D.errorRate||0).toFixed(2)+'%', fmt:'str', mod:'danger'},
+  {label:'Unique IPs', value: D.sourceCount||0, fmt:'num', mod:''},
+  {label:'Duration', value: D.durationLabel||'56m', fmt:'str', mod:'accent'},
+  {label:'Success (2xx)', value: (D.accessExtras&&D.accessExtras.statusClasses&&D.accessExtras.statusClasses.find(x=>x.class==='2xx')||{share:0}).share.toFixed(1)+'%', fmt:'str', mod:'success'},
+];
+const rail = document.getElementById('kpiRail');
+kpiData.forEach((k,i)=>{
+  const cell = document.createElement('div');
+  cell.className = 'kpi-cell';
+  cell.style.transitionDelay = (0.05+i*0.05)+'s';
+  cell.innerHTML = `<div class="kpi-label">${esc(k.label)}</div><div class="kpi-value ${k.mod}" id="kpi_${i}">${k.fmt==='num'?'0':esc(k.value)}</div>`;
+  rail.appendChild(cell);
+  setTimeout(()=>{
+    cell.classList.add('revealed');
+    if(k.fmt==='num'){
+      countUpEl(document.getElementById('kpi_'+i), k.value, 600);
+    }
+  }, 80+i*60);
+});
+
+// ── Volume histogram (SVG) ────────────────────────────────────────────────
+function buildHistogram(){
+  const buckets = D.timeBuckets||[];
+  if(!buckets.length) return;
+  const svg = document.getElementById('histSvg');
+  const W = svg.parentElement.clientWidth||600;
+  const H = 140;
+  svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
+  svg.setAttribute('height',H);
+
+  const padL=36, padR=8, padT=8, padB=28;
+  const innerW=W-padL-padR, innerH=H-padT-padB;
+  const maxCount=Math.max(...buckets.map(b=>b.count),1);
+
+  const barW = Math.max(2, innerW/buckets.length - 1);
+  const gap = innerW/buckets.length;
+
+  // Y axis
+  const yTicks=[0, Math.round(maxCount/2), maxCount];
+  let axisHtml='';
+  yTicks.forEach(v=>{
+    const y=padT+innerH*(1-v/maxCount);
+    axisHtml+=`<line x1="${padL-4}" y1="${y}" x2="${W-padR}" y2="${y}" stroke="var(--border-strong)" stroke-width="0.5" stroke-dasharray="2,3"/>`;
+    axisHtml+=`<text x="${padL-6}" y="${y+4}" text-anchor="end" font-family="var(--font-mono)" font-size="9" fill="var(--fg-muted)">${v}</text>`;
+  });
+
+  // X axis labels — show ~6 evenly spaced
+  const labelStep = Math.ceil(buckets.length/6);
+  buckets.forEach((b,i)=>{
+    if(i%labelStep===0){
+      const x=padL+i*gap+gap/2;
+      axisHtml+=`<text x="${x}" y="${H-4}" text-anchor="middle" font-family="var(--font-mono)" font-size="9" fill="var(--fg-muted)">${esc(b.label)}</text>`;
+    }
+  });
+
+  // Bars
+  let barsHtml='';
+  const burstTs = new Set((D.outliers||[]).filter(o=>o.kind==='burst').map(o=>o.ts));
+  buckets.forEach((b,i)=>{
+    const x=padL+i*gap;
+    const totalH=innerH*(b.count/maxCount);
+    const errH=b.errorCount>0?innerH*(b.errorCount/maxCount):0;
+    const totalY=padT+innerH-totalH;
+    const errY=padT+innerH-errH;
+    const isBurst=burstTs.has(b.bucket);
+    const color=isBurst?'var(--yellow)':'var(--primary)';
+    barsHtml+=`<rect x="${x+gap/2-barW/2}" y="${totalY}" width="${barW}" height="${totalH}" fill="${color}" opacity="0.55" rx="1">
+      <title>${esc(b.label)}: ${b.count} events, ${b.errorCount} errors</title></rect>`;
+    if(errH>0){
+      barsHtml+=`<rect x="${x+gap/2-barW/2}" y="${errY}" width="${barW}" height="${errH}" fill="var(--red)" opacity="0.85" rx="1">
+        <title>${esc(b.label)}: ${b.errorCount} errors</title></rect>`;
+    }
+    if(isBurst){
+      barsHtml+=`<circle cx="${x+gap/2}" cy="${totalY-5}" r="3" fill="var(--yellow)"/>`;
+    }
+  });
+
+  // legend
+  const legendHtml=`
+    <rect x="${padL}" y="${padT+2}" width="10" height="8" fill="var(--primary)" opacity="0.55" rx="1"/>
+    <text x="${padL+14}" y="${padT+10}" font-family="var(--font-mono)" font-size="9" fill="var(--fg-muted)">Total</text>
+    <rect x="${padL+60}" y="${padT+2}" width="10" height="8" fill="var(--red)" opacity="0.85" rx="1"/>
+    <text x="${padL+74}" y="${padT+10}" font-family="var(--font-mono)" font-size="9" fill="var(--fg-muted)">Errors</text>
+    <circle cx="${padL+130}" cy="${padT+6}" r="3" fill="var(--yellow)"/>
+    <text x="${padL+136}" y="${padT+10}" font-family="var(--font-mono)" font-size="9" fill="var(--fg-muted)">Burst</text>
+  `;
+
+  svg.innerHTML = axisHtml+barsHtml+legendHtml;
+}
+buildHistogram();
+window.addEventListener('resize', buildHistogram);
+
+// ── Status donut ──────────────────────────────────────────────────────────
+function buildDonut(){
+  const wrap = document.getElementById('donutWrap');
+  if(!D.accessExtras||!D.accessExtras.statusClasses){ wrap.innerHTML='<p style="color:var(--fg-muted);font-size:12px;">No status data.</p>'; return; }
+  const classes=D.accessExtras.statusClasses;
+  const total=classes.reduce((s,c)=>s+c.count,0)||1;
+  const colorMap={'2xx':'#10b981','3xx':'#3b82f6','4xx':'#f59e0b','5xx':'#ef4444'};
+  const R=48, cx=60, cy=60, r=R;
+  let startAngle=-Math.PI/2;
+  let arcsHtml='';
+  classes.forEach(c=>{
+    const frac=c.count/total;
+    const angle=frac*2*Math.PI;
+    const x1=cx+r*Math.cos(startAngle);
+    const y1=cy+r*Math.sin(startAngle);
+    const x2=cx+r*Math.cos(startAngle+angle);
+    const y2=cy+r*Math.sin(startAngle+angle);
+    const large=angle>Math.PI?1:0;
+    const col=colorMap[c.class]||'#8d7166';
+    arcsHtml+=`<path d="M${cx},${cy} L${x1},${y1} A${r},${r} 0 ${large},1 ${x2},${y2} Z" fill="${col}" opacity="0.85">
+      <title>${c.class}: ${c.count} (${c.share}%)</title></path>`;
+    startAngle+=angle;
+  });
+  const donutSvg=`<svg id="donutSvg" width="120" height="120" viewBox="0 0 120 120">
+    ${arcsHtml}
+    <circle cx="${cx}" cy="${cy}" r="28" fill="var(--surface-container-low)"/>
+    <text x="${cx}" y="${cy+4}" text-anchor="middle" font-family="var(--font-mono)" font-size="12" font-weight="700" fill="var(--fg-1)">${total}</text>
+  </svg>`;
+  let legendHtml='<div class="donut-legend">';
+  classes.forEach(c=>{
+    const col=colorMap[c.class]||'#8d7166';
+    legendHtml+=`<div class="donut-row">
+      <span class="donut-swatch" style="background:${col}"></span>
+      <span class="donut-row-label">${esc(c.class)}</span>
+      <span class="donut-row-count">${c.count}</span>
+      <span class="donut-row-pct">${c.share.toFixed(1)}%</span>
+    </div>`;
+  });
+  legendHtml+='</div>';
+  wrap.innerHTML=donutSvg+legendHtml;
+}
+buildDonut();
+
+// ── Severity bars + chips ─────────────────────────────────────────────────
+const sevColors={error:'var(--red)',warn:'var(--yellow)',info:'var(--green)',debug:'var(--accent-cyan)',trace:'var(--secondary-container)',other:'var(--fg-muted)'};
+const sevCounts=D.severityCounts||{};
+const sevTotal=Object.values(sevCounts).reduce((a,b)=>a+b,0)||1;
+let activeSev='all';
+
+function buildSevChips(){
+  const strip=document.getElementById('sevChips');
+  const all={label:'All',sev:'all',count:sevTotal};
+  const rows=[all,...Object.entries(sevCounts).filter(([,v])=>v>0).map(([k,v])=>({label:k.charAt(0).toUpperCase()+k.slice(1),sev:k,count:v}))];
+  strip.innerHTML=rows.map(r=>`<span class="filter-chip${r.sev==='all'?' active':''}" data-sev="${r.sev}">${r.label} <span class="chip-count">${r.count.toLocaleString()}</span></span>`).join('');
+  strip.querySelectorAll('.filter-chip').forEach(chip=>{
+    chip.addEventListener('click',()=>{
+      activeSev=chip.dataset.sev;
+      strip.querySelectorAll('.filter-chip').forEach(c=>c.classList.toggle('active',c.dataset.sev===activeSev));
+      applyGridFilters();
+    });
+  });
+}
+buildSevChips();
+
+function buildSevBars(){
+  const list=document.getElementById('sevBars');
+  const entries=Object.entries(sevCounts);
+  if(!entries.length){ list.innerHTML='<p style="font-size:12px;color:var(--fg-muted)">No severity data.</p>'; return; }
+  list.innerHTML=entries.map(([k,v])=>{
+    const pct=(v/sevTotal*100).toFixed(1);
+    const col=sevColors[k]||'var(--fg-muted)';
+    return `<div class="cat-bar-row">
+      <span class="cat-bar-label">${esc(k)}</span>
+      <div class="cat-bar-track"><div class="cat-bar-fill" style="width:${pct}%;background:${col}"></div></div>
+      <span class="cat-bar-pct">${v.toLocaleString()} <span style="color:var(--fg-muted)">(${pct}%)</span></span>
+    </div>`;
+  }).join('');
+}
+buildSevBars();
+
+function buildCatBars(){
+  const list=document.getElementById('catBars');
+  const cats=D.topCategories||D.categoryCounts||[];
+  if(!cats.length){ list.innerHTML='<p style="font-size:12px;color:var(--fg-muted)">No category data.</p>'; return; }
+  const maxCat=Math.max(...cats.map(c=>c.count),1);
+  const catColors={'GET 2xx':'var(--green)','POST 2xx':'var(--blue)','POST 5xx':'var(--red)','GET 3xx':'#3b82f6','GET 4xx':'var(--yellow)','POST 4xx':'var(--yellow)'};
+  list.innerHTML=cats.map(c=>{
+    const pct=(c.count/maxCat*100).toFixed(1);
+    const col=catColors[c.category]||'var(--primary)';
+    return `<div class="cat-bar-row">
+      <span class="cat-bar-label">${esc(c.category)}</span>
+      <div class="cat-bar-track"><div class="cat-bar-fill" style="width:${pct}%;background:${col}"></div></div>
+      <span class="cat-bar-pct">${c.count} <span style="color:var(--fg-muted)">(${(c.share||0).toFixed(1)}%)</span></span>
+    </div>`;
+  }).join('');
+}
+buildCatBars();
+
+// ── Outliers ──────────────────────────────────────────────────────────────
+function buildOutliers(){
+  const queue=document.getElementById('flagQueue');
+  const outliers=D.outliers||[];
+  if(!outliers.length){ queue.innerHTML='<div class="flag-card"><div class="flag-label">Stream is small — nothing stands out as unusual.</div></div>'; return; }
+  queue.innerHTML=outliers.map
+*/
+</script>
+</body>
+</html>

@@ -1,0 +1,558 @@
+<!doctype html>
+<html lang="en" data-ha-style="digital-eguide">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Mid-Market Battery Storage Field Guide</title>
+  <style>
+:root {
+  --backdrop:#d8c8c0;
+  --paper:#faf3ea;
+  --paper-2:#f4ecdf;
+  --ink:#1f1c14;
+  --muted:#837964;
+  --rule:#d3c9b3;
+  --accent:#c44a47;
+  --accent-2:#e07d52;
+  --shadow:0 30px 60px rgba(31,28,20,.18),0 4px 8px rgba(31,28,20,.06);
+  --serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
+  --body:"Georgia","Times New Roman",serif;
+  --mono:"SF Mono","IBM Plex Mono","Menlo",ui-monospace,monospace;
+  color-scheme: light;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;
+  min-height:100vh;
+  color:var(--ink);
+  background:
+    radial-gradient(ellipse 80% 60% at 50% 18%, #ead7cf, transparent 70%),
+    radial-gradient(ellipse 58% 58% at 82% 92%, #c79a8e, transparent 72%),
+    var(--backdrop);
+  font:15px/1.55 var(--body);
+}
+button,input{font:inherit;color:inherit}
+button{cursor:pointer}
+.eguide-desk{
+  width:min(1220px,100%);
+  margin:0 auto;
+  padding:56px 32px 96px;
+}
+.spread-pair{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(360px,540px));
+  gap:36px;
+  justify-content:center;
+  align-items:start;
+}
+.guide-page{
+  min-height:800px;
+  background:var(--paper);
+  border-radius:4px;
+  padding:44px 44px 36px;
+  box-shadow:var(--shadow);
+  position:relative;
+  overflow:hidden;
+}
+.cover-page{transform:rotate(-.6deg)}
+.inside-spread{transform:rotate(.6deg);background:var(--paper-2)}
+.eguide-eyebrow{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:18px;
+  padding-bottom:22px;
+  border-bottom:1px solid var(--rule);
+  color:var(--muted);
+  font:10.5px/1 var(--mono);
+  letter-spacing:.2em;
+  text-transform:uppercase;
+}
+.eguide-eyebrow span{display:inline-flex;align-items:center;gap:10px}
+.eguide-eyebrow span::before{
+  content:"";
+  width:6px;
+  height:6px;
+  border-radius:50%;
+  background:var(--accent);
+}
+.guide-title{
+  margin:34px 0 14px;
+  font:700 clamp(58px,7vw,86px)/.96 var(--serif);
+  letter-spacing:-.01em;
+}
+.guide-title em{color:var(--accent);font-style:italic}
+.guide-title .thin{font-style:italic;font-weight:500}
+.byline{
+  margin:16px 0 20px;
+  color:var(--muted);
+  font:11px/1.35 var(--mono);
+  letter-spacing:.15em;
+  text-transform:uppercase;
+}
+.stat-row{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:18px;
+  margin:22px 0 28px;
+  padding:18px 0;
+  border-top:1px solid var(--rule);
+  border-bottom:1px solid var(--rule);
+}
+.stat-value{font:700 36px/1 var(--serif)}
+.stat-label{
+  max-width:15ch;
+  margin-top:7px;
+  color:var(--muted);
+  font:10px/1.4 var(--mono);
+  text-transform:uppercase;
+  letter-spacing:.16em;
+}
+.inside-title{
+  margin:12px 0 14px;
+  font:italic 700 35px/1 var(--serif);
+}
+.inside-title em{color:var(--accent)}
+.toc{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:14px 26px;
+}
+.toc-item{
+  display:flex;
+  align-items:baseline;
+  gap:8px;
+  width:100%;
+  padding:0 0 7px;
+  border:0;
+  border-bottom:1px solid transparent;
+  background:transparent;
+  text-align:left;
+}
+.toc-item:hover,.toc-item.active{border-bottom-color:var(--accent)}
+.toc-name{
+  max-width:15ch;
+  overflow:hidden;
+  color:var(--ink);
+  font:italic 15px/1.2 var(--body);
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.toc-leader{
+  flex:1;
+  border-bottom:1px dotted var(--muted);
+  transform:translateY(-3px);
+}
+.toc-page{color:var(--muted);font:11px/1 var(--mono)}
+.guide-sticker{
+  position:absolute;
+  right:42px;
+  top:286px;
+  width:92px;
+  height:92px;
+  display:grid;
+  place-items:center;
+  border-radius:50%;
+  background:var(--accent-2);
+  color:#fff;
+  transform:rotate(8deg);
+  text-align:center;
+  padding:10px;
+  font:italic 700 13px/1.1 var(--serif);
+}
+.guide-sticker::after{
+  content:"";
+  position:absolute;
+  inset:6px;
+  border:1px dashed rgba(255,255,255,.55);
+  border-radius:inherit;
+}
+.guide-footer{
+  position:absolute;
+  left:44px;
+  right:44px;
+  bottom:28px;
+  display:flex;
+  justify-content:space-between;
+  padding-top:14px;
+  border-top:1px solid var(--rule);
+  color:var(--muted);
+  font:10.5px/1 var(--mono);
+  letter-spacing:.16em;
+  text-transform:uppercase;
+}
+.chapter-title{
+  margin:30px 0 8px;
+  max-width:17ch;
+  font:italic 700 39px/1 var(--serif);
+  letter-spacing:-.005em;
+}
+.chapter-title .accent{color:var(--accent)}
+.deck{
+  max-width:50ch;
+  margin:0 0 22px;
+  color:var(--muted);
+  font:italic 14.5px/1.42 var(--body);
+}
+.guide-columns{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+  gap:24px;
+  padding-top:14px;
+  border-top:1px solid var(--rule);
+}
+.body-copy{margin:0;color:var(--ink);font:13.4px/1.52 var(--body)}
+.body-copy::first-letter{
+  float:left;
+  padding:5px 7px 0 0;
+  color:var(--accent);
+  font:italic 700 38px/.85 var(--serif);
+}
+.lesson-steps{
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+.step{
+  display:grid;
+  grid-template-columns:32px 1fr;
+  gap:10px;
+  padding:8px 0;
+  border-bottom:1px dashed var(--rule);
+}
+.step-num{color:var(--accent);font:700 12px/1 var(--mono);letter-spacing:.08em}
+.step-title{display:block;margin-bottom:2px;font:italic 700 14px/1.2 var(--body)}
+.step-body{font:12.5px/1.36 var(--body)}
+.pullquote{
+  position:absolute;
+  right:-10px;
+  top:262px;
+  width:222px;
+  padding:18px 22px;
+  border:1px solid var(--rule);
+  border-radius:4px;
+  background:var(--paper);
+  box-shadow:0 8px 18px rgba(31,28,20,.1);
+  transform:rotate(2.4deg);
+  font:italic 700 18px/1.18 var(--serif);
+}
+.pullquote .open{
+  display:block;
+  height:24px;
+  color:var(--accent);
+  font-size:56px;
+  line-height:.4;
+}
+.pullquote .by{
+  display:block;
+  margin-top:14px;
+  color:var(--muted);
+  font:11px/1 var(--mono);
+  letter-spacing:.12em;
+  text-transform:uppercase;
+}
+.exercise-strip{
+  display:flex;
+  align-items:center;
+  gap:14px;
+  margin-top:18px;
+  padding:14px 16px;
+  border:1px solid var(--accent);
+  border-radius:4px;
+  background:rgba(196,74,71,.055);
+}
+.exercise-strip .label{
+  flex:0 0 auto;
+  padding:6px 8px;
+  border:1px solid var(--accent);
+  color:var(--accent);
+  font:10.5px/1 var(--mono);
+  letter-spacing:.18em;
+  text-transform:uppercase;
+}
+.exercise-strip .text{font:italic 14px/1.4 var(--body)}
+.guide-tools{
+  position:fixed;
+  left:50%;
+  bottom:22px;
+  z-index:20;
+  display:flex;
+  align-items:center;
+  gap:8px;
+  padding:8px;
+  border:1px solid rgba(31,28,20,.12);
+  border-radius:999px;
+  background:rgba(250,243,234,.86);
+  box-shadow:0 14px 30px rgba(31,28,20,.16);
+  transform:translateX(-50%);
+  backdrop-filter:blur(14px);
+}
+.tool-button,.search-input{
+  min-height:34px;
+  border:1px solid rgba(31,28,20,.14);
+  border-radius:999px;
+  background:rgba(255,255,255,.48);
+  color:var(--ink);
+  font:11px/1 var(--mono);
+  letter-spacing:.08em;
+  text-transform:uppercase;
+}
+.tool-button{padding:0 13px}
+.tool-button:hover{border-color:var(--accent);color:var(--accent)}
+.search-input{
+  width:190px;
+  padding:0 14px;
+  text-transform:none;
+  letter-spacing:0;
+}
+.source-drawer{
+  position:fixed;
+  top:24px;
+  right:24px;
+  z-index:30;
+  width:min(380px,calc(100vw - 48px));
+  max-height:calc(100vh - 48px);
+  overflow:auto;
+  padding:22px;
+  border:1px solid rgba(31,28,20,.14);
+  border-radius:8px;
+  background:rgba(250,243,234,.96);
+  box-shadow:0 28px 70px rgba(31,28,20,.24);
+  transform:translateX(calc(100% + 32px));
+  transition:transform .2s ease;
+}
+.source-drawer.open{transform:translateX(0)}
+.drawer-head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:16px;
+  margin-bottom:14px;
+  color:var(--muted);
+  font:11px/1 var(--mono);
+  letter-spacing:.16em;
+  text-transform:uppercase;
+}
+.drawer-close{
+  width:30px;
+  height:30px;
+  border:1px solid var(--rule);
+  border-radius:50%;
+  background:transparent;
+}
+.evidence-card{
+  padding:12px 0;
+  border-top:1px solid var(--rule);
+}
+.evidence-card strong{
+  display:block;
+  margin-bottom:5px;
+  color:var(--accent);
+  font:11px/1 var(--mono);
+  letter-spacing:.1em;
+}
+.evidence-card p{margin:0;color:#40362c;font:13px/1.5 var(--body)}
+.copied{
+  position:fixed;
+  left:50%;
+  bottom:78px;
+  z-index:40;
+  padding:8px 12px;
+  border-radius:999px;
+  background:var(--ink);
+  color:var(--paper);
+  font:11px/1 var(--mono);
+  letter-spacing:.12em;
+  text-transform:uppercase;
+  transform:translateX(-50%);
+  opacity:0;
+  pointer-events:none;
+  transition:opacity .16s ease;
+}
+.copied.show{opacity:1}
+@media (max-width:1120px){
+  .spread-pair{grid-template-columns:minmax(320px,540px)}
+  .cover-page,.inside-spread{transform:none}
+  .pullquote{right:18px}
+}
+@media (max-width:620px){
+  .eguide-desk{padding:24px 14px 104px}
+  .guide-page{min-height:auto;padding:30px 24px 84px}
+  .guide-title{font-size:52px}
+  .toc,.guide-columns,.stat-row{grid-template-columns:1fr}
+  .guide-sticker,.pullquote{position:relative;inset:auto;width:auto;margin:18px 0 0;transform:none}
+  .guide-tools{left:12px;right:12px;bottom:12px;flex-wrap:wrap;justify-content:center;transform:none;border-radius:18px}
+  .search-input{width:min(100%,240px)}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{scroll-behavior:auto!important;transition:none!important}
+}
+  </style>
+</head>
+<body>
+  <main class="eguide-desk">
+    <div class="spread-pair">
+      <article class="guide-page cover-page" data-od-id="cover">
+        <div class="eguide-eyebrow"><span>PDF GUIDE FOR OPERATORS</span><b>2026 EDITION</b></div>
+        <h1 class="guide-title">Mid-Market <em>Battery</em> Storage <span class="thin">guide</span></h1>
+        <div class="byline">Prepared from PDF source · Clockless Research · April 2026</div>
+        <div class="stat-row">
+          <div><div class="stat-value">8</div><div class="stat-label">Source pages</div></div><div><div class="stat-value">6</div><div class="stat-label">Minute read</div></div><div><div class="stat-value">22</div><div class="stat-label">Guide stops</div></div>
+        </div>
+        <h2 class="inside-title">What's <em>inside.</em></h2>
+        <div class="toc" data-od-id="toc">
+          <button class="toc-item active" type="button" data-chapter="0">
+            <span class="toc-name">Executive Summary</span>
+            <span class="toc-leader"></span>
+            <span class="toc-page">02</span>
+          </button>
+          <button class="toc-item" type="button" data-chapter="1">
+            <span class="toc-name">1. Market Structure</span>
+            <span class="toc-leader"></span>
+            <span class="toc-page">03</span>
+          </button>
+          <button class="toc-item" type="button" data-chapter="2">
+            <span class="toc-name">2. Cost Structure</span>
+            <span class="toc-leader"></span>
+            <span class="toc-page">04</span>
+          </button>
+          <button class="toc-item" type="button" data-chapter="3">
+            <span class="toc-name">3. Operator Software (DERMS)</span>
+            <span class="toc-leader"></span>
+            <span class="toc-page">05</span>
+          </button>
+          <button class="toc-item" type="button" data-chapter="4">
+            <span class="toc-name">4. Risks &amp; Counter-Theses</span>
+            <span class="toc-leader"></span>
+            <span class="toc-page">06</span>
+          </button>
+          <button class="toc-item" type="button" data-chapter="5">
+            <span class="toc-name">5. Operator Recommendations</span>
+            <span class="toc-leader"></span>
+            <span class="toc-page">07</span>
+          </button>
+          <button class="toc-item" type="button" data-chapter="6">
+            <span class="toc-name">Glossary</span>
+            <span class="toc-leader"></span>
+            <span class="toc-page">08</span>
+          </button></div>
+        <div class="guide-sticker">FIELD NOTES EDITION</div>
+        <div class="guide-footer"><span>Battery Storage</span><span>01 / 08</span></div>
+      </article>
+
+      <article class="guide-page inside-spread" data-od-id="spread">
+        <div class="eguide-eyebrow"><span id="chapter-kicker">Opening brief</span><b id="chapter-page">PAGE 02</b></div>
+        <h2 class="chapter-title"><span id="chapter-title">Executive Summary</span><br><span class="accent">as a field note.</span></h2>
+        <p class="deck" id="chapter-deck"></p>
+        <div class="guide-columns">
+          <p class="body-copy" id="chapter-body"></p>
+          <div class="lesson-steps" id="lesson-steps"></div>
+        </div>
+        <div class="pullquote" data-od-id="pullquote">
+          <span class="open">"</span>
+          <span id="pullquote-text">The cheapest electron in 2026 is one that didn’t have to cross an interconnection.</span>
+          <span class="by">Source PDF · Executive Summary</span>
+        </div>
+        <div class="exercise-strip" data-od-id="exercise">
+          <span class="label">Exercise</span>
+          <span class="text" id="exercise-text"></span>
+        </div>
+        <div class="guide-footer"><span id="footer-title">Battery Storage</span><span id="footer-page">02 / 08</span></div>
+      </article>
+    </div>
+  </main>
+
+  <div class="guide-tools" aria-label="Guide tools">
+    <button class="tool-button" type="button" id="prev">Prev</button>
+    <button class="tool-button" type="button" id="next">Next</button>
+    <input class="search-input" id="search" type="search" placeholder="Search source">
+    <button class="tool-button" type="button" id="open-drawer">Evidence</button>
+    <button class="tool-button" type="button" id="copy-summary">Copy</button>
+  </div>
+
+  <aside class="source-drawer" id="drawer" aria-label="Source evidence">
+    <div class="drawer-head"><span id="drawer-title">Source evidence</span><button class="drawer-close" type="button" id="close-drawer" aria-label="Close evidence drawer">x</button></div>
+    <div id="evidence-list"></div>
+  </aside>
+  <div class="copied" id="copied">Copied</div>
+
+  <script>const DATA={"pages":[{"page":1,"text":"The State of Mid-Market Battery Storage\n2026 Outlook — Synthetic Fixture\nA 32-page sector outlook prepared for portfolio operators. All companies, projects, deal sizes, and individuals named\nin this document are fictional and exist only to give the html-anything PDF prompt a realistic shape to work against.\nPrepared by Clockless Research · April 2026"},{"page":2,"text":"Executive Summary\nMid-market behind-the-meter battery storage moved from a policy-dependent niche to a\ncapex-positive default in 2025. On every project we modelled across the synthetic 47-site portfolio,\nfront-of-meter pricing alone justified a four-hour battery; behind-the-meter demand-charge avoidance\npushed simple payback inside seven years on 38 of 47 sites.\nThe structural change is not price decline of LFP cells, which has decelerated to 6.4% YoY. It is the\ncollapse of soft costs — interconnection engineering, permitting, and commissioning — driven by\nsoftware tooling that is now deployed at three of the four developers we surveyed.\nWe expect the mid-market segment to grow from 2.1 GWh of synthetic deployments in 2025 to 7.8\nGWh by 2028, with the median project size declining from 1.9 MWh to 1.1 MWh as the developer\necosystem moves down-market.\nThree findings drive the rest of this report:\n1. Soft costs now dominate; cell price is a second-order lever. 2. The bottleneck is utility\ninterconnection queues, not capital. 3. Operator software (DERMS) is the highest-margin layer and\nthe most contested.\n“The cheapest electron in 2026 is one that didn’t have to cross an interconnection.”"},{"page":3,"text":"1. Market Structure\nWe define mid-market as projects between 250 kWh and 5 MWh of useable energy capacity, sited\nbehind a commercial or industrial meter or in front of a distribution feeder serving 50–5,000\ncustomers. This is the segment that historically had no native developer pool — too small for\nutility-scale shops, too large for residential installers.\n1.1 Synthetic Portfolio Snapshot\nThe 47 fictional sites profiled in this report are distributed across nine U.S. states. Project sizes range\nfrom 480 kWh to 4.6 MWh. The table below summarises by state.\nState Sites Capacity (MWh) Median size (MWh) Median IRR\nCalifornia (synth.) 12 21.4 1.6 14.2%\nTexas (synth.) 9 16.8 1.9 13.7%\nNew York (synth.) 6 8.1 1.3 11.4%\nMassachusetts (synth.) 5 5.4 1.0 10.2%\nIllinois (synth.) 4 3.9 0.9 9.6%\nOther (synth.) 11 9.7 0.8 9.1%\nPortfolio total 47 65.3 1.1 12.3%\n1.2 Developer Concentration\nFour fictional developers — Halcyon Grid, Fieldline Energy, Mesa Pulse, and Bluemark Storage\n— accounted for 71% of the synthetic 2025 deployment volume. Concentration is rising: in 2023 the\nsame four held 49% share. We expect this to inflect downward in 2027 as the permitting tooling stack\nmatures and lowers the entry bar.\n“Halcyon’s real moat isn’t engineering, it’s that they ship 14-day permits in jurisdictions where\nthe average is 90.” — synthetic operator interview, March 2026"},{"page":4,"text":"2. Cost Structure\nThe shape of mid-market battery cost has flipped. As recently as 2022, cells were 56% of installed\ncost; by Q4 2025 they were 31%. The displaced share moved into engineering & permitting (now\n22%) and commissioning (now 14%), both of which are labour-bound and therefore\nsoftware-targetable.\nCost component 2022 share 2025 share 2028E share\nLFP cells 56% 31% 26%\nBMS &amp; PCS 12% 13% 12%\nEPC labor 10% 12% 11%\nEngineering &amp; permitting 9% 22% 16%\nCommissioning 5% 14% 11%\nInterconnection fees 5% 6% 12%\nDeveloper margin 3% 2% 12%\n2.1 The Software-Eatable Layer\nEngineering & permitting, commissioning, and developer overhead together represent 38% of\ninstalled cost in 2025. This is the layer that is being compressed by operator software. Three of the\nfour named developers above run an internal toolchain we collectively label DERMS-Plus: design\nautomation, permit packet generation, commissioning checklist + telemetry, and ongoing dispatch\noptimisation.\nAcross the synthetic portfolio, sites built with DERMS-Plus tooling completed permitting in 17 days\nmedian versus 83 days for the legacy approach. The cost differential per project averaged $84,000.\n2.2 What is not being compressed\nInterconnection fees are rising in three of the nine states profiled, driven by utility-side studies that\nprice grid impacts more aggressively. We expect interconnection to double as a share of installed\ncost by 2028 even as everything else compresses. This is the next bottleneck."},{"page":5,"text":"3. Operator Software (DERMS)\nDistributed Energy Resource Management Systems (DERMS) sit between the battery and the market\nsignals it responds to. In the mid-market segment, DERMS choices fall into three buckets.\n3.1 Three Architectures\nVendor-locked. The battery OEM ships the dispatch logic. Reliable but slow to adapt to new market\nmechanisms (e.g. ERCOT’s synthetic Ancillary Tier 3 product, hypothetically introduced 2026).\nRoughly 40% of the synthetic portfolio runs on this approach.\nIndependent SaaS. A third-party platform integrates with the OEM’s API. Fastest to adapt, but\nintroduces a contractual triangle. Roughly 35% of the synthetic portfolio.\nOperator-built. The site operator (or its developer) writes the dispatch layer. Highest margin\nretention, highest engineering cost. Roughly 25% of the portfolio. Concentrated among the top two\nsynthetic developers.\n3.2 Where The Value Accrues\nAcross the synthetic portfolio, sites running operator-built DERMS captured 23% more revenue per\nMWh versus vendor-locked, primarily because they could opportunistically arbitrage real-time prices\nand respond to demand-response calls without vendor mediation. The independent-SaaS bucket\ncaptured 17% more than vendor-locked but trailed operator-built.\n“Owning the dispatch logic is owning the cash flow. We give up on every other vertical\nintegration argument before we give up on this one.”"},{"page":6,"text":"4. Risks & Counter-Theses\n4.1 Interconnection Reform Stalls\nFERC Order 2023 implementation across the nine modelled states is uneven; the worst-performing\nutility in the synthetic dataset has cleared 12% of its queue 18 months in. If reform stalls, the\nbottleneck identified in §2.2 hardens, and median IRRs across the portfolio fall 180–220 bps.\n4.2 Cell Tariff Volatility\nRoughly 64% of the LFP cells in the synthetic portfolio originate from Asian manufacturers subject to\ncurrent and pending tariff regimes. A 20-percentage-point tariff shock would move installed cost up\nroughly 6.2% at the project level — meaningful but not portfolio-breaking.\n4.3 Insurance Capacity\nBattery insurance markets remain thin and concentrated. In 2025 three synthetic carriers wrote 84%\nof the policies on the portfolio. A single high-profile thermal incident could withdraw capacity\nindustry-wide and delay 12–18 months of new builds. We rate this the highest-leverage\nlow-probability tail in the report.\n4.4 What we may have wrong\nOur portfolio is synthetic and may overweight well-permitted jurisdictions. Real portfolios with heavier\nexposure to NIMBY-heavy counties will likely see higher soft costs and longer schedules. We have\nnot modelled the impact of distribution-system upgrades that shift cost onto the developer rather than\nthe utility."},{"page":7,"text":"5. Operator Recommendations\nFor mid-market portfolio operators evaluating where to allocate effort in the next 12–18 months, we\nrecommend the following synthetic-portfolio-informed priorities:\n5.1 Prioritise dispatch software ownership.\nThe 23% revenue uplift documented in §3.2 is the single largest controllable variable in the model.\nOperators who outsource dispatch are ceding the largest margin pool in the value chain. Build, buy\nwith broad API access, or acquire — but do not lock in.\n5.2 Move down-market deliberately.\nThe unit economics now support 480 kWh sites; the bottleneck is developer attention, not project\neconomics. Operators with a permitting-automation toolchain are structurally advantaged at smaller\nsites.\n5.3 Lock in interconnection upgrades early.\nOn the synthetic portfolio, sites whose interconnection studies completed before mid-2025 captured\n41% lower fees than identical sites whose studies completed in Q4. Backlog growth means delay\ncompounds; act ahead of the queue.\n5.4 Diversify insurance.\nThree-carrier concentration is unstable. Over the next 18 months, build relationships with at least two\nof the emerging European and synthetic-Lloyd’s capacity providers identified in Annex C."},{"page":8,"text":"Glossary\nBMS — Battery Management System. Electronics that monitor cells.\nDERMS — Distributed Energy Resource Management System. Dispatch + monitoring software.\nEPC — Engineering, Procurement, Construction. The on-site labour layer.\nLFP — Lithium Iron Phosphate. The dominant mid-market cell chemistry.\nPCS — Power Conversion System. The inverter between the battery and the grid.\nFERC Order 2023 — U.S. federal rulemaking on interconnection queue reform.\nMid-market — projects between 250 kWh and 5 MWh useable capacity.\nReferences\nAll references in this synthetic fixture are fictional. They mimic the shape of real industry citations (BloombergNEF,\nWood Mackenzie, EIA reports, FERC dockets) so the html-anything PDF prompt has something to extract.\n[1] Synthetic Energy Outlook 2026, fictional Halcyon Grid public deck, March 2026.\n[2] Mock-FERC Docket ER26-118 (synthetic), interconnection queue review, January 2026.\n[3] Fictional ERCOT Ancillary Tier 3 design memo, synthetic, February 2026.\n[4] Imagined Mesa Pulse investor letter, Q4 2025 (synthetic).\n[5] Fabricated Wood-Mackenzie-style storage cost teardown, January 2026."}],"headings":[{"page":1,"level":2,"text":"The State of Mid-Market Battery Storage"},{"page":1,"level":1,"text":"2026 Outlook — Synthetic Fixture"},{"page":1,"level":2,"text":"Prepared by Clockless Research · April 2026"},{"page":2,"level":2,"text":"Executive Summary"},{"page":3,"level":1,"text":"1. Market Structure"},{"page":3,"level":2,"text":"1.1 Synthetic Portfolio Snapshot"},{"page":3,"level":2,"text":"State Sites Capacity (MWh) Median size (MWh) Median IRR"},{"page":3,"level":2,"text":"1.2 Developer Concentration"},{"page":4,"level":1,"text":"2. Cost Structure"},{"page":4,"level":2,"text":"2.1 The Software-Eatable Layer"},{"page":4,"level":2,"text":"2.2 What is not being compressed"},{"page":5,"level":1,"text":"3. Operator Software (DERMS)"},{"page":5,"level":2,"text":"3.1 Three Architectures"},{"page":5,"level":2,"text":"3.2 Where The Value Accrues"},{"page":6,"level":1,"text":"4. Risks & Counter-Theses"},{"page":6,"level":2,"text":"4.1 Interconnection Reform Stalls"},{"page":6,"level":2,"text":"4.2 Cell Tariff Volatility"},{"page":6,"level":2,"text":"4.3 Insurance Capacity"},{"page":6,"level":2,"text":"4.4 What we may have wrong"},{"page":7,"level":1,"text":"5. Operator Recommendations"},{"page":8,"level":2,"text":"Glossary"},{"page":8,"level":2,"text":"References"}],"text":"The State of Mid-Market Battery Storage\n2026 Outlook — Synthetic Fixture\nA 32-page sector outlook prepared for portfolio operators. All companies, projects, deal sizes, and individuals named\nin this document are fictional and exist only to give the html-anything PDF prompt a realistic shape to work against.\nPrepared by Clockless Research · April 2026\n\nExecutive Summary\nMid-market behind-the-meter battery storage moved from a policy-dependent niche to a\ncapex-positive default in 2025. On every project we modelled across the synthetic 47-site portfolio,\nfront-of-meter pricing alone justified a four-hour battery; behind-the-meter demand-charge avoidance\npushed simple payback inside seven years on 38 of 47 sites.\nThe structural change is not price decline of LFP cells, which has decelerated to 6.4% YoY. It is the\ncollapse of soft costs — interconnection engineering, permitting, and commissioning — driven by\nsoftware tooling that is now deployed at three of the four developers we surveyed.\nWe expect the mid-market segment to grow from 2.1 GWh of synthetic deployments in 2025 to 7.8\nGWh by 2028, with the median project size declining from 1.9 MWh to 1.1 MWh as the developer\necosystem moves down-market.\nThree findings drive the rest of this report:\n1. Soft costs now dominate; cell price is a second-order lever. 2. The bottleneck is utility\ninterconnection queues, not capital. 3. Operator software (DERMS) is the highest-margin layer and\nthe most contested.\n“The cheapest electron in 2026 is one that didn’t have to cross an interconnection.”\n\n1. Market Structure\nWe define mid-market as projects between 250 kWh and 5 MWh of useable energy capacity, sited\nbehind a commercial or industrial meter or in front of a distribution feeder serving 50–5,000\ncustomers. This is the segment that historically had no native developer pool — too small for\nutility-scale shops, too large for residential installers.\n1.1 Synthetic Portfolio Snapshot\nThe 47 fictional sites profiled in this report are distributed across nine U.S. states. Project sizes range\nfrom 480 kWh to 4.6 MWh. The table below summarises by state.\nState Sites Capacity (MWh) Median size (MWh) Median IRR\nCalifornia (synth.) 12 21.4 1.6 14.2%\nTexas (synth.) 9 16.8 1.9 13.7%\nNew York (synth.) 6 8.1 1.3 11.4%\nMassachusetts (synth.) 5 5.4 1.0 10.2%\nIllinois (synth.) 4 3.9 0.9 9.6%\nOther (synth.) 11 9.7 0.8 9.1%\nPortfolio total 47 65.3 1.1 12.3%\n1.2 Developer Concentration\nFour fictional developers — Halcyon Grid, Fieldline Energy, Mesa Pulse, and Bluemark Storage\n— accounted for 71% of the synthetic 2025 deployment volume. Concentration is rising: in 2023 the\nsame four held 49% share. We expect this to inflect downward in 2027 as the permitting tooling stack\nmatures and lowers the entry bar.\n“Halcyon’s real moat isn’t engineering, it’s that they ship 14-day permits in jurisdictions where\nthe average is 90.” — synthetic operator interview, March 2026\n\n2. Cost Structure\nThe shape of mid-market battery cost has flipped. As recently as 2022, cells were 56% of installed\ncost; by Q4 2025 they were 31%. The displaced share moved into engineering & permitting (now\n22%) and commissioning (now 14%), both of which are labour-bound and therefore\nsoftware-targetable.\nCost component 2022 share 2025 share 2028E share\nLFP cells 56% 31% 26%\nBMS &amp; PCS 12% 13% 12%\nEPC labor 10% 12% 11%\nEngineering &amp; permitting 9% 22% 16%\nCommissioning 5% 14% 11%\nInterconnection fees 5% 6% 12%\nDeveloper margin 3% 2% 12%\n2.1 The Software-Eatable Layer\nEngineering & permitting, commissioning, and developer overhead together represent 38% of\ninstalled cost in 2025. This is the layer that is being compressed by operator software. Three of the\nfour named developers above run an internal toolchain we collectively label DERMS-Plus: design\nautomation, permit packet generation, commissioning checklist + telemetry, and ongoing dispatch\noptimisation.\nAcross the synthetic portfolio, sites built with DERMS-Plus tooling completed permitting in 17 days\nmedian versus 83 days for the legacy approach. The cost differential per project averaged $84,000.\n2.2 What is not being compressed\nInterconnection fees are rising in three of the nine states profiled, driven by utility-side studies that\nprice grid impacts more aggressively. We expect interconnection to double as a share of installed\ncost by 2028 even as everything else compresses. This is the next bottleneck.\n\n3. Operator Software (DERMS)\nDistributed Energy Resource Management Systems (DERMS) sit between the battery and the market\nsignals it responds to. In the mid-market segment, DERMS choices fall into three buckets.\n3.1 Three Architectures\nVendor-locked. The battery OEM ships the dispatch logic. Reliable but slow to adapt to new market\nmechanisms (e.g. ERCOT’s synthetic Ancillary Tier 3 product, hypothetically introduced 2026).\nRoughly 40% of the synthetic portfolio runs on this approach.\nIndependent SaaS. A third-party platform integrates with the OEM’s API. Fastest to adapt, but\nintroduces a contractual triangle. Roughly 35% of the synthetic portfolio.\nOperator-built. The site operator (or its developer) writes the dispatch layer. Highest margin\nretention, highest engineering cost. Roughly 25% of the portfolio. Concentrated among the top two\nsynthetic developers.\n3.2 Where The Value Accrues\nAcross the synthetic portfolio, sites running operator-built DERMS captured 23% more revenue per\nMWh versus vendor-locked, primarily because they could opportunistically arbitrage real-time prices\nand respond to demand-response calls without vendor mediation. The independent-SaaS bucket\ncaptured 17% more than vendor-locked but trailed operator-built.\n“Owning the dispatch logic is owning the cash flow. We give up on every other vertical\nintegration argument before we give up on this one.”\n\n4. Risks & Counter-Theses\n4.1 Interconnection Reform Stalls\nFERC Order 2023 implementation across the nine modelled states is uneven; the worst-performing\nutility in the synthetic dataset has cleared 12% of its queue 18 months in. If reform stalls, the\nbottleneck identified in §2.2 hardens, and median IRRs across the portfolio fall 180–220 bps.\n4.2 Cell Tariff Volatility\nRoughly 64% of the LFP cells in the synthetic portfolio originate from Asian manufacturers subject to\ncurrent and pending tariff regimes. A 20-percentage-point tariff shock would move installed cost up\nroughly 6.2% at the project level — meaningful but not portfolio-breaking.\n4.3 Insurance Capacity\nBattery insurance markets remain thin and concentrated. In 2025 three synthetic carriers wrote 84%\nof the policies on the portfolio. A single high-profile thermal incident could withdraw capacity\nindustry-wide and delay 12–18 months of new builds. We rate this the highest-leverage\nlow-probability tail in the report.\n4.4 What we may have wrong\nOur portfolio is synthetic and may overweight well-permitted jurisdictions. Real portfolios with heavier\nexposure to NIMBY-heavy counties will likely see higher soft costs and longer schedules. We have\nnot modelled the impact of distribution-system upgrades that shift cost onto the developer rather than\nthe utility.\n\n5. Operator Recommendations\nFor mid-market portfolio operators evaluating where to allocate effort in the next 12–18 months, we\nrecommend the following synthetic-portfolio-informed priorities:\n5.1 Prioritise dispatch software ownership.\nThe 23% revenue uplift documented in §3.2 is the single largest controllable variable in the model.\nOperators who outsource dispatch are ceding the largest margin pool in the value chain. Build, buy\nwith broad API access, or acquire — but do not lock in.\n5.2 Move down-market deliberately.\nThe unit economics now support 480 kWh sites; the bottleneck is developer attention, not project\neconomics. Operators with a permitting-automation toolchain are structurally advantaged at smaller\nsites.\n5.3 Lock in interconnection upgrades early.\nOn the synthetic portfolio, sites whose interconnection studies completed before mid-2025 captured\n41% lower fees than identical sites whose studies completed in Q4. Backlog growth means delay\ncompounds; act ahead of the queue.\n5.4 Diversify insurance.\nThree-carrier concentration is unstable. Over the next 18 months, build relationships with at least two\nof the emerging European and synthetic-Lloyd’s capacity providers identified in Annex C.\n\nGlossary\nBMS — Battery Management System. Electronics that monitor cells.\nDERMS — Distributed Energy Resource Management System. Dispatch + monitoring software.\nEPC — Engineering, Procurement, Construction. The on-site labour layer.\nLFP — Lithium Iron Phosphate. The dominant mid-market cell chemistry.\nPCS — Power Conversion System. The inverter between the battery and the grid.\nFERC Order 2023 — U.S. federal rulemaking on interconnection queue reform.\nMid-market — projects between 250 kWh and 5 MWh useable capacity.\nReferences\nAll references in this synthetic fixture are fictional. They mimic the shape of real industry citations (BloombergNEF,\nWood Mackenzie, EIA reports, FERC dockets) so the html-anything PDF prompt has something to extract.\n[1] Synthetic Energy Outlook 2026, fictional Halcyon Grid public deck, March 2026.\n[2] Mock-FERC Docket ER26-118 (synthetic), interconnection queue review, January 2026.\n[3] Fictional ERCOT Ancillary Tier 3 design memo, synthetic, February 2026.\n[4] Imagined Mesa Pulse investor letter, Q4 2025 (synthetic).\n[5] Fabricated Wood-Mackenzie-style storage cost teardown, January 2026.","sourceFile":"input.pdf","sizeBytes":14393,"pageCount":8,"wordCount":1417,"charCount":9519,"headingCount":22,"readingMinutes":6};const GUIDE={"title":"Mid-Market Battery Storage Field Guide","shortTitle":"Battery Storage","subtitle":"A compact field guide distilled from a synthetic sector outlook.","edition":"2026 EDITION","byline":"Prepared from PDF source · Clockless Research · April 2026","stats":[{"value":"8","label":"Source pages"},{"value":"6","label":"Minute read"},{"value":"22","label":"Guide stops"}],"chapters":[{"title":"Executive Summary","page":2,"kicker":"Opening brief","deck":"Mid-market behind-the-meter battery storage moved from a policy-dependent niche to a capex-positive default in 2025. On every project we modelled across the synthetic 47-site portfolio, front-of-meter pricing alone justified a four-hour battery; behind-the-meter demand-charge avoidance pushed simple.","body":"Mid-market behind-the-meter battery storage moved from a policy-dependent niche to a capex-positive default in 2025.","steps":[["01","Find the lever","Mid-market behind-the-meter battery storage moved from a policy-dependent niche to a capex-positive default in 2025."],["02","Name the bottleneck","On every project we modelled across the synthetic 47-site portfolio, front-of-meter pricing alone justified a."],["03","Use the signal","The structural change is not price decline of LFP cells, which has decelerated to 6.4% YoY."],["04","Decide the next action","It is the collapse of soft costs — interconnection engineering, permitting, and commissioning — driven by software."]],"exercise":"Turn this chapter into one decision, one uncertainty, and one follow-up question."},{"title":"1. Market Structure","page":3,"kicker":"Chapter 01","deck":"We define mid-market as projects between 250 kWh and 5 MWh of useable energy capacity, sited behind a commercial or industrial meter or in front of a distribution feeder serving 50–5,000. This is the segment that historically had no native developer pool — too small for utility-scale shops, too large for residential installers.","body":"We define mid-market as projects between 250 kWh and 5 MWh of useable energy capacity, sited behind a commercial or industrial meter or in front of a distribution feeder serving 50–5,000 customers.","steps":[["01","Name the bottleneck","We define mid-market as projects between 250 kWh and 5 MWh of useable energy capacity, sited behind a commercial or."],["02","Use the signal","This is the segment that historically had no native developer pool — too small for utility-scale shops, too large."],["03","Decide the next action","1.1 Synthetic Portfolio Snapshot The 47 fictional sites profiled in this report are distributed across nine U.S."],["04","Find the lever","Project sizes range from 480 kWh to 4.6 MWh."]],"exercise":"Turn this chapter into one decision, one uncertainty, and one follow-up question."},{"title":"2. Cost Structure","page":4,"kicker":"Chapter 02","deck":"The shape of mid-market battery cost has flipped. As recently as 2022, cells were 56% of installed cost; by Q4 2025 they were 31%.","body":"The shape of mid-market battery cost has flipped.","steps":[["01","Use the signal","The shape of mid-market battery cost has flipped."],["02","Decide the next action","As recently as 2022, cells were 56% of installed cost; by Q4 2025 they were 31%."],["03","Find the lever","The displaced share moved into engineering & permitting (now 22%) and commissioning (now 14%), both of which are."],["04","Name the bottleneck","This is the layer that is being compressed by operator software."]],"exercise":"Split the project budget into hardware, soft costs, and queue risk before reading the IRR."},{"title":"3. Operator Software (DERMS)","page":5,"kicker":"Chapter 03","deck":"Distributed Energy Resource Management Systems (DERMS) sit between the battery and the market signals it responds to. In the mid-market segment, DERMS choices fall into three buckets.","body":"Distributed Energy Resource Management Systems (DERMS) sit between the battery and the market signals it responds to.","steps":[["01","Map the architecture","Vendor-locked, independent SaaS, and operator-built models have different margins."],["02","Price the triangle","OEM, software vendor, and operator incentives need to be visible."],["03","Protect dispatch data","The learning loop becomes a competitive asset over time."],["04","Test a market change","Ask how fast the stack adapts to a new tariff or ancillary product."]],"exercise":"Compare one vendor-locked and one independent DERMS option on adaptation speed."},{"title":"4. Risks & Counter-Theses","page":6,"kicker":"Chapter 04","deck":"4.1 Interconnection Reform Stalls FERC Order 2023 implementation across the nine modelled states is uneven; the worst-performing utility in the synthetic dataset has cleared 12% of its. If reform stalls, the bottleneck identified in §2.2 hardens, and median IRRs across the portfolio fall 180–220 bps.","body":"4.1 Interconnection Reform Stalls FERC Order 2023 implementation across the nine modelled states is uneven; the worst-performing utility in the synthetic dataset has cleared 12% of its queue 18 months in.","steps":[["01","Name the counter-thesis","Write the assumption that would break the base case."],["02","Attach a leading signal","Track queue reform, tariff volatility, insurance capacity, or OEM lock-in."],["03","Separate delay from death","A stalled project is different from a structurally bad project."],["04","Update the memo","Keep one dated note for what changed and why."]],"exercise":"Write the single assumption that would most quickly change your recommendation."},{"title":"5. Operator Recommendations","page":7,"kicker":"Chapter 05","deck":"For mid-market portfolio operators evaluating where to allocate effort in the next 12–18 months, we recommend the following synthetic-portfolio-informed priorities: 5.1 Prioritise dispatch. The 23% revenue uplift documented in §3.2 is the single largest controllable variable in the model.","body":"For mid-market portfolio operators evaluating where to allocate effort in the next 12–18 months, we recommend the following synthetic-portfolio-informed priorities: 5.1 Prioritise dispatch software ownership.","steps":[["01","Model the bill","Run demand-charge and tariff scenarios before sizing the battery."],["02","Treat queues as critical path","Interconnection timing decides whether the project survives."],["03","Keep DERMS optionality","Avoid contracts that make dispatch logic hard to change later."],["04","Check insurability early","Confirm cyber, thermal, and warranty assumptions before launch."]],"exercise":"Pick one site and write a one-page go/no-go memo using the four steps above."},{"title":"Glossary","page":8,"kicker":"Chapter 06","deck":"DERMS — Distributed Energy Resource Management System. EPC — Engineering, Procurement, Construction.","body":"DERMS — Distributed Energy Resource Management System.","steps":[["01","Use the signal","DERMS — Distributed Energy Resource Management System."],["02","Decide the next action","EPC — Engineering, Procurement, Construction."],["03","Find the lever","The inverter between the battery and the grid."],["04","Name the bottleneck","federal rulemaking on interconnection queue reform."]],"exercise":"Turn this chapter into one decision, one uncertainty, and one follow-up question."}],"quote":"The cheapest electron in 2026 is one that didn’t have to cross an interconnection.","quoteBy":"Source PDF · Executive Summary","evidence":[{"id":"E01","page":1,"body":"The State of Mid-Market Battery Storage 2026 Outlook — Synthetic Fixture A 32-page sector outlook prepared for portfolio operators."},{"id":"E02","page":1,"body":"All companies, projects, deal sizes, and individuals named in this document are fictional and exist only to give the html-anything PDF prompt a realistic shape to work against."},{"id":"E03","page":"","body":"Prepared by Clockless Research · April 2026 Executive Summary Mid-market behind-the-meter battery storage moved from a policy-dependent niche to a capex-positive default in 2025."},{"id":"E04","page":2,"body":"On every project we modelled across the synthetic 47-site portfolio, front-of-meter pricing alone justified a four-hour battery; behind-the-meter demand-charge avoidance pushed simple payback inside seven years on 38 of 47 sites."},{"id":"E05","page":2,"body":"The structural change is not price decline of LFP cells, which has decelerated to 6.4% YoY."},{"id":"E06","page":2,"body":"It is the collapse of soft costs — interconnection engineering, permitting, and commissioning — driven by software tooling that is now deployed at three of the four developers we surveyed."},{"id":"E07","page":2,"body":"We expect the mid-market segment to grow from 2.1 GWh of synthetic deployments in 2025 to 7.8 GWh by 2028, with the median project size declining from 1.9 MWh to 1.1 MWh as the developer ecosystem moves down-market."},{"id":"E08","page":2,"body":"Three findings drive the rest of this report: 1."},{"id":"E09","page":2,"body":"Soft costs now dominate; cell price is a second-order lever."},{"id":"E10","page":2,"body":"The bottleneck is utility interconnection queues, not capital."},{"id":"E11","page":2,"body":"Operator software (DERMS) is the highest-margin layer and the most contested."},{"id":"E12","page":2,"body":"“The cheapest electron in 2026 is one that didn’t have to cross an interconnection.” 1."},{"id":"E13","page":3,"body":"Market Structure We define mid-market as projects between 250 kWh and 5 MWh of useable energy capacity, sited behind a commercial or industrial meter or in front of a distribution feeder serving 50–5,000 customers."},{"id":"E14","page":3,"body":"This is the segment that historically had no native developer pool — too small for utility-scale shops, too large for residential installers."},{"id":"E15","page":3,"body":"1.1 Synthetic Portfolio Snapshot The 47 fictional sites profiled in this report are distributed across nine U.S."},{"id":"E16","page":3,"body":"Project sizes range from 480 kWh to 4.6 MWh."},{"id":"E17","page":3,"body":"Concentration is rising: in 2023 the same four held 49% share."},{"id":"E18","page":3,"body":"We expect this to inflect downward in 2027 as the permitting tooling stack matures and lowers the entry bar."}],"source":{"file":"input.pdf","words":1417,"pages":8}};</script>
+  <script>
+(() => {
+  let active = 0;
+  const chapterTitle = document.getElementById("chapter-title");
+  const chapterKicker = document.getElementById("chapter-kicker");
+  const chapterPage = document.getElementById("chapter-page");
+  const chapterDeck = document.getElementById("chapter-deck");
+  const chapterBody = document.getElementById("chapter-body");
+  const steps = document.getElementById("lesson-steps");
+  const exercise = document.getElementById("exercise-text");
+  const footerTitle = document.getElementById("footer-title");
+  const footerPage = document.getElementById("footer-page");
+  const drawer = document.getElementById("drawer");
+  const evidenceList = document.getElementById("evidence-list");
+  const drawerTitle = document.getElementById("drawer-title");
+  const copied = document.getElementById("copied");
+
+  function escapeHtml(value) {
+    return String(value).replace(/[&<>"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]));
+  }
+  function renderChapter(index) {
+    active = (index + GUIDE.chapters.length) % GUIDE.chapters.length;
+    const chapter = GUIDE.chapters[active];
+    chapterTitle.textContent = chapter.title;
+    chapterKicker.textContent = chapter.kicker;
+    chapterPage.textContent = "PAGE " + String((chapter.page || active + 2)).padStart(2, "0");
+    chapterDeck.textContent = chapter.deck;
+    chapterBody.textContent = chapter.body;
+    exercise.textContent = chapter.exercise;
+    footerTitle.textContent = chapter.title;
+    footerPage.textContent = String(active + 2).padStart(2, "0") + " / " + String(GUIDE.chapters.length + 1).padStart(2, "0");
+    steps.innerHTML = chapter.steps.map(step => "<div class='step'><span class='step-num'>" + escapeHtml(step[0]) + "</span><span><span class='step-title'>" + escapeHtml(step[1]) + "</span><span class='step-body'>" + escapeHtml(step[2]) + "</span></span></div>").join("");
+    document.querySelectorAll(".toc-item").forEach((button, i) => button.classList.toggle("active", i === active));
+  }
+  function renderEvidence(items, title) {
+    drawerTitle.textContent = title || "Source evidence";
+    const rows = items.length ? items : GUIDE.evidence.slice(0, 8);
+    evidenceList.innerHTML = rows.map(item => "<article class='evidence-card'><strong>" + escapeHtml(item.id || "SRC") + (item.page ? " · PAGE " + escapeHtml(item.page) : "") + "</strong><p>" + escapeHtml(item.body) + "</p></article>").join("");
+  }
+  function openDrawer(items, title) {
+    renderEvidence(items || [], title);
+    drawer.classList.add("open");
+  }
+  function sourceSearch(query) {
+    const q = query.trim().toLowerCase();
+    if (!q) return GUIDE.evidence.slice(0, 8);
+    return GUIDE.evidence.filter(item => item.body.toLowerCase().includes(q)).slice(0, 12);
+  }
+  document.querySelectorAll(".toc-item").forEach(button => {
+    button.addEventListener("click", () => renderChapter(Number(button.dataset.chapter || 0)));
+  });
+  document.getElementById("prev").addEventListener("click", () => renderChapter(active - 1));
+  document.getElementById("next").addEventListener("click", () => renderChapter(active + 1));
+  document.getElementById("open-drawer").addEventListener("click", () => openDrawer([], "Source evidence"));
+  document.getElementById("close-drawer").addEventListener("click", () => drawer.classList.remove("open"));
+  document.getElementById("search").addEventListener("input", event => {
+    const q = event.target.value;
+    if (!q.trim()) return;
+    openDrawer(sourceSearch(q), "Matches for " + q);
+  });
+  document.getElementById("copy-summary").addEventListener("click", async () => {
+    const chapter = GUIDE.chapters[active];
+    const text = GUIDE.title + "\n" + chapter.title + "\n" + chapter.deck + "\nSteps: " + chapter.steps.map(step => step[1]).join(", ");
+    try { await navigator.clipboard.writeText(text); } catch {}
+    copied.classList.add("show");
+    setTimeout(() => copied.classList.remove("show"), 900);
+  });
+  document.addEventListener("keydown", event => {
+    if (event.key === "ArrowRight") renderChapter(active + 1);
+    if (event.key === "ArrowLeft") renderChapter(active - 1);
+    if (event.key === "Escape") drawer.classList.remove("open");
+  });
+  renderChapter(0);
+  renderEvidence([], "Source evidence");
+})();
+  </script>
+</body>
+</html>

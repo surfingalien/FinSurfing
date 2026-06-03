@@ -3,6 +3,7 @@ const cors         = require('cors')
 const path         = require('path')
 const fs           = require('fs')
 const helmet       = require('helmet')
+const compression  = require('compression')
 const cookieParser = require('cookie-parser')
 const rateLimit    = require('express-rate-limit')
 
@@ -68,6 +69,16 @@ const app  = express()
 const PORT = parseInt(process.env.PORT, 10) || 3001
 const PROD = process.env.NODE_ENV === 'production'
 
+// ── Compression (gzip/brotli — skip SSE streams) ─────────────────────────────
+app.use(compression({
+  level: 6,
+  threshold: 1024,
+  filter: (req, res) => {
+    if (req.path.startsWith('/api/stream/')) return false
+    return compression.filter(req, res)
+  },
+}))
+
 // ── Security headers (OWASP-recommended) ─────────
 app.use(helmet({
   contentSecurityPolicy: {
@@ -127,7 +138,21 @@ const authForgotLimit = rateLimit({
   message: { error: 'Too many password reset requests — try again in 1 hour' },
 })
 
+// Tighter limits for market data endpoints that hit paid external APIs
+const marketDataLimit = rateLimit({
+  windowMs: 60 * 1000, max: 60, standardHeaders: true, legacyHeaders: false,
+  message: { error: 'Market data rate limit exceeded — try again shortly' },
+})
+
+const chartLimit = rateLimit({
+  windowMs: 60 * 1000, max: 30, standardHeaders: true, legacyHeaders: false,
+  message: { error: 'Chart data rate limit exceeded — try again shortly' },
+})
+
 app.use('/api', baseLimit)
+app.use('/api/quote',                marketDataLimit)
+app.use('/api/chart',                chartLimit)
+app.use('/api/search',               marketDataLimit)
 app.use('/api/auth/login',           authLoginLimit)
 app.use('/api/auth/register',        authRegisterLimit)
 app.use('/api/auth/forgot-password', authForgotLimit)
@@ -167,22 +192,39 @@ async function apiFetch(url, timeoutMs = 10000) {
 
 // ── Server-side quote cache (30 s TTL for quotes, 15 min for charts) ─────────
 const _quoteCache = new Map()
-const QUOTE_TTL = 30_000
-const CHART_TTL = 15 * 60_000   // 15 minutes — chart data rarely changes intraday
+const QUOTE_TTL    = 30_000
+const CHART_TTL    = 15 * 60_000
+const PC_TTL       = 24 * 60 * 60_000   // prevClose only changes once per day at market open
+const CACHE_MAX    = 5_000              // LRU-style eviction above this size
 
-function cacheSet(key, data) { _quoteCache.set(key, { data, ts: Date.now() }) }
+function _cacheTtl(key) {
+  if (key.startsWith('chart:')) return CHART_TTL
+  if (key.startsWith('pc:'))    return PC_TTL
+  return QUOTE_TTL
+}
+
+function cacheSet(key, data) {
+  if (_quoteCache.size >= CACHE_MAX) {
+    const evict = Math.ceil(CACHE_MAX * 0.1)
+    const iter  = _quoteCache.keys()
+    for (let i = 0; i < evict; i++) {
+      const k = iter.next().value
+      if (k !== undefined) _quoteCache.delete(k)
+    }
+  }
+  _quoteCache.set(key, { data, ts: Date.now() })
+}
 function cacheGet(key) {
   const hit = _quoteCache.get(key)
   if (!hit) return null
-  const ttl = key.startsWith('chart:') ? CHART_TTL : QUOTE_TTL
-  return Date.now() - hit.ts < ttl ? hit.data : null
+  if (Date.now() - hit.ts >= _cacheTtl(key)) { _quoteCache.delete(key); return null }
+  return hit.data
 }
-// Evict stale entries every 5 minutes to prevent unbounded memory growth
+// Evict stale entries every 5 minutes
 setInterval(() => {
   const now = Date.now()
   for (const [k, v] of _quoteCache) {
-    const ttl = k.startsWith('chart:') ? CHART_TTL : QUOTE_TTL
-    if (now - v.ts > ttl) _quoteCache.delete(k)
+    if (now - v.ts > _cacheTtl(k)) _quoteCache.delete(k)
   }
 }, 5 * 60_000)
 
@@ -354,9 +396,8 @@ async function getFinnhubQuotes(symbols, keys = {}) {
       if (cached) return cached
       try {
         const d = await apiFetch(fhUrl(`/quote?symbol=${encodeURIComponent(sym)}`, key), 8000)
-        // d.c === 0 on the free tier means "market closed / no current trade".
-        // Return null so the cascade falls through to Nasdaq, which provides
-        // the actual last-session close price and netChange even after hours.
+        // d.c === 0 means no current trade (market closed on free tier) — return null so
+        // the cascade continues to providers that have correct post-market data.
         if (!d?.c && !d?.pc) return { symbol: sym, regularMarketPrice: null }
         if (!d.c) return { symbol: sym, regularMarketPrice: null }
         const q = {
@@ -372,6 +413,9 @@ async function getFinnhubQuotes(symbols, keys = {}) {
           regularMarketTime:          d.t   ?? null,
         }
         cacheSet(ck, q)
+        // Cache prevClose separately with 24 h TTL so the WS handler can compute
+        // change/changePct even after the 30 s quote cache expires.
+        if (d.pc) cacheSet(`pc:${sym}`, d.pc)
         return q
       } catch { return { symbol: sym, regularMarketPrice: null } }
     }))
@@ -604,10 +648,6 @@ async function getFMPSearch(q, keys = {}) {
 
 async function getTwelveDataChart(symbol, interval = '1d', range = '1y', keys = {}) {
   const key     = keys.td || process.env.TWELVE_DATA_API_KEY || 'demo'
-  // The demo key returns normalized price series (~$1 base) for non-AAPL/MSFT symbols,
-  // causing every symbol to show $1 prices. Skip demo for chart data — Nasdaq/Stooq/
-  // Binance cover the same universe for free without synthetic price distortion.
-  if (key === 'demo') return null
   const ivlMap  = { '1m':'1min','5m':'5min','15m':'15min','30m':'30min','60m':'1h','1h':'1h','1d':'1day','1wk':'1week','1mo':'1month' }
   const tdIvl   = ivlMap[interval]
   if (!tdIvl) return null
@@ -646,7 +686,6 @@ async function getTwelveDataChart(symbol, interval = '1d', range = '1y', keys = 
 // Quote via Twelve Data (single symbol, counts against quota)
 async function getTwelveDataQuote(symbol, keys = {}) {
   const key  = keys.td || process.env.TWELVE_DATA_API_KEY || 'demo'
-  if (key === 'demo') return null
   try {
     const url  = `https://api.twelvedata.com/quote?symbol=${encodeURIComponent(symbol)}&apikey=${key}`
     const d    = await apiFetch(url, 10000)
@@ -804,49 +843,14 @@ async function getStooqChart(symbol, interval = '1d', range = '1y') {
 
 // Well-known crypto base tickers (bare symbols without -USD suffix)
 const KNOWN_CRYPTO = new Set([
-  // Layer 1
   'BTC','ETH','SOL','BNB','XRP','ADA','DOGE','AVAX','DOT','MATIC','LINK',
-  'UNI','LTC','BCH','TRX','NEAR','SHIB','APT','SUI','SEI','INJ','TIA','JUP',
-  'TON','ATOM','FIL','ICP','XLM','XMR','DASH','ZEC','ETC','FTM','ONE','WAVES',
-  'HBAR','FLOW','EOS','XTZ','THETA','ALGO','VET','EGLD','KAVA','CELO',
-  // Layer 2
-  'ARB','OP','IMX','LRC','MNT','STRK','ZK','METIS','MANTA','MOVR','GLMR',
-  'BOBA','ROSE','ASTR','SCRT','CFG','ACA',
-  // DeFi
-  'AAVE','MKR','COMP','SNX','YFI','SUSHI','CRV','DYDX','GMX','PENDLE',
-  'CVX','FXS','LDO','RPL','RUNE','BAL','1INCH','OSMO','CAKE',
-  // AI & Data
-  'FET','OCEAN','AGIX','RNDR','WLD','GRT','NMR','TAO','AKT','ALT','AIOZ','ARKM',
-  // Meme
-  'WIF','BONK','PEPE','FLOKI','MEME','BOME','TURBO','ORDI','SATS','BRETT','NEIRO',
-  // Infrastructure
-  'HNT','AR','STORJ','IOTX','RLC','ANKR','BAND','API3','FLUX','COTI','GLM',
-  'CTSI','NKN','TFUEL','THETA',
-  // Exchange & payments
-  'CRO','STX','CFX','OCEAN','IMX','GALA','GMT','APE','LUNC','PYTH','JTO',
-  'ZETA','BLUR','BAT','MANA','SAND','AXS','VET','ALGO','HBAR',
-  // Legacy
-  'RAY','MNGO','STEP','HNT','LUNA','USTC',
-])
-
-// Mutual fund tickers — routed directly to FMP (NAV-based, end-of-day)
-// Finnhub/AISA do not carry mutual fund quotes; FMP /api/v3/quote does.
-const KNOWN_MUTUAL_FUNDS = new Set([
-  'FXAIX','VFIAX','VTSAX','FSKAX','SWTSX','SWPPX','VEXAX','FSMAX','FZROX',
-  'FZILX','FNILX','VITSX','VINIX','VBTLX','FXNAX','SWAGX','SWISX','FBIIX',
-  'VGIT','VGSH','FCNTX','FDGRX','FBGRX','AGTHX','PRGFX','TRBCX','VWUSX',
-  'CGMFX','FGRTX','RPMGX','MSEGX','VPMAX','AMRMX','SPECX','ANCFX','SEQUX',
-  'BIAWX','DODGX','FLPSX','VIVAX','VEIPX','VDIGX','DFDVX','FVDFX','USAWX',
-  'BUFVX','AIVSX','MFVFX','VWNDX','RWGRX','HAINX','TWVLX','AEPGX','CWGIX',
-  'VEIRX','DODFX','FSELX','FBIOX','FSUTX','FSENX','FRESX','FSCPX','FSRPX',
-  'FSCSX','FSPHX','FBSOX','FSHCX','FNARX','FSAIX','FSDCX','FSNGX','FTRNX',
-  'FWWFX','FAGIX','VBMFX','FBNDX','PTTAX','PTTRX','LSBRX','MWTRX','VWESX',
-  'OSTIX','DODIX','VWEAX','FBIDX','FLTMX','FSTFX','VFIIX','MWTIX','PTRAX',
-  'FGOVX','VGTSX','VFWIX','FSPSX','VTMGX','PRIDX','TBGVX','FOSFX','FDIVX',
-  'FSIIX','VEUSX','VWILX','MGIEX','FIENX','MSFAX','PREMX','PRWCX','VWELX',
-  'VWINX','FPURX','FBALX','TRRIX','DODBX','BERIX','ABALX','PRSIX','TIBIX',
-  'GLRBX','MALOX','FMSDX','VTHRX','VFORX','VFFVX','VTIVX','VTENX','FFNOX',
-  'OAKMX','GQEPX','PARGX','PARNX',
+  'UNI','LTC','BCH','TRX','NEAR','SHIB','APT','ARB','OP','SUI','SEI','INJ',
+  'TIA','JUP','WIF','BONK','PEPE','TON','ATOM','FIL','ICP','XLM','XMR','DASH',
+  'ZEC','ETC','GRT','CAKE','FTM','ONE','WAVES','DYDX','BLUR','ORDI','SATS',
+  'HBAR','FLOW','EOS','XTZ','THETA','ALGO','VET','MANA','SAND','AXS','CRV',
+  'AAVE','MKR','COMP','SNX','YFI','SUSHI','BAT','ZETA','PYTH','JTO','MEME',
+  'OP','ARB','LDO','RPL','STX','CFX','OCEAN','IMX','GALA','GMT','STEPN',
+  'APE','LUNC','LUNA','USTC','FTT','HNT','RAY','SRM','MNGO','STEP',
 ])
 
 function isCryptoSymbol(symbol) {
@@ -946,46 +950,17 @@ async function getBinanceSingleQuote(symbol) {
 // Used only when Binance fails (e.g. Railway IP block). Covers 10 000+ coins.
 
 const COINGECKO_IDS = {
-  // Layer 1
   'BTC':'bitcoin','ETH':'ethereum','SOL':'solana','BNB':'binancecoin',
   'XRP':'ripple','ADA':'cardano','DOGE':'dogecoin','AVAX':'avalanche-2',
   'DOT':'polkadot','MATIC':'matic-network','LINK':'chainlink','UNI':'uniswap',
   'LTC':'litecoin','BCH':'bitcoin-cash','ATOM':'cosmos','NEAR':'near',
   'FIL':'filecoin','TRX':'tron','XLM':'stellar','SHIB':'shiba-inu',
-  'APT':'aptos','SUI':'sui','INJ':'injective-protocol','TON':'the-open-network',
-  'ICP':'internet-computer','HBAR':'hedera-hashgraph','FTM':'fantom','ALGO':'algorand',
-  'VET':'vechain','EOS':'eos','ZEC':'zcash','XMR':'monero','EGLD':'elrond-erd-2',
-  'KAVA':'kava','CELO':'celo','TIA':'celestia','NEAR':'near',
-  // Layer 2
-  'ARB':'arbitrum','OP':'optimism','IMX':'immutable-x','LRC':'loopring',
-  'MNT':'mantle','STRK':'starknet','ZK':'zksync','METIS':'metis-token',
-  'MANTA':'manta-network','BOBA':'boba-network','MOVR':'moonriver',
-  'GLMR':'moonbeam','ROSE':'oasis-network','ASTR':'astar',
-  // DeFi
-  'AAVE':'aave','MKR':'maker','COMP':'compound-governance-token','SNX':'havven',
-  'YFI':'yearn-finance','SUSHI':'sushi','CRV':'curve-dao-token','DYDX':'dydx',
-  'GMX':'gmx','PENDLE':'pendle','CVX':'convex-finance','FXS':'frax-share',
-  'LDO':'lido-dao','RPL':'rocket-pool','RUNE':'thorchain','BAL':'balancer',
-  '1INCH':'1inch','CAKE':'pancakeswap-token',
-  // AI & Data
-  'FET':'fetch-ai','OCEAN':'ocean-protocol','AGIX':'singularitynet',
-  'RNDR':'render-token','WLD':'worldcoin-wld','GRT':'the-graph',
-  'NMR':'numeraire','TAO':'bittensor','AKT':'akash-network','ARKM':'arkham',
-  // Meme
-  'PEPE':'pepe','WIF':'dogwifcoin','BONK':'bonk','FLOKI':'floki',
-  'MEME':'memecoin-2','BOME':'book-of-meme','TURBO':'turbo',
-  'ORDI':'ordinals','BRETT':'based-brett','NEIRO':'neiro-on-eth',
-  // Infrastructure
-  'HNT':'helium','AR':'arweave','STORJ':'storj','IOTX':'iotex',
-  'RLC':'iexec-rlc','ANKR':'ankr','BAND':'band-protocol','GLM':'golem',
-  'CTSI':'cartesi','NKN':'nkn','THETA':'theta-token','TFUEL':'theta-fuel',
-  'FLUX':'zelcash','COTI':'coti','API3':'api3',
-  // Exchange & payments
-  'CRO':'crypto-com-chain','STX':'blockstack','GALA':'gala',
-  'MANA':'decentraland','SAND':'the-sandbox','AXS':'axie-infinity',
-  'APE':'apecoin','BLUR':'blur','JUP':'jupiter-exchange-solana',
-  'JTO':'jito-governance-token','PYTH':'pyth-network','SEI':'sei-network',
-  'ZETA':'zetachain','CFX':'conflux-token',
+  'APT':'aptos','ARB':'arbitrum','OP':'optimism','SUI':'sui','INJ':'injective-protocol',
+  'TON':'the-open-network','PEPE':'pepe','WIF':'dogwifcoin','JUP':'jupiter-exchange-solana',
+  'ICP':'internet-computer','HBAR':'hedera-hashgraph','AAVE':'aave','SAND':'the-sandbox',
+  'MANA':'decentraland','GRT':'the-graph','CRV':'curve-dao-token','DYDX':'dydx',
+  'LDO':'lido-dao','STX':'blockstack','THETA':'theta-token','FTM':'fantom',
+  'ALGO':'algorand','VET':'vechain','EOS':'eos','ZEC':'zcash','XMR':'monero',
 }
 
 function cgId(symbol) {
@@ -1323,15 +1298,17 @@ function _connectFhWs() {
       for (const t of msg.data) {
         const sym = t.s, price = t.p
         if (!sym || price == null) continue
-        const prev    = cacheGet(`fhq:${sym}`)
-        const pc      = prev?.regularMarketPreviousClose ?? null
-        const chg     = pc != null ? +(price - pc).toFixed(4) : null
-        const chgPct  = pc != null ? +((price - pc) / pc * 100).toFixed(4) : null
+        const prev = cacheGet(`fhq:${sym}`)
+        // Fall back to the dedicated 24h prevClose cache if the 30s quote cache has expired
+        const pc     = prev?.regularMarketPreviousClose ?? cacheGet(`pc:${sym}`) ?? null
+        const chg    = pc != null ? +(price - pc).toFixed(4) : null
+        const chgPct = pc != null ? +((price - pc) / pc * 100).toFixed(4) : null
         cacheSet(`fhq:${sym}`, {
           ...(prev || { symbol: sym, shortName: sym }),
           regularMarketPrice:         price,
           regularMarketChange:        chg,
           regularMarketChangePercent: chgPct,
+          regularMarketPreviousClose: pc,
           regularMarketTime:          t.t ? Math.floor(t.t / 1000) : null,
         })
         _sseBroadcast(sym, { symbol: sym, price, change: chg, changePct: chgPct, ts: t.t })
@@ -1459,28 +1436,11 @@ app.get('/api/quote', async (req, res) => {
         })()
       : Promise.resolve([])
 
-    // ── Mutual funds: direct to FMP (Finnhub/AISA don't carry NAV quotes) ────────
-    const fundSyms    = stockSyms.filter(s => KNOWN_MUTUAL_FUNDS.has(s))
-    const regularSyms = stockSyms.filter(s => !KNOWN_MUTUAL_FUNDS.has(s))
-
-    const fundPromise = fundSyms.length
-      ? (async () => {
-          const cached = fundSyms.map(s => cacheGet(`fhq:${s}`) || cacheGet(`aisaq:${s}`) || null)
-          if (cached.every(r => r !== null)) return cached
-          // FMP is the primary source for mutual fund NAV prices
-          const fmpFunds = await getFMPQuotes(fundSyms, keys).catch(() => null)
-          if (fmpFunds?.some(r => r.regularMarketPrice != null)) return fmpFunds
-          // Fallback: Twelve Data (has some mutual funds)
-          const tdFunds = await Promise.all(fundSyms.map(s => getTwelveDataQuote(s, keys).catch(() => null)))
-          return fundSyms.map((s, i) => tdFunds[i] || { symbol: s, regularMarketPrice: null })
-        })()
-      : Promise.resolve([])
-
     // ── Stocks/ETFs: Finnhub → AISA → FMP → AV → Twelve Data → cache ─────────
-    const stockPromise = regularSyms.length
+    const stockPromise = stockSyms.length
       ? (async () => {
           // 0th: instant caches
-          const fromCache = regularSyms.map(sym =>
+          const fromCache = stockSyms.map(sym =>
             cacheGet(`fhq:${sym}`)
             || cacheGet(`aisaq:${sym}`)
             || (() => { const p = getPriceFromChartCache(sym); return p != null ? { symbol: sym, shortName: sym, regularMarketPrice: p } : null })()
@@ -1488,36 +1448,36 @@ app.get('/api/quote', async (req, res) => {
           if (fromCache.every(r => r !== null)) return fromCache
 
           // 1st: Finnhub REST (parallel, fastest for US stocks/ETFs)
-          const fh = await getFinnhubQuotes(regularSyms, keys)
+          const fh = await getFinnhubQuotes(stockSyms, keys)
           if (fh?.some(r => r.regularMarketPrice != null)) return fh
 
           // 2nd: AISA (serial, 6 s budget)
           const aisa = await Promise.race([
-            getAISAQuotes(regularSyms, keys).catch(() => null),
+            getAISAQuotes(stockSyms, keys).catch(() => null),
             new Promise(r => setTimeout(() => r(null), 6000)),
           ])
           if (aisa?.some(r => r.regularMarketPrice != null)) return aisa
 
           // 3rd: FMP
-          const fmp = await getFMPQuotes(regularSyms, keys)
+          const fmp = await getFMPQuotes(stockSyms, keys)
           if (fmp?.some(r => r.regularMarketPrice != null)) return fmp
 
           // 4th: Alpha Vantage
-          const av = await getAVQuotes(regularSyms, keys)
+          const av = await getAVQuotes(stockSyms, keys)
           if (av?.some(r => r.regularMarketPrice != null)) return av
 
           // 5th: Nasdaq.com (free, no key — covers all US stocks/ETFs in real-time)
-          const nasdaqQ = await getNasdaqQuotes(regularSyms).catch(() => null)
+          const nasdaqQ = await getNasdaqQuotes(stockSyms).catch(() => null)
           if (nasdaqQ?.some(r => r?.regularMarketPrice != null))
-            return nasdaqQ.map((r, i) => r || { symbol: regularSyms[i], regularMarketPrice: null })
+            return nasdaqQ.map((r, i) => r || { symbol: stockSyms[i], regularMarketPrice: null })
 
           // 6th: Twelve Data
-          const td = await Promise.all(regularSyms.map(s => getTwelveDataQuote(s, keys).catch(() => null)))
+          const td = await Promise.all(stockSyms.map(s => getTwelveDataQuote(s, keys).catch(() => null)))
           if (td.some(r => r?.regularMarketPrice != null))
-            return td.map((r, i) => r || { symbol: regularSyms[i], regularMarketPrice: null })
+            return td.map((r, i) => r || { symbol: stockSyms[i], regularMarketPrice: null })
 
           // Last: chart-price cache
-          return regularSyms.map(sym => {
+          return stockSyms.map(sym => {
             const p = getPriceFromChartCache(sym)
             return p != null ? { symbol: sym, shortName: sym, regularMarketPrice: p } : { symbol: sym, regularMarketPrice: null }
           })
@@ -1525,35 +1485,11 @@ app.get('/api/quote', async (req, res) => {
       : Promise.resolve([])
 
     // ── Merge results preserving original symbol order ─────────────────────────
-    const [cryptoResults, stockResults, fundResults] = await Promise.all([cryptoPromise, stockPromise, fundPromise])
-
-    // Supplement missing/zero regularMarketChange from Nasdaq (free, no key needed).
-    // Finnhub free tier sets d.c=0 after market close → code hardcodes change=0 and
-    // sets price=prevClose → Today's P&L = (prevClose-prevClose)×shares = $0.
-    // Nasdaq provides netChange correctly from the last session even post-close.
-    const needChange = stockResults.filter(r => r?.regularMarketPrice != null && !r.regularMarketChange)
-    if (needChange.length) {
-      try {
-        const nasdaqSupp = await getNasdaqQuotes(needChange.map(r => r.symbol))
-        if (nasdaqSupp) {
-          const nm = Object.fromEntries(nasdaqSupp.filter(Boolean).map(r => [r.symbol, r]))
-          for (const r of stockResults) {
-            if (!r.regularMarketChange && nm[r.symbol]?.regularMarketChange) {
-              r.regularMarketChange        = nm[r.symbol].regularMarketChange
-              r.regularMarketChangePercent = nm[r.symbol].regularMarketChangePercent
-              if (!r.regularMarketPreviousClose && r.regularMarketPrice != null && r.regularMarketChange != null) {
-                r.regularMarketPreviousClose = +(r.regularMarketPrice - r.regularMarketChange).toFixed(4)
-              }
-            }
-          }
-        }
-      } catch { /* best effort — P&L might still be 0 if Nasdaq is unreachable */ }
-    }
+    const [cryptoResults, stockResults] = await Promise.all([cryptoPromise, stockPromise])
 
     const cryptoMap = Object.fromEntries(cryptoResults.map(r => [r.symbol, r]))
     const stockMap  = Object.fromEntries(stockResults.map(r => [r.symbol, r]))
-    const fundMap   = Object.fromEntries(fundResults.map(r => [r.symbol, r]))
-    const merged = symbols.map(s => cryptoMap[s] || fundMap[s] || stockMap[s] || { symbol: s, regularMarketPrice: null })
+    const merged = symbols.map(s => cryptoMap[s] || stockMap[s] || { symbol: s, regularMarketPrice: null })
 
     return res.json({ quoteResponse: { result: merged } })
   } catch (e) {

@@ -1,0 +1,856 @@
+<!doctype html>
+<html lang="en" data-ha-style="living-essay">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sam Reyes — reading field</title>
+<!-- html-anything family sections: Reading rhythm | Bookshelf | Themes you return to | Quote browser | Heuristic | Hour-of-day | Generated locally | kindle-highlights -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg-paper: #faf9f7;
+  --text-ink: #2b2b2b;
+  --text-soft: #42403c;
+  --text-meta: #68645d;
+  --accent-mycelium: #cfa86e;
+  --accent-deep: #8c7040;
+  --accent-glow: rgba(207, 168, 110, 0.38);
+  --capsule-bg: #f0efe9;
+  --capsule-border: #e0ded5;
+  --hairline: #eae8e0;
+  --paper-panel: rgba(255, 255, 255, 0.46);
+  --font-serif: Georgia, "Times New Roman", ui-serif, serif;
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-headline: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --radius-pill: 999px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body {
+  min-height: 100vh;
+  overflow-x: hidden;
+  background: var(--bg-paper);
+  color: var(--text-ink);
+  font-family: var(--font-serif);
+  line-height: 2.18;
+  -webkit-font-smoothing: antialiased;
+}
+button, input { font: inherit; }
+button { color: inherit; }
+.mycelium-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+}
+.layout {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 240px 680px 1fr;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 120px 0 132px;
+}
+.question-zone {
+  grid-column: 2;
+  display: flex;
+  justify-content: flex-end;
+  padding-right: 48px;
+}
+.capsule-container {
+  position: sticky;
+  top: 20vh;
+  height: max-content;
+}
+.question-capsule {
+  position: relative;
+  z-index: 20;
+  display: block;
+  min-height: 244px;
+  border: 1px solid var(--capsule-border);
+  border-radius: var(--radius-pill);
+  background: var(--capsule-bg);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
+  cursor: pointer;
+  padding: 32px 14px;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  color: var(--text-ink);
+  font-family: var(--font-serif);
+  font-size: 1.08rem;
+  line-height: 1.65;
+  letter-spacing: 0.15em;
+  text-align: center;
+  user-select: none;
+  transition: transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94), box-shadow 0.4s ease, border-color 0.4s ease;
+}
+.question-capsule:hover {
+  transform: translateY(-2px);
+  border-color: var(--accent-mycelium);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.06);
+}
+.question-capsule::before {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border: 1px solid var(--accent-mycelium);
+  border-radius: var(--radius-pill);
+  opacity: 0.22;
+  transform: scale(0.97);
+  animation: pulse-border 3.2s infinite;
+}
+.question-help {
+  width: 92px;
+  margin: 18px auto 0;
+  color: var(--text-meta);
+  font-family: var(--font-sans);
+  font-size: 0.68rem;
+  line-height: 1.5;
+  text-align: center;
+}
+.manuscript {
+  grid-column: 3;
+  max-width: 680px;
+  color: #333;
+  font-size: 1.15rem;
+}
+.meta-data {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  margin-bottom: 4rem;
+  border-bottom: 1px solid var(--hairline);
+  padding-bottom: 24px;
+  color: var(--text-meta);
+  font-family: var(--font-sans);
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+h1 {
+  margin-bottom: 2rem;
+  color: #1a1a1a;
+  font-family: var(--font-serif);
+  font-size: clamp(3.2rem, 7vw, 4.65rem);
+  font-weight: 500;
+  line-height: 1.18;
+  letter-spacing: -0.02em;
+}
+.manuscript p {
+  margin-bottom: 2.55rem;
+  text-align: justify;
+}
+.lead {
+  color: var(--text-soft);
+}
+.spore {
+  position: relative;
+  display: inline-block;
+  border: 0;
+  background: transparent;
+  padding: 0 0.03em;
+  color: inherit;
+  cursor: pointer;
+  font-family: inherit;
+  line-height: inherit;
+  transition: color 0.8s ease, text-shadow 0.8s ease;
+}
+.spore.connected,
+.spore[aria-pressed="true"] {
+  color: var(--accent-deep);
+  text-shadow: 0 0 1px rgba(207, 168, 110, 0.3);
+}
+.spore::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: 0.08em;
+  width: 100%;
+  height: 1px;
+  background: var(--accent-mycelium);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.6s ease;
+}
+.spore.connected::after,
+.spore[aria-pressed="true"]::after {
+  transform: scaleX(1);
+}
+.analysis-fields {
+  margin-top: 96px;
+  padding-top: 36px;
+  border-top: 1px solid var(--hairline);
+}
+.field-section {
+  margin-top: 72px;
+}
+.field-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 24px;
+}
+.field-head h2 {
+  color: #1f1f1d;
+  font-family: var(--font-serif);
+  font-size: 1.5rem;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+.field-note,
+.count-note {
+  color: var(--text-meta);
+  font-family: var(--font-sans);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+.seed-list,
+.book-list,
+.quote-list {
+  border-top: 1px solid var(--hairline);
+}
+.seed-row,
+.book-row,
+.quote-row {
+  width: 100%;
+  border: 0;
+  border-bottom: 1px solid var(--hairline);
+  background: transparent;
+  padding: 18px 0;
+  color: var(--text-ink);
+  text-align: left;
+}
+.seed-row,
+.book-row {
+  cursor: pointer;
+  transition: color 0.3s ease, padding-left 0.3s ease;
+}
+.seed-row:hover,
+.seed-row[aria-pressed="true"],
+.book-row:hover,
+.book-row[aria-pressed="true"] {
+  color: var(--accent-deep);
+  padding-left: 12px;
+}
+.row-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  color: inherit;
+  font-family: var(--font-sans);
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+.row-top strong {
+  font-weight: 500;
+}
+.row-meta {
+  margin-top: 5px;
+  color: var(--text-meta);
+  font-family: var(--font-sans);
+  font-size: 0.76rem;
+  line-height: 1.5;
+}
+.rhythm-panel {
+  display: grid;
+  grid-template-columns: 1.05fr 0.95fr;
+  gap: 32px;
+  border-top: 1px solid var(--hairline);
+  padding-top: 20px;
+}
+.year-bars {
+  display: grid;
+  gap: 10px;
+}
+.year-row {
+  display: grid;
+  grid-template-columns: 50px 1fr 44px;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-meta);
+  font-family: var(--font-sans);
+  font-size: 0.72rem;
+  line-height: 1;
+}
+.year-track {
+  height: 7px;
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: #efede6;
+}
+.year-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent-mycelium);
+  transform-origin: left;
+  animation: grow 0.9s ease both;
+}
+.hour-strip {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 5px;
+}
+.hour-cell {
+  position: relative;
+  min-height: 46px;
+  overflow: hidden;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  color: var(--text-meta);
+  font-family: var(--font-sans);
+  font-size: 0.63rem;
+  text-align: center;
+}
+.hour-cell::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: var(--h);
+  background: var(--accent-mycelium);
+  opacity: 0.45;
+}
+.hour-cell span {
+  position: relative;
+  z-index: 1;
+}
+.folio-tools {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+.folio-search {
+  flex: 1 1 auto;
+  min-height: 42px;
+  border: 1px solid var(--capsule-border);
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, 0.42);
+  color: var(--text-ink);
+  padding: 0 16px;
+  font-family: var(--font-sans);
+  font-size: 0.82rem;
+}
+.folio-search:focus {
+  outline: 2px solid rgba(207, 168, 110, 0.42);
+  outline-offset: 2px;
+}
+.quiet-button {
+  min-height: 42px;
+  border: 1px solid var(--capsule-border);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text-meta);
+  cursor: pointer;
+  padding: 0 14px;
+  font-family: var(--font-sans);
+  font-size: 0.78rem;
+}
+.quote-row {
+  display: block;
+}
+.quote-text {
+  color: var(--text-soft);
+  font-size: 1rem;
+  line-height: 1.86;
+}
+.quote-row.active .quote-text {
+  color: var(--accent-deep);
+}
+.quote-meta {
+  margin-top: 10px;
+  color: var(--text-meta);
+  font-family: var(--font-sans);
+  font-size: 0.72rem;
+  line-height: 1.55;
+}
+.footer-note {
+  margin-top: 96px;
+  border-top: 1px solid var(--hairline);
+  padding-top: 26px;
+  color: var(--text-meta);
+  font-family: var(--font-sans);
+  font-size: 0.78rem;
+  line-height: 1.75;
+}
+.fade-in {
+  opacity: 0;
+  animation: fade-in 1.2s ease forwards;
+}
+.mycelium-path {
+  fill: none;
+  stroke: var(--accent-mycelium);
+  stroke-width: 1.45;
+  stroke-opacity: 0.58;
+  filter: url(#glow);
+}
+@keyframes pulse-border {
+  0% { opacity: 0.12; transform: scale(1); }
+  50% { opacity: 0.38; transform: scale(1.05); }
+  100% { opacity: 0.12; transform: scale(1); }
+}
+@keyframes fade-in { to { opacity: 1; } }
+@keyframes grow { from { transform: scaleX(0); } }
+@media (max-width: 1024px) {
+  .layout {
+    grid-template-columns: 1fr 68px minmax(0, 1fr) 28px;
+    padding-top: 64px;
+  }
+  .question-zone {
+    padding-right: 10px;
+  }
+  .manuscript {
+    max-width: min(680px, calc(100vw - 118px));
+  }
+  h1 {
+    font-size: clamp(2.6rem, 11vw, 3.3rem);
+  }
+  .rhythm-panel {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 640px) {
+  .layout {
+    display: block;
+    width: min(100% - 30px, 680px);
+    padding: 34px 0 76px;
+  }
+  .question-zone {
+    display: block;
+    padding-right: 0;
+  }
+  .capsule-container {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    padding: 8px 0 14px;
+    background: linear-gradient(var(--bg-paper) 70%, rgba(250, 249, 247, 0));
+  }
+  .question-capsule {
+    min-height: 0;
+    width: 100%;
+    writing-mode: horizontal-tb;
+    padding: 13px 18px;
+    font-family: var(--font-sans);
+    letter-spacing: 0.02em;
+  }
+  .question-capsule::before,
+  .question-help {
+    display: none;
+  }
+  .manuscript {
+    max-width: none;
+  }
+  .meta-data {
+    margin-top: 32px;
+  }
+  .field-head {
+    display: block;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}
+</style>
+</head>
+<body>
+<svg class="mycelium-layer" id="mycelium-canvas" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <defs>
+    <linearGradient id="hyphae-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:var(--accent-mycelium);stop-opacity:0.8"></stop>
+      <stop offset="100%" style="stop-color:var(--accent-mycelium);stop-opacity:0"></stop>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="2" result="coloredBlur"></feGaussianBlur>
+      <feMerge>
+        <feMergeNode in="coloredBlur"></feMergeNode>
+        <feMergeNode in="SourceGraphic"></feMergeNode>
+      </feMerge>
+    </filter>
+  </defs>
+</svg>
+
+<div class="layout">
+  <aside class="question-zone fade-in" style="animation-delay:0.2s">
+    <div class="capsule-container">
+      <button class="question-capsule active" id="source-capsule" type="button">What is this archive trying to remember?</button>
+      <div class="question-help">click to shift the question</div>
+    </div>
+  </aside>
+
+  <article class="manuscript fade-in" style="animation-delay:0.4s">
+    <div class="meta-data">
+      <span>kindle-highlights</span>
+      <span id="meta-period">reading window</span>
+      <span id="meta-count">0 clippings</span>
+    </div>
+
+    <h1>Reading as a living field</h1>
+    <div id="essay-body"></div>
+
+    <div class="analysis-fields">
+      <section class="field-section reading-rhythm" id="reading-rhythm" aria-labelledby="rhythm-title">
+        <div class="field-head">
+          <h2 id="rhythm-title">Reading rhythm</h2>
+          <span class="field-note">Yearly volume and Hour-of-day traces</span>
+        </div>
+        <div class="rhythm-panel">
+          <div class="year-bars" id="year-bars"></div>
+          <div class="hour-strip" id="hour-strip"></div>
+        </div>
+      </section>
+
+      <section class="field-section" aria-labelledby="themes-title">
+        <div class="field-head">
+          <h2 id="themes-title">Themes you return to</h2>
+          <span class="field-note">Heuristic keyword spores</span>
+        </div>
+        <div class="seed-list" id="seed-list"></div>
+      </section>
+
+      <section class="field-section" aria-labelledby="books-title">
+        <div class="field-head">
+          <h2 id="books-title">Bookshelf</h2>
+          <span class="field-note">The books with the densest residue</span>
+        </div>
+        <div class="book-list" id="book-list"></div>
+      </section>
+
+      <section class="field-section evidence-folio" aria-labelledby="quote-title">
+        <div class="field-head">
+          <h2 id="quote-title">Quote browser</h2>
+          <span class="count-note" id="folio-count">0 passages</span>
+        </div>
+        <div class="folio-tools">
+          <input class="folio-search" id="folio-search" type="search" placeholder="Search passages, books, authors..." aria-label="Search quote browser">
+          <button class="quiet-button" id="copy-note" type="button">Copy note</button>
+        </div>
+        <div class="quote-list" id="quote-list"></div>
+      </section>
+    </div>
+
+    <footer class="footer-note">
+      <strong>Generated locally</strong> by html-anything from <span id="source-file">input.txt</span>. This page uses the <code>living-essay</code> style. Theme links are a heuristic roll-up from the parser, not semantic truth.
+    </footer>
+  </article>
+</div>
+
+<script>const DATA = {"kind":"kindle-highlights","format":"kindle-highlights","subtype":"my-clippings","rows":[{"id":"k_000001","bookId":"b_d083b4","title":"The Habit of Attention","author":"Jia Mwangi","kind":"note","page":62,"locationStart":1129,"locationEnd":1139,"date":"2023-03-12","time":"11:34","tsEpoch":1678620866000,"text":"Link to the essay on attention.","textLength":31,"lang":"en","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"The Habit of Attention (Jia Mwangi)","metaLine":"- Your Note on page 62 | location 1129-1139 | Added on Sunday, March 12, 2023 11:34:26 AM","body":"Link to the essay on attention."}},{"id":"k_000002","bookId":"b_d083b4","title":"The Habit of Attention","author":"Jia Mwangi","kind":"highlight","page":66,"locationStart":1200,"locationEnd":1209,"date":"2023-03-13","time":"23:26","tsEpoch":1678750014000,"text":"Stillness is not the absence of movement; it is movement that has agreed on a direction.","textLength":88,"lang":"en","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"The Habit of Attention (Jia Mwangi)","metaLine":"- Your Highlight on page 66 | location 1200-1209 | Added on Monday, March 13, 2023 11:26:54 PM","body":"Stillness is not the absence of movement; it is movement that has agreed on a direction."}},{"id":"k_000003","bookId":"b_d083b4","title":"The Habit of Attention","author":"Jia Mwangi","kind":"note","page":70,"locationStart":1278,"locationEnd":1282,"date":"2023-03-15","time":"09:49","tsEpoch":1678873764000,"text":"Use this in the Tuesday talk.","textLength":29,"lang":"en","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"The Habit of Attention (Jia Mwangi)","metaLine":"- Your Note on page 70 | location 1278-1282 | Added on Wednesday, March 15, 2023 9:49:24 AM","body":"Use this in the Tuesday talk."}},{"id":"k_000004","bookId":"b_d083b4","title":"The Habit of Attention","author":"Jia Mwangi","kind":"note","page":100,"locationStart":1803,"locationEnd":1807,"date":"2023-03-16","time":"09:51","tsEpoch":1678960308000,"text":"Remember to verify the source.","textLength":30,"lang":"en","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"The Habit of Attention (Jia Mwangi)","metaLine":"- Your Note on page 100 | location 1803-1807 | Added on Thursday, March 16, 2023 9:51:48 AM","body":"Remember to verify the source."}},{"id":"k_000005","bookId":"b_d083b4","title":"The Habit of Attention","author":"Jia Mwangi","kind":"highlight","page":45,"locationStart":827,"locationEnd":829,"date":"2023-03-18","time":"09:35","tsEpoch":1679132102000,"text":"The fastest way to ruin a habit is to make it a punishment.","textLength":59,"lang":"en","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"The Habit of Attention (Jia Mwangi)","metaLine":"- Your Highlight on page 45 | location 827-829 | Added on Saturday, March 18, 2023 9:35:02 AM","body":"The fastest way to ruin a habit is to make it a punishment."}},{"id":"k_000006","bookId":"b_d083b4","title":"The Habit of Attention","author":"Jia Mwangi","kind":"highlight","page":57,"locationStart":1029,"locationEnd":1032,"date":"2023-03-18","time":"08:19","tsEpoch":1679127550000,"text":"A morning ritual works when it is small enough to survive a bad night.","textLength":70,"lang":"en","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"The Habit of Attention (Jia Mwangi)","metaLine":"- Your Highlight on page 57 | location 1029-1032 | Added on Saturday, March 18, 2023 8:19:10 AM","body":"A morning ritual works when it is small enough to survive a bad night."}},{"id":"k_000007","bookId":"b_d083b4","title":"The Habit of Attention","author":"Jia Mwangi","kind":"note","page":58,"locationStart":1047,"locationEnd":1056,"date":"2023-03-20","time":"22:05","tsEpoch":1679349948000,"text":"Push back — feels too neat.","textLength":27,"lang":"en","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"The Habit of Attention (Jia Mwangi)","metaLine":"- Your Note on page 58 | location 1047-1056 | Added on Monday, March 20, 2023 10:05:48 PM","body":"Push back — feels too neat."}},{"id":"k_000008","bookId":"b_d083b4","title":"The Habit of Attention","author":"Jia Mwangi","kind":"highlight","page":5,"locationStart":106,"locationEnd":116,"date":"2023-03-23","time":"20:05","tsEpoch":1679601918000,"text":"If a routine cannot survive your worst day, it will not save your best one.","textLength":75,"lang":"en","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"The Habit of Attention (Jia Mwangi)","metaLine":"- Your Highlight on page 5 | location 106-116 | Added on Thursday, March 23, 2023 8:05:18 PM","body":"If a routine cannot survive your worst day, it will not save your best one."}},{"id":"k_000009","bookId":"b_d083b4","title":"The Habit of Attention","author":"Jia Mwangi","kind":"highlight","page":18,"locationStart":326,"locationEnd":332,"date":"2023-03-23","time":"08:29","tsEpoch":1679560156000,"text":"A morning ritual works when it is small enough to survive a bad night.","textLength":70,"lang":"en","duplicateOf":"k_000006","noteAttachedTo":null,"raw":{"headerLine":"The Habit of Attention (Jia Mwangi)","metaLine":"- Your Highlight on page 18 | location 326-332 | Added on Thursday, March 23, 2023 8:29:16 AM","body":"A morning ritual works when it is small enough to survive a bad night."}},{"id":"k_000010","bookId":"b_d083b4","title":"The Habit of Attention","author":"Jia Mwangi","kind":"highlight","page":5,"locationStart":106,"locationEnd":116,"date":"2023-03-23","time":"20:05","tsEpoch":1679601918000,"text":"If a routine cannot survive your worst day, it will not save your best one. It is the only debt the future never collects.","textLength":122,"lang":"en","duplicateOf":"k_000008","noteAttachedTo":null,"raw":{"headerLine":"The Habit of Attention (Jia Mwangi)","metaLine":"- Your Highlight on page 5 | location 106-116 | Added on Thursday, March 23, 2023 8:05:18 PM","body":"If a routine cannot survive your worst day, it will not save your best one. It is the only debt the future never collects."}},{"id":"k_000011","bookId":"b_d083b4","title":"The Habit of Attention","author":"Jia Mwangi","kind":"highlight","page":19,"locationStart":354,"locationEnd":358,"date":"2023-03-24","time":"22:06","tsEpoch":1679695605000,"text":"Noticing what you avoid is most of the work of changing it.","textLength":59,"lang":"en","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"The Habit of Attention (Jia Mwangi)","metaLine":"- Your Highlight on page 19 | location 354-358 | Added on Friday, March 24, 2023 10:06:45 PM","body":"Noticing what you avoid is most of the work of changing it."}},{"id":"k_000012","bookId":"b_d083b4","title":"The Habit of Attention","author":"Jia Mwangi","kind":"highlight","page":76,"locationStart":1384,"locationEnd":1397,"date":"2023-03-30","time":"21:34","tsEpoch":1680212092000,"text":"Stillness is not the absence of movement; it is movement that has agreed on a direction.","textLength":88,"lang":"en","duplicateOf":"k_000002","noteAttachedTo":null,"raw":{"headerLine":"The Habit of Attention (Jia Mwangi)","metaLine":"- Your Highlight on page 76 | location 1384-1397 | Added on Thursday, March 30, 2023 9:34:52 PM","body":"Stillness is not the absence of movement; it is movement that has agreed on a direction."}},{"id":"k_000013","bookId":"b_d083b4","title":"The Habit of Attention","author":"Jia Mwangi","kind":"highlight","page":13,"locationStart":238,"locationEnd":248,"date":"2023-04-02","time":"09:36","tsEpoch":1680428185000,"text":"Practice trains the patience that talent assumes you already have.","textLength":66,"lang":"en","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"The Habit of Attention (Jia Mwangi)","metaLine":"- Your Highlight on page 13 | location 238-248 | Added on Sunday, April 2, 2023 9:36:25 AM","body":"Practice trains the patience that talent assumes you already have."}},{"id":"k_000014","bookId":"b_d083b4","title":"The Habit of Attention","author":"Jia Mwangi","kind":"bookmark","page":33,"locationStart":601,"locationEnd":603,"date":"2023-04-06","time":"09:15","tsEpoch":1680772527000,"text":"","textLength":0,"lang":"unknown","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"The Habit of Attention (Jia Mwangi)","metaLine":"- Your Bookmark on page 33 | location 601-603 | Added on Thursday, April 6, 2023 9:15:27 AM","body":""}},{"id":"k_000015","bookId":"b_d083b4","title":"The Habit of Attention","author":"Jia Mwangi","kind":"note","page":47,"locationStart":863,"locationEnd":874,"date":"2023-04-08","time":"10:49","tsEpoch":1680950992000,"text":"Borrow the structure, not the conclusion.","textLength":41,"lang":"en","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"The Habit of Attention (Jia Mwangi)","metaLine":"- Your Note on page 47 | location 863-874 | Added on Saturday, April 8, 2023 10:49:52 AM","body":"Borrow the structure, not the conclusion."}},{"id":"k_000016","bookId":"b_d083b4","title":"The Habit of Attention","author":"Jia Mwangi","kind":"highlight","page":8,"locationStart":145,"locationEnd":154,"date":"2023-04-11","time":"22:13","tsEpoch":1681251217000,"text":"Attention is the soft tissue of will; it tears easily and heals on its own time.","textLength":80,"lang":"en","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"The Habit of Attention (Jia Mwangi)","metaLine":"- Your Highlight on page 8 | location 145-154 | Added on Tuesday, April 11, 2023 10:13:37 PM","body":"Attention is the soft tissue of will; it tears easily and heals on its own time."}},{"id":"k_000017","bookId":"b_d083b4","title":"The Habit of Attention","author":"Jia Mwangi","kind":"highlight","page":55,"locationStart":991,"locationEnd":1001,"date":"2023-04-14","time":"22:28","tsEpoch":1681511321000,"text":"Rhythm is what you are left with when motivation has gone home.","textLength":63,"lang":"en","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"The Habit of Attention (Jia Mwangi)","metaLine":"- Your Highlight on page 55 | location 991-1001 | Added on Friday, April 14, 2023 10:28:41 PM","body":"Rhythm is what you are left with when motivation has gone home."}},{"id":"k_000018","bookId":"b_d083b4","title":"The Habit of Attention","author":"Jia Mwangi","kind":"highlight","page":18,"locationStart":341,"locationEnd":350,"date":"2023-04-22","time":"09:10","tsEpoch":1682154649000,"text":"Focus is not a skill you discover, it is a skill you keep showing up for.","textLength":73,"lang":"en","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"The Habit of Attention (Jia Mwangi)","metaLine":"- Your Highlight on page 18 | location 341-350 | Added on Saturday, April 22, 2023 9:10:49 AM","body":"Focus is not a skill you discover, it is a skill you keep showing up for."}},{"id":"k_000019","bookId":"b_d083b4","title":"The Habit of Attention","author":"Jia Mwangi","kind":"highlight","page":37,"locationStart":667,"locationEnd":675,"date":"2023-04-30","time":"10:33","tsEpoch":1682850816000,"text":"Most habits are not broken — they are slowly outvoted.","textLength":54,"lang":"en","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"The Habit of Attention (Jia Mwangi)","metaLine":"- Your Highlight on page 37 | location 667-675 | Added on Sunday, April 30, 2023 10:33:36 AM","body":"Most habits are not broken — they are slowly outvoted."}},{"id":"k_000020","bookId":"b_d083b4","title":"The Habit of Attention","author":"Jia Mwangi","kind":"note","page":91,"locationStart":1640,"locationEnd":1647,"date":"2023-05-02","time":"08:06","tsEpoch":1683014810000,"text":"Use this when writing the foreword.","textLength":35,"lang":"en","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"The Habit of Attention (Jia Mwangi)","metaLine":"- Your Note on page 91 | location 1640-1647 | Added on Tuesday, May 2, 2023 8:06:50 AM","body":"Use this when writing the foreword."}},{"id":"k_000021","bookId":"b_d083b4","title":"The Habit of Attention","author":"Jia Mwangi","kind":"highlight","page":84,"locationStart":1525,"locationEnd":1533,"date":"2023-05-05","time":"21:12","tsEpoch":1683321173000,"text":"Attention is the soft tissue of will; it tears easily and heals on its own time.","textLength":80,"lang":"en","duplicateOf":"k_000016","noteAttachedTo":null,"raw":{"headerLine":"The Habit of Attention (Jia Mwangi)","metaLine":"- Your Highlight on page 84 | location 1525-1533 | Added on Friday, May 5, 2023 9:12:53 PM","body":"Attention is the soft tissue of will; it tears easily and heals on its own time."}},{"id":"k_000022","bookId":"b_d083b4","title":"The Habit of Attention","author":"Jia Mwangi","kind":"highlight","page":82,"locationStart":1484,"locationEnd":1489,"date":"2023-05-15","time":"21:58","tsEpoch":1684187888000,"text":"If a routine cannot survive your worst day, it will not save your best one.","textLength":75,"lang":"en","duplicateOf":"k_000008","noteAttachedTo":null,"raw":{"headerLine":"The Habit of Attention (Jia Mwangi)","metaLine":"- Your Highlight on page 82 | location 1484-1489 | Added on Monday, May 15, 2023 9:58:08 PM","body":"If a routine cannot survive your worst day, it will not save your best one."}},{"id":"k_000023","bookId":"b_d083b4","title":"The Habit of Attention","author":"Jia Mwangi","kind":"highlight","page":100,"locationStart":1806,"locationEnd":1812,"date":"2023-05-21","time":"08:22","tsEpoch":1684657332000,"text":"Attention is the soft tissue of will; it tears easily and heals on its own time.","textLength":80,"lang":"en","duplicateOf":"k_000016","noteAttachedTo":null,"raw":{"headerLine":"The Habit of Attention (Jia Mwangi)","metaLine":"- Your Highlight on page 100 | location 1806-1812 | Added on Sunday, May 21, 2023 8:22:12 AM","body":"Attention is the soft tissue of will; it tears easily and heals on its own time."}},{"id":"k_000024","bookId":"b_cc1cd7","title":"Small Engines, Long Roads","author":"Aleksandr Volkov","kind":"highlight","page":75,"locationStart":1471,"locationEnd":1485,"date":"2023-09-16","time":"09:55","tsEpoch":1694858143000,"text":"Long roads teach you that arriving is a kind of weather, not a kind of place.","textLength":77,"lang":"en","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"Small Engines, Long Roads (Aleksandr Volkov)","metaLine":"- Your Highlight on page 75 | location 1471-1485 | Added on Saturday, September 16, 2023 9:55:43 AM","body":"Long roads teach you that arriving is a kind of weather, not a kind of place."}},{"id":"k_000025","bookId":"b_cc1cd7","title":"Small Engines, Long Roads","author":"Aleksandr Volkov","kind":"highlight","page":70,"locationStart":1384,"locationEnd":1395,"date":"2023-09-19","time":"09:56","tsEpoch":1695117379000,"text":"My father fixed engines the way other men told stories — slowly, and with the same hand.","textLength":88,"lang":"en","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"Small Engines, Long Roads (Aleksandr Volkov)","metaLine":"- Your Highlight on page 70 | location 1384-1395 | Added on Tuesday, September 19, 2023 9:56:19 AM","body":"My father fixed engines the way other men told stories — slowly, and with the same hand."}},{"id":"k_000026","bookId":"b_cc1cd7","title":"Small Engines, Long Roads","author":"Aleksandr Volkov","kind":"highlight","page":6,"locationStart":230,"locationEnd":232,"date":"2023-09-22","time":"09:13","tsEpoch":1695374022000,"text":"Rust is patient. It does not argue. It just waits for you to come back to the part you ignored.","textLength":95,"lang":"en","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"Small Engines, Long Roads (Aleksandr Volkov)","metaLine":"- Your Highlight on page 6 | location 230-232 | Added on Friday, September 22, 2023 9:13:42 AM","body":"Rust is patient. It does not argue. It just waits for you to come back to the part you ignored."}},{"id":"k_000027","bookId":"b_cc1cd7","title":"Small Engines, Long Roads","author":"Aleksandr Volkov","kind":"highlight","page":8,"locationStart":282,"locationEnd":291,"date":"2023-10-09","time":"20:27","tsEpoch":1696883254000,"text":"We measured the year by which weather had broken us last.","textLength":57,"lang":"en","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"Small Engines, Long Roads (Aleksandr Volkov)","metaLine":"- Your Highlight on page 8 | location 282-291 | Added on Monday, October 9, 2023 8:27:34 PM","body":"We measured the year by which weather had broken us last."}},{"id":"k_000028","bookId":"b_cc1cd7","title":"Small Engines, Long Roads","author":"Aleksandr Volkov","kind":"highlight","page":45,"locationStart":946,"locationEnd":949,"date":"2023-10-10","time":"09:43","tsEpoch":1696931021000,"text":"The garage smelled like winter and gasoline; that combination still means home to me.","textLength":85,"lang":"en","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"Small Engines, Long Roads (Aleksandr Volkov)","metaLine":"- Your Highlight on page 45 | location 946-949 | Added on Tuesday, October 10, 2023 9:43:41 AM","body":"The garage smelled like winter and gasoline; that combination still means home to me."}},{"id":"k_000029","bookId":"b_cc1cd7","title":"Small Engines, Long Roads","author":"Aleksandr Volkov","kind":"highlight","page":24,"locationStart":561,"locationEnd":575,"date":"2023-10-13","time":"07:56","tsEpoch":1697183803000,"text":"Every town we slept in had a different shade of evening, and the same cheap coffee.","textLength":83,"lang":"en","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"Small Engines, Long Roads (Aleksandr Volkov)","metaLine":"- Your Highlight on page 24 | location 561-575 | Added on Friday, October 13, 2023 7:56:43 AM","body":"Every town we slept in had a different shade of evening, and the same cheap coffee."}},{"id":"k_000030","bookId":"b_cc1cd7","title":"Small Engines, Long Roads","author":"Aleksandr Volkov","kind":"highlight","page":27,"locationStart":612,"locationEnd":620,"date":"2023-10-13","time":"20:26","tsEpoch":1697228770000,"text":"Long roads teach you that arriving is a kind of weather, not a kind of place.","textLength":77,"lang":"en","duplicateOf":"k_000024","noteAttachedTo":null,"raw":{"headerLine":"Small Engines, Long Roads (Aleksandr Volkov)","metaLine":"- Your Highlight on page 27 | location 612-620 | Added on Friday, October 13, 2023 8:26:10 PM","body":"Long roads teach you that arriving is a kind of weather, not a kind of place."}},{"id":"k_000031","bookId":"b_cc1cd7","title":"Small Engines, Long Roads","author":"Aleksandr Volkov","kind":"highlight","page":25,"locationStart":573,"locationEnd":580,"date":"2023-10-17","time":"09:16","tsEpoch":1697534174000,"text":"He never said he was proud, only that the engine sounded right.","textLength":63,"lang":"en","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"Small Engines, Long Roads (Aleksandr Volkov)","metaLine":"- Your Highlight on page 25 | location 573-580 | Added on Tuesday, October 17, 2023 9:16:14 AM","body":"He never said he was proud, only that the engine sounded right."}},{"id":"k_000032","bookId":"b_cc1cd7","title":"Small Engines, Long Roads","author":"Aleksandr Volkov","kind":"highlight","page":43,"locationStart":907,"locationEnd":910,"date":"2023-10-17","time":"21:49","tsEpoch":1697579368000,"text":"Rust is patient. It does not argue. It just waits for you to come back to the part you ignored.","textLength":95,"lang":"en","duplicateOf":"k_000026","noteAttachedTo":null,"raw":{"headerLine":"Small Engines, Long Roads (Aleksandr Volkov)","metaLine":"- Your Highlight on page 43 | location 907-910 | Added on Tuesday, October 17, 2023 9:49:28 PM","body":"Rust is patient. It does not argue. It just waits for you to come back to the part you ignored."}},{"id":"k_000033","bookId":"b_cc1cd7","title":"Small Engines, Long Roads","author":"Aleksandr Volkov","kind":"highlight","page":71,"locationStart":1409,"locationEnd":1412,"date":"2023-10-29","time":"10:56","tsEpoch":1698577018000,"text":"There is a kind of road that returns the favor; you keep driving it until it remembers you.","textLength":91,"lang":"en","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"Small Engines, Long Roads (Aleksandr Volkov)","metaLine":"- Your Highlight on page 71 | location 1409-1412 | Added on Sunday, October 29, 2023 10:56:58 AM","body":"There is a kind of road that returns the favor; you keep driving it until it remembers you."}},{"id":"k_000034","bookId":"b_cc1cd7","title":"Small Engines, Long Roads","author":"Aleksandr Volkov","kind":"note","page":12,"locationStart":352,"locationEnd":356,"date":"2023-11-05","time":"11:21","tsEpoch":1699183270000,"text":"Use this in the Tuesday talk.","textLength":29,"lang":"en","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"Small Engines, Long Roads (Aleksandr Volkov)","metaLine":"- Your Note on page 12 | location 352-356 | Added on Sunday, November 5, 2023 11:21:10 AM","body":"Use this in the Tuesday talk."}},{"id":"k_000035","bookId":"b_cc1cd7","title":"Small Engines, Long Roads","author":"Aleksandr Volkov","kind":"note","page":37,"locationStart":802,"locationEnd":816,"date":"2023-11-05","time":"11:38","tsEpoch":1699184282000,"text":"Use this when writing the foreword.","textLength":35,"lang":"en","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"Small Engines, Long Roads (Aleksandr Volkov)","metaLine":"- Your Note on page 37 | location 802-816 | Added on Sunday, November 5, 2023 11:38:02 AM","body":"Use this when writing the foreword."}},{"id":"k_000036","bookId":"b_cc1cd7","title":"Small Engines, Long Roads","author":"Aleksandr Volkov","kind":"highlight","page":27,"locationStart":607,"locationEnd":619,"date":"2023-11-13","time":"23:31","tsEpoch":1699918284000,"text":"Memory is the only mile we ever drive twice.","textLength":44,"lang":"en","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"Small Engines, Long Roads (Aleksandr Volkov)","metaLine":"- Your Highlight on page 27 | location 607-619 | Added on Monday, November 13, 2023 11:31:24 PM","body":"Memory is the only mile we ever drive twice."}},{"id":"k_000037","bookId":"b_cc1cd7","title":"Small Engines, Long Roads","author":"Aleksandr Volkov","kind":"note","page":23,"locationStart":539,"locationEnd":545,"date":"2023-11-14","time":"09:32","tsEpoch":1699954323000,"text":"Also see chapter 7.","textLength":19,"lang":"en","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"Small Engines, Long Roads (Aleksandr Volkov)","metaLine":"- Your Note on page 23 | location 539-545 | Added on Tuesday, November 14, 2023 9:32:03 AM","body":"Also see chapter 7."}},{"id":"k_000038","bookId":"b_cc1cd7","title":"Small Engines, Long Roads","author":"Aleksandr Volkov","kind":"highlight","page":44,"locationStart":916,"locationEnd":924,"date":"2023-11-20","time":"09:24","tsEpoch":1700472254000,"text":"My father fixed engines the way other men told stories — slowly, and with the same hand.","textLength":88,"lang":"en","duplicateOf":"k_000025","noteAttachedTo":null,"raw":{"headerLine":"Small Engines, Long Roads (Aleksandr Volkov)","metaLine":"- Your Highlight on page 44 | location 916-924 | Added on Monday, November 20, 2023 9:24:14 AM","body":"My father fixed engines the way other men told stories — slowly, and with the same hand."}},{"id":"k_000039","bookId":"b_cc1cd7","title":"Small Engines, Long Roads","author":"Aleksandr Volkov","kind":"highlight","page":19,"locationStart":466,"locationEnd":480,"date":"2023-11-23","time":"20:04","tsEpoch":1700769872000,"text":"We repaired what we could and named what we couldn't.","textLength":53,"lang":"en","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"Small Engines, Long Roads (Aleksandr Volkov)","metaLine":"- Your Highlight on page 19 | location 466-480 | Added on Thursday, November 23, 2023 8:04:32 PM","body":"We repaired what we could and named what we couldn't."}},{"id":"k_000040","bookId":"b_a2c1df","title":"A Quiet Country","author":"Maeve Tindall","kind":"highlight","page":10,"locationStart":172,"locationEnd":175,"date":"2024-01-15","time":"21:50","tsEpoch":1705355422000,"text":"The house had three kinds of quiet, and none of them were peace.","textLength":64,"lang":"en","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"A Quiet Country (Maeve Tindall)","metaLine":"- Your Highlight on page 10 | location 172-175 | Added on Monday, January 15, 2024 9:50:22 PM","body":"The house had three kinds of quiet, and none of them were peace."}},{"id":"k_000041","bookId":"b_a2c1df","title":"A Quiet Country","author":"Maeve Tindall","kind":"highlight","page":31,"locationStart":556,"locationEnd":558,"date":"2024-01-19","time":"07:03","tsEpoch":1705647790000,"text":"The harvest season pulled the family into the same rooms it had always pulled them into.","textLength":88,"lang":"en","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"A Quiet Country (Maeve Tindall)","metaLine":"- Your Highlight on page 31 | location 556-558 | Added on Friday, January 19, 2024 7:03:10 AM","body":"The harvest season pulled the family into the same rooms it had always pulled them into."}},{"id":"k_000042","bookId":"b_a2c1df","title":"A Quiet Country","author":"Maeve Tindall","kind":"highlight","page":34,"locationStart":598,"locationEnd":601,"date":"2024-01-27","time":"09:42","tsEpoch":1706348544000,"text":"Years later, she still flinched at the word 'home' the way one flinches at an old joke.","textLength":87,"lang":"en","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"A Quiet Country (Maeve Tindall)","metaLine":"- Your Highlight on page 34 | location 598-601 | Added on Saturday, January 27, 2024 9:42:24 AM","body":"Years later, she still flinched at the word 'home' the way one flinches at an old joke."}},{"id":"k_000043","bookId":"b_a2c1df","title":"A Quiet Country","author":"Maeve Tindall","kind":"highlight","page":26,"locationStart":460,"locationEnd":470,"date":"2024-01-27","time":"08:04","tsEpoch":1706342671000,"text":"The river at the back of the house had not changed in any of the languages of the village.","textLength":90,"lang":"en","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"A Quiet Country (Maeve Tindall)","metaLine":"- Your Highlight on page 26 | location 460-470 | Added on Saturday, January 27, 2024 8:04:31 AM","body":"The river at the back of the house had not changed in any of the languages of the village."}},{"id":"k_000044","bookId":"b_a2c1df","title":"A Quiet Country","author":"Maeve Tindall","kind":"highlight","page":15,"locationStart":260,"locationEnd":274,"date":"2024-01-28","time":"11:10","tsEpoch":1706440231000,"text":"He spoke as though every sentence were a window he had just unstuck.","textLength":68,"lang":"en","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"A Quiet Country (Maeve Tindall)","metaLine":"- Your Highlight on page 15 | location 260-274 | Added on Sunday, January 28, 2024 11:10:31 AM","body":"He spoke as though every sentence were a window he had just unstuck."}},{"id":"k_000045","bookId":"b_a2c1df","title":"A Quiet Country","author":"Maeve Tindall","kind":"highlight","page":32,"locationStart":572,"locationEnd":581,"date":"2024-01-28","time":"09:53","tsEpoch":1706435630000,"text":"The orchard was a polite excuse for them to stand near each other.","textLength":66,"lang":"en","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"A Quiet Country (Maeve Tindall)","metaLine":"- Your Highlight on page 32 | location 572-581 | Added on Sunday, January 28, 2024 9:53:50 AM","body":"The orchard was a polite excuse for them to stand near each other."}},{"id":"k_000046","bookId":"b_a2c1df","title":"A Quiet Country","author":"Maeve Tindall","kind":"highlight","page":42,"locationStart":740,"locationEnd":745,"date":"2024-02-13","time":"21:18","tsEpoch":1707859116000,"text":"When her grandmother sang, the kitchen widened for a moment, and everyone pretended not to notice.","textLength":98,"lang":"en","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"A Quiet Country (Maeve Tindall)","metaLine":"- Your Highlight on page 42 | location 740-745 | Added on Tuesday, February 13, 2024 9:18:36 PM","body":"When her grandmother sang, the kitchen widened for a moment, and everyone pretended not to notice."}},{"id":"k_000047","bookId":"b_a2c1df","title":"A Quiet Country","author":"Maeve Tindall","kind":"note","page":5,"locationStart":80,"locationEnd":90,"date":"2024-02-14","time":"07:41","tsEpoch":1707896510000,"text":"Re-read in spring.","textLength":18,"lang":"en","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"A Quiet Country (Maeve Tindall)","metaLine":"- Your Note on page 5 | location 80-90 | Added on Wednesday, February 14, 2024 7:41:50 AM","body":"Re-read in spring."}},{"id":"k_000048","bookId":"b_a2c1df","title":"A Quiet Country","author":"Maeve Tindall","kind":"highlight","page":39,"locationStart":690,"locationEnd":697,"date":"2024-02-16","time":"21:22","tsEpoch":1708118536000,"text":"Winter came in by the door, like a neighbor who had been told to stop knocking.","textLength":79,"lang":"en","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"A Quiet Country (Maeve Tindall)","metaLine":"- Your Highlight on page 39 | location 690-697 | Added on Friday, February 16, 2024 9:22:16 PM","body":"Winter came in by the door, like a neighbor who had been told to stop knocking."}},{"id":"k_000049","bookId":"b_a2c1df","title":"A Quiet Country","author":"Maeve Tindall","kind":"highlight","page":13,"locationStart":220,"locationEnd":229,"date":"2024-02-19","time":"20:23","tsEpoch":1708374208000,"text":"Sound carried across the field the way rumor carries across a small town — unevenly and on purpose.","textLength":99,"lang":"en","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"A Quiet Country (Maeve Tindall)","metaLine":"- Your Highlight on page 13 | location 220-229 | Added on Monday, February 19, 2024 8:23:28 PM","body":"Sound carried across the field the way rumor carries across a small town — unevenly and on purpose."}},{"id":"k_000050","bookId":"b_a2c1df","title":"A Quiet Country","author":"Maeve Tindall","kind":"highlight","page":32,"locationStart":561,"locationEnd":564,"date":"2024-02-20","time":"23:24","tsEpoch":1708471464000,"text":"She listened to the silence between the cousins as if it were a contract.","textLength":73,"lang":"en","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"A Quiet Country (Maeve Tindall)","metaLine":"- Your Highlight on page 32 | location 561-564 | Added on Tuesday, February 20, 2024 11:24:24 PM","body":"She listened to the silence between the cousins as if it were a contract."}},{"id":"k_000051","bookId":"b_a2c1df","title":"A Quiet Country","author":"Maeve Tindall","kind":"highlight","page":25,"locationStart":448,"locationEnd":460,"date":"2024-02-21","time":"22:49","tsEpoch":1708555754000,"text":"The orchard was a polite excuse for them to stand near each other.","textLength":66,"lang":"en","duplicateOf":"k_000045","noteAttachedTo":null,"raw":{"headerLine":"A Quiet Country (Maeve Tindall)","metaLine":"- Your Highlight on page 25 | location 448-460 | Added on Wednesday, February 21, 2024 10:49:14 PM","body":"The orchard was a polite excuse for them to stand near each other."}},{"id":"k_000052","bookId":"b_a2c1df","title":"A Quiet Country","author":"Maeve Tindall","kind":"highlight","page":70,"locationStart":1253,"locationEnd":1264,"date":"2024-02-22","time":"22:55","tsEpoch":1708642512000,"text":"He spoke as though every sentence were a window he had just unstuck.","textLength":68,"lang":"en","duplicateOf":"k_000044","noteAttachedTo":null,"raw":{"headerLine":"A Quiet Country (Maeve Tindall)","metaLine":"- Your Highlight on page 70 | location 1253-1264 | Added on Thursday, February 22, 2024 10:55:12 PM","body":"He spoke as though every sentence were a window he had just unstuck."}},{"id":"k_000053","bookId":"b_09bef6","title":"Notes on Cities","author":"Hanan Boutros","kind":"highlight","page":9,"locationStart":138,"locationEnd":140,"date":"2024-05-11","time":"11:50","tsEpoch":1715428219000,"text":"Cities reveal themselves at the moment a stranger asks for directions and the answer takes too long.","textLength":100,"lang":"en","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"Notes on Cities (Hanan Boutros)","metaLine":"- Your Highlight on page 9 | location 138-140 | Added on Saturday, May 11, 2024 11:50:19 AM","body":"Cities reveal themselves at the moment a stranger asks for directions and the answer takes too long."}},{"id":"k_000054","bookId":"b_09bef6","title":"Notes on Cities","author":"Hanan Boutros","kind":"highlight","page":54,"locationStart":938,"locationEnd":952,"date":"2024-05-13","time":"09:07","tsEpoch":1715591227000,"text":"Cities die on Mondays and resurrect on Thursdays, in approximately that order.","textLength":78,"lang":"en","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"Notes on Cities (Hanan Boutros)","metaLine":"- Your Highlight on page 54 | location 938-952 | Added on Monday, May 13, 2024 9:07:07 AM","body":"Cities die on Mondays and resurrect on Thursdays, in approximately that order."}},{"id":"k_000055","bookId":"b_09bef6","title":"Notes on Cities","author":"Hanan Boutros","kind":"highlight","page":17,"locationStart":282,"locationEnd":289,"date":"2024-05-15","time":"21:02","tsEpoch":1715806949000,"text":"Every sidewalk is a lecture on how a neighborhood is allowed to live.","textLength":69,"lang":"en","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"Notes on Cities (Hanan Boutros)","metaLine":"- Your Highlight on page 17 | location 282-289 | Added on Wednesday, May 15, 2024 9:02:29 PM","body":"Every sidewalk is a lecture on how a neighborhood is allowed to live."}},{"id":"k_000056","bookId":"b_09bef6","title":"Notes on Cities","author":"Hanan Boutros","kind":"highlight","page":18,"locationStart":293,"locationEnd":301,"date":"2024-05-15","time":"20:00","tsEpoch":1715803202000,"text":"The bakery at the corner is the most accurate map of the block.","textLength":63,"lang":"en","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"Notes on Cities (Hanan Boutros)","metaLine":"- Your Highlight on page 18 | location 293-301 | Added on Wednesday, May 15, 2024 8:00:02 PM","body":"The bakery at the corner is the most accurate map of the block."}},{"id":"k_000057","bookId":"b_09bef6","title":"Notes on Cities","author":"Hanan Boutros","kind":"highlight","page":29,"locationStart":498,"locationEnd":512,"date":"2024-05-15","time":"20:10","tsEpoch":1715803837000,"text":"Walking is the only honest review a city ever receives.","textLength":55,"lang":"en","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"Notes on Cities (Hanan Boutros)","metaLine":"- Your Highlight on page 29 | location 498-512 | Added on Wednesday, May 15, 2024 8:10:37 PM","body":"Walking is the only honest review a city ever receives."}},{"id":"k_000058","bookId":"b_09bef6","title":"Notes on Cities","author":"Hanan Boutros","kind":"note","page":32,"locationStart":550,"locationEnd":561,"date":"2024-05-16","time":"20:37","tsEpoch":1715891842000,"text":"This is what I was trying to say last week.","textLength":43,"lang":"en","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"Notes on Cities (Hanan Boutros)","metaLine":"- Your Note on page 32 | location 550-561 | Added on Thursday, May 16, 2024 8:37:22 PM","body":"This is what I was trying to say last week."}},{"id":"k_000059","bookId":"b_09bef6","title":"Notes on Cities","author":"Hanan Boutros","kind":"highlight","page":48,"locationStart":836,"locationEnd":840,"date":"2024-05-21","time":"22:17","tsEpoch":1716329829000,"text":"The market does not lie — but it does change the subject.","textLength":57,"lang":"en","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"Notes on Cities (Hanan Boutros)","metaLine":"- Your Highlight on page 48 | location 836-840 | Added on Tuesday, May 21, 2024 10:17:09 PM","body":"The market does not lie — but it does change the subject."}},{"id":"k_000060","bookId":"b_09bef6","title":"Notes on Cities","author":"Hanan Boutros","kind":"highlight","page":5,"locationStart":64,"locationEnd":75,"date":"2024-05-22","time":"22:04","tsEpoch":1716415456000,"text":"Evening light is the time when a neighborhood stops performing for itself.","textLength":74,"lang":"en","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"Notes on Cities (Hanan Boutros)","metaLine":"- Your Highlight on page 5 | location 64-75 | Added on Wednesday, May 22, 2024 10:04:16 PM","body":"Evening light is the time when a neighborhood stops performing for itself."}},{"id":"k_000061","bookId":"b_09bef6","title":"Notes on Cities","author":"Hanan Boutros","kind":"note","page":5,"locationStart":64,"locationEnd":75,"date":"2024-05-22","time":"22:04","tsEpoch":1716415456000,"text":"Use this in the Tuesday talk.","textLength":29,"lang":"en","duplicateOf":null,"noteAttachedTo":"k_000060","raw":{"headerLine":"Notes on Cities (Hanan Boutros)","metaLine":"- Your Note on page 5 | location 64-75 | Added on Wednesday, May 22, 2024 10:04:16 PM","body":"Use this in the Tuesday talk."}},{"id":"k_000062","bookId":"b_09bef6","title":"Notes on Cities","author":"Hanan Boutros","kind":"highlight","page":18,"locationStart":295,"locationEnd":305,"date":"2024-05-23","time":"21:27","tsEpoch":1716499627000,"text":"What we call noise is mostly other people insisting on being included.","textLength":70,"lang":"en","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"Notes on Cities (Hanan Boutros)","metaLine":"- Your Highlight on page 18 | location 295-305 | Added on Thursday, May 23, 2024 9:27:07 PM","body":"What we call noise is mostly other people insisting on being included."}},{"id":"k_000063","bookId":"b_09bef6","title":"Notes on Cities","author":"Hanan Boutros","kind":"note","page":22,"locationStart":362,"locationEnd":368,"date":"2024-05-26","time":"10:56","tsEpoch":1716720975000,"text":"Use this when writing the foreword.","textLength":35,"lang":"en","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"Notes on Cities (Hanan Boutros)","metaLine":"- Your Note on page 22 | location 362-368 | Added on Sunday, May 26, 2024 10:56:15 AM","body":"Use this when writing the foreword."}},{"id":"k_000064","bookId":"b_09bef6","title":"Notes on Cities","author":"Hanan Boutros","kind":"highlight","page":10,"locationStart":155,"locationEnd":164,"date":"2024-05-27","time":"23:46","tsEpoch":1716853606000,"text":"Transit teaches the city to its commuters in fragments, like an unreliable narrator.","textLength":84,"lang":"en","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"Notes on Cities (Hanan Boutros)","metaLine":"- Your Highlight on page 10 | location 155-164 | Added on Monday, May 27, 2024 11:46:46 PM","body":"Transit teaches the city to its commuters in fragments, like an unreliable narrator."}},{"id":"k_000065","bookId":"b_09bef6","title":"Notes on Cities","author":"Hanan Boutros","kind":"note","page":10,"locationStart":155,"locationEnd":164,"date":"2024-05-27","time":"23:46","tsEpoch":1716853606000,"text":"Remember to verify the source.","textLength":30,"lang":"en","duplicateOf":null,"noteAttachedTo":"k_000064","raw":{"headerLine":"Notes on Cities (Hanan Boutros)","metaLine":"- Your Note on page 10 | location 155-164 | Added on Monday, May 27, 2024 11:46:46 PM","body":"Remember to verify the source."}},{"id":"k_000066","bookId":"b_a14255","title":"How to Read the Tide","author":"Mira Salonen","kind":"bookmark","page":6,"locationStart":151,"locationEnd":159,"date":"2024-09-08","time":"08:59","tsEpoch":1725785951000,"text":"","textLength":0,"lang":"unknown","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"How to Read the Tide (Mira Salonen)","metaLine":"- Your Bookmark on page 6 | location 151-159 | Added on Sunday, September 8, 2024 8:59:11 AM","body":""}},{"id":"k_000067","bookId":"b_a14255","title":"How to Read the Tide","author":"Mira Salonen","kind":"highlight","page":38,"locationStart":740,"locationEnd":751,"date":"2024-09-12","time":"20:35","tsEpoch":1726173310000,"text":"Most knots are slower than they look — that is the whole reason they work.","textLength":74,"lang":"en","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"How to Read the Tide (Mira Salonen)","metaLine":"- Your Highlight on page 38 | location 740-751 | Added on Thursday, September 12, 2024 8:35:10 PM","body":"Most knots are slower than they look — that is the whole reason they work."}},{"id":"k_000068","bookId":"b_a14255","title":"How to Read the Tide","author":"Mira Salonen","kind":"note","page":32,"locationStart":627,"locationEnd":633,"date":"2024-09-16","time":"21:09","tsEpoch":1726520949000,"text":"Also see chapter 7.","textLength":19,"lang":"en","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"How to Read the Tide (Mira Salonen)","metaLine":"- Your Note on page 32 | location 627-633 | Added on Monday, September 16, 2024 9:09:09 PM","body":"Also see chapter 7."}},{"id":"k_000069","bookId":"b_a14255","title":"How to Read the Tide","author":"Mira Salonen","kind":"bookmark","page":17,"locationStart":352,"locationEnd":354,"date":"2024-09-17","time":"07:10","tsEpoch":1726557015000,"text":"","textLength":0,"lang":"unknown","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"How to Read the Tide (Mira Salonen)","metaLine":"- Your Bookmark on page 17 | location 352-354 | Added on Tuesday, September 17, 2024 7:10:15 AM","body":""}},{"id":"k_000070","bookId":"b_a14255","title":"How to Read the Tide","author":"Mira Salonen","kind":"highlight","page":31,"locationStart":608,"locationEnd":620,"date":"2024-09-18","time":"08:24","tsEpoch":1726647885000,"text":"Small craft survive on the discipline of paying attention to small problems first.","textLength":82,"lang":"en","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"How to Read the Tide (Mira Salonen)","metaLine":"- Your Highlight on page 31 | location 608-620 | Added on Wednesday, September 18, 2024 8:24:45 AM","body":"Small craft survive on the discipline of paying attention to small problems first."}},{"id":"k_000071","bookId":"b_a14255","title":"How to Read the Tide","author":"Mira Salonen","kind":"bookmark","page":17,"locationStart":362,"locationEnd":374,"date":"2024-09-19","time":"09:45","tsEpoch":1726739141000,"text":"","textLength":0,"lang":"unknown","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"How to Read the Tide (Mira Salonen)","metaLine":"- Your Bookmark on page 17 | location 362-374 | Added on Thursday, September 19, 2024 9:45:41 AM","body":""}},{"id":"k_000072","bookId":"b_a14255","title":"How to Read the Tide","author":"Mira Salonen","kind":"highlight","page":51,"locationStart":975,"locationEnd":989,"date":"2024-09-19","time":"20:52","tsEpoch":1726779170000,"text":"Wind is weather pretending to be advice.","textLength":40,"lang":"en","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"How to Read the Tide (Mira Salonen)","metaLine":"- Your Highlight on page 51 | location 975-989 | Added on Thursday, September 19, 2024 8:52:50 PM","body":"Wind is weather pretending to be advice."}},{"id":"k_000073","bookId":"b_a14255","title":"How to Read the Tide","author":"Mira Salonen","kind":"highlight","page":54,"locationStart":1018,"locationEnd":1029,"date":"2024-09-20","time":"23:28","tsEpoch":1726874918000,"text":"The cold of the early shift is a different cold than the cold at noon, and the rope knows the difference.","textLength":105,"lang":"en","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"How to Read the Tide (Mira Salonen)","metaLine":"- Your Highlight on page 54 | location 1018-1029 | Added on Friday, September 20, 2024 11:28:38 PM","body":"The cold of the early shift is a different cold than the cold at noon, and the rope knows the difference."}},{"id":"k_000074","bookId":"b_a14255","title":"How to Read the Tide","author":"Mira Salonen","kind":"highlight","page":25,"locationStart":506,"locationEnd":513,"date":"2024-09-23","time":"21:02","tsEpoch":1727125351000,"text":"A boat trains its owner more than any owner trains a boat.","textLength":58,"lang":"en","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"How to Read the Tide (Mira Salonen)","metaLine":"- Your Highlight on page 25 | location 506-513 | Added on Monday, September 23, 2024 9:02:31 PM","body":"A boat trains its owner more than any owner trains a boat."}},{"id":"k_000075","bookId":"b_a14255","title":"How to Read the Tide","author":"Mira Salonen","kind":"highlight","page":50,"locationStart":953,"locationEnd":955,"date":"2024-09-24","time":"20:48","tsEpoch":1727210892000,"text":"You learn the harbor by the order in which the boats come back.","textLength":63,"lang":"en","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"How to Read the Tide (Mira Salonen)","metaLine":"- Your Highlight on page 50 | location 953-955 | Added on Tuesday, September 24, 2024 8:48:12 PM","body":"You learn the harbor by the order in which the boats come back."}},{"id":"k_000076","bookId":"b_a14255","title":"How to Read the Tide","author":"Mira Salonen","kind":"highlight","page":40,"locationStart":772,"locationEnd":778,"date":"2024-09-25","time":"20:24","tsEpoch":1727295880000,"text":"The first thing a fisherman learns is that the sea is older than your plan.","textLength":75,"lang":"en","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"How to Read the Tide (Mira Salonen)","metaLine":"- Your Highlight on page 40 | location 772-778 | Added on Wednesday, September 25, 2024 8:24:40 PM","body":"The first thing a fisherman learns is that the sea is older than your plan."}},{"id":"k_000077","bookId":"b_a14255","title":"How to Read the Tide","author":"Mira Salonen","kind":"highlight","page":11,"locationStart":247,"locationEnd":254,"date":"2024-10-01","time":"20:32","tsEpoch":1727814741000,"text":"The cold of the early shift is a different cold than the cold at noon, and the rope knows the difference.","textLength":105,"lang":"en","duplicateOf":"k_000073","noteAttachedTo":null,"raw":{"headerLine":"How to Read the Tide (Mira Salonen)","metaLine":"- Your Highlight on page 11 | location 247-254 | Added on Tuesday, October 1, 2024 8:32:21 PM","body":"The cold of the early shift is a different cold than the cold at noon, and the rope knows the difference."}},{"id":"k_000078","bookId":"b_a14255","title":"How to Read the Tide","author":"Mira Salonen","kind":"highlight","page":27,"locationStart":542,"locationEnd":548,"date":"2024-10-02","time":"07:11","tsEpoch":1727853080000,"text":"A tide is not a measurement; it is an agreement with the moon, renewed twice a day.","textLength":83,"lang":"en","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"How to Read the Tide (Mira Salonen)","metaLine":"- Your Highlight on page 27 | location 542-548 | Added on Wednesday, October 2, 2024 7:11:20 AM","body":"A tide is not a measurement; it is an agreement with the moon, renewed twice a day."}},{"id":"k_000079","bookId":"b_a14255","title":"How to Read the Tide","author":"Mira Salonen","kind":"note","page":9,"locationStart":211,"locationEnd":216,"date":"2024-10-03","time":"22:05","tsEpoch":1727993101000,"text":"Compare to chapter 4.","textLength":21,"lang":"en","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"How to Read the Tide (Mira Salonen)","metaLine":"- Your Note on page 9 | location 211-216 | Added on Thursday, October 3, 2024 10:05:01 PM","body":"Compare to chapter 4."}},{"id":"k_000080","bookId":"b_796517","title":"Field Notes — Volume Three","author":null,"kind":"highlight","page":null,"locationStart":233,"locationEnd":241,"date":"2025-01-24","time":"07:11","tsEpoch":1737702719000,"text":"Fern unfurling on the trail like a slow argument.","textLength":49,"lang":"en","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"Field Notes — Volume Three","metaLine":"- Highlight Loc. 233-241 | Added on Friday, January 24, 2025 7:11:59 AM","body":"Fern unfurling on the trail like a slow argument."}},{"id":"k_000081","bookId":"b_796517","title":"Field Notes — Volume Three","author":null,"kind":"highlight","page":null,"locationStart":934,"locationEnd":948,"date":"2025-01-26","time":"09:10","tsEpoch":1737882635000,"text":"Cold tonight has a different smell than cold last week. Drier. The forest is rearranging.","textLength":89,"lang":"en","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"Field Notes — Volume Three","metaLine":"- Highlight Loc. 934-948 | Added on Sunday, January 26, 2025 9:10:35 AM","body":"Cold tonight has a different smell than cold last week. Drier. The forest is rearranging."}},{"id":"k_000082","bookId":"b_796517","title":"Field Notes — Volume Three","author":null,"kind":"highlight","page":null,"locationStart":385,"locationEnd":394,"date":"2025-02-04","time":"21:07","tsEpoch":1738703239000,"text":"Counted seven kinds of green before noon and stopped because the eighth would have been showing off.","textLength":100,"lang":"en","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"Field Notes — Volume Three","metaLine":"- Highlight Loc. 385-394 | Added on Tuesday, February 4, 2025 9:07:19 PM","body":"Counted seven kinds of green before noon and stopped because the eighth would have been showing off."}},{"id":"k_000083","bookId":"b_796517","title":"Field Notes — Volume Three","author":null,"kind":"highlight","page":null,"locationStart":364,"locationEnd":371,"date":"2025-02-06","time":"07:07","tsEpoch":1738825663000,"text":"The forest hides its bookkeeping in the moss along the north side of every trunk.","textLength":81,"lang":"en","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"Field Notes — Volume Three","metaLine":"- Highlight Loc. 364-371 | Added on Thursday, February 6, 2025 7:07:43 AM","body":"The forest hides its bookkeeping in the moss along the north side of every trunk."}},{"id":"k_000084","bookId":"b_796517","title":"Field Notes — Volume Three","author":null,"kind":"highlight","page":null,"locationStart":219,"locationEnd":228,"date":"2025-02-08","time":"11:55","tsEpoch":1739015708000,"text":"Moonlight on snow at 11pm — bright enough to read by, if your reading is patience.","textLength":82,"lang":"en","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"Field Notes — Volume Three","metaLine":"- Highlight Loc. 219-228 | Added on Saturday, February 8, 2025 11:55:08 AM","body":"Moonlight on snow at 11pm — bright enough to read by, if your reading is patience."}},{"id":"k_000085","bookId":"b_796517","title":"Field Notes — Volume Three","author":null,"kind":"bookmark","page":null,"locationStart":624,"locationEnd":627,"date":"2025-02-08","time":"11:07","tsEpoch":1739012858000,"text":"","textLength":0,"lang":"unknown","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"Field Notes — Volume Three","metaLine":"- Bookmark Loc. 624-627 | Added on Saturday, February 8, 2025 11:07:38 AM","body":""}},{"id":"k_000086","bookId":"b_796517","title":"Field Notes — Volume Three","author":null,"kind":"highlight","page":null,"locationStart":265,"locationEnd":267,"date":"2025-02-10","time":"08:28","tsEpoch":1739176082000,"text":"The trail is a sentence the forest never finishes.","textLength":50,"lang":"en","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"Field Notes — Volume Three","metaLine":"- Highlight Loc. 265-267 | Added on Monday, February 10, 2025 8:28:02 AM","body":"The trail is a sentence the forest never finishes."}},{"id":"k_000087","bookId":"b_796517","title":"Field Notes — Volume Three","author":null,"kind":"highlight","page":null,"locationStart":120,"locationEnd":129,"date":"2025-02-12","time":"23:17","tsEpoch":1739402233000,"text":"Lichen patch on the cedar is wider this year. Probably nothing. Probably everything.","textLength":84,"lang":"en","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"Field Notes — Volume Three","metaLine":"- Highlight Loc. 120-129 | Added on Wednesday, February 12, 2025 11:17:13 PM","body":"Lichen patch on the cedar is wider this year. Probably nothing. Probably everything."}},{"id":"k_000088","bookId":"b_796517","title":"Field Notes — Volume Three","author":null,"kind":"highlight","page":null,"locationStart":935,"locationEnd":937,"date":"2025-02-13","time":"22:04","tsEpoch":1739484296000,"text":"The creek has rerouted itself two feet east since spring; nothing else has the courage.","textLength":87,"lang":"en","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"Field Notes — Volume Three","metaLine":"- Highlight Loc. 935-937 | Added on Thursday, February 13, 2025 10:04:56 PM","body":"The creek has rerouted itself two feet east since spring; nothing else has the courage."}},{"id":"k_000089","bookId":"b_796517","title":"Field Notes — Volume Three","author":null,"kind":"highlight","page":null,"locationStart":51,"locationEnd":64,"date":"2025-02-15","time":"11:25","tsEpoch":1739618705000,"text":"Track in the soft earth — heel narrow, no claw mark — fox, almost certainly.","textLength":76,"lang":"en","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"Field Notes — Volume Three","metaLine":"- Highlight Loc. 51-64 | Added on Saturday, February 15, 2025 11:25:05 AM","body":"Track in the soft earth — heel narrow, no claw mark — fox, almost certainly."}},{"id":"k_000090","bookId":"b_a5a37c","title":"Pocket Field Reference","author":"Calla Reyes","kind":"bookmark","page":53,"locationStart":10,"locationEnd":13,"date":"2025-03-04","time":"18:50","tsEpoch":1741114248000,"text":"","textLength":0,"lang":"unknown","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"Pocket Field Reference (Calla Reyes)","metaLine":"- Your Bookmark on page 53 | location 10-13 | Added on Tuesday, March 4, 2025 6:50:48 PM","body":""}},{"id":"k_000091","bookId":"b_a5a37c","title":"Pocket Field Reference","author":"Calla Reyes","kind":"bookmark","page":15,"locationStart":138,"locationEnd":140,"date":"2025-03-06","time":"18:43","tsEpoch":1741286588000,"text":"","textLength":0,"lang":"unknown","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"Pocket Field Reference (Calla Reyes)","metaLine":"- Your Bookmark on page 15 | location 138-140 | Added on Thursday, March 6, 2025 6:43:08 PM","body":""}},{"id":"k_000092","bookId":"b_a5a37c","title":"Pocket Field Reference","author":"Calla Reyes","kind":"bookmark","page":51,"locationStart":174,"locationEnd":178,"date":"2025-03-08","time":"16:55","tsEpoch":1741452947000,"text":"","textLength":0,"lang":"unknown","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"Pocket Field Reference (Calla Reyes)","metaLine":"- Your Bookmark on page 51 | location 174-178 | Added on Saturday, March 8, 2025 4:55:47 PM","body":""}},{"id":"k_000093","bookId":"b_a5a37c","title":"Pocket Field Reference","author":"Calla Reyes","kind":"bookmark","page":38,"locationStart":385,"locationEnd":386,"date":"2025-03-10","time":"09:31","tsEpoch":1741599114000,"text":"","textLength":0,"lang":"unknown","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"Pocket Field Reference (Calla Reyes)","metaLine":"- Your Bookmark on page 38 | location 385-386 | Added on Monday, March 10, 2025 9:31:54 AM","body":""}},{"id":"k_000094","bookId":"b_452bd6","title":"주의의 리듬","author":"이지원","kind":"highlight","page":null,"locationStart":30,"locationEnd":35,"date":"2025-04-12","time":"19:13","tsEpoch":1744485211000,"text":"주의는 의지의 부드러운 살결과 같아서, 쉽게 찢어지고 스스로의 시간으로 회복된다.","textLength":45,"lang":"non-latin","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"주의의 리듬 (이지원)","metaLine":"- Your Highlight location 30-35 | Added on Saturday, April 12, 2025 7:13:31 PM","body":"주의는 의지의 부드러운 살결과 같아서, 쉽게 찢어지고 스스로의 시간으로 회복된다."}},{"id":"k_000095","bookId":"b_452bd6","title":"주의의 리듬","author":"이지원","kind":"highlight","page":null,"locationStart":85,"locationEnd":103,"date":"2025-04-12","time":"09:17","tsEpoch":1744449479000,"text":"아침 의식은 작아야 살아남고, 살아남아야 마침내 일이 된다.","textLength":33,"lang":"non-latin","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"주의의 리듬 (이지원)","metaLine":"- Your Highlight location 85-103 | Added on Saturday, April 12, 2025 9:17:59 AM","body":"아침 의식은 작아야 살아남고, 살아남아야 마침내 일이 된다."}},{"id":"k_000096","bookId":"b_452bd6","title":"주의의 리듬","author":"이지원","kind":"highlight","page":null,"locationStart":156,"locationEnd":187,"date":"2025-04-12","time":"16:55","tsEpoch":1744476900000,"text":"리듬은 동기가 떠난 자리에 남는 것이다.","textLength":22,"lang":"non-latin","duplicateOf":null,"noteAttachedTo":null,"raw":{"headerLine":"주의의 리듬 (이지원)","metaLine":"- Your Highlight location 156-187 | Added on Saturday, April 12, 2025 4:55:00 PM","body":"리듬은 동기가 떠난 자리에 남는 것이다."}}],"books":[{"id":"b_d083b4","title":"The Habit of Attention","author":"Jia Mwangi","highlightCount":10,"noteCount":6,"bookmarkCount":1,"firstSeen":"2023-03-12","lastSeen":"2023-05-02","monthlySparkline":[{"month":"2023-03","count":9},{"month":"2023-04","count":7},{"month":"2023-05","count":1}],"sampleClippingIds":["k_000001","k_000002","k_000003","k_000004","k_000005"]},{"id":"b_cc1cd7","title":"Small Engines, Long Roads","author":"Aleksandr Volkov","highlightCount":10,"noteCount":3,"bookmarkCount":0,"firstSeen":"2023-09-16","lastSeen":"2023-11-23","monthlySparkline":[{"month":"2023-09","count":3},{"month":"2023-10","count":5},{"month":"2023-11","count":5}],"sampleClippingIds":["k_000024","k_000025","k_000026","k_000027","k_000028"]},{"id":"b_09bef6","title":"Notes on Cities","author":"Hanan Boutros","highlightCount":9,"noteCount":4,"bookmarkCount":0,"firstSeen":"2024-05-11","lastSeen":"2024-05-27","monthlySparkline":[{"month":"2024-05","count":13}],"sampleClippingIds":["k_000053","k_000054","k_000055","k_000056","k_000057"]},{"id":"b_a14255","title":"How to Read the Tide","author":"Mira Salonen","highlightCount":8,"noteCount":2,"bookmarkCount":3,"firstSeen":"2024-09-08","lastSeen":"2024-10-03","monthlySparkline":[{"month":"2024-09","count":11},{"month":"2024-10","count":2}],"sampleClippingIds":["k_000066","k_000067","k_000068","k_000069","k_000070"]},{"id":"b_a2c1df","title":"A Quiet Country","author":"Maeve Tindall","highlightCount":10,"noteCount":1,"bookmarkCount":0,"firstSeen":"2024-01-15","lastSeen":"2024-02-20","monthlySparkline":[{"month":"2024-01","count":6},{"month":"2024-02","count":5}],"sampleClippingIds":["k_000040","k_000041","k_000042","k_000043","k_000044"]},{"id":"b_796517","title":"Field Notes — Volume Three","author":null,"highlightCount":9,"noteCount":0,"bookmarkCount":1,"firstSeen":"2025-01-24","lastSeen":"2025-02-15","monthlySparkline":[{"month":"2025-01","count":2},{"month":"2025-02","count":8}],"sampleClippingIds":["k_000080","k_000081","k_000082","k_000083","k_000084"]},{"id":"b_a5a37c","title":"Pocket Field Reference","author":"Calla Reyes","highlightCount":0,"noteCount":0,"bookmarkCount":4,"firstSeen":"2025-03-04","lastSeen":"2025-03-10","monthlySparkline":[{"month":"2025-03","count":4}],"sampleClippingIds":["k_000090","k_000091","k_000092","k_000093"]},{"id":"b_452bd6","title":"주의의 리듬","author":"이지원","highlightCount":3,"noteCount":0,"bookmarkCount":0,"firstSeen":"2025-04-12","lastSeen":"2025-04-12","monthlySparkline":[{"month":"2025-04","count":3}],"sampleClippingIds":["k_000094","k_000095","k_000096"]}],"authors":[{"name":"Jia Mwangi","bookCount":1,"clippingCount":17,"share":0.20238095238095238},{"name":"Aleksandr Volkov","bookCount":1,"clippingCount":13,"share":0.15476190476190477},{"name":"Hanan Boutros","bookCount":1,"clippingCount":13,"share":0.15476190476190477},{"name":"Mira Salonen","bookCount":1,"clippingCount":13,"share":0.15476190476190477},{"name":"Maeve Tindall","bookCount":1,"clippingCount":11,"share":0.13095238095238096},{"name":"Calla Reyes","bookCount":1,"clippingCount":4,"share":0.047619047619047616},{"name":"이지원","bookCount":1,"clippingCount":3,"share":0.03571428571428571}],"yearTotals":[{"year":"2023","highlights":20,"notes":9,"bookmarks":1},{"year":"2024","highlights":27,"notes":7,"bookmarks":3},{"year":"2025","highlights":12,"notes":0,"bookmarks":5}],"monthTotals":[{"month":"2023-03","highlights":5,"notes":4,"bookmarks":0},{"month":"2023-04","highlights":5,"notes":1,"bookmarks":1},{"month":"2023-05","highlights":0,"notes":1,"bookmarks":0},{"month":"2023-06","highlights":0,"notes":0,"bookmarks":0},{"month":"2023-07","highlights":0,"notes":0,"bookmarks":0},{"month":"2023-08","highlights":0,"notes":0,"bookmarks":0},{"month":"2023-09","highlights":3,"notes":0,"bookmarks":0},{"month":"2023-10","highlights":5,"notes":0,"bookmarks":0},{"month":"2023-11","highlights":2,"notes":3,"bookmarks":0},{"month":"2023-12","highlights":0,"notes":0,"bookmarks":0},{"month":"2024-01","highlights":6,"notes":0,"bookmarks":0},{"month":"2024-02","highlights":4,"notes":1,"bookmarks":0},{"month":"2024-03","highlights":0,"notes":0,"bookmarks":0},{"month":"2024-04","highlights":0,"notes":0,"bookmarks":0},{"month":"2024-05","highlights":9,"notes":4,"bookmarks":0},{"month":"2024-06","highlights":0,"notes":0,"bookmarks":0},{"month":"2024-07","highlights":0,"notes":0,"bookmarks":0},{"month":"2024-08","highlights":0,"notes":0,"bookmarks":0},{"month":"2024-09","highlights":7,"notes":1,"bookmarks":3},{"month":"2024-10","highlights":1,"notes":1,"bookmarks":0},{"month":"2024-11","highlights":0,"notes":0,"bookmarks":0},{"month":"2024-12","highlights":0,"notes":0,"bookmarks":0},{"month":"2025-01","highlights":2,"notes":0,"bookmarks":0},{"month":"2025-02","highlights":7,"notes":0,"bookmarks":1},{"month":"2025-03","highlights":0,"notes":0,"bookmarks":4},{"month":"2025-04","highlights":3,"notes":0,"bookmarks":0}],"hourCounts":[0,0,0,0,0,0,0,7,6,19,4,8,0,0,0,0,2,0,2,1,11,8,9,7],"themeClusters":[{"key":"every","keyword":"every","count":4,"bookIds":["b_cc1cd7","b_a2c1df","b_09bef6","b_796517"],"sampleClippingIds":["k_000029","k_000044","k_000055","k_000083"]},{"key":"small","keyword":"small · survive","count":3,"bookIds":["b_d083b4","b_a2c1df","b_a14255"],"sampleClippingIds":["k_000006","k_000049","k_000070"]},{"key":"weather","keyword":"weather","count":3,"bookIds":["b_cc1cd7","b_a14255"],"sampleClippingIds":["k_000024","k_000027","k_000072"]},{"key":"other","keyword":"other","count":3,"bookIds":["b_cc1cd7","b_a2c1df","b_09bef6"],"sampleClippingIds":["k_000025","k_000045","k_000062"]},{"key":"different","keyword":"different","count":3,"bookIds":["b_cc1cd7","b_a14255","b_796517"],"sampleClippingIds":["k_000029","k_000073","k_000081"]},{"key":"forest","keyword":"forest","count":3,"bookIds":["b_796517"],"sampleClippingIds":["k_000081","k_000083","k_000086"]}],"duplicateGroups":[{"key":"b_d083b4:106-116","clippingIds":["k_000008","k_000010","k_000022"],"canonicalId":"k_000008"},{"key":"b_d083b4:145-154","clippingIds":["k_000016","k_000021","k_000023"],"canonicalId":"k_000016"},{"key":"b_d083b4:1029-1032","clippingIds":["k_000006","k_000009"],"canonicalId":"k_000006"},{"key":"b_d083b4:1200-1209","clippingIds":["k_000002","k_000012"],"canonicalId":"k_000002"},{"key":"b_cc1cd7:1471-1485","clippingIds":["k_000024","k_000030"],"canonicalId":"k_000024"},{"key":"b_cc1cd7:230-232","clippingIds":["k_000026","k_000032"],"canonicalId":"k_000026"},{"key":"b_cc1cd7:1384-1395","clippingIds":["k_000025","k_000038"],"canonicalId":"k_000025"},{"key":"b_a2c1df:572-581","clippingIds":["k_000045","k_000051"],"canonicalId":"k_000045"},{"key":"b_a2c1df:260-274","clippingIds":["k_000044","k_000052"],"canonicalId":"k_000044"},{"key":"b_a14255:1018-1029","clippingIds":["k_000073","k_000077"],"canonicalId":"k_000073"}],"summary":{"rowCount":84,"bookCount":8,"authorCount":7,"highlightCount":59,"noteCount":16,"bookmarkCount":9,"period":"2023-03-12 → 2025-04-12","durationLabel":"2 years 1 month","activeMonths":15,"topAuthor":"Jia Mwangi","topAuthorShare":0.20238095238095238,"topBook":"The Habit of Attention","topBookShare":0.20238095238095238,"duplicateGroupCount":10,"notesAttachedCount":2,"bookmarksOnlyBookCount":1},"meta":{"sourceFile":"input.txt","sizeBytes":19315,"format":"kindle-highlights","kind":"kindle-highlights","sourceFormat":"my-clippings","encoding":"utf-8","rowCount":96,"bookCount":8,"authorCount":7,"highlightCount":59,"noteCount":16,"bookmarkCount":9,"period":"2023-03-12 → 2025-04-12"}};</script>
+<script>
+(() => {
+  const rows = (DATA.rows || []).filter(function(row) { return !row.duplicateOf; });
+  const quotes = rows.filter(function(row) { return row.text && row.text.trim(); });
+  const books = DATA.books || [];
+  const themes = (DATA.themeClusters || []).slice(0, 7);
+  const yearTotals = DATA.yearTotals || [];
+  const hourCounts = DATA.hourCounts || Array.from({ length: 24 }, function() { return 0; });
+  const summary = DATA.summary || {};
+  const meta = DATA.meta || {};
+  const fmt = new Intl.NumberFormat("en-US");
+  let activeTheme = themes[0] ? themes[0].key : "";
+  let activeBook = "";
+  let query = "";
+  let activePaths = [];
+  let questionIndex = 0;
+
+  const conceptNames = {
+    every: "everydayness",
+    small: "small rituals",
+    weather: "weather",
+    other: "otherness",
+    different: "difference",
+    forest: "forest thinking"
+  };
+  const questions = [
+    "What is this archive trying to remember?",
+    "Where does the same thought return?",
+    "Which passage keeps sending roots outward?",
+    "What changes when the shelf is read as soil?"
+  ];
+
+  function $(id) { return document.getElementById(id); }
+  function esc(value) {
+    return String(value == null ? "" : value).replace(/[&<>"]/g, function(c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
+    });
+  }
+  function conceptLabel(theme) {
+    if (!theme) return "reading";
+    return conceptNames[theme.key] || theme.keyword || theme.key;
+  }
+  function conceptWords(theme) {
+    if (!theme) return [];
+    const raw = String(theme.key || "") + " " + String(theme.keyword || "");
+    const words = raw.toLowerCase().match(/[a-z][a-z'-]{3,}/g) || [];
+    return Array.from(new Set(words.map(function(word) {
+      return word.replace(/(?:'s|ing|ed|es|s)$/, "");
+    })));
+  }
+  function rowMatchesTheme(row, key) {
+    const theme = themes.find(function(item) { return item.key === key; });
+    if (!theme) return false;
+    if ((theme.sampleClippingIds || []).includes(row.id)) return true;
+    const text = (String(row.text || "") + " " + String(row.title || "")).toLowerCase();
+    return conceptWords(theme).some(function(word) { return text.includes(word); });
+  }
+  function currentTheme() {
+    return themes.find(function(item) { return item.key === activeTheme; }) || themes[0];
+  }
+  function topBook() {
+    return books.slice().sort(function(a, b) {
+      return (b.highlightCount + b.noteCount + b.bookmarkCount) - (a.highlightCount + a.noteCount + a.bookmarkCount);
+    })[0];
+  }
+  function filteredQuotes() {
+    const q = query.trim().toLowerCase();
+    return quotes.filter(function(row) {
+      if (activeTheme && !rowMatchesTheme(row, activeTheme)) return false;
+      if (activeBook && row.bookId !== activeBook) return false;
+      if (!q) return true;
+      return (String(row.text || "") + " " + String(row.title || "") + " " + String(row.author || "")).toLowerCase().includes(q);
+    });
+  }
+  function spore(label, key, type) {
+    const attr = type === "book" ? "data-book" : "data-theme";
+    const pressed = type === "book" ? key === activeBook : key === activeTheme;
+    return '<button class="spore" type="button" ' + attr + '="' + esc(key) + '" aria-pressed="' + pressed + '">' + esc(label) + '</button>';
+  }
+
+  function renderEssay() {
+    const theme = currentTheme();
+    const top = topBook();
+    const period = summary.period || meta.period || "reading window";
+    $("meta-period").textContent = period;
+    $("meta-count").textContent = fmt.format(summary.rowCount || rows.length) + " clippings";
+    $("source-file").textContent = meta.sourceFile || "input.txt";
+
+    const active = conceptLabel(theme);
+    const bookTitle = top ? top.title : "the most marked book";
+    const bookId = top ? top.id : "";
+    const bookCount = summary.bookCount || books.length;
+    const clippingCount = summary.rowCount || rows.length;
+    const highlightCount = summary.highlightCount || rows.filter(function(row) { return row.kind === "highlight"; }).length;
+    const activeMonths = summary.activeMonths || "many";
+
+    $("essay-body").innerHTML = [
+      '<p class="lead">This Kindle export is not arranged like a report. It behaves more like a patch of soil: ' + spore(fmt.format(clippingCount) + " clippings", activeTheme, "theme") + ' from ' + spore(fmt.format(bookCount) + " books", bookId, "book") + ' keep breaking down into smaller traces, then sending threads back toward the same few questions.</p>',
+      '<p>The strongest visible spore is ' + spore(active, activeTheme, "theme") + '. It appears across distant books as if the shelf were quietly reusing one vocabulary. A highlight is not a conclusion here; it is a place where attention paused long enough to leave residue.</p>',
+      '<p>The densest shelf signal comes from ' + spore(bookTitle, bookId, "book") + '. That does not mean it is the most important book. It only means the reader returned to it with a different pressure: more underlines, more notes, more little attempts to keep a sentence alive.</p>',
+      '<p>Across ' + esc(String(activeMonths)) + ' active months, the archive keeps mixing ' + spore("reading rhythm", activeTheme, "theme") + ' with daily interruption. Some clippings look like deliberate study. Others feel more accidental, like a phrase caught between errands, weather, and sleep.</p>',
+      '<p>The lower sections preserve the ordinary instruments: ' + spore("Reading rhythm", activeTheme, "theme") + ', ' + spore("Bookshelf", bookId, "book") + ', ' + spore("Themes you return to", activeTheme, "theme") + ', and the full ' + spore("Quote browser", activeTheme, "theme") + '. But the page begins with the living relation between a question and the words it keeps touching.</p>',
+      '<p>Read this as a heuristic field. The page is allowed to be suggestive, but not mystical: ' + esc(fmt.format(highlightCount)) + ' highlights, source titles, timestamps, and short passages remain available below for checking where each thread actually lands.</p>'
+    ].join("");
+
+    document.querySelectorAll(".spore[data-theme]").forEach(function(el) {
+      el.addEventListener("click", function() { selectTheme(el.dataset.theme); });
+    });
+    document.querySelectorAll(".spore[data-book]").forEach(function(el) {
+      el.addEventListener("click", function() { selectBook(el.dataset.book); });
+    });
+  }
+
+  function renderRhythm() {
+    const max = Math.max.apply(null, [1].concat(yearTotals.map(function(y) {
+      return (y.highlights || 0) + (y.notes || 0) + (y.bookmarks || 0);
+    })));
+    $("year-bars").innerHTML = yearTotals.map(function(y) {
+      const total = (y.highlights || 0) + (y.notes || 0) + (y.bookmarks || 0);
+      const width = Math.max(4, total / max * 100).toFixed(1);
+      return '<div class="year-row"><span>' + esc(y.year) + '</span><div class="year-track"><div class="year-fill" style="width:' + width + '%"></div></div><span>' + fmt.format(total) + '</span></div>';
+    }).join("") || '<p class="field-note">No dated highlights.</p>';
+
+    const hourMax = Math.max.apply(null, [1].concat(hourCounts));
+    $("hour-strip").innerHTML = hourCounts.map(function(count, hour) {
+      const h = Math.max(4, count / hourMax * 100).toFixed(1);
+      return '<div class="hour-cell" title="' + hour + ':00 - ' + count + ' clippings" style="--h:' + h + '%"><span>' + hour + '</span></div>';
+    }).join("");
+  }
+
+  function renderThemes() {
+    $("seed-list").innerHTML = themes.map(function(theme) {
+      const label = conceptLabel(theme);
+      const pressed = theme.key === activeTheme;
+      return '<button class="seed-row" type="button" data-key="' + esc(theme.key) + '" aria-pressed="' + pressed + '"><span class="row-top"><strong>' + esc(label) + '</strong><span>' + fmt.format(theme.count || 0) + ' passages</span></span><span class="row-meta">Heuristic keyword: ' + esc(theme.keyword || theme.key) + ' / ' + fmt.format((theme.bookIds || []).length) + ' books</span></button>';
+    }).join("");
+    document.querySelectorAll(".seed-row").forEach(function(row) {
+      row.addEventListener("click", function() { selectTheme(row.dataset.key); });
+    });
+  }
+
+  function renderBooks() {
+    const topBooks = books.slice().sort(function(a, b) {
+      return (b.highlightCount + b.noteCount + b.bookmarkCount) - (a.highlightCount + a.noteCount + a.bookmarkCount);
+    }).slice(0, 9);
+    $("book-list").innerHTML = topBooks.map(function(book) {
+      const total = book.highlightCount + book.noteCount + book.bookmarkCount;
+      return '<button class="book-row" type="button" data-book-id="' + esc(book.id) + '" aria-pressed="' + (book.id === activeBook) + '"><span class="row-top"><strong>' + esc(book.title) + '</strong><span>' + fmt.format(total) + '</span></span><span class="row-meta">' + esc(book.author || "Unknown author") + ' / ' + book.highlightCount + ' H / ' + book.noteCount + ' N / ' + book.bookmarkCount + ' B</span></button>';
+    }).join("");
+    document.querySelectorAll(".book-row").forEach(function(row) {
+      row.addEventListener("click", function() { selectBook(row.dataset.bookId); });
+    });
+  }
+
+  function renderQuotes() {
+    const list = filteredQuotes();
+    $("folio-count").textContent = fmt.format(list.length) + " passages";
+    $("quote-list").innerHTML = list.slice(0, 24).map(function(row) {
+      const active = activeTheme && rowMatchesTheme(row, activeTheme);
+      const place = row.page ? "page " + row.page : row.locationStart ? "loc " + row.locationStart : "kindle clipping";
+      return '<article class="quote-row ' + (active ? "active" : "") + '" data-id="' + esc(row.id) + '"><div class="quote-text">' + esc(row.text) + '</div><div class="quote-meta">' + esc(row.title) + ' / ' + esc(row.author || "Unknown") + ' / ' + esc(row.date || "") + ' / ' + esc(place) + ' / ' + esc(row.kind) + '</div></article>';
+    }).join("") || '<article class="quote-row"><div class="quote-text">No passages match this focus.</div></article>';
+  }
+
+  function updateQuestion() {
+    const theme = currentTheme();
+    const base = questions[questionIndex % questions.length];
+    $("source-capsule").textContent = theme ? base.replace("this archive", conceptLabel(theme)) : base;
+  }
+  function selectTheme(key) {
+    activeTheme = key || activeTheme;
+    activeBook = "";
+    renderAll();
+  }
+  function selectBook(id) {
+    activeBook = id || "";
+    renderEssay();
+    renderBooks();
+    renderQuotes();
+  }
+  function renderAll() {
+    renderEssay();
+    renderRhythm();
+    renderThemes();
+    renderBooks();
+    renderQuotes();
+    updateQuestion();
+  }
+
+  function getCoords(elem) {
+    const rect = elem.getBoundingClientRect();
+    return {
+      x: rect.left + rect.width / 2,
+      y: rect.top + rect.height / 2,
+      right: rect.right,
+      left: rect.left
+    };
+  }
+  function createPath(target) {
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute("class", "mycelium-path");
+    $("mycelium-canvas").appendChild(path);
+    target.classList.add("connected");
+    return { element: path, target: target, progress: 0, phase: "growing", life: 80 + Math.random() * 210 };
+  }
+  function updatePaths() {
+    const source = $("source-capsule");
+    if (!source) return;
+    const src = getCoords(source);
+    const startX = src.right;
+    const startY = src.y;
+
+    activePaths.forEach(function(obj, index) {
+      if (!document.body.contains(obj.target)) {
+        activePaths.splice(index, 1);
+        return;
+      }
+      const target = getCoords(obj.target);
+      const endX = target.left;
+      const endY = target.y + 4;
+      const cp1x = startX + 80 + Math.sin(Date.now() / 1000 + index) * 20;
+      const cp1y = startY;
+      const cp2x = endX - 80 + Math.cos(Date.now() / 800 + index) * 20;
+      const cp2y = endY;
+      const d = "M " + startX + " " + startY + " C " + cp1x + " " + cp1y + ", " + cp2x + " " + cp2y + ", " + endX + " " + endY;
+      obj.element.setAttribute("d", d);
+      const length = obj.element.getTotalLength();
+      obj.element.style.strokeDasharray = length;
+      if (obj.phase === "growing") {
+        obj.progress += 0.025;
+        if (obj.progress >= 1) {
+          obj.progress = 1;
+          obj.phase = "sustained";
+        }
+        obj.element.style.strokeDashoffset = length * (1 - obj.progress);
+      } else if (obj.phase === "sustained") {
+        obj.element.style.strokeDashoffset = 0;
+        obj.life -= 1;
+        if (obj.life <= 0) obj.phase = "dying";
+      } else {
+        obj.progress -= 0.025;
+        obj.element.style.strokeDashoffset = length * (1 - obj.progress);
+        if (obj.progress <= 0) {
+          obj.element.remove();
+          obj.target.classList.remove("connected");
+          activePaths.splice(index, 1);
+        }
+      }
+    });
+  }
+  function visibleSporeTargets() {
+    return Array.from(document.querySelectorAll(".spore")).filter(function(sporeEl) {
+      if (sporeEl.classList.contains("connected")) return false;
+      if (activeTheme && sporeEl.dataset.theme && sporeEl.dataset.theme !== activeTheme) return false;
+      const rect = sporeEl.getBoundingClientRect();
+      return rect.top > 0 && rect.bottom < window.innerHeight;
+    });
+  }
+  function manageMycelium() {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    if (activePaths.length < 4 && Math.random() > 0.952) {
+      const targets = visibleSporeTargets();
+      if (targets.length) {
+        activePaths.push(createPath(targets[Math.floor(Math.random() * targets.length)]));
+      }
+    }
+    updatePaths();
+    requestAnimationFrame(manageMycelium);
+  }
+
+  $("source-capsule").addEventListener("click", function() {
+    questionIndex += 1;
+    updateQuestion();
+  });
+  $("folio-search").addEventListener("input", function(event) {
+    query = event.target.value || "";
+    renderQuotes();
+  });
+  $("copy-note").addEventListener("click", function() {
+    const theme = currentTheme();
+    const note = [
+      "# " + document.title,
+      "",
+      "Active question: " + $("source-capsule").textContent,
+      "Active spore: " + conceptLabel(theme),
+      "",
+      "## Sample passages",
+      filteredQuotes().slice(0, 5).map(function(row) { return '- "' + row.text + '" - ' + row.title; }).join("\n")
+    ].join("\n");
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(note).catch(function() { window.prompt("Copy this:", note); });
+    } else {
+      window.prompt("Copy this:", note);
+    }
+  });
+  window.addEventListener("resize", function() {
+    activePaths.forEach(function(obj) {
+      obj.element.remove();
+      obj.target.classList.remove("connected");
+    });
+    activePaths = [];
+  });
+
+  renderAll();
+  requestAnimationFrame(manageMycelium);
+})();
+</script>
+</body>
+</html>

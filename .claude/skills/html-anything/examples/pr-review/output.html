@@ -1,0 +1,1597 @@
+<!doctype html>
+<html lang="en" data-ha-style="developer">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PR — pending-charge queue + webhook drain</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --primary: #a03b00;
+  --primary-container: #c94c00;
+  --primary-fixed: #ffdbcd;
+  --primary-fixed-dim: #ffb597;
+  --on-primary: #ffffff;
+  --accent-glow: #E8400D;
+  --secondary: #d5baff;
+  --secondary-container: #7b40e0;
+  --tertiary: #4d44e3;
+  --accent-cyan: #00D4FF;
+  --bg: #fff8f6;
+  --surface: #fff8f6;
+  --surface-container-lowest: #ffffff;
+  --surface-container-low: #fbf2ef;
+  --surface-container: #f5ece9;
+  --surface-container-high: #efe6e3;
+  --fg-1: #1e1b19;
+  --fg-2: #594138;
+  --fg-muted: #8d7166;
+  --border: rgba(0,0,0,0.06);
+  --border-strong: rgba(0,0,0,0.12);
+  --outline-variant: #e1bfb2;
+  --green: #10b981;
+  --blue: #3b82f6;
+  --yellow: #f59e0b;
+  --red: #ef4444;
+  --font-headline: 'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
+  --font-body: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'SF Mono', 'Menlo', ui-monospace, monospace;
+  --space-xs: 4px; --space-sm: 8px; --space-md: 12px;
+  --space-lg: 16px; --space-xl: 20px; --space-2xl: 24px;
+  --space-3xl: 32px; --space-4xl: 48px; --space-5xl: 64px;
+  --radius-sm: 8px; --radius-md: 12px; --radius-lg: 16px;
+  --radius-xl: 20px; --radius-2xl: 28px; --radius-pill: 9999px;
+  --shadow-sm: 0 1px 2px rgba(30,27,25,0.04);
+  --shadow-md: 0 4px 12px rgba(30,27,25,0.08);
+  --shadow-lg: 0 8px 24px rgba(30,27,25,0.12);
+  --shadow-accent: 0 8px 24px rgba(160,59,0,0.15);
+  --gradient-primary: linear-gradient(135deg,#a03b00 0%,#c94c00 100%);
+  --gradient-hero: linear-gradient(135deg,#a03b00 0%,#7b40e0 100%);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #060B18;
+    --surface: #0B1426;
+    --surface-container-lowest: #101D35;
+    --surface-container-low: #101D35;
+    --surface-container: #162544;
+    --surface-container-high: #1c2d52;
+    --fg-1: #F8FAFC;
+    --fg-2: #CBD5E1;
+    --fg-muted: #64748B;
+    --border: rgba(255,255,255,0.08);
+    --border-strong: rgba(255,255,255,0.14);
+    --primary: #FF6B35;
+    --accent-glow: #00D4FF;
+    --shadow-md: 0 4px 12px rgba(0,0,0,0.4);
+    --shadow-lg: 0 8px 24px rgba(0,0,0,0.5);
+    --outline-variant: #1c2d52;
+  }
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{
+  font-family:var(--font-body);
+  font-size:15px;
+  line-height:1.6;
+  color:var(--fg-1);
+  background:var(--bg);
+  min-height:100vh;
+}
+a{color:var(--primary);text-decoration:none}
+button{cursor:pointer;font-family:var(--font-body)}
+
+/* ---- DEV SHELL ---- */
+.dev-shell{
+  max-width:960px;
+  margin:0 auto;
+  padding:var(--space-lg) var(--space-lg) var(--space-5xl);
+}
+
+/* ---- FINDING BAR ---- */
+.finding-bar{
+  background:var(--surface-container-low);
+  border:1px solid var(--border-strong);
+  border-radius:var(--radius-xl);
+  padding:var(--space-2xl);
+  margin-bottom:var(--space-2xl);
+  box-shadow:var(--shadow-md);
+  animation:slideDown 320ms ease both;
+}
+@keyframes slideDown{from{opacity:0;transform:translateY(-12px)}to{opacity:1;transform:translateY(0)}}
+
+.finding-bar__top{
+  display:flex;
+  flex-wrap:wrap;
+  align-items:flex-start;
+  gap:var(--space-md);
+  margin-bottom:var(--space-lg);
+}
+.finding-bar__badge{
+  font-family:var(--font-mono);
+  font-size:11px;
+  font-weight:600;
+  letter-spacing:0.06em;
+  text-transform:uppercase;
+  padding:3px var(--space-sm);
+  border-radius:var(--radius-pill);
+  background:var(--primary);
+  color:var(--on-primary);
+  flex-shrink:0;
+  margin-top:3px;
+}
+.finding-bar__title{
+  font-family:var(--font-headline);
+  font-size:clamp(16px,3vw,20px);
+  font-weight:700;
+  letter-spacing:-0.01em;
+  color:var(--fg-1);
+  flex:1;
+  min-width:200px;
+}
+.finding-bar__author{
+  font-size:13px;
+  color:var(--fg-muted);
+  font-family:var(--font-mono);
+}
+.finding-bar__meta{
+  display:flex;
+  flex-wrap:wrap;
+  gap:var(--space-sm);
+  margin-bottom:var(--space-md);
+}
+.meta-chip{
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+  font-family:var(--font-mono);
+  font-size:12px;
+  padding:3px 10px;
+  border-radius:var(--radius-pill);
+  border:1px solid var(--border-strong);
+  background:var(--surface-container);
+  color:var(--fg-2);
+}
+.meta-chip.green{border-color:var(--green);color:var(--green);background:color-mix(in srgb,var(--green) 10%,transparent)}
+.meta-chip.red{border-color:var(--red);color:var(--red);background:color-mix(in srgb,var(--red) 10%,transparent)}
+.meta-chip.yellow{border-color:var(--yellow);color:var(--yellow);background:color-mix(in srgb,var(--yellow) 10%,transparent)}
+.meta-chip.blue{border-color:var(--blue);color:var(--blue);background:color-mix(in srgb,var(--blue) 10%,transparent)}
+.finding-bar__body{
+  font-size:14px;
+  color:var(--fg-2);
+  line-height:1.65;
+  border-top:1px solid var(--border);
+  padding-top:var(--space-md);
+}
+.hypothesis-chip{
+  display:inline-flex;
+  align-items:center;
+  gap:4px;
+  font-size:10px;
+  font-weight:600;
+  letter-spacing:0.05em;
+  text-transform:uppercase;
+  padding:2px 7px;
+  border-radius:var(--radius-pill);
+  background:color-mix(in srgb,var(--yellow) 18%,transparent);
+  border:1px solid var(--yellow);
+  color:var(--yellow);
+  vertical-align:middle;
+  margin-right:4px;
+}
+
+/* ---- FOOTPRINT ROW ---- */
+.footprint-row{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(100px,1fr));
+  gap:var(--space-md);
+  margin-bottom:var(--space-2xl);
+}
+.footprint-card{
+  background:var(--surface-container-low);
+  border:1px solid var(--border);
+  border-radius:var(--radius-lg);
+  padding:var(--space-lg) var(--space-lg);
+  text-align:center;
+  box-shadow:var(--shadow-sm);
+  animation:fadeUp 400ms ease both;
+}
+.footprint-card:nth-child(1){animation-delay:60ms}
+.footprint-card:nth-child(2){animation-delay:100ms}
+.footprint-card:nth-child(3){animation-delay:140ms}
+.footprint-card:nth-child(4){animation-delay:180ms}
+.footprint-card:nth-child(5){animation-delay:220ms}
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.footprint-card__num{
+  font-family:var(--font-mono);
+  font-size:24px;
+  font-weight:700;
+  color:var(--primary);
+  display:block;
+  line-height:1;
+  margin-bottom:4px;
+}
+.footprint-card__label{
+  font-size:11px;
+  color:var(--fg-muted);
+  text-transform:uppercase;
+  letter-spacing:0.06em;
+  font-weight:600;
+}
+
+/* ---- SECTION HEADING ---- */
+.section-heading{
+  font-family:var(--font-headline);
+  font-size:13px;
+  font-weight:700;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  color:var(--fg-muted);
+  margin-bottom:var(--space-md);
+  display:flex;
+  align-items:center;
+  gap:var(--space-sm);
+}
+.section-heading::after{
+  content:'';
+  flex:1;
+  height:1px;
+  background:var(--border-strong);
+}
+
+/* ---- REVIEW CHECKLIST ---- */
+.review-checklist{
+  background:var(--surface-container-low);
+  border:1px solid var(--border-strong);
+  border-radius:var(--radius-xl);
+  padding:var(--space-2xl);
+  margin-bottom:var(--space-2xl);
+  box-shadow:var(--shadow-md);
+}
+.checklist-heading{
+  font-family:var(--font-headline);
+  font-size:16px;
+  font-weight:700;
+  letter-spacing:-0.01em;
+  color:var(--fg-1);
+  margin-bottom:var(--space-lg);
+  display:flex;
+  align-items:center;
+  gap:var(--space-sm);
+}
+.checklist-heading svg{color:var(--primary)}
+.checklist-item{
+  display:flex;
+  align-items:flex-start;
+  gap:var(--space-md);
+  padding:var(--space-md) 0;
+  border-bottom:1px solid var(--border);
+  animation:fadeUp 350ms ease both;
+}
+.checklist-item:last-child{border-bottom:none}
+.checklist-cb{
+  width:18px;height:18px;
+  border:2px solid var(--border-strong);
+  border-radius:5px;
+  flex-shrink:0;
+  margin-top:2px;
+  cursor:pointer;
+  background:var(--surface-container-lowest);
+  transition:background 150ms,border-color 150ms;
+  display:flex;align-items:center;justify-content:center;
+}
+.checklist-cb.checked{background:var(--green);border-color:var(--green)}
+.checklist-cb.checked::after{content:'✓';color:#fff;font-size:11px;font-weight:700}
+.checklist-text{font-size:14px;color:var(--fg-2);line-height:1.55;flex:1}
+.checklist-text code{
+  font-family:var(--font-mono);
+  font-size:12px;
+  background:var(--surface-container);
+  padding:1px 5px;
+  border-radius:4px;
+  color:var(--primary);
+}
+.checklist-sev{
+  font-size:10px;
+  font-weight:700;
+  letter-spacing:0.05em;
+  text-transform:uppercase;
+  padding:2px 8px;
+  border-radius:var(--radius-pill);
+  flex-shrink:0;
+  margin-top:2px;
+}
+.sev-high{background:color-mix(in srgb,var(--red) 15%,transparent);border:1px solid var(--red);color:var(--red)}
+.sev-med{background:color-mix(in srgb,var(--yellow) 15%,transparent);border:1px solid var(--yellow);color:var(--yellow)}
+.sev-low{background:color-mix(in srgb,var(--green) 15%,transparent);border:1px solid var(--green);color:var(--green)}
+
+/* ---- RISK HOTSPOTS ---- */
+.risk-hotspots{
+  margin-bottom:var(--space-2xl);
+}
+.hotspot-card{
+  background:var(--surface-container-low);
+  border:1px solid var(--border-strong);
+  border-radius:var(--radius-lg);
+  padding:var(--space-lg) var(--space-xl);
+  margin-bottom:var(--space-md);
+  box-shadow:var(--shadow-sm);
+  cursor:pointer;
+  transition:box-shadow 160ms,border-color 160ms;
+  animation:fadeUp 400ms ease both;
+}
+.hotspot-card:hover{box-shadow:var(--shadow-md);border-color:var(--primary)}
+.hotspot-card__top{display:flex;align-items:flex-start;gap:var(--space-md);flex-wrap:wrap}
+.hotspot-card__path{
+  font-family:var(--font-mono);
+  font-size:13px;
+  color:var(--primary);
+  font-weight:600;
+  flex:1;
+  min-width:140px;
+  word-break:break-all;
+}
+.hotspot-card__why{
+  font-size:13.5px;
+  color:var(--fg-2);
+  margin-top:var(--space-sm);
+  line-height:1.55;
+}
+.hotspot-card__link{
+  font-size:11px;
+  color:var(--fg-muted);
+  font-family:var(--font-mono);
+  margin-top:var(--space-xs);
+  display:block;
+}
+
+/* ---- COMMIT TIMELINE ---- */
+.commit-timeline{
+  position:relative;
+  margin-bottom:var(--space-2xl);
+  padding-left:var(--space-lg);
+}
+.commit-timeline::before{
+  content:'';
+  position:absolute;
+  left:7px;top:0;bottom:0;
+  width:2px;
+  background:var(--border-strong);
+  border-radius:var(--radius-pill);
+}
+.commit-node{
+  position:relative;
+  margin-bottom:var(--space-lg);
+  animation:fadeUp 380ms ease both;
+}
+.commit-node:nth-child(1){animation-delay:80ms}
+.commit-node:nth-child(2){animation-delay:140ms}
+.commit-node:nth-child(3){animation-delay:200ms}
+.commit-dot{
+  position:absolute;
+  left:-22px;
+  top:14px;
+  width:14px;height:14px;
+  border-radius:50%;
+  background:var(--primary);
+  border:2px solid var(--bg);
+  box-shadow:0 0 0 2px var(--primary);
+}
+.commit-card{
+  background:var(--surface-container-low);
+  border:1px solid var(--border);
+  border-radius:var(--radius-lg);
+  padding:var(--space-lg);
+  box-shadow:var(--shadow-sm);
+  transition:box-shadow 160ms;
+  cursor:pointer;
+}
+.commit-card:hover{box-shadow:var(--shadow-md)}
+.commit-card__top{display:flex;align-items:center;gap:var(--space-sm);flex-wrap:wrap;margin-bottom:var(--space-sm)}
+.commit-hash{
+  font-family:var(--font-mono);
+  font-size:11px;
+  background:var(--surface-container);
+  padding:2px 7px;
+  border-radius:var(--radius-sm);
+  color:var(--fg-muted);
+  border:1px solid var(--border-strong);
+}
+.commit-author{font-size:12px;color:var(--fg-muted)}
+.commit-date{font-size:12px;color:var(--fg-muted);font-family:var(--font-mono)}
+.commit-card__subject{
+  font-family:var(--font-headline);
+  font-size:14px;
+  font-weight:600;
+  color:var(--fg-1);
+  letter-spacing:-0.01em;
+  margin-bottom:var(--space-sm);
+}
+.commit-card__body{
+  font-size:12.5px;
+  color:var(--fg-muted);
+  line-height:1.55;
+  margin-bottom:var(--space-sm);
+}
+.commit-chips{display:flex;flex-wrap:wrap;gap:var(--space-xs)}
+
+/* ---- FILE RISK MAP ---- */
+.file-risk-map{
+  margin-bottom:var(--space-2xl);
+}
+.file-row{
+  display:grid;
+  grid-template-columns:1fr auto auto;
+  gap:var(--space-md);
+  align-items:start;
+  background:var(--surface-container-low);
+  border:1px solid var(--border);
+  border-radius:var(--radius-lg);
+  padding:var(--space-md) var(--space-lg);
+  margin-bottom:var(--space-sm);
+  box-shadow:var(--shadow-sm);
+  transition:box-shadow 160ms,border-color 160ms;
+  cursor:pointer;
+  animation:fadeUp 350ms ease both;
+}
+.file-row:hover{box-shadow:var(--shadow-md);border-color:var(--primary)}
+.file-row__path{
+  font-family:var(--font-mono);
+  font-size:12.5px;
+  color:var(--primary);
+  font-weight:600;
+  word-break:break-all;
+}
+.file-row__status{
+  font-size:10px;
+  font-weight:700;
+  text-transform:uppercase;
+  letter-spacing:0.05em;
+  padding:2px 8px;
+  border-radius:var(--radius-pill);
+  white-space:nowrap;
+}
+.status-modified{background:color-mix(in srgb,var(--blue) 15%,transparent);border:1px solid var(--blue);color:var(--blue)}
+.status-added{background:color-mix(in srgb,var(--green) 15%,transparent);border:1px solid var(--green);color:var(--green)}
+.status-deleted{background:color-mix(in srgb,var(--red) 15%,transparent);border:1px solid var(--red);color:var(--red)}
+.file-row__adds{font-family:var(--font-mono);font-size:12px;color:var(--green);white-space:nowrap}
+.file-row__dels{font-family:var(--font-mono);font-size:12px;color:var(--red);white-space:nowrap}
+.file-row__detail{
+  grid-column:1/-1;
+  font-size:13px;
+  color:var(--fg-2);
+  line-height:1.55;
+  padding-top:var(--space-sm);
+  border-top:1px solid var(--border);
+  margin-top:var(--space-xs);
+}
+.file-row__test{
+  font-size:11px;
+  font-weight:600;
+  padding:2px 8px;
+  border-radius:var(--radius-pill);
+  white-space:nowrap;
+}
+.test-yes{background:color-mix(in srgb,var(--green) 15%,transparent);border:1px solid var(--green);color:var(--green)}
+.test-no{background:color-mix(in srgb,var(--red) 15%,transparent);border:1px solid var(--red);color:var(--red)}
+.delta-bar{
+  height:4px;
+  border-radius:var(--radius-pill);
+  background:var(--border-strong);
+  overflow:hidden;
+  margin-top:4px;
+}
+.delta-bar__fill{
+  height:100%;
+  border-radius:var(--radius-pill);
+  background:var(--gradient-primary);
+  transition:width 600ms cubic-bezier(.22,1,.36,1);
+}
+
+/* ---- SEARCH ---- */
+.search-bar{
+  display:flex;
+  align-items:center;
+  gap:var(--space-sm);
+  background:var(--surface-container);
+  border:1px solid var(--border-strong);
+  border-radius:var(--radius-pill);
+  padding:var(--space-sm) var(--space-lg);
+  margin-bottom:var(--space-lg);
+}
+.search-bar svg{color:var(--fg-muted);flex-shrink:0}
+.search-bar input{
+  flex:1;
+  background:transparent;
+  border:none;
+  outline:none;
+  font-family:var(--font-mono);
+  font-size:13px;
+  color:var(--fg-1);
+}
+.search-bar input::placeholder{color:var(--fg-muted)}
+.search-count{font-size:11px;color:var(--fg-muted);font-family:var(--font-mono);white-space:nowrap}
+
+/* ---- RAW ARTIFACT ---- */
+.raw-artifact{
+  margin-bottom:var(--space-2xl);
+}
+.raw-artifact__toggle{
+  display:flex;
+  align-items:center;
+  gap:var(--space-sm);
+  background:var(--surface-container);
+  border:1px solid var(--border-strong);
+  border-radius:var(--radius-lg);
+  padding:var(--space-md) var(--space-xl);
+  cursor:pointer;
+  width:100%;
+  font-family:var(--font-headline);
+  font-size:14px;
+  font-weight:600;
+  color:var(--fg-1);
+  transition:background 150ms;
+  margin-bottom:0;
+}
+.raw-artifact__toggle:hover{background:var(--surface-container-high)}
+.raw-artifact__toggle .chevron{
+  margin-left:auto;
+  transition:transform 250ms;
+  color:var(--fg-muted);
+}
+.raw-artifact__toggle.open .chevron{transform:rotate(180deg)}
+.raw-artifact__body{
+  display:none;
+  background:var(--surface-container-lowest);
+  border:1px solid var(--border-strong);
+  border-top:none;
+  border-radius:0 0 var(--radius-lg) var(--radius-lg);
+}
+.raw-artifact__body.open{display:block}
+.commit-section{
+  border-bottom:1px solid var(--border);
+}
+.commit-section:last-child{border-bottom:none}
+.commit-section__header{
+  display:flex;
+  align-items:center;
+  gap:var(--space-md);
+  padding:var(--space-md) var(--space-xl);
+  background:var(--surface-container);
+  cursor:pointer;
+  transition:background 150ms;
+}
+.commit-section__header:hover{background:var(--surface-container-high)}
+.commit-section__hash{font-family:var(--font-mono);font-size:11px;color:var(--fg-muted)}
+.commit-section__subject{font-size:13px;font-weight:600;color:var(--fg-1);flex:1}
+.commit-section__body{display:none}
+.commit-section__body.open{display:block}
+.file-diff{border-bottom:1px solid var(--border)}
+.file-diff:last-child{border-bottom:none}
+.file-diff__header{
+  display:flex;
+  align-items:center;
+  gap:var(--space-sm);
+  padding:var(--space-sm) var(--space-xl);
+  background:var(--surface-container-low);
+  font-family:var(--font-mono);
+  font-size:12px;
+  color:var(--fg-muted);
+  cursor:pointer;
+}
+.file-diff__header:hover{background:var(--surface-container)}
+.file-diff__path{color:var(--primary);font-weight:600}
+.hunk{margin:0;padding:0}
+.hunk-header{
+  font-family:var(--font-mono);
+  font-size:11px;
+  background:color-mix(in srgb,var(--tertiary) 10%,transparent);
+  color:var(--tertiary);
+  padding:3px var(--space-xl);
+  display:flex;
+  align-items:center;
+  gap:var(--space-sm);
+}
+.copy-hunk-btn{
+  margin-left:auto;
+  font-size:10px;
+  padding:1px 8px;
+  border-radius:var(--radius-pill);
+  border:1px solid var(--border-strong);
+  background:var(--surface-container);
+  color:var(--fg-muted);
+  font-family:var(--font-body);
+  transition:background 120ms;
+}
+.copy-hunk-btn:hover{background:var(--surface-container-high);color:var(--fg-1)}
+.diff-lines{
+  overflow-x:auto;
+}
+.diff-line{
+  display:flex;
+  font-family:var(--font-mono);
+  font-size:12px;
+  line-height:1.5;
+  white-space:pre;
+}
+.diff-line.add{background:color-mix(in srgb,var(--green) 9%,transparent)}
+.diff-line.del{background:color-mix(in srgb,var(--red) 9%,transparent)}
+.diff-line.ctx{background:transparent}
+.diff-line.search-match{background:color-mix(in srgb,var(--yellow) 25%,transparent)}
+.line-num{
+  width:40px;
+  min-width:40px;
+  text-align:right;
+  padding:0 var(--space-sm);
+  color:var(--fg-muted);
+  border-right:1px solid var(--border);
+  user-select:none;
+  flex-shrink:0;
+  font-size:11px;
+  line-height:1.5;
+}
+.line-sign{
+  width:18px;min-width:18px;
+  padding-left:4px;
+  flex-shrink:0;
+  line-height:1.5;
+}
+.diff-line.add .line-sign{color:var(--green)}
+.diff-line.del .line-sign{color:var(--red)}
+.diff-line.ctx .line-sign{color:var(--fg-muted)}
+.line-text{
+  flex:1;
+  padding:0 var(--space-md);
+  line-height:1.5;
+  overflow-x:auto;
+}
+mark.search-hl{
+  background:var(--yellow);
+  color:#000;
+  border-radius:2px;
+  padding:0 1px;
+}
+
+/* ---- COPY HANDOFF ---- */
+.copy-handoff{
+  background:var(--surface-container-low);
+  border:1px solid var(--border-strong);
+  border-radius:var(--radius-xl);
+  padding:var(--space-2xl);
+  margin-bottom:var(--space-2xl);
+  box-shadow:var(--shadow-md);
+}
+.copy-handoff__header{
+  display:flex;
+  align-items:center;
+  gap:var(--space-md);
+  margin-bottom:var(--space-md);
+  flex-wrap:wrap;
+}
+.copy-handoff__title{
+  font-family:var(--font-headline);
+  font-size:15px;
+  font-weight:700;
+  color:var(--fg-1);
+  flex:1;
+}
+.btn-copy{
+  display:inline-flex;
+  align-items:center;
+  gap:var(--space-sm);
+  font-family:var(--font-body);
+  font-size:13px;
+  font-weight:600;
+  padding:var(--space-sm) var(--space-xl);
+  border-radius:var(--radius-pill);
+  background:var(--gradient-primary);
+  color:var(--on-primary);
+  border:none;
+  box-shadow:var(--shadow-accent);
+  transition:opacity 140ms,transform 100ms;
+}
+.btn-copy:hover{opacity:0.9}
+.btn-copy:active{transform:scale(0.97)}
+.btn-copy.copied{background:var(--green);box-shadow:none}
+.copy-handoff__preview{
+  font-family:var(--font-mono);
+  font-size:12px;
+  color:var(--fg-2);
+  background:var(--surface-container);
+  border-radius:var(--radius-md);
+  padding:var(--space-lg);
+  max-height:180px;
+  overflow-y:auto;
+  white-space:pre-wrap;
+  word-break:break-word;
+  line-height:1.6;
+}
+
+/* ---- FOOTER ---- */
+.page-footer{
+  font-size:11.5px;
+  color:var(--fg-muted);
+  text-align:center;
+  padding:var(--space-xl) var(--space-lg);
+  border-top:1px solid var(--border);
+  line-height:1.65;
+}
+
+/* ---- UTIL ---- */
+.flex{display:flex}
+.gap-sm{gap:var(--space-sm)}
+.items-center{align-items:center}
+.flex-wrap{flex-wrap:wrap}
+.mt-md{margin-top:var(--space-md)}
+.mt-lg{margin-top:var(--space-lg)}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}
+
+@media (prefers-reduced-motion: reduce) {
+  *{animation:none!important;transition:none!important}
+}
+@media (min-width:640px){
+  .dev-shell{padding:var(--space-3xl) var(--space-2xl) var(--space-5xl)}
+}
+</style>
+<!-- html-anything example style skin:start -->
+
+<style id="html-anything-example-style-skin">
+html[data-ha-style] {
+  --ha-style-accent: var(--primary, #a03b00);
+  --ha-style-accent-2: var(--secondary-container, #7b40e0);
+  --ha-style-badge-bg: rgba(255,255,255,.78);
+  --ha-style-badge-fg: var(--fg-1, #1e1b19);
+}
+html[data-ha-style] body {
+  position: relative;
+  background-attachment: fixed;
+}
+html[data-ha-style] body::before {
+  position: fixed;
+  z-index: 9999;
+  top: 12px;
+  right: 12px;
+  padding: 7px 10px;
+  border: 1px solid color-mix(in srgb, var(--ha-style-accent) 26%, transparent);
+  border-radius: 999px;
+  background: var(--ha-style-badge-bg);
+  color: var(--ha-style-badge-fg);
+  box-shadow: 0 6px 24px rgba(0,0,0,.10);
+  font: 700 10px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  backdrop-filter: blur(16px);
+}
+html[data-ha-style] .hero,
+html[data-ha-style] header.hero,
+html[data-ha-style] .top,
+html[data-ha-style] .header {
+  position: relative;
+}
+html[data-ha-style] .hero::before,
+html[data-ha-style] header.hero::before {
+  content: "";
+  display: block;
+  width: 64px;
+  height: 6px;
+  margin-bottom: 18px;
+  border-radius: 999px;
+  background: var(--ha-style-accent);
+}
+
+html[data-ha-style="teaching"] {
+  --ha-style-accent: #0f766e;
+  --ha-style-accent-2: #f59e0b;
+  --primary: #0f766e;
+  --primary-container: #115e59;
+  --primary-fixed: #ccfbf1;
+  --secondary-container: #f59e0b;
+  --bg: #f6fbfb;
+  --surface: #f6fbfb;
+  --surface-container-lowest: #ffffff;
+  --surface-container-low: #edf7f5;
+  --surface-container: #e5f1ee;
+  --surface-container-high: #d8e8e4;
+  --fg-1: #10201f;
+  --fg-2: #304c49;
+  --fg-muted: #647b78;
+  --border: rgba(15,118,110,.14);
+  --gradient-hero: linear-gradient(135deg, #0f766e 0%, #f59e0b 100%);
+  --gradient-text: linear-gradient(135deg, #0f766e 0%, #f59e0b 100%);
+}
+html[data-ha-style="teaching"] body {
+  background-color: var(--bg) !important;
+  background-image:
+    linear-gradient(rgba(15,118,110,.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(15,118,110,.07) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+html[data-ha-style="teaching"] body::before { content: "teaching"; }
+
+html[data-ha-style="relationship"] {
+  --ha-style-accent: #be3455;
+  --ha-style-accent-2: #317b93;
+  --primary: #be3455;
+  --primary-container: #a52d4b;
+  --primary-fixed: #ffe1e8;
+  --secondary-container: #317b93;
+  --bg: #fff7f8;
+  --surface: #fff7f8;
+  --surface-container-lowest: #ffffff;
+  --surface-container-low: #fff0f3;
+  --surface-container: #f8e7eb;
+  --surface-container-high: #efdde3;
+  --fg-1: #28181c;
+  --fg-2: #5f3e48;
+  --fg-muted: #8d6b75;
+  --border: rgba(190,52,85,.14);
+  --rose: #e25b74;
+  --blue: #4f95a8;
+  --gradient-hero: linear-gradient(135deg, #be3455 0%, #317b93 100%);
+  --gradient-text: linear-gradient(135deg, #be3455 0%, #317b93 100%);
+}
+html[data-ha-style="relationship"] body {
+  background-color: var(--bg) !important;
+  background-image:
+    linear-gradient(120deg, rgba(190,52,85,.08), transparent 36%),
+    linear-gradient(300deg, rgba(49,123,147,.08), transparent 40%);
+}
+html[data-ha-style="relationship"] body::before { content: "relationship"; }
+
+html[data-ha-style="timeline-story"] {
+  --ha-style-accent: #9a4b14;
+  --ha-style-accent-2: #2f6f73;
+  --primary: #9a4b14;
+  --primary-container: #7a3b10;
+  --primary-fixed: #ffe8cf;
+  --secondary-container: #2f6f73;
+  --bg: #fbf8f1;
+  --surface: #fbf8f1;
+  --surface-container-lowest: #ffffff;
+  --surface-container-low: #f4ecdf;
+  --surface-container: #eee3d3;
+  --surface-container-high: #e4d7c4;
+  --fg-1: #241b12;
+  --fg-2: #5c4b3d;
+  --fg-muted: #8a7968;
+  --border: rgba(154,75,20,.16);
+  --gradient-hero: linear-gradient(135deg, #9a4b14 0%, #2f6f73 100%);
+  --gradient-text: linear-gradient(135deg, #9a4b14 0%, #2f6f73 100%);
+}
+html[data-ha-style="timeline-story"] body {
+  background-color: var(--bg) !important;
+  background-image:
+    linear-gradient(90deg, transparent 0 calc(50% - 1px), rgba(154,75,20,.16) calc(50% - 1px) calc(50% + 1px), transparent calc(50% + 1px)),
+    radial-gradient(circle at 50% 72px, rgba(154,75,20,.20) 0 4px, transparent 5px);
+  background-size: 100% 100%, 100% 96px;
+}
+html[data-ha-style="timeline-story"] body::before { content: "timeline story"; }
+html[data-ha-style="timeline-story"] .hero::before,
+html[data-ha-style="timeline-story"] header.hero::before {
+  width: 8px;
+  height: 72px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--ha-style-accent), var(--ha-style-accent-2));
+}
+
+html[data-ha-style="map-atlas"] {
+  --ha-style-accent: #17695a;
+  --ha-style-accent-2: #2f66a8;
+  --primary: #17695a;
+  --primary-container: #115346;
+  --primary-fixed: #daf5ec;
+  --secondary-container: #2f66a8;
+  --bg: #f4faf7;
+  --surface: #f4faf7;
+  --surface-container-lowest: #ffffff;
+  --surface-container-low: #eaf4ef;
+  --surface-container: #e0eee8;
+  --surface-container-high: #d4e6de;
+  --fg-1: #10221d;
+  --fg-2: #365149;
+  --fg-muted: #6e837b;
+  --border: rgba(23,105,90,.16);
+  --gradient-hero: linear-gradient(135deg, #17695a 0%, #2f66a8 100%);
+  --gradient-text: linear-gradient(135deg, #17695a 0%, #2f66a8 100%);
+}
+html[data-ha-style="map-atlas"] body {
+  background-color: var(--bg) !important;
+  background-image:
+    repeating-linear-gradient(24deg, rgba(23,105,90,.09) 0 1px, transparent 1px 34px),
+    repeating-linear-gradient(116deg, rgba(47,102,168,.08) 0 1px, transparent 1px 42px);
+}
+html[data-ha-style="map-atlas"] body::before { content: "map atlas"; }
+html[data-ha-style="map-atlas"] .hero::before,
+html[data-ha-style="map-atlas"] header.hero::before {
+  width: 78px;
+  height: 78px;
+  border: 2px solid var(--ha-style-accent);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 55% 42%, var(--ha-style-accent) 0 4px, transparent 5px),
+    linear-gradient(45deg, transparent 47%, rgba(47,102,168,.55) 48% 52%, transparent 53%);
+}
+
+html[data-ha-style="network-map"] {
+  --ha-style-accent: #355f91;
+  --ha-style-accent-2: #a34d67;
+  --primary: #355f91;
+  --primary-container: #294b75;
+  --primary-fixed: #deebff;
+  --secondary-container: #a34d67;
+  --bg: #f7f8fb;
+  --surface: #f7f8fb;
+  --surface-container-lowest: #ffffff;
+  --surface-container-low: #eef1f7;
+  --surface-container: #e6ebf3;
+  --surface-container-high: #dbe2ee;
+  --fg-1: #151b24;
+  --fg-2: #3f4a5b;
+  --fg-muted: #737e8f;
+  --border: rgba(53,95,145,.16);
+  --gradient-hero: linear-gradient(135deg, #355f91 0%, #a34d67 100%);
+  --gradient-text: linear-gradient(135deg, #355f91 0%, #a34d67 100%);
+}
+html[data-ha-style="network-map"] body {
+  background-color: var(--bg) !important;
+  background-image:
+    radial-gradient(circle at 20% 20%, rgba(53,95,145,.22) 0 3px, transparent 4px),
+    radial-gradient(circle at 68% 34%, rgba(163,77,103,.18) 0 3px, transparent 4px),
+    linear-gradient(38deg, transparent 0 48%, rgba(53,95,145,.10) 49% 51%, transparent 52%);
+  background-size: 88px 88px, 118px 118px, 132px 132px;
+}
+html[data-ha-style="network-map"] body::before { content: "network map"; }
+html[data-ha-style="network-map"] .hero::before,
+html[data-ha-style="network-map"] header.hero::before {
+  width: 86px;
+  height: 46px;
+  border-radius: 999px;
+  background:
+    radial-gradient(circle at 18px 24px, var(--ha-style-accent) 0 7px, transparent 8px),
+    radial-gradient(circle at 44px 12px, var(--ha-style-accent-2) 0 6px, transparent 7px),
+    radial-gradient(circle at 70px 30px, var(--ha-style-accent) 0 7px, transparent 8px),
+    linear-gradient(22deg, transparent 0 31%, color-mix(in srgb, var(--ha-style-accent) 60%, transparent) 32% 36%, transparent 37%),
+    linear-gradient(160deg, transparent 0 43%, color-mix(in srgb, var(--ha-style-accent-2) 60%, transparent) 44% 48%, transparent 49%);
+}
+
+html[data-ha-style="dashboard"] {
+  --ha-style-accent: #0f5f6f;
+  --ha-style-accent-2: #8a5a16;
+  --primary: #0f5f6f;
+  --primary-container: #0b4c59;
+  --primary-fixed: #d8f2f5;
+  --secondary-container: #8a5a16;
+  --bg: #f5f7f9;
+  --surface: #f5f7f9;
+  --surface-container-lowest: #ffffff;
+  --surface-container-low: #eef2f5;
+  --surface-container: #e7edf1;
+  --surface-container-high: #dce5ea;
+  --fg-1: #111827;
+  --fg-2: #374151;
+  --fg-muted: #6b7280;
+  --border: rgba(15,95,111,.16);
+  --gradient-hero: linear-gradient(135deg, #0f5f6f 0%, #083344 100%);
+  --gradient-text: linear-gradient(135deg, #0f5f6f 0%, #083344 100%);
+}
+html[data-ha-style="dashboard"] body {
+  background-color: var(--bg) !important;
+  background-image: linear-gradient(90deg, rgba(15,95,111,.08) 0 1px, transparent 1px);
+  background-size: 18px 100%;
+}
+html[data-ha-style="dashboard"] body::before { content: "dashboard"; }
+html[data-ha-style="dashboard"] .hero::before,
+html[data-ha-style="dashboard"] header.hero::before {
+  width: 100%;
+  height: 3px;
+  margin-bottom: 14px;
+}
+
+html[data-ha-style="document"] {
+  --ha-style-accent: #8b3f1f;
+  --ha-style-accent-2: #2f6f73;
+  --primary: #8b3f1f;
+  --primary-container: #703319;
+  --primary-fixed: #ffe4d5;
+  --secondary-container: #2f6f73;
+  --bg: #fbfaf7;
+  --surface: #fbfaf7;
+  --surface-container-lowest: #ffffff;
+  --surface-container-low: #f2efe8;
+  --surface-container: #e9e4da;
+  --surface-container-high: #ded7c9;
+  --fg-1: #211d18;
+  --fg-2: #554d44;
+  --fg-muted: #82786c;
+  --border: rgba(139,63,31,.16);
+  --font-headline: Georgia, "Iowan Old Style", "Times New Roman", serif;
+  --gradient-hero: linear-gradient(135deg, #8b3f1f 0%, #2f6f73 100%);
+  --gradient-text: linear-gradient(135deg, #8b3f1f 0%, #2f6f73 100%);
+}
+html[data-ha-style="document"] body {
+  background-color: var(--bg) !important;
+  background-image: linear-gradient(90deg, rgba(139,63,31,.18) 0 4px, transparent 4px);
+  background-size: 100% 100%;
+}
+html[data-ha-style="document"] body::before { content: "document"; }
+html[data-ha-style="document"] .hero::before,
+html[data-ha-style="document"] header.hero::before {
+  width: 42px;
+  height: 42px;
+  border-radius: 0;
+  background: transparent;
+  border-top: 4px solid var(--ha-style-accent);
+  border-left: 4px solid var(--ha-style-accent);
+}
+
+html[data-ha-style="developer"] {
+  color-scheme: dark;
+  --ha-style-accent: #38bdf8;
+  --ha-style-accent-2: #f97316;
+  --ha-style-badge-bg: rgba(8,16,31,.82);
+  --ha-style-badge-fg: #dbeafe;
+  --primary: #38bdf8;
+  --primary-container: #0e7490;
+  --primary-fixed: #0f2942;
+  --secondary-container: #f97316;
+  --bg: #07111f;
+  --surface: #07111f;
+  --surface-container-lowest: #0b1426;
+  --surface-container-low: #0f1b31;
+  --surface-container: #13233d;
+  --surface-container-high: #1b2f50;
+  --fg-1: #f8fafc;
+  --fg-2: #cbd5e1;
+  --fg-muted: #94a3b8;
+  --border: rgba(148,163,184,.18);
+  --green: #34d399;
+  --red: #fb7185;
+  --yellow: #fbbf24;
+  --gradient-hero: linear-gradient(135deg, #0f172a 0%, #0e7490 100%);
+  --gradient-text: linear-gradient(135deg, #38bdf8 0%, #f97316 100%);
+}
+html[data-ha-style="developer"] body {
+  background-color: var(--bg) !important;
+  background-image:
+    linear-gradient(rgba(56,189,248,.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(56,189,248,.05) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+html[data-ha-style="developer"] body::before { content: "developer"; }
+html[data-ha-style="developer"] pre,
+html[data-ha-style="developer"] code,
+html[data-ha-style="developer"] .mono {
+  color: inherit;
+}
+</style>
+<!-- html-anything example style skin:end -->
+</head>
+<body>
+<script>const DATA = {"kind":"pr-review","pr":{"title":"checkout: fail closed when payment provider returns ambiguous status","author":"Mira Park <mira@clockless.ai>"},"commits":[{"id":"c_0001","hash":"a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0","shortHash":"a1b2c3d","author":"Mira Park <mira@clockless.ai>","authorName":"Mira Park","date":"Mon, 4 May 2026 09:15:32 -0700","subject":"checkout: fail closed when payment provider returns ambiguous status","body":"Previously a `pending_review` response from the payment provider was\ntreated as a successful charge by the order pipeline. That is unsafe\nunder provider-side fraud holds — we'd ship the order before the\ncharge resolved.\n\nThis change routes any non-`succeeded` status into the new\n`pendingChargeQueue` and leaves the order in `awaiting_payment`.\nThe webhook handler is responsible for transitioning out.","fileIds":["f_0001","f_0002","f_0003"],"additions":52,"deletions":11},{"id":"c_0002","hash":"b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1","shortHash":"b2c3d4e","author":"Mira Park <mira@clockless.ai>","authorName":"Mira Park","date":"Mon, 4 May 2026 11:42:08 -0700","subject":"checkout: webhook drains pendingChargeQueue on charge.succeeded / charge.failed","body":"Pairs with the previous commit. The webhook handler now reads the\npendingCharges row, transitions the order's payment_state, and\ndeletes the row.","fileIds":["f_0004","f_0005"],"additions":37,"deletions":1},{"id":"c_0003","hash":"c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2","shortHash":"c3d4e5f","author":"Mira Park <mira@clockless.ai>","authorName":"Mira Park","date":"Mon, 4 May 2026 14:08:51 -0700","subject":"db: migration for pending_charges table","body":"","fileIds":["f_0006"],"additions":14,"deletions":1}],"files":[{"id":"f_0001","path":"src/checkout/charge.ts","oldPath":"src/checkout/charge.ts","newPath":"src/checkout/charge.ts","status":"modified","language":"typescript","additions":11,"deletions":5,"isBinary":false,"hunks":[{"id":"h_0001","header":"@@ -1,18 +1,24 @@","oldStart":1,"oldLines":18,"newStart":1,"newLines":24,"context":"","lines":[{"kind":"context","oldNum":1,"newNum":1,"text":"import type { Order } from \"../order/types\""},{"kind":"context","oldNum":2,"newNum":2,"text":"import { provider } from \"../payments/provider\""},{"kind":"add","oldNum":null,"newNum":3,"text":"import { enqueuePendingCharge } from \"./pendingQueue\""},{"kind":"context","oldNum":3,"newNum":4,"text":"import { logger } from \"../obs/logger\""},{"kind":"context","oldNum":4,"newNum":5,"text":""},{"kind":"context","oldNum":5,"newNum":6,"text":"export async function chargeOrder(order: Order) {"},{"kind":"context","oldNum":6,"newNum":7,"text":"  const result = await provider.charge({"},{"kind":"context","oldNum":7,"newNum":8,"text":"    orderId: order.id,"},{"kind":"context","oldNum":8,"newNum":9,"text":"    amountCents: order.totalCents,"},{"kind":"context","oldNum":9,"newNum":10,"text":"    currency: order.currency,"},{"kind":"context","oldNum":10,"newNum":11,"text":"  })"},{"kind":"del","oldNum":11,"newNum":null,"text":"  if (result.status === \"succeeded\") {"},{"kind":"del","oldNum":12,"newNum":null,"text":"    return { ok: true as const, chargeId: result.id }"},{"kind":"del","oldNum":13,"newNum":null,"text":"  }"},{"kind":"del","oldNum":14,"newNum":null,"text":"  logger.warn({ orderId: order.id, status: result.status }, \"charge failed\")"},{"kind":"del","oldNum":15,"newNum":null,"text":"  return { ok: false as const, reason: result.status }"},{"kind":"add","oldNum":null,"newNum":12,"text":"  if (result.status === \"succeeded\") {"},{"kind":"add","oldNum":null,"newNum":13,"text":"    return { ok: true as const, chargeId: result.id }"},{"kind":"add","oldNum":null,"newNum":14,"text":"  }"},{"kind":"add","oldNum":null,"newNum":15,"text":"  if (result.status === \"pending_review\" || result.status === \"requires_action\") {"},{"kind":"add","oldNum":null,"newNum":16,"text":"    logger.info({ orderId: order.id, status: result.status }, \"charge pending — queued\")"},{"kind":"add","oldNum":null,"newNum":17,"text":"    await enqueuePendingCharge(order.id, result.id)"},{"kind":"add","oldNum":null,"newNum":18,"text":"    return { ok: false as const, reason: \"pending\", chargeId: result.id }"},{"kind":"add","oldNum":null,"newNum":19,"text":"  }"},{"kind":"add","oldNum":null,"newNum":20,"text":"  logger.warn({ orderId: order.id, status: result.status }, \"charge failed\")"},{"kind":"add","oldNum":null,"newNum":21,"text":"  return { ok: false as const, reason: result.status }"},{"kind":"context","oldNum":16,"newNum":22,"text":"}"}]}],"hasMatchingTestChange":false},{"id":"f_0002","path":"src/checkout/pendingQueue.ts","oldPath":"/dev/null","newPath":"src/checkout/pendingQueue.ts","status":"added","language":"typescript","additions":18,"deletions":0,"isBinary":false,"hunks":[{"id":"h_0002","header":"@@ -0,0 +1,18 @@","oldStart":0,"oldLines":0,"newStart":1,"newLines":18,"context":"","lines":[{"kind":"add","oldNum":null,"newNum":1,"text":"import { db } from \"../db\""},{"kind":"add","oldNum":null,"newNum":2,"text":"import { logger } from \"../obs/logger\""},{"kind":"add","oldNum":null,"newNum":3,"text":""},{"kind":"add","oldNum":null,"newNum":4,"text":"/**"},{"kind":"add","oldNum":null,"newNum":5,"text":" * Records that a charge is awaiting external resolution. The webhook"},{"kind":"add","oldNum":null,"newNum":6,"text":" * handler in `src/checkout/webhook.ts` reads from this table and"},{"kind":"add","oldNum":null,"newNum":7,"text":" * transitions the order on `charge.succeeded` / `charge.failed`."},{"kind":"add","oldNum":null,"newNum":8,"text":" */"},{"kind":"add","oldNum":null,"newNum":9,"text":"export async function enqueuePendingCharge(orderId: string, chargeId: string) {"},{"kind":"add","oldNum":null,"newNum":10,"text":"  await db.pendingCharges.insert({"},{"kind":"add","oldNum":null,"newNum":11,"text":"    order_id: orderId,"},{"kind":"add","oldNum":null,"newNum":12,"text":"    charge_id: chargeId,"},{"kind":"add","oldNum":null,"newNum":13,"text":"    enqueued_at: new Date().toISOString(),"},{"kind":"add","oldNum":null,"newNum":14,"text":"    status: \"awaiting_webhook\","},{"kind":"add","oldNum":null,"newNum":15,"text":"  })"},{"kind":"add","oldNum":null,"newNum":16,"text":"  logger.info({ orderId, chargeId }, \"enqueued pending charge\")"},{"kind":"add","oldNum":null,"newNum":17,"text":"}"},{"kind":"add","oldNum":null,"newNum":18,"text":""}]}],"hasMatchingTestChange":false},{"id":"f_0003","path":"tests/checkout/charge.test.ts","oldPath":"tests/checkout/charge.test.ts","newPath":"tests/checkout/charge.test.ts","status":"modified","language":"typescript","additions":23,"deletions":6,"isBinary":false,"hunks":[{"id":"h_0003","header":"@@ -1,16 +1,38 @@","oldStart":1,"oldLines":16,"newStart":1,"newLines":38,"context":"","lines":[{"kind":"context","oldNum":1,"newNum":1,"text":"import { describe, it, expect, vi } from \"vitest\""},{"kind":"context","oldNum":2,"newNum":2,"text":"import { chargeOrder } from \"../../src/checkout/charge\""},{"kind":"context","oldNum":3,"newNum":3,"text":"import { provider } from \"../../src/payments/provider\""},{"kind":"add","oldNum":null,"newNum":4,"text":"import * as pendingQueue from \"../../src/checkout/pendingQueue\""},{"kind":"context","oldNum":4,"newNum":5,"text":""},{"kind":"context","oldNum":5,"newNum":6,"text":"describe(\"chargeOrder\", () => {"},{"kind":"context","oldNum":6,"newNum":7,"text":"  it(\"returns ok for a succeeded charge\", async () => {"},{"kind":"context","oldNum":7,"newNum":8,"text":"    vi.spyOn(provider, \"charge\").mockResolvedValue({ status: \"succeeded\", id: \"ch_001\" })"},{"kind":"context","oldNum":8,"newNum":9,"text":"    const result = await chargeOrder({ id: \"o_1\", totalCents: 1200, currency: \"USD\" } as any)"},{"kind":"context","oldNum":9,"newNum":10,"text":"    expect(result).toEqual({ ok: true, chargeId: \"ch_001\" })"},{"kind":"context","oldNum":10,"newNum":11,"text":"  })"},{"kind":"context","oldNum":11,"newNum":12,"text":""},{"kind":"del","oldNum":12,"newNum":null,"text":"  it(\"returns the failure reason for a failed charge\", async () => {"},{"kind":"del","oldNum":13,"newNum":null,"text":"    vi.spyOn(provider, \"charge\").mockResolvedValue({ status: \"card_declined\", id: \"ch_002\" })"},{"kind":"del","oldNum":14,"newNum":null,"text":"    const result = await chargeOrder({ id: \"o_2\", totalCents: 800, currency: \"USD\" } as any)"},{"kind":"del","oldNum":15,"newNum":null,"text":"    expect(result).toEqual({ ok: false, reason: \"card_declined\" })"},{"kind":"del","oldNum":16,"newNum":null,"text":"  })"},{"kind":"add","oldNum":null,"newNum":13,"text":"  it(\"returns the failure reason for a hard-declined charge\", async () => {"},{"kind":"add","oldNum":null,"newNum":14,"text":"    vi.spyOn(provider, \"charge\").mockResolvedValue({ status: \"card_declined\", id: \"ch_002\" })"},{"kind":"add","oldNum":null,"newNum":15,"text":"    const result = await chargeOrder({ id: \"o_2\", totalCents: 800, currency: \"USD\" } as any)"},{"kind":"add","oldNum":null,"newNum":16,"text":"    expect(result).toEqual({ ok: false, reason: \"card_declined\" })"},{"kind":"add","oldNum":null,"newNum":17,"text":"  })"},{"kind":"add","oldNum":null,"newNum":18,"text":""},{"kind":"add","oldNum":null,"newNum":19,"text":"  it(\"queues the charge and returns pending for a pending_review status\", async () => {"},{"kind":"add","oldNum":null,"newNum":20,"text":"    vi.spyOn(provider, \"charge\").mockResolvedValue({ status: \"pending_review\", id: \"ch_003\" })"},{"kind":"add","oldNum":null,"newNum":21,"text":"    const enqueueSpy = vi.spyOn(pendingQueue, \"enqueuePendingCharge\").mockResolvedValue(undefined as any)"},{"kind":"add","oldNum":null,"newNum":22,"text":"    const result = await chargeOrder({ id: \"o_3\", totalCents: 5400, currency: \"USD\" } as any)"},{"kind":"add","oldNum":null,"newNum":23,"text":"    expect(result).toEqual({ ok: false, reason: \"pending\", chargeId: \"ch_003\" })"},{"kind":"add","oldNum":null,"newNum":24,"text":"    expect(enqueueSpy).toHaveBeenCalledWith(\"o_3\", \"ch_003\")"},{"kind":"add","oldNum":null,"newNum":25,"text":"  })"},{"kind":"add","oldNum":null,"newNum":26,"text":""},{"kind":"add","oldNum":null,"newNum":27,"text":"  it(\"queues the charge for a requires_action status\", async () => {"},{"kind":"add","oldNum":null,"newNum":28,"text":"    vi.spyOn(provider, \"charge\").mockResolvedValue({ status: \"requires_action\", id: \"ch_004\" })"},{"kind":"add","oldNum":null,"newNum":29,"text":"    const enqueueSpy = vi.spyOn(pendingQueue, \"enqueuePendingCharge\").mockResolvedValue(undefined as any)"},{"kind":"add","oldNum":null,"newNum":30,"text":"    const result = await chargeOrder({ id: \"o_4\", totalCents: 1500, currency: \"USD\" } as any)"},{"kind":"add","oldNum":null,"newNum":31,"text":"    expect(result.ok).toBe(false)"},{"kind":"add","oldNum":null,"newNum":32,"text":"    expect(result.reason).toBe(\"pending\")"},{"kind":"add","oldNum":null,"newNum":33,"text":"    expect(enqueueSpy).toHaveBeenCalled()"},{"kind":"add","oldNum":null,"newNum":34,"text":"  })"},{"kind":"context","oldNum":17,"newNum":35,"text":"})"},{"kind":"del","oldNum":18,"newNum":null,"text":"-"},{"kind":"context","oldNum":19,"newNum":36,"text":""},{"kind":"context","oldNum":20,"newNum":37,"text":""}]}],"hasMatchingTestChange":true},{"id":"f_0004","path":"src/checkout/webhook.ts","oldPath":"src/checkout/webhook.ts","newPath":"src/checkout/webhook.ts","status":"modified","language":"typescript","additions":16,"deletions":0,"isBinary":false,"hunks":[{"id":"h_0001","header":"@@ -1,15 +1,35 @@","oldStart":1,"oldLines":15,"newStart":1,"newLines":35,"context":"","lines":[{"kind":"context","oldNum":1,"newNum":1,"text":"import type { Request, Response } from \"express\""},{"kind":"context","oldNum":2,"newNum":2,"text":"import { db } from \"../db\""},{"kind":"add","oldNum":null,"newNum":3,"text":"import { logger } from \"../obs/logger\""},{"kind":"context","oldNum":3,"newNum":4,"text":""},{"kind":"context","oldNum":4,"newNum":5,"text":"export async function paymentWebhook(req: Request, res: Response) {"},{"kind":"context","oldNum":5,"newNum":6,"text":"  const event = req.body as { type: string; data: { chargeId: string } }"},{"kind":"context","oldNum":6,"newNum":7,"text":"  if (event.type === \"charge.succeeded\") {"},{"kind":"add","oldNum":null,"newNum":8,"text":"    const pending = await db.pendingCharges.findByChargeId(event.data.chargeId)"},{"kind":"add","oldNum":null,"newNum":9,"text":"    if (pending) {"},{"kind":"add","oldNum":null,"newNum":10,"text":"      await db.orders.update(pending.order_id, { payment_state: \"paid\" })"},{"kind":"add","oldNum":null,"newNum":11,"text":"      await db.pendingCharges.deleteByChargeId(event.data.chargeId)"},{"kind":"add","oldNum":null,"newNum":12,"text":"      logger.info({ orderId: pending.order_id }, \"drained pending charge: paid\")"},{"kind":"add","oldNum":null,"newNum":13,"text":"    }"},{"kind":"context","oldNum":7,"newNum":14,"text":"    return res.status(200).end()"},{"kind":"context","oldNum":8,"newNum":15,"text":"  }"},{"kind":"add","oldNum":null,"newNum":16,"text":"  if (event.type === \"charge.failed\") {"},{"kind":"add","oldNum":null,"newNum":17,"text":"    const pending = await db.pendingCharges.findByChargeId(event.data.chargeId)"},{"kind":"add","oldNum":null,"newNum":18,"text":"    if (pending) {"},{"kind":"add","oldNum":null,"newNum":19,"text":"      await db.orders.update(pending.order_id, { payment_state: \"failed\" })"},{"kind":"add","oldNum":null,"newNum":20,"text":"      await db.pendingCharges.deleteByChargeId(event.data.chargeId)"},{"kind":"add","oldNum":null,"newNum":21,"text":"      logger.warn({ orderId: pending.order_id }, \"drained pending charge: failed\")"},{"kind":"add","oldNum":null,"newNum":22,"text":"    }"},{"kind":"add","oldNum":null,"newNum":23,"text":"    return res.status(200).end()"},{"kind":"add","oldNum":null,"newNum":24,"text":"  }"},{"kind":"context","oldNum":9,"newNum":25,"text":"  return res.status(204).end()"},{"kind":"context","oldNum":10,"newNum":26,"text":"}"}]}],"hasMatchingTestChange":false},{"id":"f_0005","path":"tests/checkout/webhook.test.ts","oldPath":"tests/checkout/webhook.test.ts","newPath":"tests/checkout/webhook.test.ts","status":"modified","language":"typescript","additions":21,"deletions":1,"isBinary":false,"hunks":[{"id":"h_0002","header":"@@ -1,8 +1,36 @@","oldStart":1,"oldLines":8,"newStart":1,"newLines":36,"context":"","lines":[{"kind":"context","oldNum":1,"newNum":1,"text":"import { describe, it, expect, vi } from \"vitest\""},{"kind":"context","oldNum":2,"newNum":2,"text":"import { paymentWebhook } from \"../../src/checkout/webhook\""},{"kind":"context","oldNum":3,"newNum":3,"text":"import { db } from \"../../src/db\""},{"kind":"context","oldNum":4,"newNum":4,"text":""},{"kind":"context","oldNum":5,"newNum":5,"text":"describe(\"paymentWebhook\", () => {"},{"kind":"context","oldNum":6,"newNum":6,"text":"  it(\"returns 204 for unknown event types\", async () => {"},{"kind":"context","oldNum":7,"newNum":7,"text":"    const res = mockRes()"},{"kind":"context","oldNum":8,"newNum":8,"text":"    await paymentWebhook({ body: { type: \"ping\" } } as any, res)"},{"kind":"context","oldNum":9,"newNum":9,"text":"    expect(res.statusCode).toBe(204)"},{"kind":"context","oldNum":10,"newNum":10,"text":"  })"},{"kind":"add","oldNum":null,"newNum":11,"text":""},{"kind":"add","oldNum":null,"newNum":12,"text":"  it(\"transitions the order to paid on charge.succeeded\", async () => {"},{"kind":"add","oldNum":null,"newNum":13,"text":"    vi.spyOn(db.pendingCharges, \"findByChargeId\").mockResolvedValue({ order_id: \"o_1\", charge_id: \"ch_1\" } as any)"},{"kind":"add","oldNum":null,"newNum":14,"text":"    const updateSpy = vi.spyOn(db.orders, \"update\").mockResolvedValue(undefined as any)"},{"kind":"add","oldNum":null,"newNum":15,"text":"    const deleteSpy = vi.spyOn(db.pendingCharges, \"deleteByChargeId\").mockResolvedValue(undefined as any)"},{"kind":"add","oldNum":null,"newNum":16,"text":"    const res = mockRes()"},{"kind":"add","oldNum":null,"newNum":17,"text":"    await paymentWebhook({ body: { type: \"charge.succeeded\", data: { chargeId: \"ch_1\" } } } as any, res)"},{"kind":"add","oldNum":null,"newNum":18,"text":"    expect(updateSpy).toHaveBeenCalledWith(\"o_1\", { payment_state: \"paid\" })"},{"kind":"add","oldNum":null,"newNum":19,"text":"    expect(deleteSpy).toHaveBeenCalledWith(\"ch_1\")"},{"kind":"add","oldNum":null,"newNum":20,"text":"    expect(res.statusCode).toBe(200)"},{"kind":"add","oldNum":null,"newNum":21,"text":"  })"},{"kind":"add","oldNum":null,"newNum":22,"text":""},{"kind":"add","oldNum":null,"newNum":23,"text":"  it(\"transitions the order to failed on charge.failed\", async () => {"},{"kind":"add","oldNum":null,"newNum":24,"text":"    vi.spyOn(db.pendingCharges, \"findByChargeId\").mockResolvedValue({ order_id: \"o_2\", charge_id: \"ch_2\" } as any)"},{"kind":"add","oldNum":null,"newNum":25,"text":"    const updateSpy = vi.spyOn(db.orders, \"update\").mockResolvedValue(undefined as any)"},{"kind":"add","oldNum":null,"newNum":26,"text":"    vi.spyOn(db.pendingCharges, \"deleteByChargeId\").mockResolvedValue(undefined as any)"},{"kind":"add","oldNum":null,"newNum":27,"text":"    const res = mockRes()"},{"kind":"add","oldNum":null,"newNum":28,"text":"    await paymentWebhook({ body: { type: \"charge.failed\", data: { chargeId: \"ch_2\" } } } as any, res)"},{"kind":"add","oldNum":null,"newNum":29,"text":"    expect(updateSpy).toHaveBeenCalledWith(\"o_2\", { payment_state: \"failed\" })"},{"kind":"add","oldNum":null,"newNum":30,"text":"    expect(res.statusCode).toBe(200)"},{"kind":"add","oldNum":null,"newNum":31,"text":"  })"},{"kind":"context","oldNum":11,"newNum":32,"text":"})"},{"kind":"context","oldNum":12,"newNum":33,"text":""},{"kind":"context","oldNum":13,"newNum":34,"text":"function mockRes() {"},{"kind":"context","oldNum":14,"newNum":35,"text":"  const res: any = { statusCode: 0 }"},{"kind":"context","oldNum":15,"newNum":36,"text":"  res.status = (c: number) => { res.statusCode = c; return res }"},{"kind":"context","oldNum":16,"newNum":37,"text":"  res.end = () => res"},{"kind":"context","oldNum":17,"newNum":38,"text":"  res.json = () => res"},{"kind":"context","oldNum":18,"newNum":39,"text":"  return res"},{"kind":"context","oldNum":19,"newNum":40,"text":"}"},{"kind":"del","oldNum":20,"newNum":null,"text":"-"},{"kind":"context","oldNum":21,"newNum":41,"text":""},{"kind":"context","oldNum":22,"newNum":42,"text":""}]}],"hasMatchingTestChange":true},{"id":"f_0006","path":"migrations/0051_pending_charges.sql","oldPath":"/dev/null","newPath":"migrations/0051_pending_charges.sql","status":"added","language":"sql","additions":14,"deletions":1,"isBinary":false,"hunks":[{"id":"h_0001","header":"@@ -0,0 +1,14 @@","oldStart":0,"oldLines":0,"newStart":1,"newLines":14,"context":"","lines":[{"kind":"add","oldNum":null,"newNum":1,"text":"-- 0051_pending_charges"},{"kind":"add","oldNum":null,"newNum":2,"text":"-- Adds pending_charges table for charges awaiting external resolution."},{"kind":"add","oldNum":null,"newNum":3,"text":""},{"kind":"add","oldNum":null,"newNum":4,"text":"CREATE TABLE pending_charges ("},{"kind":"add","oldNum":null,"newNum":5,"text":"  id          BIGSERIAL PRIMARY KEY,"},{"kind":"add","oldNum":null,"newNum":6,"text":"  order_id    TEXT      NOT NULL,"},{"kind":"add","oldNum":null,"newNum":7,"text":"  charge_id   TEXT      NOT NULL UNIQUE,"},{"kind":"add","oldNum":null,"newNum":8,"text":"  status      TEXT      NOT NULL,"},{"kind":"add","oldNum":null,"newNum":9,"text":"  enqueued_at TIMESTAMPTZ NOT NULL DEFAULT NOW()"},{"kind":"add","oldNum":null,"newNum":10,"text":");"},{"kind":"add","oldNum":null,"newNum":11,"text":""},{"kind":"add","oldNum":null,"newNum":12,"text":"CREATE INDEX idx_pending_charges_order_id ON pending_charges (order_id);"},{"kind":"add","oldNum":null,"newNum":13,"text":"CREATE INDEX idx_pending_charges_status   ON pending_charges (status);"},{"kind":"add","oldNum":null,"newNum":14,"text":""},{"kind":"del","oldNum":0,"newNum":null,"text":"-"},{"kind":"context","oldNum":1,"newNum":15,"text":""}]}],"hasMatchingTestChange":false}],"totals":{"files":6,"additions":103,"deletions":13,"hunks":6,"byStatus":{"modified":4,"added":2,"deleted":0,"renamed":0},"byLanguage":{"typescript":5,"sql":1},"commits":3},"sourceFile":"input.patch","sizeBytes":10591,"format":"pr-review"};</script>
+<div class="dev-shell evidence-workbench">
+
+  <!-- FINDING BAR -->
+  <div class="finding-bar terminal-prompt prompt-line" id="finding-bar">
+    <div class="finding-bar__top">
+      <span class="finding-bar__badge">PR Review</span>
+      <div>
+        <div class="finding-bar__title" id="fb-title">—</div>
+        <div class="finding-bar__author" id="fb-author"></div>
+      </div>
+    </div>
+    <div class="finding-bar__meta" id="fb-meta"></div>
+    <div class="finding-bar__body" id="fb-body"></div>
+  </div>
+
+  <!-- FOOTPRINT -->
+  <div class="footprint-row" id="footprint-row"></div>
+
+  <!-- REVIEW CHECKLIST -->
+  <div class="review-checklist risk-checklist terminal-pane" id="review-checklist">
+    <div class="checklist-heading">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+      Review checklist
+    </div>
+    <div id="checklist-items"></div>
+  </div>
+
+  <!-- RISK HOTSPOTS -->
+  <div class="risk-hotspots terminal-pane" id="risk-hotspots-section">
+    <div class="section-heading">Risk hotspots</div>
+    <div id="hotspot-cards"></div>
+  </div>
+
+  <!-- COMMITS -->
+  <div class="section-heading">Commits</div>
+  <div class="commit-timeline" id="commit-timeline"></div>
+
+  <!-- FILE RISK MAP -->
+  <div class="file-risk-map" id="file-risk-map">
+    <div class="section-heading">Risk map by file</div>
+    <div id="file-rows"></div>
+  </div>
+
+  <!-- COPY HANDOFF -->
+  <div class="copy-handoff handoff-block terminal-pane">
+    <div class="copy-handoff__header">
+      <div class="copy-handoff__title">Copy summary</div>
+      <button class="btn-copy" id="copy-btn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        Copy summary
+      </button>
+    </div>
+    <div class="copy-handoff__preview" id="summary-preview"></div>
+  </div>
+
+  <!-- RAW DIFF -->
+  <div class="raw-artifact artifact-navigator terminal-pane" id="raw-artifact-section">
+    <button class="raw-artifact__toggle" id="raw-toggle">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+      Raw diff
+      <span id="raw-stats" style="font-size:12px;font-weight:400;color:var(--fg-muted);margin-left:4px"></span>
+      <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+    </button>
+    <div class="raw-artifact__body" id="raw-body">
+      <div style="padding:var(--space-md) var(--space-xl);border-bottom:1px solid var(--border)">
+        <div class="search-bar">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="text" id="diff-search" placeholder="Search diff lines…" autocomplete="off">
+          <span class="search-count" id="search-count"></span>
+        </div>
+      </div>
+      <div id="diff-content"></div>
+    </div>
+  </div>
+
+  <footer class="page-footer">
+    Generated locally — your diff / log / trace never left your machine. The full artifact is embedded in this HTML and rendered in your browser.<br>
+    The analysis above is a hypothesis from a sample, not a verdict; verify against the runtime before acting on it.
+  </footer>
+</div>
+
+<script>/* html-anything: truncated generated script disabled so this checked-in example remains valid HTML.
+
+(function(){
+  // ---- Helpers ----
+  function esc(s){
+    if(s==null)return '';
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function relDate(dateStr){
+    if(!dateStr)return '';
+    const d=new Date(dateStr);
+    if(isNaN(d))return dateStr;
+    const diff=Date.now()-d.getTime();
+    const h=Math.floor(diff/3600000);
+    if(h<1)return 'just now';
+    if(h<24)return h+'h ago';
+    const day=Math.floor(h/24);
+    if(day<7)return day+'d ago';
+    return d.toLocaleDateString(undefined,{month:'short',day:'numeric'});
+  }
+
+  const D = typeof DATA !== 'undefined' ? DATA : {};
+  const pr = D.pr || {};
+  const commits = D.commits || [];
+  const files = D.files || [];
+  const totals = D.totals || {};
+
+  // ---- Finding bar ----
+  document.getElementById('fb-title').textContent = pr.title || 'Pull Request';
+  if(pr.author){
+    document.getElementById('fb-author').textContent = pr.author;
+  }
+  const meta = document.getElementById('fb-meta');
+  const chips = [
+    {label: (totals.commits||0)+' commits', cls:''},
+    {label: (totals.files||0)+' files', cls:''},
+    {label: '+'+(totals.additions||0), cls:'green'},
+    {label: '−'+(totals.deletions||0), cls:'red'},
+    {label: (totals.hunks||0)+' hunks', cls:'blue'},
+  ];
+  if(pr.branch||pr.base){
+    const br = [pr.branch,pr.base].filter(Boolean).join(' → ');
+    chips.push({label:br,cls:''});
+  }
+  chips.forEach(c=>{
+    const span=document.createElement('span');
+    span.className='meta-chip'+(c.cls?' '+c.cls:'');
+    span.textContent=c.label;
+    meta.appendChild(span);
+  });
+
+  const bodyEl = document.getElementById('fb-body');
+  // Shape hypothesis
+  const shape = inferShape(totals, files, commits);
+  bodyEl.innerHTML = `<span class="hypothesis-chip">Hypothesis</span>${esc(shape)}`;
+  if(pr.body && pr.body.trim() && pr.body.trim().length > 10){
+    const p = document.createElement('p');
+    p.style.marginTop='8px';
+    p.style.fontSize='13.5px';
+    p.textContent = pr.body.slice(0,400)+(pr.body.length>400?'…':'');
+    bodyEl.appendChild(p);
+  }
+
+  function inferShape(t,f,c){
+    const files=t.files||0;
+    const adds=t.additions||0;
+    const dels=t.deletions||0;
+    const ratio=dels>0?(adds/dels).toFixed(1):'new';
+    if(files<=3 && adds<60) return `Appears to be a focused, tight change (${files} files, +${adds}/−${dels}) — likely a targeted fix rather than a refactor.`;
+    if(files>=8 || adds>300) return `Appears to be a sprawling change across ${files} files (+${adds}/−${dels}) — may warrant careful scoping review.`;
+    return `Looks like a feature drop across ${files} files (+${adds}/−${dels}, add/del ratio ${ratio}) — a two-commit pipeline paired with a migration suggests coordinated delivery.`;
+  }
+
+  // ---- Footprint ----
+  const fp = document.getElementById('footprint-row');
+  [
+    {num:totals.commits||0, label:'Commits'},
+    {num:totals.files||0, label:'Files'},
+    {num:'+'+(totals.additions||0), label:'Additions'},
+    {num:'−'+(totals.deletions||0), label:'Deletions'},
+    {num:totals.hunks||0, label:'Hunks'},
+  ].forEach(item=>{
+    const card=document.createElement('div');
+    card.className='footprint-card';
+    card.innerHTML=`<span class="footprint-card__num">${esc(String(item.num))}</span><span class="footprint-card__label">${esc(item.label)}</span>`;
+    fp.appendChild(card);
+  });
+
+  // ---- Review checklist ----
+  const checklistData = buildChecklist(files, commits, pr);
+  const clContainer = document.getElementById('checklist-items');
+  checklistData.forEach((item,i)=>{
+    const row = document.createElement('div');
+    row.className='checklist-item';
+    row.style.animationDelay=(60+i*40)+'ms';
+    row.innerHTML=`
+      <div class="checklist-cb" tabindex="0" role="checkbox" aria-checked="false"></div>
+      <div class="checklist-text">${item.html}</div>
+      <span class="checklist-sev ${item.sev==='high'?'sev-high':item.sev==='med'?'sev-med':'sev-low'}">${item.sev}</span>
+    `;
+    const cb=row.querySelector('.checklist-cb');
+    function toggle(){
+      const checked=!cb.classList.contains('checked');
+      cb.classList.toggle('checked',checked);
+      cb.setAttribute('aria-checked',checked);
+    }
+    cb.addEventListener('click',toggle);
+    cb.addEventListener('keydown',e=>{if(e.key===' '||e.key==='Enter'){e.preventDefault();toggle();}});
+    clContainer.appendChild(row);
+  });
+
+  function buildChecklist(files, commits, pr){
+    const items=[];
+    // charge.ts — fail-closed logic
+    const chargeFile = files.find(f=>f.path && f.path.includes('charge.ts') && !f.path.includes('test'));
+    if(chargeFile){
+      items.push({
+        html:'Confirm <code>chargeOrder</code> in <code>src/checkout/charge.ts</code> correctly handles every non-<code>succeeded</code> status — particularly any status values the provider may add in future (open-set enum risk).',
+        sev:'high'
+      });
+      items.push({
+        html:'Verify the <code>pending_review</code> and <code>requires_action</code> paths in <code>charge.ts</code> do NOT advance the order to a shipped/confirmed state — the fail-closed guarantee depends on this.',
+        sev:'high'
+      });
+    }
+    // pendingQueue.ts
+    const queueFile = files.find(f=>f.path && f.path.includes('pendingQueue'));
+    if(queueFile){
+      items.push({
+        html:'Check that <code>enqueuePendingCharge</code> in <code>pendingQueue.ts</code> is idempotent — if called twice for the same <code>chargeId</code>, a duplicate row should not be silently inserted.',
+        sev:'high'
+      });
+    }
+    // webhook
+    const webhookFile = files.find(f=>f.path && f.path.includes('webhook'));
+    if(webhookFile){
+      items.push({
+        html:'Confirm the webhook handler in <code>src/checkout/webhook.ts</code> atomically transitions <code>payment_state</code> and deletes the <code>pending_charges</code> row — a crash between the two steps would leave an order stuck.',
+        sev:'high'
+      });
+      items.push({
+        html:'Verify the webhook handler is idempotent for repeated <code>charge.succeeded</code> events — payment providers may deliver the same webhook more than once.',
+        sev:'high'
+      });
+    }
+    // migration
+    const migFile = files.find(f=>f.language==='sql' || (f.path && f.path.includes('migration')));
+    if(migFile){
+      items.push({
+        html:`Confirm the migration in <code>${esc(migFile.path)}</code> can run against a live (populated) table without locking — check for table-level locks on <code>ALTER TABLE</code> if orders table is high-traffic.`,
+        sev:'high'
+      });
+      items.push({
+        html:`Verify the migration in <code>${esc(migFile.path)}</code> is rollback-safe: if a rollback is needed mid-deploy, orders in <code>pendingChargeQueue</code> must not be orphaned.`,
+        sev:'med'
+      });
+    }
+    // test coverage
+    const noTestFiles = files.filter(f=>!f.path.includes('test') && !f.path.includes('spec') && f.hasMatchingTestChange===false);
+    noTestFiles.forEach(f=>{
+      items.push({
+        html:`No matching test file change detected alongside <code>${esc(f.path)}</code> — confirm adequate test coverage exists, or ask the author to add/reference tests.`,
+        sev:'med'
+      });
+    });
+    // generic safety net items
+    items.push({
+      html:'Confirm logging statements in the new paths do not inadvertently emit PII (order IDs are fine; card details are not).',
+      sev:'low'
+    });
+    items.push({
+      html:'Verify the <code>pendingCharges</code> table has an appropriate retention / cleanup strategy for rows that never receive a webhook (e.g. provider outage leaves rows orphaned indefinitely).',
+      sev:'med'
+    });
+    return items.slice(0,10);
+  }
+
+  // ---- Risk hotspots ----
+  const hotspotData = buildHotspots(files);
+  const hcContainer = document.getElementById('hotspot-cards');
+  hotspotData.forEach((h,i)=>{
+    const card=document.createElement('div');
+    card.className='hotspot-card';
+    card.style.animationDelay=(80+i*60)+'ms';
+    card.innerHTML=`
+      <div class="hotspot-card__top">
+        <span class="hotspot-card__path">${esc(h.path)}</span>
+        <span class="hypothesis-chip">Hypothesis</span>
+        <span class="checklist-sev ${h.sev==='high'?'sev-high':h.sev==='med'?'sev-med':'sev-low'}">${h.sev}</span>
+      </div>
+      <p class="hotspot-card__why">${h.why}</p>
+      <span class="hotspot-card__link">→ jump to diff</span>
+    `;
+    card.addEventListener('click',()=>{
+      openRawAndJump(h.fileId);
+    });
+    hcContainer.appendChild(card);
+  });
+
+  function buildHotspots(files){
+    const hs=[];
+    files.forEach(f=>{
+      if(f.path.includes('charge.ts') && !f.path.includes('test')){
+        hs.push({path:f.path,fileId:f.id,sev:'high',why:'The core payment dispatch logic; the new branching on `pending_review` and `requires_action` is the primary fail-closed gate — any gap here may result in orders shipping without settled funds.'});
+      } else if(f.path.includes('webhook')){
+        hs.push({path:f.path,fileId:f.id,sev:'high',why:'The webhook handler now drives the final order state transition and deletes the queue row; a partial failure between those two operations may leave an order permanently stuck in pending.'});
+      } else if(f.language==='sql' || f.path.includes('migration')){
+        hs.push({path:f.path,fileId:f.id,sev:'high',why:'Schema migration adding `pending_charges` table — needs to be verified for liveness on a populated production DB and rollback safety under a failed deploy.'});
+      } else if(f.path.includes('pendingQueue')){
+        hs.push({path:f.path,fileId:f.id,sev:'med',why:'New module with no matching test change detected; idempotency on duplicate enqueue calls is unverified in the visible diff.'});
+      } else if(f.additions+f.deletions > 20){
+        hs.push({path:f.path,fileId:f.id,sev:'med',why:`High-churn file (+${f.additions}/−${f.deletions}) worth a close read to confirm no unintended side-effects were introduced.`});
+      }
+    });
+    return hs.slice(0,6);
+  }
+
+  // ---- Commits ----
+  const tlContainer = document.getElementById('commit-timeline');
+  if(commits.length===0){
+    const p=document.createElement('p');
+    p.style.color='var(--fg-muted)';
+    p.style.fontSize='14px';
+    p.textContent='This patch contains a single commit with no parsed metadata.';
+    tlContainer.appendChild(p);
+  } else {
+    commits.forEach((c,i)=>{
+      const node=document.createElement('div');
+      node.className='commit-node';
+      node.id='commit-node-'+c.id;
+      node.style.animationDelay=(80+i*60)+'ms';
+      const fileStr=c.fileCount!=null?`${c.fileCount} file${c.fileCount!==1?'s':''}`:'' ;
+      const addStr=c.additions!=null?`+${c.additions}`:'';
+      const delStr=c.deletions!=null?`−${c.deletions}`:'';
+      const preview=c.bodyPreview&&c.bodyPreview.trim()?`<p class="commit-card__body">${esc(c.bodyPreview.slice(0,220)+(c.bodyPreview.length>220?'…':''))}</p>`:'';
+      node.innerHTML=`
+        <div class="commit-dot"></div>
+        <div class="commit-card" data-commit-id="${esc(c.id)}">
+          <div class="commit-card__top">
+            <span class="commit-hash">${esc(c.shortHash||c.hash||'')}</span>
+            ${c.authorName?`<span class="commit-author">${esc(c.authorName)}</span>`:''}
+            ${c.date?`<span class="commit-date">${relDate(c.date)}</span>`:''}
+          </div>
+          <div class="commit-card__subject">${esc(c.subject||'')}</div>
+          ${preview}
+          <div class="commit-chips">
+            ${fileStr?`<span class="meta-chip">${esc(fileStr)}</span>`:''}
+            ${addStr?`<span class="meta-chip green">${esc(addStr)}</span>`:''}
+            ${delStr?`<span class="meta-chip red">${esc(delStr)}</span>`:''}
+          </div>
+        </div>
+      `;
+      node.querySelector('.commit-card').addEventListener('click',()=>{
+        openRawAndJumpCommit(c.id);
+      });
+      tlContainer.appendChild(node);
+    });
+  }
+
+  // ---- File risk map ----
+  const maxDelta = Math.max(...files.map(f=>(f.additions||0)+(f.deletions||0)),1);
+  const frContainer = document.getElementById('file-rows');
+  files.forEach((f,i)=>{
+    const row=document.createElement('div');
+    row.className='file-row';
+    row.id='file-row-'+f.id;
+    row.style.animationDelay=(50+i*40)+'ms';
+    const delta=(f.additions||0)+(f.deletions||0);
+    const pct=Math.round((delta/maxDelta)*100);
+    const statusCls='status-'+(f.status||'modified');
+    const testBadge=f.hasMatchingTestChange===true
+      ?`<span class="file-row__test test-yes">tests ✓</span>`
+      :f.hasMatchingTestChange===false
+        ?`<span class="file-row__test test-no">no tests</span>`
+        :'';
+    const riskNote = fileRiskNote(f);
+    row.innerHTML=`
+      <div>
+        <div class="file-row__path">${esc(f.path)}</div>
+        <div class="delta-bar"><div class="delta-bar__fill" style="width:${pct}%"></div></div>
+        <div class="file-row__detail">${riskNote}</div>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
+        <span class="file-row__status ${statusCls}">${esc(f.status||'')}</span>
+        ${testBadge}
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px">
+        <span class="file-row__adds">+${f.additions||0}</span>
+        <span class="file-row__dels">−${f.deletions||0}</span>
+      </div>
+    `;
+    row.addEventListener('click',()=>openRawAndJump(f.id));
+    frContainer.appendChild(row);
+  });
+
+  function fileRiskNote(f){
+    if(f.path.includes('charge.ts') && !f.path.includes('test'))
+      return 'Payment dispatch boundary — confirm every provider status code is handled explicitly and no status falls through silently.';
+    if(f.path.includes('pendingQueue'))
+      return 'New queue module — reviewers should check idempotency and verify the DB insert is wrapped in error handling.';
+    if(f.path.includes('webhook'))
+      return 'Webhook handler transitions order state and deletes queue rows — confirm atomicity and idempotency for repeated event delivery.';
+    if(f.language==='sql' || f.path.includes('migration'))
+      return 'Schema migration — verify backward compatibility with running services and confirm no table-level locks on high-traffic tables.';
+    if(f.path.includes('test')||f.path.includes('spec'))
+      return 'Test file — confirm new cases cover the pending/queued path and the hard-decline path independently.';
+    return 'Review for unintended side-effects alongside the primary changes.';
+  }
+
+  // ---- Raw diff ----
+  document.getElementById('raw-stats').textContent = `(${totals.files||0} files, ${totals.commits||0} commits)`;
+  const rawToggle=document.getElementById('raw-toggle');
+  const rawBody=document.getElementById('raw-body');
+  rawToggle.addEventListener('click',()=>{
+    const open=rawBody.classList.toggle('open');
+    rawToggle.classList.toggle('open',open);
+    if(open && !rawBody.dataset.rendered){
+      renderDiff();
+      rawBody.dataset.rendered='1';
+    }
+  });
+
+  // Group files by commit
+  function getCommitForFile(fileId){
+    for(const c of commits){
+      if(c.fileIds && c.fileIds.includes(fileId)) return c;
+    }
+    return null;
+  }
+
+  function renderDiff(){
+    const diffContent=document.getElementById('diff-content');
+    diffContent.innerHTML='';
+
+    // Build commit → files map
+    const commitFileMap = new Map();
+    const unassigned = [];
+    files.forEach(f=>{
+      let found=false;
+      commits.forEach(c=>{
+        if(c.fileIds && c.fileIds.includes(f.id)){
+          if(!commitFileMap.has(c.id)) commitFileMap.set(c.id,[]);
+          commitFileMap.get(c.id).push(f);
+          found=true;
+        }
+      });
+      if(!found) unassigned.push(f);
+    });
+
+    function renderFileDiff(f, container){
+      const fd=document.createElement('div');
+      fd.className='file-diff';
+      fd.id='diff-file-'+f.id;
+      const hdr=document.createElement('div');
+      hdr.className='file-diff__header';
+      hdr.innerHTML=`<span class="file-diff__path">${esc(f.path)}</span><span style="margin-left:auto">${esc(f.status)}</span><span class="meta-chip green" style="margin-left:8px">+${f.additions||0}</span><span class="meta-chip red">−${f.deletions||0}</span>`;
+      const body=document.createElement('div');
+      body.style.display='block';
+      hdr.addEventListener('click',()=>{body.style.display=body.style.display==='none'?'block':'none';});
+      fd.appendChild(hdr);
+      fd.appendChild(body);
+
+      (f.hunks||[]).forEach(h=>{
+        const hunkEl=document.createElement('div');
+        hunkEl.className='hunk';
+        hunkEl.id='hunk-'+h.id;
+        const hunkHdr=document.createElement('div');
+        hunkHdr.className='hunk-header';
+        hunkHdr.innerHTML=`<span>${esc(h.header)}</span><button class="copy-hunk-btn" data-hunk-id="${esc(h.id)}">Copy hunk</button>`;
+        hunkHdr.querySelector('.copy-hunk-btn').addEventListener('click',e=>{
+          e.stopPropagation();
+          const lines=(h.sampleLines||[]).map(l=>(l.kind==='add'?'+':l.kind==='del'?'-':' ')+l.text).join('\n');
+          copyText(h.header+'\n'+lines);
+          const btn=hunkHdr.querySelector('.copy-hunk-btn');
+          btn.textContent='Copied!';
+          setTimeout(()=>{btn.textContent='Copy hunk';},1500);
+        });
+        const linesEl=document.createElement('div');
+        linesEl.className='diff-lines';
+        linesEl.dataset.hunkId=h.id;
+        (h.sampleLines||[]).forEach(line=>{
+          linesEl.appendChild(makeDiffLine(line));
+        });
+        if(h.truncated){
+          const tr=document.createElement('div');
+          tr.style.cssText='padding:4px 16px;font-size:11px;color:var(--fg-muted);font-family:var(--font-mono);background:var(--surface-container)';
+          tr.textContent=`… hunk truncated (${h.totalLines} lines total)`;
+          linesEl.appendChild(tr);
+        }
+        hunkEl.appendChild(hunkHdr);
+        hunkEl.appendChild(linesEl);
+        body.appendChild(hunkEl);
+      });
+      container.appendChild(fd);
+    }
+
+    if(commits.length>0){
+      commits.forEach(c=>{
+        const sec=document.createElement('div');
+        sec.className='commit-section';
+        sec.id='diff-commit-'+c.id;
+        const secHdr=document.createElement('div');
+        secHdr.className='commit-section__header';
+        secHdr.innerHTML=`<span class="commit-section__hash">${esc(c.shortHash||c.hash||'')}</span><span class="commit-section__subject">${esc(c.subject||'')}</span>`;
+        const secBody=document.createElement('div');
+        secBody.className='commit-section__body';
+        secHdr.addEventListener('click',()=>{
+          secBody.classList.toggle('open');
+        });
+        const cFiles=commitFileMap.get(c.id)||[];
+        cFiles.forEach(f=>renderFileDiff(f,secBody));
+        sec.appendChild(secHdr);
+        sec.appendChild(secBody);
+        diffContent.appendChild(sec);
+      });
+    }
+    // Unassigned files
+    if(unassigned.length>0){
+      const sec=document.createElement('div');
+      sec.className='commit-section';
+      const secHdr=document.createElement('div');
+      secHdr.className='commit-section__header';
+      secHdr.innerHTML=`<span class="commit-section__subject">Additional files</span>`;
+      const secBody=document.createElement('div');
+      secBody.className='commit-section__body';
+      secHdr.addEventListener('click',()=>secBody.classList.toggle('open'));
+      unassigned.forEach(f=>renderFileDiff(f,secBody));
+      sec.appendChild(secHdr);
+      sec.appendChild(secBody);
+      diffContent.appendChild(sec);
+    }
+  }
+
+  function makeDiffLine(line){
+    const el=document.createElement('div');
+    el.className='diff-line '+(line.kind==='add'?'add':line.kind==='del'?'del':'ctx');
+    const oldN=document.createElement('span');
+    oldN.className='line-num';
+    oldN.textContent=line.oldNum!=null?line.
+*/
+</script>
+</body>
+</html>

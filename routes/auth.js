@@ -746,7 +746,7 @@ router.post('/forgot-password', async (req, res) => {
     const link = `${process.env.APP_URL || 'http://localhost:5173'}/reset-password?token=${token}`
     const html = `<p>Reset your FinSurf password: <a href="${link}">${link}</a></p><p>Expires in 1 hour.</p>`
     const sent = await sendEmail({ to: lEmail, subject: 'FinSurf — Password reset', html })
-    if (!sent) console.log(`[AUTH] Password reset link for ${email}: ${link}`)
+    if (!sent) console.log(`[AUTH] Password reset email not sent (no SMTP); token issued for user ${userId}`)
     return res.json(ok)
   } catch (err) { return res.json(ok) }
 })

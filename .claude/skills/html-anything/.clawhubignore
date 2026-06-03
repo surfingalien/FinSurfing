@@ -1,0 +1,13 @@
+# ClawHub publishes the agent skill bundle, not this whole repo.
+# Keep the public bundle lean:
+#   - SKILL.md contains the runnable agent instructions.
+#   - prompts/ contains source/style guidance plus canonical style references.
+#
+# Exclude repo docs/screenshots/examples from the published skill package.
+
+*
+
+!SKILL.md
+!prompts/
+!prompts/**
+!.clawhubignore

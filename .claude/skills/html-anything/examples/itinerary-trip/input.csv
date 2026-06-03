@@ -1,0 +1,36 @@
+Date,Day,Time,Location,City,Country,Type,Title,Notes,Cost,Currency,Hours
+2026-05-04,1,06:30,SFO Airport,San Francisco,USA,transport,Lyft to SFO,Pre-booked Lyft from apartment,42,USD,0.5
+2026-05-04,1,09:15,SFO Airport,San Francisco,USA,flight,UA837 SFO → NRT,Window 27A; ~11h flight; remember to fill in landing card,1450,USD,11.0
+2026-05-05,2,15:30,Narita Airport,Narita,Japan,transport,Narita Express to Shinjuku,Reserved seat car 4; ~80 min direct,30,USD,1.5
+2026-05-05,2,17:30,Hotel Gracery Shinjuku,Tokyo,Japan,hotel,Check-in Hotel Gracery,2 nights; Godzilla view room,420,USD,1.0
+2026-05-05,2,19:30,Omoide Yokocho,Tokyo,Japan,restaurant,Yakitori at Albatross,Walkable from hotel; cash only,55,USD,1.5
+2026-05-06,3,07:00,Tsukiji Outer Market,Tokyo,Japan,activity,Sushi breakfast walk,Saturday morning crowds — go early; coffee at Turret Coffee after,40,USD,2.0
+2026-05-06,3,11:00,Tokyo National Museum,Tokyo,Japan,activity,Honkan + Heiseikan,Permanent collection; allow 2.5h,16,USD,2.5
+2026-05-06,3,15:00,Yanaka,Tokyo,Japan,activity,Yanaka old town walk,Stroll through alleys; cat shrines; bakery break,20,USD,2.0
+2026-05-06,3,18:30,Sushi Saito (no — fully booked),Tokyo,Japan,restaurant,FALLBACK: Sushi Hashiguchi,Confirmed via concierge; 18:30 seating,210,USD,2.0
+2026-05-06,3,19:00,Robot Restaurant,Tokyo,Japan,activity,Robot Restaurant Shinjuku,Booked months ago — collides with Sushi Hashiguchi seating; pick one,80,USD,2.0
+2026-05-07,4,08:00,Tokyo Station,Tokyo,Japan,transport,Shinkansen to Kyoto,Nozomi 213; reserved car 3; ~2h15,140,USD,2.25
+2026-05-07,4,10:45,Tofuku-ji,Kyoto,Japan,activity,Tofuku-ji temple + zen garden,Drop bags at hotel first; temple opens 09:00,8,USD,1.5
+2026-05-07,4,14:00,Hotel Kanra Kyoto,Kyoto,Japan,hotel,Check-in Hotel Kanra,3 nights; ryokan-style room with onsen tub,720,USD,1.0
+2026-05-07,4,15:30,Fushimi Inari Shrine,Kyoto,Japan,activity,Fushimi Inari at golden hour,Climb to Yotsutsuji viewpoint; ~2h round trip,0,USD,2.5
+2026-05-07,4,18:30,Tofuku-ji onsen,Kyoto,Japan,activity,Public onsen at Tofuku-ji,90 min reserved time; collides with 19:00 dinner — move dinner to 20:30 or skip onsen,28,USD,1.5
+2026-05-07,4,19:00,Pontocho,Kyoto,Japan,restaurant,Kawayuka dinner along Kamogawa,Riverbank seating; reservations under last name,135,USD,2.0
+2026-05-08,5,08:00,Arashiyama,Kyoto,Japan,activity,Bamboo grove at sunrise,Beat the crowds — be there 07:30 if possible,0,USD,1.5
+2026-05-08,5,10:00,Tenryu-ji,Kyoto,Japan,activity,Tenryu-ji temple + sogenchi garden,Walking distance from bamboo grove,7,USD,1.5
+2026-05-08,5,12:00,Sagano Yu,Kyoto,Japan,restaurant,Lunch — converted bathhouse,No reservations; ~30 min wait possible,28,USD,1.5
+2026-05-08,5,14:30,Nishiki Market,Kyoto,Japan,activity,Nishiki market food crawl,~30 stalls; pickle shop; tako-tamago,35,USD,2.0
+2026-05-08,5,18:00,Gion,Kyoto,Japan,activity,Gion evening walk,Geisha district; Hanamikoji-dori,0,USD,1.5
+2026-05-08,5,19:30,Kikunoi,Kyoto,Japan,restaurant,Kaiseki dinner at Kikunoi Honten,Booked 2 months ago; 8-course; dress jacket,420,USD,3.0
+2026-05-09,6,09:00,Kinkaku-ji,Kyoto,Japan,activity,Golden Pavilion,30 min walk through grounds; small entrance fee,5,USD,1.0
+2026-05-09,6,11:00,Ryoan-ji,Kyoto,Japan,activity,Ryoan-ji rock garden,Iconic zen garden; sit and observe,5,USD,1.0
+2026-05-09,6,13:00,Hokuriku Coffee,Kyoto,Japan,restaurant,Lunch at Hokuriku Coffee,Light lunch + cake,18,USD,1.5
+2026-05-09,6,16:00,Philosopher's Path,Kyoto,Japan,activity,Philosopher's Path walk,~2 km path along canal; cherry trees,0,USD,2.0
+2026-05-09,6,19:00,Hotel Kanra Kyoto,Kyoto,Japan,restaurant,Kanra in-house kaiseki,Lighter than Kikunoi; reserved,180,USD,2.0
+2026-05-10,7,07:00,Hotel Kanra Kyoto,Kyoto,Japan,hotel,Check-out + leave luggage,Pick up at 18:00 before train,0,USD,0.5
+2026-05-10,7,09:00,Nara Park,Nara,Japan,activity,Day trip to Nara,JR train ~45 min from Kyoto Station,18,USD,1.5
+2026-05-10,7,10:30,Todai-ji,Nara,Japan,activity,Todai-ji daibutsu,Allow 2h with grounds,7,USD,2.0
+2026-05-10,7,13:00,Yoshikawa,Nara,Japan,restaurant,Lunch — kakinoha-zushi,Persimmon-leaf wrapped sushi specialty,32,USD,1.5
+2026-05-10,7,18:30,Kyoto Station,Kyoto,Japan,transport,Shinkansen back to Tokyo,Nozomi 224; ~2h15,140,USD,2.25
+2026-05-10,7,21:30,Narita Airport,Narita,Japan,transport,Narita Express to airport hotel,Last train; 90 min direct,30,USD,1.5
+2026-05-10,7,22:30,Narita Airport Rest House,Narita,Japan,hotel,Airport hotel — 1 night,Early flight tomorrow,160,USD,8.0
+2026-05-11,8,07:00,Narita Airport,Narita,Japan,flight,UA838 NRT → SFO,Cross dateline; arrive same calendar day; ~10h,1450,USD,10.0

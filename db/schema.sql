@@ -377,3 +377,33 @@ CREATE INDEX IF NOT EXISTS idx_research_notes_symbol  ON research_notes(user_id,
 CREATE TRIGGER research_notes_updated_at
   BEFORE UPDATE ON research_notes
   FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+-- ─────────────────────────────────────────────────
+--  AI MEMORY  (per-user per-symbol analysis history)
+-- ─────────────────────────────────────────────────
+-- Stores every Claude trading analysis so future calls can recall
+-- prior signals, detect trend changes, and avoid redundant reasoning.
+-- summary_tsv enables full-text search across all past analyses.
+CREATE TABLE IF NOT EXISTS ai_memory (
+  id           UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id      UUID          NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  symbol       VARCHAR(20)   NOT NULL,
+  interval     VARCHAR(10)   NOT NULL DEFAULT '1d',
+  signal       VARCHAR(10),                       -- BUY | SELL | HOLD
+  confidence   SMALLINT,                          -- 0-100
+  price        DECIMAL(18,4),                     -- price at analysis time
+  summary      TEXT,                              -- AI reasoning summary (human-readable)
+  analysis     JSONB         NOT NULL DEFAULT '{}', -- full structured Claude output
+  summary_tsv  TSVECTOR GENERATED ALWAYS AS
+               (to_tsvector('english', coalesce(summary, ''))) STORED,
+  created_at   TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_ai_memory_user_symbol
+  ON ai_memory(user_id, symbol, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_ai_memory_user_created
+  ON ai_memory(user_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_ai_memory_fts
+  ON ai_memory USING GIN(summary_tsv);

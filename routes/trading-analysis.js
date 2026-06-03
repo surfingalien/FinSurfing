@@ -5,12 +5,18 @@
  * AI-powered trading analysis routes:
  *   POST /analyze — fetch OHLCV, compute TA indicators, call Claude for structured signal
  *   POST /chat    — SSE streaming chat with chart context memory
+ *   GET  /memory/:symbol — prior analyses for a symbol (authenticated)
  */
 
 const express   = require('express')
 const Anthropic  = require('@anthropic-ai/sdk')
+const { optionalAuth, requireAuth } = require('../middleware/auth')
+const { recallMemory, saveMemory, searchMemory } = require('../db/ai_memory')
 
 const router = express.Router()
+
+// Attach user context when a valid JWT is present (never rejects guests)
+router.use(optionalAuth)
 
 // ── Crypto detection (mirrors server.js isCryptoSymbol) ───────────────────────
 const CRYPTO_TICKERS = new Set([
@@ -219,10 +225,9 @@ function tvToYahoo(tvSymbol) {
   return symUpper
 }
 
-// ── StockTwits retail sentiment (no API key required) ─────────────────────────
+// ── StockTwits retail sentiment ───────────────────────────────────────────────
 
 async function fetchStockTwits(symbol) {
-  // Strip quote suffix for crypto (BTC-USD → BTC) then sanitize
   const base = symbol.replace(/-[A-Z]+$/, '').replace(/[^A-Z0-9]/g, '')
   if (!base) return null
   try {
@@ -248,8 +253,6 @@ async function fetchStockTwits(symbol) {
     return { bullish, bearish, neutral, total: messages.length, snippets, bullishPct }
   } catch { return null }
 }
-
-// ── Multi-source sentiment alignment classifier (ported from OpenStock) ─
 
 function getSourceAlignment(bullishPcts) {
   if (!bullishPcts || bullishPcts.length === 0) return 'No data'
@@ -711,7 +714,7 @@ function volumeAnalysis(volumes) {
 
 // ── Analysis prompt builder ────────────────────────────────────────────────────
 
-function buildAnalysisPrompt(symbol, interval, price, indicators, patterns, vol, priceLabel = 'last bar close', sentiment = null) {
+function buildAnalysisPrompt(symbol, interval, price, indicators, patterns, vol, priceLabel = 'last bar close', sentiment = null, priorMemories = []) {
   const { rsi, macd, ema9, ema21, ema50, ema200, bb, atr, stochRsi, vwap, obv, sr } = indicators
 
   const rsiInterp = rsi == null ? 'N/A'
@@ -749,7 +752,15 @@ function buildAnalysisPrompt(symbol, interval, price, indicators, patterns, vol,
     ? `\nRETAIL SENTIMENT (StockTwits — last ${sentiment.total} posts):\nBullish: ${sentiment.bullish} | Bearish: ${sentiment.bearish} | Neutral: ${sentiment.neutral}${sentiment.snippets.length ? '\nSample posts:\n' + sentiment.snippets.join('\n') : ''}\n`
     : ''
 
-  const prompt = `You are an expert quantitative trading analyst. Analyze the following technical data for ${symbol} on the ${interval} timeframe and generate a structured trading signal.
+  const memoryBlock = priorMemories.length
+    ? `\nPRIOR ANALYSES FOR ${symbol} (your past signals — note any trend changes):\n` +
+      priorMemories.map(m => {
+        const date = new Date(m.created_at).toLocaleDateString()
+        return `• [${date}] ${m.signal ?? '—'} @ $${m.price ?? '?'} (${m.confidence ?? '?'}% conf) — ${m.summary?.slice(0, 150) ?? 'no summary'}`
+      }).join('\n') + '\n'
+    : ''
+
+  const prompt = `You are an expert quantitative trading analyst.${memoryBlock ? '\n' + memoryBlock : ''} Analyze the following technical data for ${symbol} on the ${interval} timeframe and generate a structured trading signal.
 
 MARKET DATA:
 - Symbol: ${symbol}
@@ -772,21 +783,16 @@ ${volInterp}
 
 DETECTED PATTERNS:
 ${patternsStr}
-${sentimentSection}
+
 ANALYSIS INSTRUCTIONS:
 1. Look for CONTRADICTIONS between indicators (e.g. RSI overbought but MACD still bullish, price above EMA50 but OBV falling, BB squeeze while RSI diverging). List each contradiction explicitly.
 2. For price targets, provide a ZONE (low/high) based on key S/R and ATR, not a single precise number. Entry zone should reflect realistic fill range around current price.
 3. Assess overall signal confidence based on indicator CONFLUENCE — high confidence requires 4+ indicators agreeing.
-4. TWO-SIDED THESIS (institutional research framework — populate the "thesis" object):
-   LEFT SIDE — technical structure: What do the indicators say about the underlying price structure? Identify the 2-3 load-bearing assumptions the setup rests on. State your "variant view" — where this reading differs from the obvious, consensus interpretation of the chart. Then: what must remain true for the left case to hold, and what single signal would break it?
-   RIGHT SIDE — market confirmation: Is the market itself moving with or against the thesis right now? Judge via price momentum, OBV/volume trend, and trend alignment across EMAs. Is capital flowing into or out of this name? What must persist for the right case to hold, and what would break it?
-   PRICED-IN CHECK: Is this setup obvious and already crowded? A correct thesis that everyone can see has thin edge even if technically valid.
-   ENTRY TYPE — classify as exactly one of: "left-entry" (setup is structurally sound but market not yet confirming — higher timing risk, potentially better price), "right-entry" (market actively confirming the thesis — pay slightly higher for lower timing risk), "neither" (thesis doesn't hold on either side).
-5. Use the full 5-tier signal scale: BUY = strong entry, 4+ indicators confirming | OVERWEIGHT = favorable setup, add to existing position | HOLD = no clear directional edge, stay flat | UNDERWEIGHT = headwinds building, reduce exposure | SELL = exit or short, significant downside confirmed by multiple signals.
+4. Reasoning should explicitly weigh the bull and bear cases before reaching a conclusion.
 
 Respond with ONLY pure JSON (absolutely no markdown fences, no backticks, no code blocks, no text before or after the JSON). The JSON must match this exact shape:
 {
-  "signal": "BUY | OVERWEIGHT | HOLD | UNDERWEIGHT | SELL",
+  "signal": "BUY or SELL or HOLD",
   "confidence": 0-100,
   "trend": "BULLISH or BEARISH or NEUTRAL",
   "entry": number,
@@ -798,17 +804,6 @@ Respond with ONLY pure JSON (absolutely no markdown fences, no backticks, no cod
   "timeHorizon": "scalp or swing or position",
   "bullishProbability": 0-100,
   "bearishProbability": 0-100,
-  "thesis": {
-    "claim": "one sentence — what must happen for this trade to work",
-    "left": "technical structure case — load-bearing assumptions and variant view vs consensus chart read",
-    "leftMustBeTrue": "the one thing that must hold for the left case to survive",
-    "leftBreaksIf": "specific signal that would invalidate the structural case",
-    "right": "market confirmation — momentum, volume/OBV flow, trend alignment",
-    "rightMustBeTrue": "the condition that must persist for market to keep confirming",
-    "rightBreaksIf": "specific signal that would break the confirmation case",
-    "pricedIn": "is this the obvious trade — crowded or contrarian",
-    "entryType": "left-entry | right-entry | neither"
-  },
   "indicators": {
     "rsi": "concise interpretation string",
     "macd": "concise interpretation string",
@@ -818,7 +813,7 @@ Respond with ONLY pure JSON (absolutely no markdown fences, no backticks, no cod
   },
   "contradictions": ["contradiction1 if any", "contradiction2 if any"],
   "patterns": ["pattern1", "pattern2"],
-  "reasoning": "3-4 sentence synthesis of the two-sided thesis — which side dominates and why",
+  "reasoning": "3-4 sentence analysis weighing bull and bear cases",
   "risks": ["risk1", "risk2", "risk3"],
   "disclaimer": "brief risk disclaimer string"
 }`
@@ -910,17 +905,11 @@ router.post('/analyze', async (req, res) => {
         )
         const qd = await qr.json()
         const lp = qd?.quoteResponse?.result?.[0]?.regularMarketPrice
-        if (lp && lp > 0) {
-          // Trust the quote over bar close: bar data can be stale or from a demo key
-          // that normalises prices to ~$1. Only reject if the bar close already looks
-          // realistic (>$2) AND the quote is more than 10× off — which would signal a
-          // genuine data error rather than a stale/normalised bar.
-          const barLooksReal = price > 2
-          const withinRange  = Math.abs(lp - price) / price < 10
-          if (!barLooksReal || withinRange || isCryptoSymbol(sym)) {
-            price = lp
-            priceLabel = 'live quote'
-          }
+        if (lp && lp > 0 && (Math.abs(lp - price) / price < 0.5 || isCryptoSymbol(sym))) {
+          // Sanity check: accept if within 50% of bar close, OR always for crypto
+          // (crypto quote from Binance/CoinGecko is authoritative even when bars are stale)
+          price = lp
+          priceLabel = 'live quote'
         }
       } catch { /* keep last bar close */ }
     }
@@ -948,8 +937,12 @@ router.post('/analyze', async (req, res) => {
     const sentiment = await fetchStockTwits(sym)
     if (sentiment) console.log(`[trading-analysis] ${sym} StockTwits: ${sentiment.bullish}B ${sentiment.bearish}Be ${sentiment.neutral}N / ${sentiment.total}`)
 
+    // Recall prior analyses for this user+symbol (no-op if DB unavailable)
+    const priorMemories = await recallMemory(req.user?.userId, sym)
+    if (priorMemories.length) console.log(`[trading-analysis] ${sym} memory: ${priorMemories.length} prior analyses injected`)
+
     // Build prompt and call Claude
-    const analysisPrompt = buildAnalysisPrompt(sym, interval, price, indicators, patterns, vol, priceLabel, sentiment)
+    const analysisPrompt = buildAnalysisPrompt(sym, interval, price, indicators, patterns, vol, priceLabel, sentiment, priorMemories)
 
     const anthropic = new Anthropic({ apiKey })
     const msg = await anthropic.messages.create({
@@ -979,6 +972,9 @@ router.post('/analyze', async (req, res) => {
         return res.status(500).json({ error: 'AI analysis response was malformed — please try again' })
       }
     }
+
+    // Persist analysis to memory (fire-and-forget — never blocks response)
+    if (req.user?.userId) saveMemory(req.user.userId, sym, yInterval, price, analysis)
 
     // Candles: last 200 bars for charting
     const candleSlice = bars.slice(-200)
@@ -1014,6 +1010,25 @@ router.post('/analyze', async (req, res) => {
     console.error('[trading-analysis/analyze]', err.message)
     return res.status(500).json({ error: 'Analysis failed: ' + err.message })
   }
+})
+
+// ── GET /memory/search?q=... ──────────────────────────────────────────────────
+
+router.get('/memory/search', requireAuth, async (req, res) => {
+  const { q, limit = 10 } = req.query
+  if (!q) return res.status(400).json({ error: 'q is required' })
+  const rows = await searchMemory(req.user.userId, String(q), parseInt(limit, 10))
+  res.json({ results: rows })
+})
+
+// ── GET /memory/:symbol ───────────────────────────────────────────────────────
+
+router.get('/memory/:symbol', requireAuth, async (req, res) => {
+  const sym   = req.params.symbol?.toUpperCase()
+  const limit = Math.min(parseInt(req.query.limit, 10) || 10, 50)
+  if (!sym) return res.status(400).json({ error: 'symbol is required' })
+  const rows = await recallMemory(req.user.userId, sym, limit)
+  res.json({ symbol: sym, history: rows })
 })
 
 // ── POST /chat (SSE streaming) ────────────────────────────────────────────────
@@ -1075,7 +1090,7 @@ router.post('/chat', async (req, res) => {
 
     const stream = anthropic.messages.stream({
       model:      'claude-sonnet-4-6',
-      max_tokens: 2048,
+      max_tokens: 1024,
       system:     systemPrompt,
       messages,
     })

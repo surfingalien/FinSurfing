@@ -51,11 +51,24 @@ function finnhubGet(path, key) {
   })
 }
 
+// SSRF guard: reject private/loopback/link-local IPs
+const PRIVATE_IP_RE = /^(127\.|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|169\.254\.|::1$|fc00:|fe80:)/i
+function isSafeHost(hostname) {
+  if (!hostname || hostname === 'localhost') return false
+  if (PRIVATE_IP_RE.test(hostname)) return false
+  return true
+}
+
 // Fetch URL content, follow redirects, strip HTML tags
 function fetchUrlContent(targetUrl, maxRedirects = 3) {
   return new Promise((resolve, reject) => {
     let parsed
     try { parsed = new URL(targetUrl) } catch { return reject(new Error('Invalid URL')) }
+
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:')
+      return reject(new Error('Only http/https URLs are supported'))
+    if (!isSafeHost(parsed.hostname))
+      return reject(new Error('URL resolves to a disallowed address'))
 
     const client = parsed.protocol === 'https:' ? https : http
     const req = client.request(
@@ -68,12 +81,16 @@ function fetchUrlContent(targetUrl, maxRedirects = 3) {
         timeout:  12000,
       },
       (res) => {
-        // Follow redirects
+        // Follow redirects — re-validate host on each hop
         if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location && maxRedirects > 0) {
           const next = res.headers.location.startsWith('http')
             ? res.headers.location
             : `${parsed.protocol}//${parsed.host}${res.headers.location}`
           res.destroy()
+          try {
+            const nextParsed = new URL(next)
+            if (!isSafeHost(nextParsed.hostname)) return reject(new Error('Redirect to disallowed address'))
+          } catch { return reject(new Error('Invalid redirect URL')) }
           return resolve(fetchUrlContent(next, maxRedirects - 1))
         }
         let data = ''
