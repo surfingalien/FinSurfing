@@ -22,6 +22,10 @@ const rateLimit  = require('express-rate-limit')
 const http       = require('http')
 const { getBreaker, CircuitOpenError } = require('../lib/circuit-breaker')
 const { logCall }                       = require('../lib/ai-audit')
+const {
+  saveQuantmindPaper, getQuantmindPapers,
+  getQuantmindPaper, deleteQuantmindPaper,
+} = require('../db/ai_memory')
 
 const router  = express.Router()
 const breaker = getBreaker('quantmind', { threshold: 4, resetTimeoutMs: 60_000 })
@@ -46,8 +50,32 @@ const searchLimit = rateLimit({
   message: { error: 'Too many search requests — wait a minute' },
 })
 
-// ── In-memory paper cache (survives request, resets on deploy) ────────────────
+// ── In-memory paper cache (session-level; DB-backed for authenticated users) ───
 const PAPER_CACHE = new Map()
+
+// For authenticated users: check in-memory first, then DB (warms cache on hit)
+async function paperGet(userId, arxivId) {
+  if (PAPER_CACHE.has(arxivId)) return PAPER_CACHE.get(arxivId)
+  if (!userId) return null
+  const row = await getQuantmindPaper(userId, arxivId)
+  if (row) PAPER_CACHE.set(arxivId, row)
+  return row || null
+}
+
+// Write to in-memory; also persist to DB for authenticated users
+async function paperSet(userId, arxivId, paper) {
+  PAPER_CACHE.set(arxivId, paper)
+  if (userId) saveQuantmindPaper(userId, paper)  // fire-and-forget
+}
+
+// List all papers: DB (for auth users) merged with in-memory
+async function paperAll(userId) {
+  if (!userId) return [...PAPER_CACHE.values()]
+  const dbPapers = await getQuantmindPapers(userId)
+  const merged = new Map(dbPapers.map(p => [p.arxiv_id, p]))
+  for (const [id, p] of PAPER_CACHE) merged.set(id, p)
+  return [...merged.values()]
+}
 
 // ── arXiv fetch (pure Node https — no extra deps) ─────────────────────────────
 function fetchArxivMeta(arxivId) {
@@ -185,10 +213,10 @@ router.post('/paper', paperLimit, async (req, res) => {
   }
 
   const cleanId = arxiv_id.replace(/^arxiv:/i, '').trim()
+  const userId  = req.user?.userId
 
-  if (PAPER_CACHE.has(cleanId)) {
-    return res.json({ cached: true, paper: PAPER_CACHE.get(cleanId) })
-  }
+  const cached = await paperGet(userId, cleanId)
+  if (cached) return res.json({ cached: true, paper: cached })
 
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) return res.status(503).json({ error: 'ANTHROPIC_API_KEY not configured' })
@@ -212,7 +240,7 @@ router.post('/paper', paperLimit, async (req, res) => {
       ...card,
     }
 
-    PAPER_CACHE.set(cleanId, paper)
+    await paperSet(userId, cleanId, paper)
     return res.json({ cached: false, paper })
 
   } catch (err) {
@@ -237,7 +265,8 @@ router.post('/batch', batchLimit, async (req, res) => {
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) return res.status(503).json({ error: 'ANTHROPIC_API_KEY not configured' })
 
-  const client = new Anthropic({ apiKey })
+  const client  = new Anthropic({ apiKey })
+  const userId  = req.user?.userId
   const concurrency = Math.min(Math.max(1, max_concurrency), 6)
   const ids     = arxiv_ids.map(id => id.replace(/^arxiv:/i, '').trim())
   const results = []
@@ -246,9 +275,8 @@ router.post('/batch', batchLimit, async (req, res) => {
     const chunk = ids.slice(i, i + concurrency)
     const settled = await Promise.allSettled(
       chunk.map(async (cleanId) => {
-        if (PAPER_CACHE.has(cleanId)) {
-          return { cached: true, paper: PAPER_CACHE.get(cleanId) }
-        }
+        const cached = await paperGet(userId, cleanId)
+        if (cached) return { cached: true, paper: cached }
         const fetched = await fetchArxivMeta(cleanId)
         const card    = await extractPaperCard(client, fetched)
         const paper = {
@@ -259,7 +287,7 @@ router.post('/batch', batchLimit, async (req, res) => {
           pdf_url:    `https://arxiv.org/pdf/${cleanId}`,
           extracted_at: new Date().toISOString(), model: QM_MODEL, ...card,
         }
-        PAPER_CACHE.set(cleanId, paper)
+        await paperSet(userId, cleanId, paper)
         return { cached: false, paper }
       })
     )
@@ -290,12 +318,13 @@ router.post('/ask', askLimit, async (req, res) => {
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) return res.status(503).json({ error: 'ANTHROPIC_API_KEY not configured' })
 
+  const userId        = req.user?.userId
   const personaPrompt = PERSONAS[persona] || PERSONAS.quant_analyst
 
   const contextParts = []
   for (const rawId of arxiv_ids.slice(0, 5)) {
     const cleanId = rawId.replace(/^arxiv:/i, '').trim()
-    const p = PAPER_CACHE.get(cleanId)
+    const p = await paperGet(userId, cleanId)
     if (p) {
       contextParts.push(
         `Paper: ${p.title}\n` +
@@ -381,11 +410,14 @@ router.get('/search', searchLimit, async (req, res) => {
 
   try {
     const results = await searchArxiv({ q, category, max, sortBy })
-    // Annotate which papers are already loaded in memory
-    const withStatus = results.map(r => ({
-      ...r,
-      loaded: PAPER_CACHE.has(r.arxiv_id),
-    }))
+    // Build set of loaded IDs: in-memory + DB for auth users
+    const userId    = req.user?.userId
+    const loadedIds = new Set(PAPER_CACHE.keys())
+    if (userId) {
+      const dbPapers = await getQuantmindPapers(userId)
+      for (const p of dbPapers) loadedIds.add(p.arxiv_id)
+    }
+    const withStatus = results.map(r => ({ ...r, loaded: loadedIds.has(r.arxiv_id) }))
     return res.json({ results: withStatus, total: withStatus.length, query: { q, category, sortBy } })
   } catch (err) {
     console.error('[quantmind/search]', err.message)
@@ -394,8 +426,10 @@ router.get('/search', searchLimit, async (req, res) => {
 })
 
 // ── GET /api/quantmind/memory ─────────────────────────────────────────────────
-router.get('/memory', (req, res) => {
-  const papers = [...PAPER_CACHE.values()].map(p => ({
+router.get('/memory', async (req, res) => {
+  const userId = req.user?.userId
+  const all    = await paperAll(userId)
+  const papers = all.map(p => ({
     arxiv_id:        p.arxiv_id,
     title:           p.title,
     published:       p.published,
@@ -407,18 +441,21 @@ router.get('/memory', (req, res) => {
 })
 
 // ── GET /api/quantmind/memory/:id ─────────────────────────────────────────────
-router.get('/memory/:id', (req, res) => {
+router.get('/memory/:id', async (req, res) => {
   const cleanId = req.params.id.replace(/^arxiv:/i, '').trim()
-  const paper = PAPER_CACHE.get(cleanId)
+  const userId  = req.user?.userId
+  const paper   = await paperGet(userId, cleanId)
   if (!paper) return res.status(404).json({ error: `Paper ${cleanId} not in memory` })
   res.json(paper)
 })
 
 // ── DELETE /api/quantmind/memory/:id ─────────────────────────────────────────
-router.delete('/memory/:id', (req, res) => {
+router.delete('/memory/:id', async (req, res) => {
   const cleanId = req.params.id.replace(/^arxiv:/i, '').trim()
-  const existed = PAPER_CACHE.delete(cleanId)
-  res.json({ deleted: existed, arxiv_id: cleanId })
+  const userId  = req.user?.userId
+  PAPER_CACHE.delete(cleanId)
+  if (userId) await deleteQuantmindPaper(userId, cleanId)
+  res.json({ deleted: true, arxiv_id: cleanId })
 })
 
 module.exports = router

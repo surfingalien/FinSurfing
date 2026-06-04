@@ -29,6 +29,7 @@ const express  = require('express')
 const router   = express.Router()
 const { computeAll }           = require('../utils/technicals')
 const { fetchAllFundamentals } = require('../utils/dataProviders')
+const { getChatHistory, saveChatSummary } = require('../db/ai_memory')
 
 // ── Lazy-load Anthropic SDK ───────────────────────────────────────────────────
 let _client = null
@@ -429,6 +430,9 @@ router.post('/analyze', async (req, res) => {
 
   const send = (event, data) => res.write(`data: ${JSON.stringify({ event, ...data })}\n\n`)
 
+  const userId = req.user?.userId
+  const sym    = symbol?.toUpperCase().trim() || null
+
   // ── Gemini path ─────────────────────────────────────────────────────────────
   if (isGemini) {
     try {
@@ -472,6 +476,19 @@ router.post('/analyze', async (req, res) => {
   try { client = getClient() }
   catch (err) { return res.status(503).json({ error: err.message, code: 'NO_API_KEY' }) }
 
+  // Build system prompt — inject prior analyses if the user has history for this symbol
+  const priorChats = userId && sym ? await getChatHistory(userId, sym) : []
+  let systemPromptFull = SYSTEM_PROMPT
+  if (priorChats.length > 0) {
+    systemPromptFull +=
+      '\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n' +
+      `PRIOR ANALYSES FOR ${sym} (most recent first — note any thesis changes):\n` +
+      priorChats
+        .map(c => `[${new Date(c.created_at).toISOString().split('T')[0]}] ${c.summary.slice(0, 400)}`)
+        .join('\n\n') +
+      '\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
+  }
+
   const userContent = symbol ? `Analyze ${symbol.toUpperCase()}. ${prompt}` : prompt
 
   const messages = [
@@ -489,7 +506,7 @@ router.post('/analyze', async (req, res) => {
       const stream = client.messages.stream({
         model,
         max_tokens: 8192,
-        system:     SYSTEM_PROMPT,
+        system:     systemPromptFull,
         tools:      TOOLS,
         messages,
       })
@@ -500,6 +517,7 @@ router.post('/analyze', async (req, res) => {
       const message = await stream.finalMessage()
 
       if (message.stop_reason === 'end_turn') {
+        if (userId && sym && fullText) saveChatSummary(userId, sym, fullText.slice(0, 900))
         send('done', { usage: { input_tokens: message.usage?.input_tokens, output_tokens: message.usage?.output_tokens } })
         res.end()
         return
