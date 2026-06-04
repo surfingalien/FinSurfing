@@ -407,3 +407,58 @@ CREATE INDEX IF NOT EXISTS idx_ai_memory_user_created
 
 CREATE INDEX IF NOT EXISTS idx_ai_memory_fts
   ON ai_memory USING GIN(summary_tsv);
+
+-- ─────────────────────────────────────────────────
+--  AI CHAT HISTORY  (Stock Agent conversation memory)
+-- ─────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS ai_chat_history (
+  id          UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     UUID         NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  symbol      VARCHAR(20),
+  summary     TEXT         NOT NULL,
+  messages    JSONB,
+  created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_ai_chat_history_user_symbol
+  ON ai_chat_history(user_id, symbol, created_at DESC);
+
+-- ─────────────────────────────────────────────────
+--  AI USER PREFERENCES  (learned from interactions)
+-- ─────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS ai_user_prefs (
+  id          UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     UUID         NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  type        VARCHAR(50)  NOT NULL,
+  content     TEXT         NOT NULL,
+  concepts    TEXT[]       NOT NULL DEFAULT '{}',
+  source      VARCHAR(50),
+  created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_ai_user_prefs_user
+  ON ai_user_prefs(user_id, type, created_at DESC);
+
+-- ─────────────────────────────────────────────────
+--  QUANTMIND PAPER CACHE  (persists across deploys)
+-- ─────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS quantmind_papers (
+  id                  UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+  arxiv_id            TEXT         NOT NULL,
+  user_id             UUID         NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  title               TEXT,
+  abstract            TEXT,
+  authors             TEXT[]       DEFAULT '{}',
+  categories          TEXT[]       DEFAULT '{}',
+  key_contributions   JSONB        DEFAULT '[]',
+  relevance_score     DECIMAL(3,2) DEFAULT 0.5,
+  tags                TEXT[]       DEFAULT '{}',
+  quant_applicability TEXT,
+  published           TEXT,
+  source_url          TEXT,
+  extracted_at        TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+  UNIQUE(arxiv_id, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_quantmind_papers_user
+  ON quantmind_papers(user_id, extracted_at DESC);

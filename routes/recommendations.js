@@ -21,6 +21,7 @@ const router              = express.Router()
 const rateLimit           = require('express-rate-limit')
 const { getBreaker, CircuitOpenError } = require('../lib/circuit-breaker')
 const { logCall }         = require('../lib/ai-audit')
+const { getUserPrefs, saveUserPref } = require('../db/ai_memory')
 
 const recLimit = rateLimit({
   windowMs: 60 * 1000, max: 5,
@@ -118,6 +119,14 @@ router.post('/', recLimit, async (req, res) => {
   const focusStr   = focusSymbols.length ? focusSymbols.join(', ') : ''
   const fwdHeaders = fwdKeys(req)
   const port       = process.env.PORT || 3001
+  const userId     = req.user?.userId
+
+  // Load prior rec history to avoid repeating recently recommended symbols
+  const recHistory = userId ? await getUserPrefs(userId, 'rec_history', 5) : []
+  const historySnippet = recHistory.length > 0
+    ? '\nUSER\'S RECENT RECOMMENDATION HISTORY (avoid repeating these symbols/sectors):\n' +
+      recHistory.map(p => p.content).join('\n')
+    : ''
 
   // ── Step 1: Pre-fetch live prices + catalyst context in parallel ─────────────
   const symbolsForContext = focusSymbols.length ? focusSymbols : []
@@ -147,7 +156,7 @@ router.post('/', recLimit, async (req, res) => {
   const prompt = `You are a senior portfolio strategist. Provide specific actionable buy recommendations for a retail investor.
 
 Current portfolio holdings (avoid overlap): ${holdingStr}${focusInstructions}
-${livePriceSnippet}${earningsSnippet}${sentimentSnippet}
+${livePriceSnippet}${earningsSnippet}${sentimentSnippet}${historySnippet}
 
 ${countInstructions}
 
@@ -273,6 +282,18 @@ Respond ONLY with a JSON object — no markdown, no explanation, just the JSON:
 
     if (pricesAnchored > 0)
       console.log(`[recommendations] re-anchored prices for ${pricesAnchored}/${recSymbols.length} symbols`)
+
+    // Save what was recommended so future calls avoid repeating symbols/sectors
+    if (userId) {
+      const sectors = [...new Set(data.recommendations.map(r => r.sector).filter(Boolean))].slice(0, 5)
+      const top = data.recommendations[0]
+      saveUserPref(
+        userId, 'rec_history',
+        `${new Date().toISOString().split('T')[0]}: Got ${data.recommendations.length} recs. ` +
+        `Top: ${top?.symbol} ${top?.type} (${top?.targetReturn}% target). Sectors: ${sectors.join(', ')}.`,
+        sectors, 'recommendations'
+      )
+    }
 
     return res.json({ ...data, generatedAt: new Date().toISOString(), llmUsed })
   } catch (err) {
