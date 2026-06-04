@@ -41,6 +41,10 @@ const askLimit = rateLimit({
   windowMs: 60 * 1000, max: 8,
   message: { error: 'Too many research questions — wait a minute' },
 })
+const searchLimit = rateLimit({
+  windowMs: 60 * 1000, max: 20,
+  message: { error: 'Too many search requests — wait a minute' },
+})
 
 // ── In-memory paper cache (survives request, resets on deploy) ────────────────
 const PAPER_CACHE = new Map()
@@ -63,6 +67,54 @@ function fetchArxivMeta(arxivId) {
       })
     }).on('error', reject)
   })
+}
+
+// ── arXiv search (keyword or category browse) ────────────────────────────────
+function searchArxiv({ q = '', category = 'q-fin', max = 15, sortBy = 'submittedDate' } = {}) {
+  const searchQuery = [
+    q ? `all:${encodeURIComponent(q)}` : '',
+    category ? `cat:${category}` : '',
+  ].filter(Boolean).join('+AND+')
+
+  const url = `http://export.arxiv.org/api/query?search_query=${searchQuery}&max_results=${max}&sortBy=${sortBy}&sortOrder=descending`
+
+  return new Promise((resolve, reject) => {
+    http.get(url, (res) => {
+      let data = ''
+      res.on('data', chunk => { data += chunk })
+      res.on('end', () => {
+        try { resolve(_parseArxivFeed(data)) } catch (e) { reject(e) }
+      })
+    }).on('error', reject)
+  })
+}
+
+function _parseArxivFeed(xml) {
+  // Split into individual <entry> blocks
+  const entries = [...xml.matchAll(/<entry>([\s\S]*?)<\/entry>/g)].map(m => m[1])
+  return entries.map(entry => {
+    const tag = (t) => {
+      const m = entry.match(new RegExp(`<${t}[^>]*>([\\s\\S]*?)<\\/${t}>`))
+      return m ? m[1].trim() : ''
+    }
+    const idRaw    = tag('id')
+    const arxivId  = idRaw.replace('http://arxiv.org/abs/', '').replace('https://arxiv.org/abs/', '').trim()
+    const title    = tag('title').replace(/\s+/g, ' ').trim()
+    const abstract = tag('summary').replace(/\s+/g, ' ').trim()
+    const authors  = [...entry.matchAll(/<name>(.*?)<\/name>/g)].map(m => m[1])
+    const cats     = [...entry.matchAll(/term="([^"]+)"/g)].map(m => m[1]).filter(c => !c.includes('/'))
+    const pubRaw   = tag('published')
+    return {
+      arxiv_id:   arxivId,
+      title,
+      abstract:   abstract.slice(0, 500),
+      authors:    authors.slice(0, 5),
+      categories: cats.slice(0, 4),
+      published:  pubRaw ? new Date(pubRaw).toISOString() : null,
+      source_url: `https://arxiv.org/abs/${arxivId}`,
+      pdf_url:    `https://arxiv.org/pdf/${arxivId}`,
+    }
+  }).filter(e => e.arxiv_id && e.title)
 }
 
 function _parseArxivAtom(xml, arxivId) {
@@ -304,6 +356,39 @@ If the research doesn't address the question directly, say so and give your best
     if (err instanceof CircuitOpenError) {
       return res.status(503).json({ error: err.message, circuitOpen: true })
     }
+    return res.status(500).json({ error: err.message })
+  }
+})
+
+// ── GET /api/quantmind/search ─────────────────────────────────────────────────
+// Search arXiv for financial papers. No API key required.
+// ?q=momentum&category=q-fin.PM&max=15&sort=submittedDate|relevance
+const QFIN_CATEGORIES = new Set([
+  'q-fin', 'q-fin.PM', 'q-fin.TR', 'q-fin.RM', 'q-fin.ST',
+  'q-fin.GN', 'q-fin.MF', 'q-fin.CP', 'q-fin.EC', 'q-fin.PR',
+  'econ.GN', 'stat.ML', 'cs.LG',
+])
+
+router.get('/search', searchLimit, async (req, res) => {
+  const q        = (req.query.q || '').slice(0, 200).trim()
+  const category = QFIN_CATEGORIES.has(req.query.category) ? req.query.category : 'q-fin'
+  const max      = Math.min(parseInt(req.query.max) || 15, 30)
+  const sortBy   = req.query.sort === 'relevance' ? 'relevance' : 'submittedDate'
+
+  if (!q && category === 'q-fin') {
+    return res.status(400).json({ error: 'Provide q (keyword) or a specific category' })
+  }
+
+  try {
+    const results = await searchArxiv({ q, category, max, sortBy })
+    // Annotate which papers are already loaded in memory
+    const withStatus = results.map(r => ({
+      ...r,
+      loaded: PAPER_CACHE.has(r.arxiv_id),
+    }))
+    return res.json({ results: withStatus, total: withStatus.length, query: { q, category, sortBy } })
+  } catch (err) {
+    console.error('[quantmind/search]', err.message)
     return res.status(500).json({ error: err.message })
   }
 })
