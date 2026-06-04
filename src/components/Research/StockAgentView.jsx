@@ -15,7 +15,6 @@ import {
   AlertTriangle, ChevronRight, Zap, X, Info, Search, Share2,
 } from 'lucide-react'
 import AIAdvisoryView from './AIAdvisoryView'
-import PublishSignalModal from '../Trading/PublishSignalModal'
 
 // ── Markdown-lite renderer ────────────────────────────────────────────────────
 // Renders the structured sections Claude outputs without a full MD library
@@ -235,7 +234,6 @@ export default function StockAgentView({ portfolio }) {
   const [hasKey,      setHasKey]    = useState(null)      // null = unknown, true/false
   const [agentCaps,   setAgentCaps] = useState({})        // { hasFMP, hasAV, hasGemini }
   const [error,       setError]     = useState(null)
-  const [showPublish, setShowPublish] = useState(false)
 
   const bottomRef  = useRef(null)
   const inputRef   = useRef(null)
@@ -603,17 +601,7 @@ I'm your real-time stock analyst powered by Claude. I can:
         </div>
       )}
 
-      {/* Publish Signal modal — pre-filled with last assistant message */}
-      {showPublish && (
-        <PublishSignalModal
-          symbol={symbol}
-          analysis={(() => {
-            const last = [...messages].reverse().find(m => m.role === 'assistant' && m.content && !m.streaming)
-            return last?.content?.slice(0, 1000) || ''
-          })()}
-          onClose={() => setShowPublish(false)}
-        />
-      )}
+
     </div>
   )
 }

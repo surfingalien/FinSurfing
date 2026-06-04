@@ -14,11 +14,10 @@ import {
   LayoutDashboard, PieChart, Eye, LineChart, Lightbulb,
   TrendingUp, SlidersHorizontal, GitBranch, Bell, Bot,
   ShieldCheck, ChevronLeft, ChevronRight, LogIn, LogOut,
-  User, KeyRound, Activity, X, Menu, FolderOpen, Users, Calendar,
+  User, KeyRound, Activity, X, Menu, FolderOpen, Calendar,
   FlaskConical, BarChart3, Settings, Sparkles, Brain, Bookmark, Monitor, BookOpen,
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
-import { useAITrader } from '../../contexts/AITraderContext'
 import { useApiKeys } from '../../contexts/ApiKeysContext'
 import AccountSwitcher from '../Portfolio/AccountSwitcher'
 import CreatePortfolioModal from '../Portfolio/CreatePortfolioModal'
@@ -28,7 +27,7 @@ import { Tooltip } from '../shared/Tooltip'
 
 // ── Nav item definitions ──────────────────────────────────────────────────────
 
-function buildGroups(user, triggeredCount, tradingUnread) {
+function buildGroups(user, triggeredCount) {
   const groups = [
     {
       label: 'Overview',
@@ -66,7 +65,6 @@ function buildGroups(user, triggeredCount, tradingUnread) {
       items: [
         { id: 'strategies', label: 'Strategies',     icon: GitBranch },
         { id: 'backtest',   label: 'Backtester',     icon: FlaskConical },
-        { id: 'trading',    label: 'Trader Network', icon: Users, badge: tradingUnread },
       ],
     },
     {
@@ -216,7 +214,6 @@ export default function Sidebar({
   onMobileClose,
 }) {
   const { user, isAuthenticated } = useAuth()
-  const { unreadCount: tradingUnread = 0 } = useAITrader()
   const { hasAnyKey } = useApiKeys()
 
   const [collapsed,      setCollapsed]      = useState(() => {
@@ -225,7 +222,7 @@ export default function Sidebar({
   const [showCreate,     setShowCreate]     = useState(false)
   const [showApiKeys,    setShowApiKeys]    = useState(false)
 
-  const groups = buildGroups(user, triggeredCount, tradingUnread)
+  const groups = buildGroups(user, triggeredCount)
 
   const toggleCollapse = () => {
     setCollapsed(v => {
