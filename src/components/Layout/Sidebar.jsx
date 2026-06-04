@@ -58,6 +58,7 @@ function buildGroups(user, triggeredCount, tradingUnread) {
         { id: 'second-brain',    label: 'Second Brain',   icon: BookOpen },
         { id: 'quantmind',       label: 'QuantMind',      icon: FlaskConical },
         { id: 'recommendations', label: 'Advisory',       icon: Lightbulb },
+        { id: 'polymarket',      label: 'Polymarket',     icon: TrendingUp },
       ],
     },
     {
