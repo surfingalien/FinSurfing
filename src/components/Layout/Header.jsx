@@ -9,9 +9,9 @@
  * Navigation tabs and user menu have moved to Sidebar.jsx.
  */
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Menu, Terminal } from 'lucide-react'
-import { fetchQuotes } from '../../services/api'
+import { fetchQuotes, subscribeQuotes } from '../../services/api'
 import { TICKER_SYMBOLS } from '../../data/portfolio'
 import { fmt, fmtPct } from '../../services/api'
 import { useProMode } from '../../contexts/ProModeContext'
@@ -21,6 +21,7 @@ export default function Header({ onMobileMenuOpen }) {
   const [time,       setTime]       = useState(new Date())
   const [marketOpen, setMarketOpen] = useState(false)
   const { proMode, toggleProMode } = useProMode()
+  const tickerMapRef = useRef({})
 
   useEffect(() => {
     const t = setInterval(() => {
@@ -36,12 +37,38 @@ export default function Header({ onMobileMenuOpen }) {
   }, [])
 
   useEffect(() => {
-    const load = async () => {
-      try { setTickerData(await fetchQuotes(TICKER_SYMBOLS)) } catch {}
-    }
-    load()
-    const t = setInterval(load, 60000)
-    return () => clearInterval(t)
+    // Seed initial prices via REST, then switch to SSE for sub-100ms updates
+    fetchQuotes(TICKER_SYMBOLS, { force: true }).then(results => {
+      const map = {}
+      results.forEach(q => { map[q.symbol] = q })
+      tickerMapRef.current = map
+      setTickerData(results)
+    }).catch(() => {})
+
+    const unsub = subscribeQuotes(TICKER_SYMBOLS, ({ symbol, price, change, changePct }) => {
+      const prev = tickerMapRef.current[symbol] || {}
+      const updated = {
+        ...prev,
+        symbol,
+        price,
+        change:    change    ?? prev.change,
+        changePct: changePct ?? prev.changePct,
+      }
+      tickerMapRef.current = { ...tickerMapRef.current, [symbol]: updated }
+      setTickerData(TICKER_SYMBOLS.map(s => tickerMapRef.current[s]).filter(Boolean))
+    })
+
+    // Full REST refresh every 60s as a safety net (handles new symbols, prevClose drift)
+    const t = setInterval(() => {
+      fetchQuotes(TICKER_SYMBOLS, { force: true }).then(results => {
+        const map = {}
+        results.forEach(q => { map[q.symbol] = { ...tickerMapRef.current[q.symbol], ...q } })
+        tickerMapRef.current = { ...tickerMapRef.current, ...map }
+        setTickerData(TICKER_SYMBOLS.map(s => tickerMapRef.current[s]).filter(Boolean))
+      }).catch(() => {})
+    }, 60_000)
+
+    return () => { unsub(); clearInterval(t) }
   }, [])
 
   const gainColor = proMode ? 'text-[#4af626]' : 'text-emerald-400'

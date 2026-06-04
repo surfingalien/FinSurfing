@@ -1479,8 +1479,8 @@ app.get('/api/stream/quotes', (req, res) => {
 })
 
 // ── SSE proactive price push ───────────────────────────────────────────────────
-// Every 2 s: push cached/fresh prices ONLY for symbols that haven't had a live
-// WS tick in the last 4 s. Symbols actively ticking via Finnhub/Binance WS already
+// Every 500 ms: push cached/fresh prices ONLY for symbols that haven't had a live
+// WS tick in the last 1.5 s. Symbols actively ticking via Finnhub/Binance WS already
 // get sub-100 ms updates via _sseBroadcast — re-broadcasting stale cache on top
 // of those just adds noise and latency.
 let _sseRefreshing = false
@@ -1494,9 +1494,9 @@ setInterval(async () => {
   const allSyms = [...new Set([..._sseClients.values()].flatMap(c => [...c.symbols]))]
   if (!allSyms.length) return
 
-  // Only process symbols with no recent WS tick (last 4 s)
+  // Only process symbols with no recent WS tick (last 1.5 s)
   const now         = Date.now()
-  const noRecentTick = allSyms.filter(s => now - (_lastWsTick.get(s) || 0) > 4000)
+  const noRecentTick = allSyms.filter(s => now - (_lastWsTick.get(s) || 0) > 1500)
   if (!noRecentTick.length) return
 
   // Push cached prices for no-tick symbols that still have a valid cache entry
@@ -1540,7 +1540,7 @@ setInterval(async () => {
   } finally {
     _sseRefreshing = false
   }
-}, 2000)
+}, 500)
 
 
 /* ── Health (includes DB status + demo mode) ───── */

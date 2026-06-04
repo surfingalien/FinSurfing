@@ -1,5 +1,5 @@
 const cache = new Map()
-const TTL = 10 * 1000 // 10 sec — short enough for live quotes, long enough to batch rapid re-renders
+const TTL = 2 * 1000 // 2 sec — keeps REST responses fresh; SSE handles live ticks independently
 
 function cached(key, fn) {
   const hit = cache.get(key)
