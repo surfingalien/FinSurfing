@@ -12,8 +12,6 @@ const portfolioRoutes   = require('./routes/portfolios')
 const publicRoutes      = require('./routes/public')
 const adminRoutes       = require('./routes/admin')
 const agentRoutes       = require('./routes/agent')
-const tradingRoutes     = require('./routes/trading')
-const copyTradingRoutes = require('./routes/copy-trading')
 const earningsRoutes    = require('./routes/earnings')
 const backtestRoutes    = require('./routes/backtest')
 const analyticsRoutes   = require('./routes/analytics')
@@ -90,7 +88,7 @@ app.use(helmet({
       styleSrc:    ["'self'", "'unsafe-inline'"],
       imgSrc:      ["'self'", 'data:', 'https:'],
       frameSrc:    ["'self'", 'https://*.tradingview.com', 'https://www.tradingview.com'],
-      connectSrc:  ["'self'", 'https://finnhub.io', 'https://financialmodelingprep.com', 'https://ai4trade.ai', 'https://api.aisa.one', 'https://www.alphavantage.co', 'https://api.twelvedata.com', 'https://*.tradingview.com', 'wss://*.tradingview.com'],
+      connectSrc:  ["'self'", 'https://finnhub.io', 'https://financialmodelingprep.com', 'https://api.aisa.one', 'https://www.alphavantage.co', 'https://api.twelvedata.com', 'https://*.tradingview.com', 'wss://*.tradingview.com'],
       fontSrc:     ["'self'", 'data:'],
       objectSrc:   ["'none'"],
       upgradeInsecureRequests: PROD ? [] : null,
@@ -165,8 +163,6 @@ app.use('/api/portfolios',   portfolioRoutes)
 app.use('/api/public',       publicLimit, publicRoutes)
 app.use('/api/admin',        adminRoutes)
 app.use('/api/agent',        agentRoutes)
-app.use('/api/trading',      tradingRoutes)
-app.use('/api/copy-trading', copyTradingRoutes)
 app.use('/api/earnings',     earningsRoutes)
 app.use('/api/backtest',     backtestRoutes)
 app.use('/api/analytics',    analyticsRoutes)
@@ -2023,38 +2019,3 @@ if (process.env.DATABASE_URL) {
   }, 60_000)
 }
 
-// ── AI-Trader background heartbeat poller (every 60 s) ───────────────────────
-// Polls notifications for every user that has registered an AI-Trader agent.
-// Stores new messages in ai_trader_notifications so GET /api/trading/notifications
-// can serve them instantly without blocking the request.
-if (process.env.DATABASE_URL) {
-  const at = require('./services/aiTraderClient')
-  const { query: dbQ } = require('./db/db')
-
-  async function runHeartbeatCycle() {
-    try {
-      const { rows } = await dbQ(
-        'SELECT id, ai_trader_token FROM users WHERE ai_trader_token IS NOT NULL LIMIT 100'
-      )
-      for (const user of rows) {
-        try {
-          const hb = await at.pollHeartbeat(user.ai_trader_token)
-          if (!hb?.messages?.length) continue
-          for (const msg of hb.messages) {
-            await dbQ(
-              `INSERT INTO ai_trader_notifications (user_id, type, data)
-               VALUES ($1, $2, $3)`,
-              [user.id, msg.type || 'info', JSON.stringify(msg)]
-            ).catch(() => {})
-          }
-        } catch {}
-      }
-    } catch {}
-  }
-
-  // Stagger first run by 30 s to let DB settle after startup
-  setTimeout(() => {
-    runHeartbeatCycle()
-    setInterval(runHeartbeatCycle, 60_000)
-  }, 30_000)
-}

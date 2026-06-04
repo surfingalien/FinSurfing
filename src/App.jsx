@@ -2,7 +2,6 @@ import { useState, useMemo, useRef, useCallback } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { PortfolioProvider, usePortfolioContext } from './contexts/PortfolioContext'
-import { AITraderProvider } from './contexts/AITraderContext'
 import { ApiKeysProvider } from './contexts/ApiKeysContext'
 import { ProModeProvider } from './contexts/ProModeContext'
 import { ToastProvider } from './components/shared/ToastNotifications'
@@ -27,7 +26,6 @@ import StockAgentView from './components/Research/StockAgentView'
 import ResearchNotesView from './components/Research/ResearchNotesView'
 import QuantMindView from './components/Research/QuantMindView'
 import PolymarketView from './components/Polymarket/PolymarketView'
-import TradingNetworkView from './components/Trading/TradingNetworkView'
 import EarningsCalendarView from './components/EarningsCalendar/EarningsCalendarView'
 import BacktestView from './components/Backtest/BacktestView'
 import BuySignalsView from './components/Recommendations/BuySignalsView'
@@ -36,7 +34,6 @@ import AIWatchlistView from './components/AIWatchlist/AIWatchlistView'
 import PortfolioAnalyticsView from './components/Analytics/PortfolioAnalyticsView'
 import RebalancerView from './components/Rebalancer/RebalancerView'
 import TradingViewView from './components/TradingView/TradingViewView'
-import TraderProfileView from './components/Profile/TraderProfileView'
 import { usePortfolio } from './hooks/usePortfolio'
 import { useWatchlist } from './hooks/useWatchlist'
 import { useAlerts } from './hooks/useAlerts'
@@ -69,9 +66,7 @@ function AppInner() {
   if (isAuthenticated) {
     return (
       <PortfolioProvider>
-        <AITraderProvider>
-          <MainApp onSignIn={() => setScreen('landing')} />
-        </AITraderProvider>
+        <MainApp onSignIn={() => setScreen('landing')} />
       </PortfolioProvider>
     )
   }
@@ -101,9 +96,7 @@ function AppInner() {
   // Guest / demo app mode
   return (
     <PortfolioProvider>
-      <AITraderProvider>
-        <MainApp onSignIn={() => setScreen('login')} />
-      </AITraderProvider>
+      <MainApp onSignIn={() => setScreen('login')} />
     </PortfolioProvider>
   )
 }
@@ -117,7 +110,6 @@ function MainApp({ onSignIn }) {
   const [analyzeSymbol,   setAnalyzeSymbol]   = useState('AAPL')
   const [wizardDone,      setWizardDone]      = useState(false)
   const [mobileNav,       setMobileNav]       = useState(false)
-  const [traderUsername,  setTraderUsername]  = useState(null)
   const mainRef = useRef(null)
 
   // Reset scroll to top whenever the active tab changes
@@ -149,11 +141,6 @@ function MainApp({ onSignIn }) {
   }
 
   const navigateToAnalyze = (symbol) => navigateTo('analyze', symbol)
-
-  const navigateToTraderProfile = (username) => {
-    setTraderUsername(username)
-    changeTab('trader-profile')
-  }
 
   // Show portfolio setup wizard for new authenticated users with no portfolios
   const showWizard = isAuthenticated && !loadingPortfolios && portfolios.length === 0 && !wizardDone
@@ -241,9 +228,6 @@ function MainApp({ onSignIn }) {
             {activeTab === 'polymarket' && (
               <PolymarketView portfolio={portfolio} />
             )}
-            {activeTab === 'trading' && (
-              <TradingNetworkView />
-            )}
             {activeTab === 'earnings' && (
               <EarningsCalendarView portfolio={portfolio} onAnalyze={navigateToAnalyze} onNavigate={navigateTo} />
             )}
@@ -267,12 +251,6 @@ function MainApp({ onSignIn }) {
             )}
             {activeTab === 'rebalancer' && (
               <RebalancerView />
-            )}
-            {activeTab === 'trader-profile' && (
-              <TraderProfileView
-                username={traderUsername}
-                onBack={() => changeTab('trading')}
-              />
             )}
             {activeTab === 'admin' && (
               <AdminDashboard />
