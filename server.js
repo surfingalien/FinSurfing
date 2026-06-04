@@ -197,10 +197,19 @@ const CHART_TTL    = 15 * 60_000
 const PC_TTL       = 24 * 60 * 60_000   // prevClose only changes once per day at market open
 const CACHE_MAX    = 5_000              // LRU-style eviction above this size
 
+function _isUsRegularSession() {
+  const et   = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }))
+  const day  = et.getDay()
+  const mins = et.getHours() * 60 + et.getMinutes()
+  return day >= 1 && day <= 5 && mins >= 570 && mins < 960
+}
+
 function _cacheTtl(key) {
   if (key.startsWith('chart:')) return CHART_TTL
   if (key.startsWith('pc:'))    return PC_TTL
-  return QUOTE_TTL
+  // Outside regular session: keep quote cache alive for 10 min so the SSE
+  // initial-flush can serve closing prices without hitting REST APIs.
+  return _isUsRegularSession() ? QUOTE_TTL : 10 * 60_000
 }
 
 function cacheSet(key, data) {
@@ -1297,6 +1306,7 @@ function _connectFhWs() {
     try {
       const msg = JSON.parse(raw)
       if (msg.type !== 'trade' || !Array.isArray(msg.data)) return
+      if (!_isUsRegularSession()) return  // ignore after-hours/pre-market ticks
       for (const t of msg.data) {
         const sym = t.s, price = t.p
         if (!sym || price == null) continue
@@ -1474,6 +1484,10 @@ app.get('/api/stream/quotes', (req, res) => {
 let _sseRefreshing = false
 setInterval(async () => {
   if (!_sseClients.size) return
+  // Outside regular session there are no new prices to push — the SSE connection
+  // flush already sent closing prices on connect, and the extended-TTL cache
+  // keeps them alive for REST requests.  Skip to avoid unnecessary API calls.
+  if (!_isUsRegularSession()) return
 
   const allSyms = [...new Set([..._sseClients.values()].flatMap(c => [...c.symbols]))]
   if (!allSyms.length) return
