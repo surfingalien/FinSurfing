@@ -24,6 +24,7 @@ const tradingAnalysisRoutes = require('./routes/trading-analysis')
 const governanceRoutes      = require('./routes/governance')
 const researchNotesRoutes   = require('./routes/research-notes')
 const sentimentRoutes       = require('./routes/sentiment')
+const quantmindRoutes       = require('./routes/quantmind')
 
 const { seedAdminDB } = require('./db/adminSeed')
 
@@ -175,6 +176,7 @@ app.use('/api/trading-analysis',  tradingAnalysisRoutes)
 app.use('/api/governance',        governanceRoutes)
 app.use('/api/research-notes',    researchNotesRoutes)
 app.use('/api/sentiment',         sentimentRoutes)
+app.use('/api/quantmind',         quantmindRoutes)
 
 /* ── Market data helpers (AISA primary → Finnhub → FMP fallback) ─────────────
    Yahoo Finance is completely removed — its IPs are blocked on Railway.
