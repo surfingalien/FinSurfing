@@ -192,7 +192,7 @@ async function apiFetch(url, timeoutMs = 10000) {
 
 // ── Server-side quote cache (30 s TTL for quotes, 15 min for charts) ─────────
 const _quoteCache = new Map()
-const QUOTE_TTL    = 15_000
+const QUOTE_TTL    = 5_000
 const CHART_TTL    = 15 * 60_000
 const PC_TTL       = 24 * 60 * 60_000   // prevClose only changes once per day at market open
 const CACHE_MAX    = 5_000              // LRU-style eviction above this size
@@ -1254,6 +1254,7 @@ let   _fhWs           = null
 let   _fhWsDelay      = 1000
 const _fhSubscribed   = new Set()   // symbols currently subscribed on Finnhub WS
 const _sseClients     = new Map()   // clientId → { res, symbols: Set<string> }
+const _lastWsTick     = new Map()   // symbol → timestamp of most recent WS trade tick
 
 function _fhSend(obj) {
   if (_fhWs?.readyState === WebSocket.OPEN) _fhWs.send(JSON.stringify(obj))
@@ -1312,6 +1313,7 @@ function _connectFhWs() {
           regularMarketPreviousClose: pc,
           regularMarketTime:          t.t ? Math.floor(t.t / 1000) : null,
         })
+        _lastWsTick.set(sym, Date.now())
         _sseBroadcast(sym, { symbol: sym, price, change: chg, changePct: chgPct, ts: t.t })
       }
     } catch {}
@@ -1319,14 +1321,13 @@ function _connectFhWs() {
 
   _fhWs.on('close', () => {
     console.warn('[Finnhub WS] closed — reconnect in', _fhWsDelay, 'ms')
-    setTimeout(() => { _fhWsDelay = Math.min(_fhWsDelay * 2, 30_000); _connectFhWs() }, _fhWsDelay)
+    setTimeout(() => { _fhWsDelay = Math.min(_fhWsDelay * 2, 8_000); _connectFhWs() }, _fhWsDelay)
   })
 
   _fhWs.on('error', e => console.warn('[Finnhub WS] error:', e.message))
 }
 
-// Delay 6 s so REST health check fires first (which warms the cache)
-setTimeout(() => { if (FH_KEY()) _connectFhWs() }, 6000)
+setTimeout(() => { if (FH_KEY()) _connectFhWs() }, 1000)
 
 // ── Binance WebSocket — real-time crypto trade stream ─────────────────────────
 // Covers BTC-USD, ETH-USD, SOL-USD etc. (Finnhub WS doesn't understand these)
@@ -1393,6 +1394,7 @@ function _connectBinWs() {
           regularMarketPreviousClose: pc,
           regularMarketTime:          msg.T ? Math.floor(msg.T / 1000) : null,
         })
+        _lastWsTick.set(sym, Date.now())
         _sseBroadcast(sym, { symbol: sym, price, change: chg, changePct: chgPct, ts: msg.T })
       }
     } catch {}
@@ -1400,14 +1402,13 @@ function _connectBinWs() {
 
   _binWs.on('close', () => {
     console.warn('[Binance WS] closed — reconnect in', _binWsDelay, 'ms')
-    setTimeout(() => { _binWsDelay = Math.min(_binWsDelay * 2, 30_000); _connectBinWs() }, _binWsDelay)
+    setTimeout(() => { _binWsDelay = Math.min(_binWsDelay * 2, 8_000); _connectBinWs() }, _binWsDelay)
   })
 
   _binWs.on('error', e => console.warn('[Binance WS] error:', e.message))
 }
 
-// Connect Binance WS at startup (free, no key needed)
-setTimeout(() => _connectBinWs(), 8000)
+setTimeout(() => _connectBinWs(), 1000)
 
 /* ── SSE: real-time quote stream ───────────────────────────────────────────── */
 // GET /api/stream/quotes?symbols=AAPL,MSFT
@@ -1466,10 +1467,10 @@ app.get('/api/stream/quotes', (req, res) => {
 })
 
 // ── SSE proactive price push ───────────────────────────────────────────────────
-// Every 5 s: (1) broadcast currently-cached prices to all SSE clients so the UI
-// always sees fresh data even when no WS trade tick has fired (after-hours, WS down,
-// mutual funds, ETFs). (2) For symbols whose cache has expired, fetch fresh quotes
-// from the internal /api/quote cascade and broadcast the result.
+// Every 2 s: push cached/fresh prices ONLY for symbols that haven't had a live
+// WS tick in the last 4 s. Symbols actively ticking via Finnhub/Binance WS already
+// get sub-100 ms updates via _sseBroadcast — re-broadcasting stale cache on top
+// of those just adds noise and latency.
 let _sseRefreshing = false
 setInterval(async () => {
   if (!_sseClients.size) return
@@ -1477,21 +1478,26 @@ setInterval(async () => {
   const allSyms = [...new Set([..._sseClients.values()].flatMap(c => [...c.symbols]))]
   if (!allSyms.length) return
 
-  // Push whatever is in cache right now — no API call, instant
-  for (const sym of allSyms) {
+  // Only process symbols with no recent WS tick (last 4 s)
+  const now         = Date.now()
+  const noRecentTick = allSyms.filter(s => now - (_lastWsTick.get(s) || 0) > 4000)
+  if (!noRecentTick.length) return
+
+  // Push cached prices for no-tick symbols that still have a valid cache entry
+  for (const sym of noRecentTick) {
     const q = cacheGet(`fhq:${sym}`) || cacheGet(`aisaq:${sym}`)
     if (!q?.regularMarketPrice) continue
     _sseBroadcast(sym, {
       symbol:    sym,
       price:     q.regularMarketPrice,
-      change:    q.regularMarketChange     ?? null,
+      change:    q.regularMarketChange        ?? null,
       changePct: q.regularMarketChangePercent ?? null,
       ts:        q.regularMarketTime ? q.regularMarketTime * 1000 : null,
     })
   }
 
-  // For stale (cache-expired) non-crypto symbols, fetch fresh and broadcast
-  const stale = allSyms.filter(s => !isCryptoSymbol(s) && !cacheGet(`fhq:${s}`) && !cacheGet(`aisaq:${s}`))
+  // REST-fetch for no-tick symbols whose cache has also expired
+  const stale = noRecentTick.filter(s => !isCryptoSymbol(s) && !cacheGet(`fhq:${s}`) && !cacheGet(`aisaq:${s}`))
   if (!stale.length || _sseRefreshing) return
 
   _sseRefreshing = true
@@ -1499,7 +1505,7 @@ setInterval(async () => {
     const port = process.env.PORT || 3001
     const r = await fetch(
       `http://127.0.0.1:${port}/api/quote?symbols=${stale.map(encodeURIComponent).join(',')}`,
-      { signal: AbortSignal.timeout(12000) }
+      { signal: AbortSignal.timeout(8000) }
     )
     if (!r.ok) return
     const data = await r.json()
@@ -1508,7 +1514,7 @@ setInterval(async () => {
       _sseBroadcast(q.symbol, {
         symbol:    q.symbol,
         price:     q.regularMarketPrice,
-        change:    q.regularMarketChange     ?? null,
+        change:    q.regularMarketChange        ?? null,
         changePct: q.regularMarketChangePercent ?? null,
         ts:        q.regularMarketTime ? q.regularMarketTime * 1000 : null,
       })
@@ -1518,7 +1524,7 @@ setInterval(async () => {
   } finally {
     _sseRefreshing = false
   }
-}, 5000)
+}, 2000)
 
 
 /* ── Health (includes DB status + demo mode) ───── */
