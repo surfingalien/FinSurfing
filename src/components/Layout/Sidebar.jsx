@@ -56,6 +56,7 @@ function buildGroups(user, triggeredCount, tradingUnread) {
         { id: 'ai-watchlist',    label: 'AI Watchlist',   icon: Bookmark },
         { id: 'research',        label: 'AI Agent',       icon: Bot },
         { id: 'second-brain',    label: 'Second Brain',   icon: BookOpen },
+        { id: 'quantmind',       label: 'QuantMind',      icon: FlaskConical },
         { id: 'recommendations', label: 'Advisory',       icon: Lightbulb },
       ],
     },
