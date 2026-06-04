@@ -14,6 +14,7 @@
     "@radix-ui/react-popover": "^1.1.15",
     "@radix-ui/react-tooltip": "^1.2.8",
     "bcryptjs": "^2.4.3",
+    "ccxt": "^4.5.56",
     "clsx": "^2.1.1",
     "compression": "^1.8.1",
     "cookie-parser": "^1.4.7",

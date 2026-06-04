@@ -25,6 +25,10 @@ const researchNotesRoutes   = require('./routes/research-notes')
 const sentimentRoutes       = require('./routes/sentiment')
 const quantmindRoutes       = require('./routes/quantmind')
 const polymarketRoutes      = require('./routes/polymarket')
+const exchangeRoutes        = require('./routes/exchange')
+const ticksRoutes           = require('./routes/ticks')
+const quantRoutes           = require('./routes/quant')
+const questdb               = require('./lib/questdb')
 
 const { seedAdminDB } = require('./db/adminSeed')
 
@@ -65,6 +69,9 @@ const { seedAdminDB } = require('./db/adminSeed')
     console.error('[DB] Migration failed:', err.message)
   }
 })()
+
+// QuestDB tick table init (gracefully no-ops when QUESTDB_URL is not set)
+questdb.init()
 
 const app  = express()
 const PORT = parseInt(process.env.PORT, 10) || 3001
@@ -177,6 +184,9 @@ app.use('/api/research-notes',    researchNotesRoutes)
 app.use('/api/sentiment',         sentimentRoutes)
 app.use('/api/quantmind',         quantmindRoutes)
 app.use('/api/polymarket',        polymarketRoutes)
+app.use('/api/exchange',          exchangeRoutes)
+app.use('/api/ticks',             ticksRoutes)
+app.use('/api/quant',             quantRoutes)
 
 /* ── Market data helpers (AISA primary → Finnhub → FMP fallback) ─────────────
    Yahoo Finance is completely removed — its IPs are blocked on Railway.
@@ -1327,6 +1337,7 @@ function _connectFhWs() {
         })
         _lastWsTick.set(sym, Date.now())
         _sseBroadcast(sym, { symbol: sym, price, change: chg, changePct: chgPct, ts: t.t })
+        questdb.writeTick(sym, price, chg, chgPct, 'finnhub')
       }
     } catch {}
   })
@@ -1408,6 +1419,7 @@ function _connectBinWs() {
         })
         _lastWsTick.set(sym, Date.now())
         _sseBroadcast(sym, { symbol: sym, price, change: chg, changePct: chgPct, ts: msg.T })
+        questdb.writeTick(sym, price, chg, chgPct, 'binance')
       }
     } catch {}
   })
