@@ -1,5 +1,5 @@
 const cache = new Map()
-const TTL = 30 * 1000 // 30 sec — keeps rapid re-renders cheap but lets Refresh work
+const TTL = 10 * 1000 // 10 sec — short enough for live quotes, long enough to batch rapid re-renders
 
 function cached(key, fn) {
   const hit = cache.get(key)

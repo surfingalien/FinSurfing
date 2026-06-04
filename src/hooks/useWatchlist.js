@@ -35,9 +35,8 @@ export function useWatchlist() {
 
   useEffect(() => {
     if (!symbols.length) return
-    // Full fetch on mount and every 2 min
     refresh()
-    const fullRefresh = setInterval(refresh, 2 * 60_000)
+    const fullRefresh = setInterval(refresh, 30_000)
 
     // Real-time stream — merges price ticks; never overwrite valid change with null
     const unsub = subscribeQuotes(symbols, ({ symbol: sym, price, change, changePct }) => {
