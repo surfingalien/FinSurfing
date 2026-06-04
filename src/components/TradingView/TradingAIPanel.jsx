@@ -19,6 +19,9 @@ import {
   Zap,
   BarChart2,
   ChevronRight,
+  Mic,
+  ThumbsUp,
+  ThumbsDown,
 } from 'lucide-react'
 import { getApiKeyHeaders } from '../../services/api'
 
@@ -118,6 +121,9 @@ export default function TradingAIPanel({ symbol, interval, price }) {
   const [alerts, setAlerts] = useState([])
   const [reasoningOpen, setReasoningOpen] = useState(false)
   const [thesisOpen, setThesisOpen]       = useState(true)
+  const [earnings, setEarnings]           = useState(null)
+  const [earningsLoading, setEarningsLoading] = useState(false)
+  const [earningsError, setEarningsError]     = useState(null)
 
   const debounceRef = useRef(null)
   const chatEndRef  = useRef(null)
@@ -180,6 +186,8 @@ export default function TradingAIPanel({ symbol, interval, price }) {
     if (prevSymRef.current !== null && prevSymRef.current !== symbol) {
       setResult(null)
       setError(null)
+      setEarnings(null)
+      setEarningsError(null)
     }
     prevSymRef.current = symbol
 
@@ -252,6 +260,26 @@ export default function TradingAIPanel({ symbol, interval, price }) {
     setStreaming(false)
   }
 
+  // ── fetchEarnings ──────────────────────────────────────────────────────────
+  const fetchEarnings = useCallback(async () => {
+    if (!symbol) return
+    setEarningsLoading(true)
+    setEarningsError(null)
+    try {
+      const res = await fetch(`/api/earnings-call?symbol=${encodeURIComponent(ticker)}`, {
+        headers: getApiKeyHeaders(),
+        signal: AbortSignal.timeout(30000),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Earnings fetch failed')
+      if (data.available === false) throw new Error(data.error || 'No earnings transcript available')
+      setEarnings(data)
+    } catch (e) {
+      setEarningsError(e.message)
+    }
+    setEarningsLoading(false)
+  }, [symbol, ticker])
+
   // ── Derived display values ─────────────────────────────────────────────────
   const analysis          = result?.analysis ?? null
   const indicators        = result?.indicators ?? null
@@ -267,6 +295,7 @@ export default function TradingAIPanel({ symbol, interval, price }) {
     { id: 'analysis', label: 'Analysis', icon: Brain },
     { id: 'chat',     label: 'Chat',     icon: MessageSquare },
     { id: 'alerts',   label: 'Alerts',   icon: Bell, badge: alerts.length },
+    { id: 'earnings', label: 'Earnings', icon: Mic },
   ]
 
   return (
@@ -842,6 +871,207 @@ export default function TradingAIPanel({ symbol, interval, price }) {
                   </div>
                 ))}
               </div>
+            )}
+          </div>
+        )}
+
+        {/* ──────────────────── EARNINGS TAB ────────────────────────────── */}
+        {tab === 'earnings' && (
+          <div className="flex-1 overflow-y-auto">
+            {/* Empty state — prompt to load */}
+            {!earnings && !earningsLoading && !earningsError && (
+              <div className="flex flex-col items-center justify-center h-40 gap-3 text-slate-600">
+                <Mic className="w-8 h-8 opacity-30" />
+                <span className="text-xs text-slate-500">Earnings call transcript analysis</span>
+                <button
+                  onClick={fetchEarnings}
+                  className="px-3 py-1.5 rounded-lg bg-violet-500/20 text-violet-400 border border-violet-500/25 text-xs hover:bg-violet-500/30 transition-all"
+                >
+                  Load Earnings Analysis
+                </button>
+              </div>
+            )}
+
+            {/* Loading */}
+            {earningsLoading && (
+              <div className="flex flex-col items-center justify-center h-40 gap-2 text-slate-500">
+                <Loader2 className="w-6 h-6 animate-spin text-violet-400" />
+                <span className="text-xs">Fetching earnings transcript…</span>
+              </div>
+            )}
+
+            {/* Error */}
+            {!earningsLoading && earningsError && (
+              <div className="m-3 rounded-xl border border-red-500/20 bg-red-500/5 p-3">
+                <div className="flex items-center gap-2 text-red-400 mb-2 text-xs font-medium">
+                  <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                  Earnings unavailable
+                </div>
+                <p className="text-[11px] text-red-400/70 mb-2">{earningsError}</p>
+                <button
+                  onClick={fetchEarnings}
+                  className="text-[11px] text-red-400 hover:text-red-300 flex items-center gap-1 transition-colors"
+                >
+                  <RefreshCw className="w-3 h-3" /> Retry
+                </button>
+              </div>
+            )}
+
+            {/* Result */}
+            {!earningsLoading && earnings && (
+              <>
+                {/* ── Header card ──────────────────────────────────────── */}
+                <div className="m-3 rounded-xl border border-white/[0.08] bg-white/[0.03] p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-1.5">
+                      <Mic className="w-3.5 h-3.5 text-violet-400" />
+                      <span className="text-xs font-semibold text-white">
+                        Q{earnings.quarter} {earnings.year} Earnings Call
+                      </span>
+                    </div>
+                    <button
+                      onClick={fetchEarnings}
+                      className="p-1 rounded hover:bg-white/[0.06] text-slate-600 hover:text-slate-400 transition-all"
+                      title="Refresh"
+                    >
+                      <RefreshCw className="w-3 h-3" />
+                    </button>
+                  </div>
+                  {earnings.date && (
+                    <p className="text-[10px] text-slate-500 mb-2">{earnings.date}</p>
+                  )}
+
+                  {/* Sentiment badge + score */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {earnings.overallSentiment && (
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${
+                        earnings.overallSentiment === 'Positive' || earnings.overallSentiment === 'Very Positive'
+                          ? 'bg-emerald-500/20 text-emerald-400'
+                          : earnings.overallSentiment === 'Negative' || earnings.overallSentiment === 'Very Negative'
+                          ? 'bg-red-500/20 text-red-400'
+                          : 'bg-amber-500/20 text-amber-400'
+                      }`}>
+                        {earnings.overallSentiment}
+                      </span>
+                    )}
+                    {earnings.sentimentScore != null && (
+                      <span className="text-[10px] text-slate-400">
+                        Score: <span className="text-white font-mono">{earnings.sentimentScore}/10</span>
+                      </span>
+                    )}
+                    {earnings.managementTone && (
+                      <span className="text-[10px] text-slate-500">
+                        Tone: <span className="text-slate-300">{earnings.managementTone}</span>
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* ── Key Metrics ───────────────────────────────────────── */}
+                {earnings.keyMetrics && earnings.keyMetrics.length > 0 && (
+                  <div className="px-3 mb-3">
+                    <div className="text-[10px] text-slate-500 mb-1.5 uppercase tracking-wider">Key Metrics</div>
+                    <div className="rounded-lg bg-white/[0.03] border border-white/[0.06] divide-y divide-white/[0.04]">
+                      {earnings.keyMetrics.map((m, i) => (
+                        <div key={i} className="flex items-start gap-1.5 px-2.5 py-1.5">
+                          <span className="text-violet-400/70 text-[10px] shrink-0 mt-0.5">•</span>
+                          <span className="text-[11px] text-slate-300 leading-snug">{m}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Guidance ──────────────────────────────────────────── */}
+                {earnings.guidance && (
+                  <div className="px-3 mb-3">
+                    <div className="text-[10px] text-slate-500 mb-1.5 uppercase tracking-wider">Forward Guidance</div>
+                    <div className="rounded-lg bg-blue-500/5 border border-blue-500/15 p-2.5">
+                      <p className="text-[11px] text-blue-300/90 leading-snug">{earnings.guidance}</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Bull / Bear points ────────────────────────────────── */}
+                {((earnings.bullPoints?.length > 0) || (earnings.bearPoints?.length > 0)) && (
+                  <div className="px-3 mb-3 grid grid-cols-2 gap-2">
+                    {/* Bull */}
+                    <div>
+                      <div className="text-[10px] text-emerald-400/80 mb-1.5 flex items-center gap-1 uppercase tracking-wider">
+                        <ThumbsUp className="w-3 h-3" /> Bull
+                      </div>
+                      <div className="space-y-1">
+                        {(earnings.bullPoints ?? []).map((p, i) => (
+                          <div key={i} className="flex items-start gap-1">
+                            <span className="text-emerald-400/60 text-[10px] shrink-0 mt-0.5">+</span>
+                            <span className="text-[10px] text-slate-400 leading-snug">{p}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    {/* Bear */}
+                    <div>
+                      <div className="text-[10px] text-red-400/80 mb-1.5 flex items-center gap-1 uppercase tracking-wider">
+                        <ThumbsDown className="w-3 h-3" /> Bear
+                      </div>
+                      <div className="space-y-1">
+                        {(earnings.bearPoints ?? []).map((p, i) => (
+                          <div key={i} className="flex items-start gap-1">
+                            <span className="text-red-400/60 text-[10px] shrink-0 mt-0.5">−</span>
+                            <span className="text-[10px] text-slate-400 leading-snug">{p}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Key Quote ─────────────────────────────────────────── */}
+                {earnings.keyQuote && (
+                  <div className="px-3 mb-3">
+                    <div className="text-[10px] text-slate-500 mb-1.5 uppercase tracking-wider">Key Quote</div>
+                    <blockquote className="rounded-lg bg-white/[0.03] border-l-2 border-violet-500/40 border border-white/[0.05] pl-3 pr-2.5 py-2">
+                      <p className="text-[11px] text-slate-300 leading-relaxed italic">"{earnings.keyQuote}"</p>
+                    </blockquote>
+                  </div>
+                )}
+
+                {/* ── Catalysts & Risks ─────────────────────────────────── */}
+                {(earnings.catalysts?.length > 0 || earnings.risks?.length > 0) && (
+                  <div className="px-3 mb-3 space-y-2">
+                    {earnings.catalysts?.length > 0 && (
+                      <div>
+                        <div className="text-[10px] text-slate-500 mb-1 uppercase tracking-wider">Catalysts</div>
+                        {earnings.catalysts.map((c, i) => (
+                          <div key={i} className="flex items-start gap-1.5 mb-0.5">
+                            <Zap className="w-3 h-3 text-amber-400/70 shrink-0 mt-0.5" />
+                            <span className="text-[11px] text-amber-400/80 leading-snug">{c}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {earnings.risks?.length > 0 && (
+                      <div>
+                        <div className="text-[10px] text-slate-500 mb-1 uppercase tracking-wider">Risks</div>
+                        {earnings.risks.map((r, i) => (
+                          <div key={i} className="flex items-start gap-1.5 mb-0.5">
+                            <AlertTriangle className="w-3 h-3 text-red-400/70 shrink-0 mt-0.5" />
+                            <span className="text-[11px] text-red-400/80 leading-snug">{r}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* ── Disclaimer ────────────────────────────────────────── */}
+                <div className="px-3 pb-4">
+                  <p className="text-[9px] text-slate-600 leading-relaxed">
+                    Transcript analysis by AI. {earnings.transcriptLength != null ? `${earnings.transcriptLength.toLocaleString()} chars analyzed. ` : ''}
+                    Not financial advice.
+                  </p>
+                </div>
+              </>
             )}
           </div>
         )}

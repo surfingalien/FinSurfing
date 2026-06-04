@@ -14,15 +14,14 @@
  */
 
 const express             = require('express')
-const Anthropic           = require('@anthropic-ai/sdk')
 const rateLimit           = require('express-rate-limit')
 const fs                  = require('fs')
 const path                = require('path')
-const { getBreaker, CircuitOpenError } = require('../lib/circuit-breaker')
-const { logCall }         = require('../lib/ai-audit')
+const { getRouter }       = require('../lib/ai-router')
+const { CircuitOpenError } = require('../lib/circuit-breaker')
 
-const router  = express.Router()
-const breaker = getBreaker('ai-brain', { threshold: 3, resetTimeoutMs: 60_000 })
+const router   = express.Router()
+const aiRouter = getRouter('ai-brain')
 
 const PREDICTION_LOG = path.join(__dirname, '../data/ai-brain-predictions.jsonl')
 
@@ -317,9 +316,6 @@ router.post('/analyze', brainLimit, async (req, res) => {
   if (process.env.AI_BRAIN_DISABLED === 'true')
     return res.status(503).json({ error: 'AI Brain is temporarily disabled (kill switch active)', killSwitch: true })
 
-  const apiKey = process.env.ANTHROPIC_API_KEY
-  if (!apiKey) return res.status(503).json({ error: 'AI service not configured (ANTHROPIC_API_KEY missing)' })
-
   const {
     symbols,
     scanMode = 'broad',
@@ -339,7 +335,7 @@ router.post('/analyze', brainLimit, async (req, res) => {
   const horizonLabel = { '3m': '3-month', '6m': '6-month', '12m': '12-month' }[horizon]
   const generatedAt  = new Date().toISOString()
 
-  // ── Step 1: fetch live quotes with volume data ─────────────────────────────
+  // ── Sub-agent 1: data fetch — live quotes for the universe ───────────────────
   let marketSnippet = ''
   let liveQuotes    = []
   try {
@@ -454,70 +450,19 @@ Rules:
 - dataSource: "live" if snapshot provided, else "knowledge"
 - STRICTLY respect all ≤N word limits`
 
-  // ── Groq fallback ─────────────────────────────────────────────────────────
-  async function callGroq(text) {
-    const groqKey = process.env.GROQ_API_KEY
-    if (!groqKey) throw new Error('GROQ_API_KEY not configured')
-    const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${groqKey}` },
-      body:    JSON.stringify({
-        model:      'llama-3.3-70b-versatile',
-        max_tokens: 8192,
-        messages:   [{ role: 'user', content: text }],
-      }),
-      signal: AbortSignal.timeout(60_000),
-    })
-    if (!r.ok) {
-      const e = await r.text()
-      throw new Error(`Groq API error ${r.status}: ${e.slice(0, 200)}`)
-    }
-    const d = await r.json()
-    return d.choices?.[0]?.message?.content || ''
-  }
-
-  // ── Step 3: run Claude via circuit breaker ─────────────────────────────────
-  const AI_MODEL = 'claude-sonnet-4-6'
+  // ── Sub-agent 2: signal generation via ai-router (Claude + Groq fallback) ────
   let raw     = ''
   let llmUsed = 'claude'
-  let tokensIn = null, tokensOut = null
 
   try {
-    const { result: msg, durationMs } = await breaker.call(async () => {
-      const client = new Anthropic({ apiKey })
-      return client.messages.create({
-        model:      AI_MODEL,
-        max_tokens: 16000,
-        messages:   [{ role: 'user', content: prompt }],
-      })
-    })
-    raw       = msg.content?.[0]?.text || ''
-    tokensIn  = msg.usage?.input_tokens
-    tokensOut = msg.usage?.output_tokens
-    logCall({ route: 'ai-brain', model: AI_MODEL, llm: 'claude', symbols: universe, success: true, tokensIn, tokensOut, durationMs })
-  } catch (claudeErr) {
-    if (claudeErr instanceof CircuitOpenError) {
-      logCall({ route: 'ai-brain', model: AI_MODEL, llm: 'claude', symbols: universe, success: false, error: claudeErr.message, durationMs: 0 })
-      return res.status(503).json({ error: claudeErr.message, circuitOpen: true })
-    }
-
-    const isOverloaded = claudeErr.status === 529 || claudeErr.message?.includes('overloaded')
-    if (isOverloaded && process.env.GROQ_API_KEY) {
-      console.warn('[ai-brain] Claude overloaded, falling back to Groq')
-      const groqModel = 'llama-3.3-70b-versatile'
-      const t0 = Date.now()
-      try {
-        raw = await callGroq(prompt)
-        llmUsed = 'groq'
-        logCall({ route: 'ai-brain', model: groqModel, llm: 'groq', symbols: universe, success: true, durationMs: Date.now() - t0 })
-      } catch (groqErr) {
-        logCall({ route: 'ai-brain', model: groqModel, llm: 'groq', symbols: universe, success: false, error: groqErr.message, durationMs: Date.now() - t0 })
-        throw groqErr
-      }
-    } else {
-      logCall({ route: 'ai-brain', model: AI_MODEL, llm: 'claude', symbols: universe, success: false, error: claudeErr.message, durationMs: claudeErr._durationMs || 0 })
-      throw claudeErr
-    }
+    const result = await aiRouter.call({ prompt, maxTokens: 16000, symbols: universe })
+    raw     = result.text
+    llmUsed = result.llmUsed
+  } catch (err) {
+    if (err instanceof CircuitOpenError) return res.status(503).json({ error: err.message, circuitOpen: true })
+    if (err.status === 503)             return res.status(503).json({ error: err.message })
+    console.error('[ai-brain]', err.message)
+    return res.status(500).json({ error: 'AI Brain analysis failed: ' + err.message })
   }
 
   try {
@@ -560,7 +505,7 @@ Rules:
       universeAnalyzed: universe,
       liveDataSymbols:  liveQuotes.map(q => q.symbol),
       llmUsed,
-      modelUsed: llmUsed === 'claude' ? AI_MODEL : 'llama-3.3-70b-versatile',
+      modelUsed: llmUsed === 'claude' ? 'claude-sonnet-4-6' : 'llama-3.3-70b-versatile',
       agentsUsed: ['Fundamental Analyst','Technical Analyst','Sentiment Agent','Macro Economist','Risk Manager','Supervisor'],
     })
   } catch (err) {
