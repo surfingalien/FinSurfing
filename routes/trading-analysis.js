@@ -9,9 +9,11 @@
  */
 
 const express   = require('express')
-const Anthropic  = require('@anthropic-ai/sdk')
+const { getRouter } = require('../lib/ai-router')
 const { optionalAuth, requireAuth } = require('../middleware/auth')
 const { recallMemory, saveMemory, searchMemory } = require('../db/ai_memory')
+
+const aiRouter = getRouter('trading-analysis')
 
 const router = express.Router()
 
@@ -824,9 +826,6 @@ Respond with ONLY pure JSON (absolutely no markdown fences, no backticks, no cod
 // ── POST /analyze ─────────────────────────────────────────────────────────────
 
 router.post('/analyze', async (req, res) => {
-  const apiKey = process.env.ANTHROPIC_API_KEY
-  if (!apiKey) return res.status(503).json({ error: 'AI service not configured (ANTHROPIC_API_KEY missing)' })
-
   const { symbol, interval = 'D', livePrice: clientLivePrice } = req.body
 
   if (!symbol || typeof symbol !== 'string')
@@ -944,14 +943,11 @@ router.post('/analyze', async (req, res) => {
     // Build prompt and call Claude
     const analysisPrompt = buildAnalysisPrompt(sym, interval, price, indicators, patterns, vol, priceLabel, sentiment, priorMemories)
 
-    const anthropic = new Anthropic({ apiKey })
-    const msg = await anthropic.messages.create({
-      model:      'claude-sonnet-4-6',
-      max_tokens: 2048,
-      messages:   [{ role: 'user', content: analysisPrompt }],
+    const { text: rawText } = await aiRouter.call({
+      prompt:    analysisPrompt,
+      maxTokens: 2048,
+      symbols:   [sym],
     })
-
-    const rawText = msg.content?.[0]?.text || ''
 
     // Strip any accidental markdown fences
     const cleaned = rawText.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim()
@@ -1039,13 +1035,6 @@ const CHAT_SYSTEM_PROMPT =
   'Always include brief risk disclaimers. Never guarantee profits.'
 
 router.post('/chat', async (req, res) => {
-  const apiKey = process.env.ANTHROPIC_API_KEY
-  if (!apiKey) {
-    res.setHeader('Content-Type', 'text/event-stream')
-    res.write(`data: ${JSON.stringify({ error: 'AI service not configured (ANTHROPIC_API_KEY missing)' })}\n\n`)
-    return res.end()
-  }
-
   const {
     message,
     symbol,
@@ -1070,8 +1059,8 @@ router.post('/chat', async (req, res) => {
   let systemPrompt = CHAT_SYSTEM_PROMPT
   if (symbol || interval || price != null) {
     const contextLines = []
-    if (symbol)   contextLines.push(`Symbol: ${symbol}`)
-    if (interval) contextLines.push(`Timeframe: ${interval}`)
+    if (symbol)        contextLines.push(`Symbol: ${symbol}`)
+    if (interval)      contextLines.push(`Timeframe: ${interval}`)
     if (price != null) contextLines.push(`Current price: ${price}`)
     systemPrompt += `\n\nCurrent chart context:\n${contextLines.join('\n')}`
   }
@@ -1079,21 +1068,14 @@ router.post('/chat', async (req, res) => {
     systemPrompt += `\n\nLatest analysis context:\n${JSON.stringify(analysisContext, null, 2)}`
   }
 
-  // Build messages: include last 10 from history + current message
-  const messages = [
-    ...history.slice(-10).map(m => ({ role: m.role, content: String(m.content) })),
-    { role: 'user', content: message },
-  ]
+  // Build full prompt including conversation history
+  const historyBlock = history.slice(-10)
+    .map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${String(m.content)}`)
+    .join('\n')
+  const fullPrompt = historyBlock ? `${historyBlock}\nUser: ${message}` : message
 
   try {
-    const anthropic = new Anthropic({ apiKey })
-
-    const stream = anthropic.messages.stream({
-      model:      'claude-sonnet-4-6',
-      max_tokens: 1024,
-      system:     systemPrompt,
-      messages,
-    })
+    const stream = aiRouter.stream({ prompt: fullPrompt, maxTokens: 1024, system: systemPrompt })
 
     stream.on('text', (text) => {
       res.write(`data: ${JSON.stringify({ text })}\n\n`)

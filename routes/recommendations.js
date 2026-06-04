@@ -16,11 +16,10 @@
  */
 
 const express             = require('express')
-const Anthropic           = require('@anthropic-ai/sdk')
 const router              = express.Router()
 const rateLimit           = require('express-rate-limit')
-const { getBreaker, CircuitOpenError } = require('../lib/circuit-breaker')
-const { logCall }         = require('../lib/ai-audit')
+const { getRouter }       = require('../lib/ai-router')
+const { CircuitOpenError } = require('../lib/circuit-breaker')
 const { getUserPrefs, saveUserPref } = require('../db/ai_memory')
 
 const recLimit = rateLimit({
@@ -28,7 +27,7 @@ const recLimit = rateLimit({
   message: { error: 'Too many recommendation requests — wait a minute' },
 })
 
-const breaker = getBreaker('recommendations', { threshold: 3, resetTimeoutMs: 60_000 })
+const aiRouter = getRouter('recommendations')
 
 // Extract user API key headers to forward to the internal quote endpoint
 function fwdKeys(req) {
@@ -111,9 +110,6 @@ router.post('/', recLimit, async (req, res) => {
   if (process.env.AI_RECOMMENDATIONS_DISABLED === 'true')
     return res.status(503).json({ error: 'AI Buy Signals are temporarily disabled (kill switch active)', killSwitch: true })
 
-  const apiKey = process.env.ANTHROPIC_API_KEY
-  if (!apiKey) return res.status(503).json({ error: 'AI service not configured (ANTHROPIC_API_KEY missing)' })
-
   const { holdings = [], focusSymbols = [] } = req.body
   const holdingStr = holdings.length    ? holdings.join(', ') : 'none'
   const focusStr   = focusSymbols.length ? focusSymbols.join(', ') : ''
@@ -195,58 +191,19 @@ Respond ONLY with a JSON object — no markdown, no explanation, just the JSON:
   "keyRisks": "1-sentence macro risk to watch"
 }`
 
-  const REC_MODEL = 'claude-sonnet-4-6'
+  const allSymbols = [...new Set([...holdings, ...focusSymbols])]
   let raw     = ''
   let llmUsed = 'claude'
-  let tokensIn = null, tokensOut = null
-  const allSymbols = [...new Set([...holdings, ...focusSymbols])]
 
   try {
-    const { result: msg, durationMs } = await breaker.call(async () => {
-      const client = new Anthropic({ apiKey })
-      return client.messages.create({
-        model:      REC_MODEL,
-        max_tokens: 8192,
-        messages:   [{ role: 'user', content: prompt }],
-      })
-    })
-    raw       = msg.content?.[0]?.text || ''
-    tokensIn  = msg.usage?.input_tokens
-    tokensOut = msg.usage?.output_tokens
-    logCall({ route: 'recommendations', model: REC_MODEL, llm: 'claude', symbols: allSymbols, success: true, tokensIn, tokensOut, durationMs })
-  } catch (claudeErr) {
-    if (claudeErr instanceof CircuitOpenError) {
-      logCall({ route: 'recommendations', model: REC_MODEL, llm: 'claude', symbols: allSymbols, success: false, error: claudeErr.message, durationMs: 0 })
-      return res.status(503).json({ error: claudeErr.message, circuitOpen: true })
-    }
-
-    const isOverloaded = claudeErr.status === 529 || claudeErr.message?.includes('overloaded')
-    if (isOverloaded && process.env.GROQ_API_KEY) {
-      console.warn('[recommendations] Claude overloaded, falling back to Groq')
-      const groqModel = 'llama-3.3-70b-versatile'
-      const t0 = Date.now()
-      try {
-        const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-          method:  'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.GROQ_API_KEY}` },
-          body:    JSON.stringify({ model: groqModel, max_tokens: 8000, messages: [{ role: 'user', content: prompt }] }),
-          signal:  AbortSignal.timeout(60_000),
-        })
-        if (!r.ok) throw new Error(`Groq API error ${r.status}`)
-        const d = await r.json()
-        raw     = d.choices?.[0]?.message?.content || ''
-        llmUsed = 'groq'
-        logCall({ route: 'recommendations', model: groqModel, llm: 'groq', symbols: allSymbols, success: true, durationMs: Date.now() - t0 })
-      } catch (groqErr) {
-        logCall({ route: 'recommendations', model: groqModel, llm: 'groq', symbols: allSymbols, success: false, error: groqErr.message, durationMs: Date.now() - t0 })
-        console.error('[recommendations]', groqErr.message)
-        return res.status(500).json({ error: 'Recommendation service error: ' + groqErr.message })
-      }
-    } else {
-      logCall({ route: 'recommendations', model: REC_MODEL, llm: 'claude', symbols: allSymbols, success: false, error: claudeErr.message, durationMs: claudeErr._durationMs || 0 })
-      console.error('[recommendations]', claudeErr.message)
-      return res.status(500).json({ error: 'Recommendation service error: ' + claudeErr.message })
-    }
+    const result = await aiRouter.call({ prompt, maxTokens: 8192, symbols: allSymbols })
+    raw     = result.text
+    llmUsed = result.llmUsed
+  } catch (err) {
+    if (err instanceof CircuitOpenError) return res.status(503).json({ error: err.message, circuitOpen: true })
+    if (err.status === 503)             return res.status(503).json({ error: err.message })
+    console.error('[recommendations]', err.message)
+    return res.status(500).json({ error: 'Recommendation service error: ' + err.message })
   }
 
   try {
