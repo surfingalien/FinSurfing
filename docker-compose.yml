@@ -1,0 +1,64 @@
+version: "3.9"
+
+services:
+  questdb:
+    image: questdb/questdb:8.1.0
+    ports:
+      - "9000:9000"   # REST API / Web Console
+      - "9009:9009"   # ILP (InfluxDB Line Protocol)
+      - "8812:8812"   # PGWire
+    environment:
+      QDB_CAIRO_COMMIT_LAG: 1000
+      QDB_CAIRO_MAX_UNCOMMITTED_ROWS: 100000
+    volumes:
+      - questdb_data:/root/.questdb
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  quant-sidecar:
+    build:
+      context: ./python-sidecar
+      dockerfile: Dockerfile
+    ports:
+      - "5001:5001"
+    environment:
+      PORT: "5001"
+      FMP_API_KEY: "${FMP_API_KEY}"
+    depends_on:
+      - questdb
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5001/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3001"
+    environment:
+      PORT: "3001"
+      NODE_ENV: production
+      DATABASE_URL: "${DATABASE_URL}"
+      QUESTDB_URL: "http://questdb:9000"
+      QUANT_SIDECAR_URL: "http://quant-sidecar:5001"
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY}"
+      GROQ_API_KEY: "${GROQ_API_KEY}"
+      FINNHUB_API_KEY: "${FINNHUB_API_KEY}"
+      FMP_API_KEY: "${FMP_API_KEY}"
+      ALPHA_VANTAGE_API_KEY: "${ALPHA_VANTAGE_API_KEY}"
+      TWELVEDATA_API_KEY: "${TWELVEDATA_API_KEY}"
+      JWT_SECRET: "${JWT_SECRET}"
+    depends_on:
+      questdb:
+        condition: service_healthy
+      quant-sidecar:
+        condition: service_healthy
+
+volumes:
+  questdb_data:
