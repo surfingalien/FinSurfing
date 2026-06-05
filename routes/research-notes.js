@@ -1102,4 +1102,177 @@ Structure:
   }
 })
 
+// ── POST /api/research-notes/daily-checklist ─────────────────────────────────
+// Pre-market investment checklist tailored to portfolio + stated goals (obsidian-claude-pkm /daily)
+router.post('/daily-checklist', async (req, res) => {
+  const { portfolioSymbols = [], goals = {}, portfolioValue } = req.body
+
+  const today   = new Date()
+  const dateStr = today.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
+  const dateShort = today.toISOString().slice(0, 10)
+
+  const goalsCtx = [
+    goals.vision?.text   && `3-Year Vision: ${goals.vision.text}`,
+    ...(goals.yearly || []).map(g => `Yearly Goal: ${g.text}${g.target ? ` (target: ${g.target})` : ''}`),
+    goals.weekly?.priority && `This Week's Priority: ${goals.weekly.priority}`,
+  ].filter(Boolean).join('\n')
+
+  const syms = Array.isArray(portfolioSymbols) ? portfolioSymbols : []
+
+  const prompt = `You are a disciplined investment coach generating a pre-market checklist for ${dateStr}.
+
+INVESTOR GOALS:
+${goalsCtx || 'No goals set yet.'}
+
+PORTFOLIO: ${syms.length > 0 ? syms.join(', ') : 'Not specified'}
+${portfolioValue ? `Portfolio Value: ~$${Number(portfolioValue).toLocaleString()}` : ''}
+
+Generate a focused, actionable pre-market checklist. Respond ONLY with valid JSON:
+{
+  "title": "Daily Checklist — ${dateShort}",
+  "content": "full markdown checklist",
+  "tags": ["daily-checklist", "${dateShort}"],
+  "note_type": "braindump"
+}
+
+Structure (be specific to their holdings and goals, not generic):
+# Pre-Market Checklist — ${dateStr}
+
+## Morning Focus (5 min)
+- [ ] specific action tied to their goals or holdings
+
+## Portfolio Review
+${syms.slice(0, 4).map(s => `- [ ] Check ${s} for overnight moves or news`).join('\n')}
+
+## Research Queue
+- [ ] [specific research task aligned with goals]
+
+## Risk Check
+- [ ] [specific risk check for their positions]
+
+## Goal Pulse
+- [ ] [one concrete check tied to their stated yearly goal or weekly priority]
+
+## Evening Reflection
+- [ ] Log any trades or position changes in research notes
+- [ ] Update thesis if any key developments occurred`
+
+  try {
+    const client = aiClient()
+    const msg = await client.messages.create({
+      model: 'claude-sonnet-4-6', max_tokens: 2048,
+      messages: [{ role: 'user', content: prompt }],
+    })
+    return res.json(parseAiJson(msg.content?.[0]?.text || ''))
+  } catch (err) {
+    console.error('[research-notes/daily-checklist]', err.message)
+    return res.status(500).json({ error: err.message })
+  }
+})
+
+// ── POST /api/research-notes/goal-align ───────────────────────────────────────
+// Audit recent notes + portfolio activity against stated investment goals
+router.post('/goal-align', async (req, res) => {
+  const userId = req.user.userId
+  const { goals = {} } = req.body
+
+  const goalsCtx = [
+    goals.vision?.text   && `Vision: ${goals.vision.text}`,
+    ...(goals.yearly || []).map(g => `Yearly: ${g.text}`),
+    ...(goals.projects || []).map(p => `Project: ${p.name}`),
+    goals.weekly?.priority && `Weekly Priority: ${goals.weekly.priority}`,
+  ].filter(Boolean).join('\n')
+
+  if (!goalsCtx) return res.status(400).json({ error: 'No goals configured — set your goals first' })
+
+  const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString()
+  let recentNotes
+  if (DB_MODE) {
+    const { rows } = await query(
+      `SELECT title, note_type, symbol, content, updated_at FROM research_notes WHERE user_id=$1 AND updated_at>$2 ORDER BY updated_at DESC LIMIT 20`,
+      [userId, sevenDaysAgo]
+    )
+    recentNotes = rows
+  } else {
+    recentNotes = [...MEM.notes.values()]
+      .filter(n => n.user_id === userId && n.updated_at > sevenDaysAgo)
+      .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
+      .slice(0, 20)
+  }
+
+  const notesCtx = recentNotes.length > 0
+    ? recentNotes.map(n => `- "${n.title}" [${n.note_type}${n.symbol ? ` · ${n.symbol}` : ''}]: ${n.content.slice(0, 200)}`).join('\n')
+    : 'No research activity in the last 7 days.'
+
+  const dateLabel = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+
+  const prompt = `You are a goal-alignment coach for an investor.
+
+STATED GOALS:
+${goalsCtx}
+
+LAST 7 DAYS OF RESEARCH ACTIVITY:
+${notesCtx}
+
+Assess alignment between goals and recent activity. Respond ONLY with valid JSON:
+{
+  "title": "Goal Alignment Audit — ${new Date().toISOString().slice(0, 10)}",
+  "content": "full markdown audit",
+  "tags": ["goal-align", "accountability"],
+  "note_type": "think",
+  "score": 72,
+  "aligned": ["specific activity supporting goal 1", "activity 2"],
+  "misaligned": ["gap or activity working against goals"],
+  "recommendation": "single most important action to improve alignment this week"
+}
+
+Structure:
+# Goal Alignment Audit — ${dateLabel}
+
+## Alignment Score: X/100
+*[One sentence explaining the score]*
+
+## Well Aligned This Week
+[Activities that serve stated goals — be specific]
+
+## Gaps & Misalignments
+[Activities or omissions that work against or don't serve goals]
+
+## Recommendation
+**[One concrete, specific action to do this week to improve alignment]**
+
+## Reflection Questions
+- [question 1 tailored to their goals]
+- [question 2]`
+
+  try {
+    const client = aiClient()
+    const msg = await client.messages.create({
+      model: 'claude-sonnet-4-6', max_tokens: 2048,
+      messages: [{ role: 'user', content: prompt }],
+    })
+    const result = parseAiJson(msg.content?.[0]?.text || '')
+
+    if (DB_MODE) {
+      const { rows: [note] } = await query(`
+        INSERT INTO research_notes (user_id, symbol, title, content, note_type, tags)
+        VALUES ($1,$2,$3,$4,$5,$6) RETURNING *
+      `, [userId, null, result.title, result.content, 'think', result.tags])
+      return res.json({ note, score: result.score, aligned: result.aligned, misaligned: result.misaligned, recommendation: result.recommendation })
+    }
+
+    const note = {
+      id: newId(), user_id: userId, symbol: null,
+      title: result.title, content: result.content,
+      note_type: 'think', source_url: null, tags: result.tags,
+      created_at: now(), updated_at: now(),
+    }
+    MEM.notes.set(note.id, note)
+    return res.json({ note, score: result.score, aligned: result.aligned, misaligned: result.misaligned, recommendation: result.recommendation })
+  } catch (err) {
+    console.error('[research-notes/goal-align]', err.message)
+    return res.status(500).json({ error: err.message })
+  }
+})
+
 module.exports = router
