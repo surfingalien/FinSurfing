@@ -30,10 +30,46 @@ function finnhubGet(path, key) {
       (res) => {
         let data = ''
         res.on('data', c => { data += c })
-        res.on('end', () => { try { resolve(JSON.parse(data)) } catch { resolve(null) } })
+        res.on('end', () => {
+          try {
+            const parsed = JSON.parse(data)
+            // Detect Finnhub API error responses (rate limit, access denied, etc.)
+            if (parsed?.error) {
+              console.warn('[sentiment] Finnhub error:', parsed.error)
+              resolve(null)
+            } else {
+              resolve(parsed)
+            }
+          } catch { resolve(null) }
+        })
       }
     ).on('error', () => resolve(null))
   })
+}
+
+// Fetch news in small batches with a short pause to avoid Finnhub rate limits
+async function fetchNewsInBatches(symbols, fKey, from, to) {
+  const results = []
+  const BATCH  = 4
+  const DELAY  = 400 // ms between batches
+
+  for (let i = 0; i < symbols.length; i += BATCH) {
+    const batch = symbols.slice(i, i + BATCH)
+    const batchResults = await Promise.all(
+      batch.map(sym =>
+        finnhubGet(`/company-news?symbol=${sym}&from=${from}&to=${to}`, fKey)
+          .then(n => ({
+            sym,
+            headlines: Array.isArray(n) ? n.slice(0, 5).map(h => h.headline).filter(Boolean) : [],
+          }))
+      )
+    )
+    results.push(...batchResults)
+    if (i + BATCH < symbols.length) {
+      await new Promise(r => setTimeout(r, DELAY))
+    }
+  }
+  return results
 }
 
 // GET /api/sentiment/portfolio
@@ -56,18 +92,18 @@ router.get('/portfolio', async (req, res) => {
 
   try {
     const today      = new Date()
-    const fiveDaysAgo = new Date(today - 5 * 86400000)
+    const sevenDaysAgo = new Date(today - 7 * 86400000)
     const fmt         = d => d.toISOString().slice(0, 10)
 
-    const newsData = await Promise.all(
-      symbols.map(sym =>
-        finnhubGet(`/company-news?symbol=${sym}&from=${fmt(fiveDaysAgo)}&to=${fmt(today)}`, fKey)
-          .then(n => ({
-            sym,
-            headlines: Array.isArray(n) ? n.slice(0, 5).map(h => h.headline).filter(Boolean) : [],
-          }))
-      )
-    )
+    const newsData = await fetchNewsInBatches(symbols, fKey, fmt(sevenDaysAgo), fmt(today))
+
+    const withNewsCount = newsData.filter(d => d.headlines.length > 0).length
+    const noNewsRatio   = 1 - withNewsCount / newsData.length
+
+    // If Finnhub returned no news for any symbol, propagate a warning
+    const newsWarning = noNewsRatio === 1
+      ? 'No company news available — Finnhub company news may require a Premium plan or higher rate limit.'
+      : null
 
     const newsContext = newsData.map(({ sym, headlines }) =>
       headlines.length
@@ -77,7 +113,7 @@ router.get('/portfolio', async (req, res) => {
 
     const prompt = `You are a financial analyst. Assess the investment sentiment for each stock based on these recent news headlines.
 
-NEWS HEADLINES (last 5 days):
+NEWS HEADLINES (last 7 days):
 ${newsContext}
 
 Respond ONLY with a valid JSON array — one object per ticker, in the same order:
@@ -113,7 +149,7 @@ If a symbol has no news, return score 5 and sentiment "neutral".`
 
     const ts = Date.now()
     sentimentCache.set(cacheKey, { results, ts })
-    return res.json({ results, cached: false, updatedAt: ts })
+    return res.json({ results, cached: false, updatedAt: ts, warning: newsWarning })
   } catch (err) {
     console.error('[sentiment/portfolio]', err.message)
     return res.status(500).json({ error: err.message })

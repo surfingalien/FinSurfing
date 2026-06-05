@@ -6,9 +6,9 @@ import { useState, useEffect, useMemo, useCallback } from 'react'
 import { motion } from 'motion/react'
 import {
   TrendingUp, TrendingDown, Activity, Shield, BarChart2,
-  Zap, RefreshCw, Layers, AlertCircle,
+  Zap, RefreshCw, Layers, AlertCircle, Newspaper, ExternalLink,
 } from 'lucide-react'
-import { fetchQuotes, fmt, fmtPct } from '../../services/api'
+import { fetchQuotes, fmt, fmtPct, fetchMarketNews } from '../../services/api'
 import { calcFearGreed, calcSectorPerformance } from '../../services/forecast'
 import { scanPortfolio, SIGNAL_TYPES } from '../../services/aiEngine'
 import SentimentPulseWidget from '../Sentiment/SentimentPulseWidget'
@@ -497,12 +497,64 @@ function MarketOverview() {
   )
 }
 
+/* ── Market news feed ────────────────────────── */
+function MarketNewsFeed({ refreshKey }) {
+  const [news,    setNews]    = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    setLoading(true)
+    fetchMarketNews().then(items => {
+      setNews(items.slice(0, 8))
+    }).catch(() => {}).finally(() => setLoading(false))
+  }, [refreshKey])
+
+  const relTime = (d) => {
+    if (!d) return ''
+    const diff = Math.floor((Date.now() - d.getTime()) / 60000)
+    if (diff < 60)  return `${diff}m ago`
+    if (diff < 1440) return `${Math.floor(diff / 60)}h ago`
+    return `${Math.floor(diff / 1440)}d ago`
+  }
+
+  if (loading) return (
+    <div className="space-y-2">
+      {[...Array(4)].map((_, i) => (
+        <div key={i} className="h-10 bg-white/[0.04] rounded-lg animate-pulse" />
+      ))}
+    </div>
+  )
+
+  if (!news.length) return (
+    <p className="text-slate-600 text-xs text-center py-4">No market news available</p>
+  )
+
+  return (
+    <div className="space-y-1.5">
+      {news.map((n, i) => (
+        <a key={i} href={n.link} target="_blank" rel="noopener noreferrer"
+          className="flex items-start gap-3 p-2.5 rounded-lg hover:bg-white/[0.04] transition-colors group">
+          <div className="flex-1 min-w-0">
+            <p className="text-xs text-slate-300 leading-snug group-hover:text-white transition-colors line-clamp-2">{n.title}</p>
+            <div className="flex items-center gap-2 mt-1">
+              <span className="text-[10px] text-slate-500">{n.publisher}</span>
+              {n.time && <span className="text-[10px] text-slate-600">{relTime(n.time)}</span>}
+            </div>
+          </div>
+          <ExternalLink className="w-3 h-3 text-slate-600 group-hover:text-mint-400 shrink-0 mt-0.5 transition-colors" />
+        </a>
+      ))}
+    </div>
+  )
+}
+
 /* ── Main DashboardView ──────────────────────── */
 export default function DashboardView({ portfolio, onAnalyze }) {
-  const [scan,       setScan]       = useState(null)
-  const [scanning,   setScanning]   = useState(false)
-  const [vixPrice,   setVixPrice]   = useState(null)
-  const [refreshing, setRefreshing] = useState(false)
+  const [scan,           setScan]           = useState(null)
+  const [scanning,       setScanning]       = useState(false)
+  const [vixPrice,       setVixPrice]       = useState(null)
+  const [refreshing,     setRefreshing]     = useState(false)
+  const [newsRefreshKey, setNewsRefreshKey] = useState(0)
 
   const positions = portfolio?.positions ?? []
   const quotes    = portfolio?.quotes    ?? {}
@@ -526,6 +578,7 @@ export default function DashboardView({ portfolio, onAnalyze }) {
           if (data?.[0]?.price) setVixPrice(data[0].price)
         }).catch(() => {}),
       ])
+      setNewsRefreshKey(k => k + 1)
     } finally {
       setRefreshing(false)
     }
@@ -729,6 +782,15 @@ export default function DashboardView({ portfolio, onAnalyze }) {
           </h3>
           <PortfolioRisk positions={positions} quotes={quotes} />
         </div>
+      </div>
+
+      {/* ── Market News ── */}
+      <div className="glass rounded-xl p-4">
+        <h3 className="text-sm font-semibold text-white flex items-center gap-2 mb-3">
+          <Newspaper className="w-3.5 h-3.5 text-mint-400" /> Latest Market News
+          <span className="ml-auto text-[10px] text-slate-600 font-normal">via Finnhub</span>
+        </h3>
+        <MarketNewsFeed refreshKey={newsRefreshKey} />
       </div>
 
       {/* ── News Sentiment Pulse ── */}

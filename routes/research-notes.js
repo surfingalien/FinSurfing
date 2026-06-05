@@ -77,7 +77,12 @@ function fetchUrlContent(targetUrl, maxRedirects = 3) {
         port:     parsed.port || undefined,
         path:     parsed.pathname + parsed.search,
         method:   'GET',
-        headers:  { 'User-Agent': 'FinSurf-Scout/1.0', Accept: 'text/html,text/plain' },
+        headers:  {
+          'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.5',
+          'Accept-Encoding': 'identity',
+        },
         timeout:  12000,
       },
       (res) => {
@@ -92,6 +97,10 @@ function fetchUrlContent(targetUrl, maxRedirects = 3) {
             if (!isSafeHost(nextParsed.hostname)) return reject(new Error('Redirect to disallowed address'))
           } catch { return reject(new Error('Invalid redirect URL')) }
           return resolve(fetchUrlContent(next, maxRedirects - 1))
+        }
+        if (res.statusCode && res.statusCode >= 400) {
+          res.destroy()
+          return reject(new Error(`URL returned HTTP ${res.statusCode} — the site may require login or block automated access.`))
         }
         let data = ''
         res.setEncoding('utf8')
@@ -124,11 +133,19 @@ function getFinnhubKey(req) {
   return req.headers['x-finnhub-key'] || process.env.FINNHUB_API_KEY || process.env.FINNHUB_KEY || ''
 }
 
-// Parse JSON from Claude's text response
+// Parse JSON from Claude's text response — handles markdown fences + common malformations
 function parseAiJson(text) {
-  const match = text.match(/\{[\s\S]*\}/)
-  if (!match) throw new Error('Failed to parse AI response')
-  return JSON.parse(match[0])
+  if (!text?.trim()) throw new Error('AI returned an empty response — please try again.')
+  // Strip markdown code fences (```json ... ```)
+  const unwrapped = text.replace(/^```(?:json)?\s*/im, '').replace(/\s*```\s*$/im, '').trim()
+  // Direct parse
+  try { return JSON.parse(unwrapped) } catch {}
+  // Extract first JSON object
+  const match = unwrapped.match(/\{[\s\S]*\}/)
+  if (!match) throw new Error('AI response did not contain valid JSON — please try again.')
+  try { return JSON.parse(match[0]) } catch (e) {
+    throw new Error(`AI response JSON parse failed — please try again. (${e.message.slice(0, 60)})`)
+  }
 }
 
 function isStaleNote(updatedAt) {
@@ -591,19 +608,19 @@ router.get('/daily-brief', async (req, res) => {
         if (q?.symbol) quoteLookup[q.symbol] = q
     } catch (e) { console.warn('[daily-brief] quote fetch failed:', e.message) }
 
-    // Fetch news for top 5 holdings
+    // Fetch news for all holdings (up to 15 symbols)
     const today      = new Date()
     const threeDays  = new Date(today - 3 * 86400000)
     const fmt        = d => d.toISOString().slice(0, 10)
-    const top5    = symbols.slice(0, 5)
+    const allSyms = symbols.slice(0, 15)
     const newsAll = fKey
       ? await Promise.all(
-          top5.map(sym =>
+          allSyms.map(sym =>
             finnhubGet(`/company-news?symbol=${sym}&from=${fmt(threeDays)}&to=${fmt(today)}`, fKey)
-              .then(n => ({ sym, news: Array.isArray(n) ? n.slice(0, 3) : [] }))
+              .then(n => ({ sym, news: Array.isArray(n) ? n.slice(0, 5) : [] }))
           )
         )
-      : top5.map(sym => ({ sym, news: [] }))
+      : allSyms.map(sym => ({ sym, news: [] }))
 
     const quoteTable = symbols.map(sym => {
       const q = quoteLookup[sym]
@@ -613,9 +630,12 @@ router.get('/daily-brief', async (req, res) => {
       return `| ${sym} | $${q.regularMarketPrice.toFixed(2)} | ${chg} |`
     }).join('\n')
 
-    const newsContext = newsAll.map(({ sym, news }) =>
-      news.length ? `**${sym}:**\n${news.map(n => `  - ${n.headline}`).join('\n')}` : `**${sym}:** No recent news`
-    ).join('\n')
+    const newsContext = newsAll
+      .filter(({ news }) => news.length > 0)
+      .map(({ sym, news }) => `**${sym}:**\n${news.map(n => `  - ${n.headline}`).join('\n')}`)
+      .join('\n') || 'No recent news available.'
+
+    const totalNewsCount = newsAll.reduce((s, { news }) => s + news.length, 0)
 
     const dateStr    = today.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
     const dateShort  = fmt(today)
@@ -632,18 +652,38 @@ LIVE PRICES:
 |--------|-------|------------|
 ${quoteTable}
 
-RECENT NEWS (last 3 days, top holdings):
+RECENT NEWS (last 3 days, ${totalNewsCount} articles across all holdings):
 ${newsContext}
 
-Generate a comprehensive morning brief. Respond ONLY with a valid JSON object:
+Generate a comprehensive morning brief with Top 10 Portfolio Impact News. Respond ONLY with a valid JSON object:
 {
   "title": "Morning Brief — ${dateShort}",
-  "content": "full markdown morning brief (detailed, 600-900 words)",
-  "tags": ["daily-brief", "${dateShort}", "morning-brief"]
+  "content": "full markdown morning brief (700-1000 words)",
+  "tags": ["daily-brief", "${dateShort}", "morning-brief"],
+  "top_news": [
+    {"rank": 1, "symbol": "TICKER", "headline": "exact headline", "impact": "HIGH", "reason": "1-sentence: why this matters for this portfolio"},
+    {"rank": 2, "symbol": "TICKER", "headline": "exact headline", "impact": "MEDIUM", "reason": "..."},
+    ...up to 10 items, omit if fewer than 10 news exist...
+  ]
 }
 
-Use EXACTLY this structure — be specific, not generic:
+Impact levels: HIGH = could drive 3%+ move on position | MEDIUM = 1-3% | LOW = informational/background
+Only include news that is directly relevant to held symbols or macro factors affecting them.
+
+Use EXACTLY this structure for "content":
 # Morning Brief — ${dateStr}
+
+## Morning Routine
+- [ ] Review Top Impact News below and flag HIGH-impact items
+- [ ] Check Portfolio Pulse — any positions down >2%?
+- [ ] Scan for earnings or FDA/macro events this week
+- [ ] Update research notes for any significant overnight moves
+- [ ] Set today's priority action item
+
+## Top 10 Portfolio Impact News
+[Rank the top 10 news items by impact on THIS portfolio. Format each as:]
+**[IMPACT]** **SYMBOL** — Headline text
+> Reason this matters for your portfolio position
 
 ## Portfolio Pulse
 | Symbol | Price | Day % | Assessment |
@@ -651,13 +691,13 @@ Use EXACTLY this structure — be specific, not generic:
 [one row per holding, Assessment = Strong/Hold/Watch/Weak based on momentum]
 
 ## Key Catalysts This Week
-[2-4 bullet points per symbol that has notable news; skip if no news]
+[2-4 bullet points per symbol that has notable news; skip symbols with no news]
 
 ## 3–6 Month Outlook
 [concise 2-3 bullet thesis for each major holding based on current price action and news]
 
 ## Opportunities to Watch (3–6 Month Growth)
-[5 specific tickers NOT already in the portfolio. Mix: sector ETFs (XLK, SOXX, QQQ, VGT, SCHG, ARKK, IBB) AND individual quality growth names. For each: **TICKER** — 1-sentence rationale tied to the existing portfolio's sector gaps or momentum themes]
+[5 specific tickers NOT already in the portfolio. Mix: sector ETFs AND individual growth names. For each: **TICKER** — 1-sentence rationale tied to portfolio's sector gaps]
 
 ## Action Items
 - [ ] [specific, actionable step — not generic advice]
@@ -670,13 +710,14 @@ Use EXACTLY this structure — be specific, not generic:
       messages: [{ role: 'user', content: prompt }],
     })
     const structured = parseAiJson(msg.content?.[0]?.text || '')
+    const topNews = Array.isArray(structured.top_news) ? structured.top_news : []
 
     if (DB_MODE) {
       const { rows: [note] } = await query(`
         INSERT INTO research_notes (user_id, symbol, title, content, note_type, tags)
         VALUES ($1,$2,$3,$4,$5,$6) RETURNING *
       `, [userId, null, structured.title, structured.content, 'braindump', structured.tags])
-      return res.json(note)
+      return res.json({ ...note, _topNews: topNews })
     }
 
     const note = {
@@ -686,7 +727,7 @@ Use EXACTLY this structure — be specific, not generic:
       created_at: now(), updated_at: now(),
     }
     MEM.notes.set(note.id, note)
-    return res.json(note)
+    return res.json({ ...note, _topNews: topNews })
   } catch (err) {
     console.error('[research-notes/daily-brief]', err.message)
     return res.status(500).json({ error: err.message })

@@ -1925,22 +1925,35 @@ async function getTwelveDataSearch(query, keys = {}) {
   } catch { return null }
 }
 
+// Rank search results: exact ticker match first, then by symbol length (shorter = more relevant)
+function rankSearchQuotes(quotes, q) {
+  const qUp = q.trim().toUpperCase()
+  return quotes.slice().sort((a, b) => {
+    const sA = (a.symbol || '').toUpperCase()
+    const sB = (b.symbol || '').toUpperCase()
+    const exactA = sA === qUp ? 10 : 0
+    const exactB = sB === qUp ? 10 : 0
+    if (exactB !== exactA) return exactB - exactA
+    return sA.length - sB.length
+  })
+}
+
 app.get('/api/search', async (req, res) => {
   const { q } = req.query
   if (!q) return res.status(400).json({ error: 'q required' })
   const keys = extractKeys(req)
   try {
     const fh = await getFinnhubSearch(q, keys)
-    if (fh?.quotes?.length) return res.json(fh)
+    if (fh?.quotes?.length) return res.json({ quotes: rankSearchQuotes(fh.quotes, q) })
 
     const fmp = await getFMPSearch(q, keys)
-    if (fmp?.quotes?.length) return res.json(fmp)
+    if (fmp?.quotes?.length) return res.json({ quotes: rankSearchQuotes(fmp.quotes, q) })
 
     const td = await getTwelveDataSearch(q, keys)
-    if (td?.quotes?.length) return res.json(td)
+    if (td?.quotes?.length) return res.json({ quotes: rankSearchQuotes(td.quotes, q) })
 
     const av = await getAVSearch(q, keys)
-    if (av?.quotes?.length) return res.json(av)
+    if (av?.quotes?.length) return res.json({ quotes: rankSearchQuotes(av.quotes, q) })
 
     res.json({ quotes: [] })
   } catch (e) {

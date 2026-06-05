@@ -19,7 +19,7 @@
 const express    = require('express')
 const Anthropic  = require('@anthropic-ai/sdk')
 const rateLimit  = require('express-rate-limit')
-const http       = require('http')
+const https      = require('https')
 const { getBreaker, CircuitOpenError } = require('../lib/circuit-breaker')
 const { logCall }                       = require('../lib/ai-audit')
 const {
@@ -80,10 +80,10 @@ async function paperAll(userId) {
 // ── arXiv fetch (pure Node https — no extra deps) ─────────────────────────────
 function fetchArxivMeta(arxivId) {
   const cleanId = arxivId.replace(/^arxiv:/i, '').trim()
-  const apiUrl  = `http://export.arxiv.org/api/query?id_list=${cleanId}&max_results=1`
+  const apiUrl  = `https://export.arxiv.org/api/query?id_list=${cleanId}&max_results=1`
 
   return new Promise((resolve, reject) => {
-    http.get(apiUrl, (res) => {
+    https.get(apiUrl, (res) => {
       let data = ''
       res.on('data', chunk => { data += chunk })
       res.on('end', () => {
@@ -104,10 +104,14 @@ function searchArxiv({ q = '', category = 'q-fin', max = 15, sortBy = 'submitted
     category ? `cat:${category}` : '',
   ].filter(Boolean).join('+AND+')
 
-  const url = `http://export.arxiv.org/api/query?search_query=${searchQuery}&max_results=${max}&sortBy=${sortBy}&sortOrder=descending`
+  const url = `https://export.arxiv.org/api/query?search_query=${searchQuery}&max_results=${max}&sortBy=${sortBy}&sortOrder=descending`
 
   return new Promise((resolve, reject) => {
-    http.get(url, (res) => {
+    https.get(url, (res) => {
+      if (res.statusCode && res.statusCode >= 400) {
+        res.destroy()
+        return reject(new Error(`arXiv returned HTTP ${res.statusCode}`))
+      }
       let data = ''
       res.on('data', chunk => { data += chunk })
       res.on('end', () => {
