@@ -18,14 +18,13 @@ router.get('/jobs', (req, res) => {
   res.json(scheduler.getStatus())
 })
 
-router.post('/jobs/:id/trigger', async (req, res) => {
+router.post('/jobs/:id/trigger', (req, res) => {
   const { id } = req.params
-  try {
-    const data = await scheduler.trigger(id)
-    res.json({ ok: true, data })
-  } catch (e) {
-    res.status(500).json({ error: e.message })
-  }
+  const jobs = scheduler.getStatus()
+  if (!jobs.find(j => j.id === id)) return res.status(404).json({ error: `Unknown job: ${id}` })
+  // Fire-and-forget — long jobs (AI Brain) take 2–4 min; don't block the HTTP connection
+  scheduler.trigger(id).catch(e => console.error(`[scheduler] manual trigger ${id}:`, e.message))
+  res.json({ ok: true, status: 'running', message: `Job "${id}" started. Poll GET /api/scheduler/jobs for result.` })
 })
 
 router.patch('/jobs/:id', (req, res) => {
