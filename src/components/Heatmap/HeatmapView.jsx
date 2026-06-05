@@ -144,7 +144,7 @@ export default function HeatmapView() {
       {!loading && view === 'sectors' && (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2">
           {sectors.length === 0
-            ? <p className="col-span-full text-center text-slate-600 py-12 text-sm">No data — FMP API key required</p>
+            ? !error && <p className="col-span-full text-center text-slate-500 py-12 text-sm">No sector data — verify your FMP API key in Settings → API Keys</p>
             : sectors.map(s => (
                 <HeatCell key={s.sector} label={s.sector} pct={s.pct} />
               ))
@@ -156,7 +156,7 @@ export default function HeatmapView() {
       {!loading && view === 'industries' && (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2">
           {industries.length === 0
-            ? <p className="col-span-full text-center text-slate-600 py-12 text-sm">No data — FMP API key required</p>
+            ? !error && <p className="col-span-full text-center text-slate-500 py-12 text-sm">No industry data — verify your FMP API key in Settings → API Keys</p>
             : industries.map(ind => (
                 <HeatCell key={ind.industry} label={ind.industry} pct={ind.pct} />
               ))
