@@ -10,11 +10,12 @@ import { createContext, useContext, useState, useCallback } from 'react'
 const STORAGE_KEY = 'finsurf_api_keys'
 
 const DEFAULTS = {
-  aisa:    '',
-  finnhub: '',
-  fmp:     '',
-  td:      '',
-  av:      '',
+  aisa:      '',
+  finnhub:   '',
+  fmp:       '',
+  td:        '',
+  av:        '',
+  marketaux: '',
 }
 
 function load() {
@@ -44,11 +45,12 @@ export function ApiKeysProvider({ children }) {
   // Returns headers object to attach to every API request
   const getHeaders = useCallback(() => {
     const h = {}
-    if (keys.aisa)    h['x-aisa-key']    = keys.aisa.trim()
-    if (keys.finnhub) h['x-finnhub-key'] = keys.finnhub.trim()
-    if (keys.fmp)     h['x-fmp-key']     = keys.fmp.trim()
-    if (keys.td)      h['x-td-key']      = keys.td.trim()
-    if (keys.av)      h['x-av-key']      = keys.av.trim()
+    if (keys.aisa)      h['x-aisa-key']      = keys.aisa.trim()
+    if (keys.finnhub)   h['x-finnhub-key']   = keys.finnhub.trim()
+    if (keys.fmp)       h['x-fmp-key']       = keys.fmp.trim()
+    if (keys.td)        h['x-td-key']        = keys.td.trim()
+    if (keys.av)        h['x-av-key']        = keys.av.trim()
+    if (keys.marketaux) h['x-marketaux-key'] = keys.marketaux.trim()
     return h
   }, [keys])
 

@@ -67,11 +67,23 @@ const PROVIDERS = [
     envVar:   'ALPHA_VANTAGE_API_KEY',
     url:      'https://www.alphavantage.co/support/#api-key',
     urlLabel: 'alphavantage.co',
-    desc:     'Last-resort fallback. Free tier: 25 req/day, 5 req/min.',
+    desc:     'Fallback charts/quotes + NEWS_SENTIMENT endpoint. Free tier: 25 req/day, 5 req/min.',
     test:     '/api/quote?symbols=AAPL',
     check:    (d) => d?.quoteResponse?.result?.[0]?.regularMarketPrice != null,
     badge:    'Free',
     color:    'rose',
+  },
+  {
+    id:       'marketaux',
+    label:    'Marketaux',
+    envVar:   'MARKETAUX_API_KEY',
+    url:      'https://www.marketaux.com',
+    urlLabel: 'marketaux.com',
+    desc:     'News + native sentiment scores. Free tier: 100 req/day. Highest quality sentiment for News Sentiment widget.',
+    test:     '/api/news',
+    check:    (d) => Array.isArray(d?.news),
+    badge:    'News',
+    color:    'teal',
   },
 ]
 
@@ -81,6 +93,7 @@ const COLOR = {
   amber:  'text-amber-400 border-amber-500/30 bg-amber-500/10',
   purple: 'text-purple-400 border-purple-500/30 bg-purple-500/10',
   rose:   'text-rose-400 border-rose-500/30 bg-rose-500/10',
+  teal:   'text-teal-400 border-teal-500/30 bg-teal-500/10',
 }
 
 function KeyRow({ provider, value, onChange, onTest, testState }) {
@@ -182,11 +195,12 @@ export default function ApiKeysModal({ onClose }) {
     setTestState(s => ({ ...s, [provider.id]: 'testing' }))
     try {
       const headerMap = {
-        aisa:    'x-aisa-key',
-        finnhub: 'x-finnhub-key',
-        fmp:     'x-fmp-key',
-        av:      'x-av-key',
-        td:      'x-td-key',
+        aisa:      'x-aisa-key',
+        finnhub:   'x-finnhub-key',
+        fmp:       'x-fmp-key',
+        av:        'x-av-key',
+        td:        'x-td-key',
+        marketaux: 'x-marketaux-key',
       }
       const res = await fetch(provider.test, {
         headers: { [headerMap[provider.id]]: val },
@@ -208,7 +222,7 @@ export default function ApiKeysModal({ onClose }) {
 
   const handleClear = () => {
     clear()
-    setDraft({ aisa: '', finnhub: '', fmp: '', td: '', av: '' })
+    setDraft({ aisa: '', finnhub: '', fmp: '', td: '', av: '', marketaux: '' })
     setTestState({})
   }
 
