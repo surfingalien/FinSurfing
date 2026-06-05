@@ -26,7 +26,6 @@ const sentimentRoutes       = require('./routes/sentiment')
 const quantmindRoutes       = require('./routes/quantmind')
 const polymarketRoutes      = require('./routes/polymarket')
 const macroRoutes           = require('./routes/macro')
-const marketIntelRoutes     = require('./routes/market-intel')
 const schedulerRoutes       = require('./routes/scheduler')
 const agentResearchRoutes   = require('./routes/agents')
 
@@ -182,7 +181,7 @@ app.use('/api/sentiment',         sentimentRoutes)
 app.use('/api/quantmind',         quantmindRoutes)
 app.use('/api/polymarket',        polymarketRoutes)
 app.use('/api/macro',            macroRoutes)
-app.use('/api/market-intel',    marketIntelRoutes)
+
 app.use('/api/scheduler',       schedulerRoutes)
 app.use('/api/agents',          agentResearchRoutes)
 

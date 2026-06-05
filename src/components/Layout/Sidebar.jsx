@@ -16,7 +16,7 @@ import {
   ShieldCheck, ChevronLeft, ChevronRight, LogIn, LogOut,
   User, KeyRound, Activity, X, Menu, FolderOpen, Calendar,
   FlaskConical, BarChart3, Settings, Sparkles, Brain, Bookmark, Monitor, BookOpen, Globe, Target,
-  Users, Star, LayoutGrid, Network,
+  Network,
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useApiKeys } from '../../contexts/ApiKeysContext'
@@ -43,10 +43,6 @@ function buildGroups(user, triggeredCount) {
       label: 'Markets',
       items: [
         { id: 'analyze',        label: 'Analyze',       icon: LineChart },
-        { id: 'screener',       label: 'Screener',      icon: SlidersHorizontal },
-        { id: 'heatmap',        label: 'Heatmap',       icon: LayoutGrid },
-        { id: 'insider-trades', label: 'Insider Trades',icon: Users },
-        { id: 'analyst',        label: 'Analyst Ratings',icon: Star },
         { id: 'earnings',       label: 'Earnings',      icon: Calendar },
         { id: 'tradingview',    label: 'TradingView',   icon: Monitor },
       ],

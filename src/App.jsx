@@ -19,7 +19,7 @@ import WatchlistView from './components/Watchlist/WatchlistView'
 import AnalysisView from './components/Analysis/AnalysisView'
 import AdvisoryView from './components/Recommendations/AdvisoryView'
 import SimulationView from './components/MonteCarlo/SimulationView'
-import ScreenerView from './components/Screener/ScreenerView'
+
 import StrategiesView from './components/Strategies/StrategiesView'
 import AlertsView from './components/Alerts/AlertsView'
 import StockAgentView from './components/Research/StockAgentView'
@@ -31,9 +31,7 @@ import RiskRulesView from './components/Risk/RiskRulesView'
 import TradeSetupView from './components/Orders/TradeSetupView'
 import EarningsCalendarView from './components/EarningsCalendar/EarningsCalendarView'
 import BacktestView from './components/Backtest/BacktestView'
-import InsiderTradesView from './components/InsiderTrades/InsiderTradesView'
-import AnalystView from './components/Analyst/AnalystView'
-import HeatmapView from './components/Heatmap/HeatmapView'
+
 import BuySignalsView from './components/Recommendations/BuySignalsView'
 import AIBrainView from './components/AIBrain/AIBrainView'
 import AIWatchlistView from './components/AIWatchlist/AIWatchlistView'
@@ -209,9 +207,7 @@ function MainApp({ onSignIn }) {
             {activeTab === 'montecarlo' && (
               <SimulationView portfolio={portfolio} />
             )}
-            {activeTab === 'screener' && (
-              <ScreenerView onSelectSymbol={sym => navigateTo('analyze', sym)} />
-            )}
+
             {activeTab === 'strategies' && (
               <StrategiesView onAnalyze={sym => navigateTo('analyze', sym)} />
             )}
@@ -250,15 +246,7 @@ function MainApp({ onSignIn }) {
             {activeTab === 'backtest' && (
               <BacktestView />
             )}
-            {activeTab === 'insider-trades' && (
-              <InsiderTradesView />
-            )}
-            {activeTab === 'analyst' && (
-              <AnalystView />
-            )}
-            {activeTab === 'heatmap' && (
-              <HeatmapView />
-            )}
+
             {activeTab === 'buy-signals' && (
               <BuySignalsView portfolio={portfolio} onAnalyze={navigateToAnalyze} />
             )}
