@@ -21,6 +21,8 @@ const rateLimit           = require('express-rate-limit')
 const { getRouter }       = require('../lib/ai-router')
 const { CircuitOpenError } = require('../lib/circuit-breaker')
 const { getUserPrefs, saveUserPref } = require('../db/ai_memory')
+const { PERSONAS }        = require('../lib/investor-personas')
+const { getIndicators }   = require('./macro')
 
 const recLimit = rateLimit({
   windowMs: 60 * 1000, max: 5,
@@ -110,7 +112,8 @@ router.post('/', recLimit, async (req, res) => {
   if (process.env.AI_RECOMMENDATIONS_DISABLED === 'true')
     return res.status(503).json({ error: 'AI Buy Signals are temporarily disabled (kill switch active)', killSwitch: true })
 
-  const { holdings = [], focusSymbols = [] } = req.body
+  const { holdings = [], focusSymbols = [], persona: personaId = 'default', includeMacro = true } = req.body
+  const persona    = PERSONAS[personaId] ?? PERSONAS.default
   const holdingStr = holdings.length    ? holdings.join(', ') : 'none'
   const focusStr   = focusSymbols.length ? focusSymbols.join(', ') : ''
   const fwdHeaders = fwdKeys(req)
@@ -124,12 +127,15 @@ router.post('/', recLimit, async (req, res) => {
       recHistory.map(p => p.content).join('\n')
     : ''
 
-  // ── Step 1: Pre-fetch live prices + catalyst context in parallel ─────────────
+  // ── Step 1: Pre-fetch live prices + catalyst context + macro in parallel ─────
   const symbolsForContext = focusSymbols.length ? focusSymbols : []
-  const [preLivePrices, { earningsSnippet, sentimentSnippet }] = await Promise.all([
+  const [preLivePrices, { earningsSnippet, sentimentSnippet }, macroData] = await Promise.all([
     focusSymbols.length ? fetchLiveQuotes(focusSymbols, fwdHeaders) : Promise.resolve({}),
     fetchCatalystContext(symbolsForContext, fwdHeaders, port),
+    includeMacro ? getIndicators().catch(() => null) : Promise.resolve(null),
   ])
+
+  const macroSnippet = macroData?.macroSummary ?? ''
 
   const livePriceSnippet = Object.keys(preLivePrices).length
     ? '\nLIVE PRICES (use these exact values for entryPrice — do not guess):\n' +
@@ -149,18 +155,23 @@ router.post('/', recLimit, async (req, res) => {
 - 3 Cryptocurrencies (mix of 3m and 6m)
 - 1 additional high-conviction pick of any type`
 
-  const prompt = `You are a senior portfolio strategist. Provide specific actionable buy recommendations for a retail investor.
+  const personaBlock = persona.id !== 'default'
+    ? `\nINVESTOR PERSONA: ${persona.name} (${persona.style})\n${persona.systemPrompt}\n`
+    : ''
+
+  const prompt = `${personaBlock}You are a senior portfolio strategist channeling the investment philosophy above. Provide specific actionable buy recommendations for a retail investor.
 
 Current portfolio holdings (avoid overlap): ${holdingStr}${focusInstructions}
-${livePriceSnippet}${earningsSnippet}${sentimentSnippet}${historySnippet}
+${livePriceSnippet}${macroSnippet}${earningsSnippet}${sentimentSnippet}${historySnippet}
 
 ${countInstructions}
+${persona.constraints ? '\n' + persona.constraints : ''}
 
 Rules:
 - Use standard tickers (BTC-USD for Bitcoin, ETH-USD for Ethereum, SOL-USD for Solana, etc.)
 - Be realistic: target returns 5–40%, stop-loss 5–15%
-- Diversify across sectors for stocks; include both ETFs and crypto unless focus symbols override
-- Each thesis must be specific, not generic
+- Diversify unless the persona specifies concentration
+- Each thesis must be specific, not generic, and reflect the persona's investment style
 - entryPrice: use the LIVE PRICE above if provided, otherwise your best estimate of current market price
 - takeProfitPrice: entryPrice × (1 + targetReturn/100)
 - stopLossPrice: entryPrice × (1 - stopLoss/100)
@@ -252,11 +263,31 @@ Respond ONLY with a JSON object — no markdown, no explanation, just the JSON:
       )
     }
 
-    return res.json({ ...data, generatedAt: new Date().toISOString(), llmUsed })
+    return res.json({
+      ...data,
+      generatedAt: new Date().toISOString(),
+      llmUsed,
+      persona: { id: persona.id, name: persona.name, emoji: persona.emoji, style: persona.style },
+      macroRegime: macroData?.regime ?? null,
+    })
   } catch (err) {
     console.error('[recommendations]', err.message)
     return res.status(500).json({ error: 'Recommendation service error: ' + err.message })
   }
+})
+
+// GET /api/recommendations/personas — list available personas for the UI
+router.get('/personas', (req, res) => {
+  const list = Object.values(PERSONAS).map(p => ({
+    id:         p.id,
+    name:       p.name,
+    emoji:      p.emoji,
+    tagline:    p.tagline,
+    style:      p.style,
+    styleColor: p.styleColor,
+    assetBias:  p.assetBias,
+  }))
+  res.json({ personas: list })
 })
 
 module.exports = router

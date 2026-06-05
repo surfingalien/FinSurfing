@@ -14,7 +14,8 @@ React18+Vite SPA → Express API proxy. Dev: Vite proxies `/api/*` → :3001. Pr
 - `portfolio.js` — CRUD holdings; Postgres → in-memory memstore fallback
 - `ai-brain.js` — market scanner; Claude primary + Groq `llama-3.3-70b-versatile` fallback; circuit breaker `getBreaker()`
 - `trading-analysis.js` — per-symbol AI; Claude `claude-sonnet-4-6`
-- `recommendations.js` — AI Advisory; Claude primary + Groq fallback
+- `recommendations.js` — AI Advisory; Claude primary + Groq fallback; accepts `persona` (see `lib/investor-personas.js`) + `includeMacro` body params; GET `/personas` returns persona list
+- `macro.js` — FRED macro indicators (14 series); requires `FRED_API_KEY` env var; 1h cache; `getIndicators()` exported for prompt injection
 
 **DB**: `DATABASE_URL` → Postgres; missing → memstore. Schema: `db/schema.sql`.
 **Client state**: localStorage: watchlist, alerts, AI watchlist, `finsurf_api_keys`. Portfolio → DB when authed.
@@ -44,6 +45,12 @@ React18+Vite SPA → Express API proxy. Dev: Vite proxies `/api/*` → :3001. Pr
 ```json
 {"entry":n,"entryZoneLow":n,"entryZoneHigh":n,"target":n,"stopLoss":n,"signal":"BUY|SELL|HOLD","confidence":n,"risks":["..."],"contradictions":["..."],"summary":"..."}
 ```
+
+## Investor Personas (`lib/investor-personas.js`)
+10 personas: `default` | `buffett` | `munger` | `lynch` | `dalio` | `burry` | `wood` | `marks` | `soros` | `greenblatt`. Each has `systemPrompt` + `constraints` injected into the recommendations prompt. `assetBias` declares which asset types the persona uses.
+
+## Macro Data (`routes/macro.js`)
+14 FRED series (rates, inflation, labor, growth, VIX, credit). `GET /api/macro/indicators` returns full dataset + regime assessment + AI macro summary string. `GET /api/macro/summary` returns compact string for prompt injection. Requires `FRED_API_KEY` env var (free).
 
 ## Deploy
 Railway auto-deploy `main` (`railway.toml` + `Procfile`).
