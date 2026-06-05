@@ -290,9 +290,10 @@ export function usePortfolio({ userId, activePortfolioId, authFetch } = {}) {
 
     const prevClose  = q?.prevClose ?? null
     const marketTime = q?.marketTime ?? null
+    // No timestamp → treat as stale so daily P&L resets at midnight
     const isToday    = marketTime
       ? new Date(marketTime * 1000).toDateString() === new Date().toDateString()
-      : true
+      : false
     const todayGL    = isToday && price !== null && prevClose !== null
       ? (price - prevClose) * pos.shares
       : isToday && q?.change != null
