@@ -15,7 +15,7 @@ import {
   TrendingUp, SlidersHorizontal, GitBranch, Bell, Bot,
   ShieldCheck, ChevronLeft, ChevronRight, LogIn, LogOut,
   User, KeyRound, Activity, X, Menu, FolderOpen, Calendar,
-  FlaskConical, BarChart3, Settings, Sparkles, Brain, Bookmark, Monitor, BookOpen,
+  FlaskConical, BarChart3, Settings, Sparkles, Brain, Bookmark, Monitor, BookOpen, Globe,
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useApiKeys } from '../../contexts/ApiKeysContext'
@@ -57,6 +57,7 @@ function buildGroups(user, triggeredCount) {
         { id: 'second-brain',    label: 'Second Brain',   icon: BookOpen },
         { id: 'quantmind',       label: 'QuantMind',      icon: FlaskConical },
         { id: 'recommendations', label: 'Advisory',       icon: Lightbulb },
+        { id: 'macro',           label: 'Macro',          icon: Globe },
         { id: 'polymarket',      label: 'Polymarket',     icon: TrendingUp },
       ],
     },

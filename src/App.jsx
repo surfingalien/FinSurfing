@@ -26,6 +26,7 @@ import StockAgentView from './components/Research/StockAgentView'
 import ResearchNotesView from './components/Research/ResearchNotesView'
 import QuantMindView from './components/Research/QuantMindView'
 import PolymarketView from './components/Polymarket/PolymarketView'
+import MacroView from './components/Macro/MacroView'
 import EarningsCalendarView from './components/EarningsCalendar/EarningsCalendarView'
 import BacktestView from './components/Backtest/BacktestView'
 import BuySignalsView from './components/Recommendations/BuySignalsView'
@@ -227,6 +228,9 @@ function MainApp({ onSignIn }) {
             )}
             {activeTab === 'polymarket' && (
               <PolymarketView portfolio={portfolio} />
+            )}
+            {activeTab === 'macro' && (
+              <MacroView />
             )}
             {activeTab === 'earnings' && (
               <EarningsCalendarView portfolio={portfolio} onAnalyze={navigateToAnalyze} onNavigate={navigateTo} />
