@@ -44,12 +44,13 @@ export default function SentimentPulseWidget({ symbols = [] }) {
   const [loading,   setLoading]   = useState(false)
   const [error,     setError]     = useState(null)
   const [warning,   setWarning]   = useState(null)
+  const [source,    setSource]    = useState(null)
   const [updatedAt, setUpdatedAt] = useState(null)
   const timerRef = useRef(null)
 
   const load = useCallback(async (bust = false) => {
     if (!symbols.length) return
-    setLoading(true); setError(null); setWarning(null)
+    setLoading(true); setError(null)
     try {
       const params = new URLSearchParams({ symbols: symbols.slice(0, 15).join(',') })
       if (bust) params.set('bust', String(Date.now()))
@@ -59,6 +60,7 @@ export default function SentimentPulseWidget({ symbols = [] }) {
       setResults(data.results || [])
       setUpdatedAt(data.updatedAt || Date.now())
       if (data.warning) setWarning(data.warning)
+      if (data.source)  setSource(data.source)
     } catch (e) { setError(e.message) }
     setLoading(false)
   }, [symbols.join(','), authFetch, getHeaders])
@@ -106,14 +108,6 @@ export default function SentimentPulseWidget({ symbols = [] }) {
         <p className="text-xs text-slate-500 text-center py-3">{error}</p>
       )}
 
-      {/* Warning — e.g. company news unavailable on free Finnhub tier */}
-      {warning && !loading && (
-        <div className="flex items-start gap-2 text-[11px] text-amber-400/80 bg-amber-500/[0.08] border border-amber-500/20 rounded-lg px-3 py-2 mb-2">
-          <span className="shrink-0 mt-0.5">⚠</span>
-          <span>{warning}</span>
-        </div>
-      )}
-
       {/* Empty */}
       {!loading && !error && !results.length && symbols.length === 0 && (
         <p className="text-xs text-slate-600 text-center py-3">Add holdings to see sentiment</p>
@@ -155,7 +149,7 @@ export default function SentimentPulseWidget({ symbols = [] }) {
 
       {results.length > 0 && (
         <div className="text-[9px] text-slate-700 text-right mt-2">
-          AI-scored from Finnhub headlines · Not investment advice
+          {source ? `via ${source}` : 'AI-scored'} · Not investment advice
         </div>
       )}
     </div>

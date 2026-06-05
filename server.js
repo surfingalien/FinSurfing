@@ -250,11 +250,12 @@ setInterval(() => {
 // Header keys take precedence over server env vars so users can use their own.
 function extractKeys(req) {
   return {
-    aisa:    (req.headers['x-aisa-key']    || '').trim() || process.env.AISA_API_KEY    || null,
-    finnhub: (req.headers['x-finnhub-key'] || '').trim() || process.env.FINNHUB_API_KEY || null,
-    fmp:     (req.headers['x-fmp-key']     || '').trim() || process.env.FMP_API_KEY     || null,
-    av:      (req.headers['x-av-key']      || '').trim() || process.env.ALPHA_VANTAGE_API_KEY || process.env.AV_API_KEY || null,
-    td:      (req.headers['x-td-key']      || '').trim() || process.env.TWELVE_DATA_API_KEY  || null,
+    aisa:      (req.headers['x-aisa-key']      || '').trim() || process.env.AISA_API_KEY    || null,
+    finnhub:   (req.headers['x-finnhub-key']   || '').trim() || process.env.FINNHUB_API_KEY || null,
+    fmp:       (req.headers['x-fmp-key']       || '').trim() || process.env.FMP_API_KEY     || null,
+    av:        (req.headers['x-av-key']        || '').trim() || process.env.ALPHA_VANTAGE_API_KEY || process.env.AV_API_KEY || null,
+    td:        (req.headers['x-td-key']        || '').trim() || process.env.TWELVE_DATA_API_KEY  || null,
+    marketaux: (req.headers['x-marketaux-key'] || '').trim() || process.env.MARKETAUX_API_KEY    || null,
   }
 }
 
@@ -508,6 +509,29 @@ async function getFinnhubNews(symbol, keys = {}) {
       providerPublishTime: a.datetime,
       thumbnail: a.image ? { resolutions: [{ url: a.image }] } : null,
     })) }
+  } catch { return null }
+}
+
+// FMP news — company-specific or general market news
+async function getFMPStockNews(symbol, keys = {}, limit = 8) {
+  const key = keys.fmp || FMP_KEY()
+  if (!key) return null
+  try {
+    const tickerParam = symbol ? `&tickers=${encodeURIComponent(symbol)}` : ''
+    const data = await apiFetch(
+      fmpUrl(`/stock_news?limit=${limit}${tickerParam}`, key),
+      10000
+    )
+    if (!Array.isArray(data) || !data.length) return null
+    return {
+      news: data.map(a => ({
+        title:               a.title,
+        link:                a.url,
+        publisher:           a.site,
+        providerPublishTime: a.publishedDate ? Math.floor(new Date(a.publishedDate).getTime() / 1000) : null,
+        thumbnail:           a.image ? { resolutions: [{ url: a.image }] } : null,
+      }))
+    }
   } catch { return null }
 }
 
@@ -1560,9 +1584,10 @@ app.get('/health', async (_req, res) => {
   if (!demoMode) {
     try { const { ping } = require('./db/db'); dbOk = await ping() } catch {}
   }
-  const avKey = process.env.ALPHA_VANTAGE_API_KEY || process.env.AV_API_KEY
-  const tdKey = process.env.TWELVE_DATA_API_KEY
-  res.json({ ok: true, db: dbOk, demoMode, aisa: !!AISA_KEY(), finnhub: !!FH_KEY(), fmp: !!FMP_KEY(), av: !!avKey, td: !!tdKey, tdDemo: !tdKey, ts: Date.now() })
+  const avKey  = process.env.ALPHA_VANTAGE_API_KEY || process.env.AV_API_KEY
+  const tdKey  = process.env.TWELVE_DATA_API_KEY
+  const mxKey  = process.env.MARKETAUX_API_KEY
+  res.json({ ok: true, db: dbOk, demoMode, aisa: !!AISA_KEY(), finnhub: !!FH_KEY(), fmp: !!FMP_KEY(), av: !!avKey, td: !!tdKey, tdDemo: !tdKey, marketaux: !!mxKey, ts: Date.now() })
 })
 
 // Extract last price from chart cache (populated by /api/chart calls — 15-min TTL)
@@ -1964,10 +1989,16 @@ app.get('/api/search', async (req, res) => {
 /* ── News ──────────────────────────────────────── */
 app.get('/api/news', async (req, res) => {
   const symbol = req.query.symbol || null
-  const keys = extractKeys(req)
+  const keys   = extractKeys(req)
   try {
+    // FMP first — better financial news coverage
+    const fmp = await getFMPStockNews(symbol, keys, symbol ? 10 : 15)
+    if (fmp?.news?.length) return res.json(fmp)
+
+    // Finnhub fallback
     const fh = await getFinnhubNews(symbol, keys)
     if (fh) return res.json(fh)
+
     res.json({ news: [] })
   } catch (e) {
     res.json({ news: [] })
