@@ -385,6 +385,9 @@ async function getAISAQuotes(symbols, keys = {}) {
           trailingPE:                 d.pe_ratio            ?? null,
         }
         cacheSet(ck, q)
+        // Warm the 24h prevClose cache so Binance WS ticks can compute changePct
+        // even after the 30s quote cache expires (mirrors what getFinnhubQuotes does)
+        if (q.regularMarketPreviousClose) cacheSet(`pc:${sym}`, q.regularMarketPreviousClose)
         results.push(q)
       } catch (e) {
         console.warn(`[AISA] quote error for ${sym}:`, e.message)
@@ -1400,7 +1403,7 @@ function _connectBinWs() {
       const originals = _binToOriginal.get(msg.s.toUpperCase())
       if (!originals?.size) return
       for (const sym of originals) {
-        const prev   = cacheGet(`fhq:${sym}`)
+        const prev   = cacheGet(`fhq:${sym}`) || cacheGet(`aisaq:${sym}`)
         const pc     = prev?.regularMarketPreviousClose ?? cacheGet(`pc:${sym}`) ?? null
         const chg    = pc != null ? +(price - pc).toFixed(6) : null
         const chgPct = pc != null ? +((price - pc) / pc * 100).toFixed(4) : null
@@ -1456,8 +1459,9 @@ app.get('/api/stream/quotes', (req, res) => {
   }
 
   // Immediately flush any cached price so the UI isn't blank while waiting for the next trade
+  // Check both fhq: (Finnhub/WS) and aisaq: (AISA — primary provider) caches
   for (const sym of symbols) {
-    const c = cacheGet(`fhq:${sym}`)
+    const c = cacheGet(`fhq:${sym}`) || cacheGet(`aisaq:${sym}`)
     if (c?.regularMarketPrice != null) {
       res.write(`data: ${JSON.stringify({
         symbol: sym, price: c.regularMarketPrice,
@@ -1519,7 +1523,7 @@ setInterval(async () => {
   }
 
   // REST-fetch for no-tick symbols whose cache has also expired
-  const stale = noRecentTick.filter(s => !isCryptoSymbol(s) && !cacheGet(`fhq:${s}`) && !cacheGet(`aisaq:${s}`))
+  const stale = noRecentTick.filter(s => !cacheGet(`fhq:${s}`) && !cacheGet(`aisaq:${s}`))
   if (!stale.length || _sseRefreshing) return
 
   _sseRefreshing = true
