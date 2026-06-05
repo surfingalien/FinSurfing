@@ -560,7 +560,6 @@ Use EXACTLY this structure:
 // Morning portfolio intelligence brief + 3–6 month opportunity watchlist
 router.get('/daily-brief', async (req, res) => {
   const fKey = getFinnhubKey(req)
-  if (!fKey) return res.status(503).json({ error: 'Finnhub API key not configured. Add it in API Keys settings.' })
 
   const userId = req.user.userId
   const { symbols: symbolsStr = '', portfolioValue = '0' } = req.query
@@ -569,27 +568,44 @@ router.get('/daily-brief', async (req, res) => {
   if (symbols.length === 0) return res.status(400).json({ error: 'symbols query param is required' })
 
   try {
-    // Fetch quotes for all holdings
-    const quotes = await Promise.all(
-      symbols.map(sym => finnhubGet(`/quote?symbol=${sym}`, fKey).then(q => ({ sym, q })))
-    )
+    // Fetch quotes via the internal cascade (AISA → Finnhub → FMP) instead of
+    // direct Finnhub calls — avoids the free-tier c:0 trap and uses cached prices
+    const BASE = `http://127.0.0.1:${process.env.PORT || 3001}`
+    const fwdH = {}
+    for (const h of ['x-aisa-key','x-finnhub-key','x-fmp-key','x-td-key','x-av-key'])
+      if (req.headers[h]) fwdH[h] = req.headers[h]
+
+    let quoteLookup = {}
+    try {
+      const qRes  = await fetch(
+        `${BASE}/api/quote?symbols=${symbols.map(encodeURIComponent).join(',')}`,
+        { headers: fwdH, signal: AbortSignal.timeout(15_000) }
+      )
+      const qJson = qRes.ok ? await qRes.json() : null
+      for (const q of (qJson?.quoteResponse?.result ?? []))
+        if (q?.symbol) quoteLookup[q.symbol] = q
+    } catch (e) { console.warn('[daily-brief] quote fetch failed:', e.message) }
 
     // Fetch news for top 5 holdings
     const today      = new Date()
     const threeDays  = new Date(today - 3 * 86400000)
     const fmt        = d => d.toISOString().slice(0, 10)
-    const top5       = symbols.slice(0, 5)
-    const newsAll    = await Promise.all(
-      top5.map(sym =>
-        finnhubGet(`/company-news?symbol=${sym}&from=${fmt(threeDays)}&to=${fmt(today)}`, fKey)
-          .then(n => ({ sym, news: Array.isArray(n) ? n.slice(0, 3) : [] }))
-      )
-    )
+    const top5    = symbols.slice(0, 5)
+    const newsAll = fKey
+      ? await Promise.all(
+          top5.map(sym =>
+            finnhubGet(`/company-news?symbol=${sym}&from=${fmt(threeDays)}&to=${fmt(today)}`, fKey)
+              .then(n => ({ sym, news: Array.isArray(n) ? n.slice(0, 3) : [] }))
+          )
+        )
+      : top5.map(sym => ({ sym, news: [] }))
 
-    const quoteTable = quotes.map(({ sym, q }) => {
-      if (!q?.c) return `| ${sym} | N/A | N/A |`
-      const chg = q.dp >= 0 ? `+${q.dp?.toFixed(2)}%` : `${q.dp?.toFixed(2)}%`
-      return `| ${sym} | $${q.c.toFixed(2)} | ${chg} |`
+    const quoteTable = symbols.map(sym => {
+      const q = quoteLookup[sym]
+      if (!q?.regularMarketPrice) return `| ${sym} | N/A | N/A |`
+      const pct = q.regularMarketChangePercent
+      const chg = pct != null ? (pct >= 0 ? `+${pct.toFixed(2)}%` : `${pct.toFixed(2)}%`) : 'N/A'
+      return `| ${sym} | $${q.regularMarketPrice.toFixed(2)} | ${chg} |`
     }).join('\n')
 
     const newsContext = newsAll.map(({ sym, news }) =>
