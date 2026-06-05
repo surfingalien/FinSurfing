@@ -217,29 +217,90 @@ function simulate(timestamps, closes, strategy, params, initialCapital = 10000) 
   // Buy & hold benchmark
   const firstClose = closes[0]
   const lastClose  = closes.at(-1)
+  // Sortino ratio (downside deviation only)
+  const downside = dailyRet.filter(r => r < 0)
+  const downVar  = downside.reduce((s, v) => s + v ** 2, 0) / (dailyRet.length || 1)
+  const downStd  = Math.sqrt(downVar) * Math.sqrt(252)
+  const sortino  = downStd > 0 ? (annRet - 0.05) / downStd : 0
+
+  // Consecutive wins / losses
+  let maxConsecWins = 0, maxConsecLoss = 0, curW = 0, curL = 0
+  for (const t of closed) {
+    if (t.pnl > 0) { curW++; curL = 0; maxConsecWins = Math.max(maxConsecWins, curW) }
+    else           { curL++; curW = 0; maxConsecLoss = Math.max(maxConsecLoss, curL) }
+  }
+
+  // Recovery factor = total return / max drawdown
+  const recoveryFactor = maxDD > 0 ? Math.abs(totalReturn) / maxDD : 0
+
+  // Avg trade duration
+  const avgDuration = closed.length > 0
+    ? Math.round(closed.reduce((s, t) => s + (t.durationDays ?? 0), 0) / closed.length)
+    : 0
+
   const buyHold    = ((lastClose - firstClose) / firstClose) * 100
 
   return {
     equity,
     trades,
     metrics: {
-      totalReturn:    +totalReturn.toFixed(2),
-      finalValue:     +finalValue.toFixed(2),
+      totalReturn:      +totalReturn.toFixed(2),
+      finalValue:       +finalValue.toFixed(2),
       initialCapital,
-      maxDrawdown:    +maxDD.toFixed(2),
-      sharpeRatio:    +sharpe.toFixed(3),
-      calmarRatio:    +calmar.toFixed(3),
+      maxDrawdown:      +maxDD.toFixed(2),
+      sharpeRatio:      +sharpe.toFixed(3),
+      sortinoRatio:     +sortino.toFixed(3),
+      calmarRatio:      +calmar.toFixed(3),
+      recoveryFactor:   +recoveryFactor.toFixed(2),
       annualizedReturn: +(annRet * 100).toFixed(2),
-      winRate:        +winRate.toFixed(1),
-      totalTrades:    closed.length,
+      winRate:          +winRate.toFixed(1),
+      totalTrades:      closed.length,
       profitableTrades: wins.length,
-      avgWinPct:      +avgWin.toFixed(2),
-      avgLossPct:     +avgLoss.toFixed(2),
-      profitFactor:   profitFactor ? +profitFactor.toFixed(2) : null,
-      buyHoldReturn:  +buyHold.toFixed(2),
-      alpha:          +(totalReturn - buyHold).toFixed(2),
+      maxConsecWins,
+      maxConsecLoss,
+      avgDurationDays:  avgDuration,
+      avgWinPct:        +avgWin.toFixed(2),
+      avgLossPct:       +avgLoss.toFixed(2),
+      profitFactor:     profitFactor ? +profitFactor.toFixed(2) : null,
+      buyHoldReturn:    +buyHold.toFixed(2),
+      alpha:            +(totalReturn - buyHold).toFixed(2),
     }
   }
 }
 
-module.exports = { simulate, smaSeries, rsiSeries, macdSeries, bbSeries }
+// ── Parameter optimizer ───────────────────────────────────────────────────────
+// Runs a grid search over all combinations of param ranges and returns
+// results sorted by the given metric (default: sharpeRatio).
+// paramRanges: { paramKey: { min, max, step } }
+// Returns: array of { params, metrics } sorted descending by sortBy
+function optimizeStrategy(timestamps, closes, strategy, paramRanges, initialCapital = 10000, sortBy = 'sharpeRatio', maxResults = 50) {
+  // Build grid of all param combinations
+  const keys  = Object.keys(paramRanges)
+  const grids = keys.map(k => {
+    const { min, max, step } = paramRanges[k]
+    const vals = []
+    for (let v = min; v <= max + 1e-9; v += step) vals.push(+v.toFixed(6))
+    return vals
+  })
+
+  function* cartesian(arrays, idx = 0, current = []) {
+    if (idx === arrays.length) { yield [...current]; return }
+    for (const v of arrays[idx]) { current[idx] = v; yield* cartesian(arrays, idx + 1, current) }
+  }
+
+  const results = []
+  for (const combo of cartesian(grids)) {
+    const params = {}
+    keys.forEach((k, i) => { params[k] = combo[i] })
+    try {
+      const r = simulate(timestamps, closes, strategy, params, initialCapital)
+      if (r.metrics.totalTrades < 2) continue   // skip configs with no trades
+      results.push({ params: { ...params }, metrics: r.metrics })
+    } catch (_) {}
+  }
+
+  results.sort((a, b) => (b.metrics[sortBy] ?? -Infinity) - (a.metrics[sortBy] ?? -Infinity))
+  return results.slice(0, maxResults)
+}
+
+module.exports = { simulate, optimizeStrategy, smaSeries, rsiSeries, macdSeries, bbSeries }
