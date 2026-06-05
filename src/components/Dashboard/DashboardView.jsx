@@ -599,9 +599,10 @@ export default function DashboardView({ portfolio, onAnalyze }) {
       // Only count today's move when the quote timestamp is from today's date
       const prevClose  = q?.prevClose ?? null
       const marketTime = q?.marketTime ?? null
+      // No timestamp → treat as stale so daily P&L resets at midnight
       const isToday    = marketTime
         ? new Date(marketTime * 1000).toDateString() === new Date().toDateString()
-        : true
+        : false
       const dayMove = isToday
         ? (price !== null && prevClose !== null ? price - prevClose : q?.change ?? null)
         : 0   // reset to zero between sessions
