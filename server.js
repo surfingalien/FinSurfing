@@ -1587,7 +1587,9 @@ app.get('/health', async (_req, res) => {
   const avKey  = process.env.ALPHA_VANTAGE_API_KEY || process.env.AV_API_KEY
   const tdKey  = process.env.TWELVE_DATA_API_KEY
   const mxKey  = process.env.MARKETAUX_API_KEY
-  res.json({ ok: true, db: dbOk, demoMode, aisa: !!AISA_KEY(), finnhub: !!FH_KEY(), fmp: !!FMP_KEY(), av: !!avKey, td: !!tdKey, tdDemo: !tdKey, marketaux: !!mxKey, ts: Date.now() })
+  const briefEmail = !!(process.env.MORNING_BRIEF_EMAIL || process.env.ADMIN_EMAIL)
+  const hasEmailTransport = !!(process.env.RESEND_API_KEY || (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS))
+  res.json({ ok: true, db: dbOk, demoMode, aisa: !!AISA_KEY(), finnhub: !!FH_KEY(), fmp: !!FMP_KEY(), av: !!avKey, td: !!tdKey, tdDemo: !tdKey, marketaux: !!mxKey, morningBriefEmail: briefEmail, emailTransport: hasEmailTransport, ts: Date.now() })
 })
 
 // Extract last price from chart cache (populated by /api/chart calls — 15-min TTL)

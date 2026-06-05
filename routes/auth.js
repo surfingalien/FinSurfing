@@ -33,11 +33,11 @@ const express       = require('express')
 const bcrypt        = require('bcryptjs')
 const jwt           = require('jsonwebtoken')
 const crypto        = require('crypto')
-const nodemailer    = require('nodemailer')
 const { query }     = require('../db/db')
 const { requireAuth, SECRET } = require('../middleware/auth')
 const { MEM }       = require('../db/memstore')
 const { makeAdminHoldings } = require('../db/adminSeed')
+const { sendEmail } = require('../lib/email')
 
 const router = express.Router()
 
@@ -50,8 +50,6 @@ const LOCKOUT_MINUTES  = 15
 const REFRESH_COOKIE   = 'finsurf_rt'
 
 const DB_MODE        = !!process.env.DATABASE_URL
-const HAS_SMTP       = !!(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS)
-const HAS_RESEND     = !!process.env.RESEND_API_KEY
 const ADMIN_EMAIL    = (process.env.ADMIN_EMAIL || '').toLowerCase()
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || ''
 
@@ -63,49 +61,6 @@ const cookieOpts = (remember = true) => ({
   ...(remember ? { maxAge: REFRESH_TTL_DAYS * 86400000 } : {}),
   path: '/api/auth',
 })
-
-// ── Email transport ────────────────────────────────
-// Priority: Resend API → SMTP (nodemailer) → console log (demo)
-let mailer = null
-if (!HAS_RESEND && HAS_SMTP) {
-  mailer = nodemailer.createTransport({
-    host:   process.env.SMTP_HOST,
-    port:   parseInt(process.env.SMTP_PORT || '587'),
-    secure: process.env.SMTP_SECURE === 'true',
-    auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
-  })
-}
-
-async function sendEmail({ to, subject, html }) {
-  // ── Resend (recommended on Railway — no SMTP needed) ──
-  if (HAS_RESEND) {
-    const from = process.env.RESEND_FROM || 'FinSurf <noreply@finsurf.app>'
-    const res = await fetch('https://api.resend.com/emails', {
-      method:  'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
-        'Content-Type':  'application/json',
-      },
-      body: JSON.stringify({ from, to, subject, html }),
-    })
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}))
-      throw new Error(err.message || `Resend error ${res.status}`)
-    }
-    return true
-  }
-
-  // ── Nodemailer / SMTP ──────────────────────────────
-  if (mailer) {
-    const from = process.env.SMTP_FROM || `FinSurf <${process.env.SMTP_USER}>`
-    await mailer.sendMail({ from, to, subject, html })
-    return true
-  }
-
-  // ── Demo / no email configured ─────────────────────
-  console.log(`[EMAIL] To: ${to} | Subject: ${subject}`)
-  return false
-}
 
 // ── Pre-seed admin account in memory (env-var based, private) ─────────
 ;(async () => {
