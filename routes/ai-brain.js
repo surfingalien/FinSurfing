@@ -27,6 +27,7 @@ const PREDICTION_LOG = path.join(__dirname, '../data/ai-brain-predictions.jsonl'
 
 const brainLimit = rateLimit({
   windowMs: 5 * 60 * 1000, max: 4,
+  skip:    (req) => req.headers['x-internal'] === '1',
   message: { error: 'Too many AI Brain requests — wait a few minutes' },
 })
 
