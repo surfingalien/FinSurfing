@@ -27,6 +27,8 @@ const quantmindRoutes       = require('./routes/quantmind')
 const polymarketRoutes      = require('./routes/polymarket')
 const macroRoutes           = require('./routes/macro')
 const marketIntelRoutes     = require('./routes/market-intel')
+const schedulerRoutes       = require('./routes/scheduler')
+const agentResearchRoutes   = require('./routes/agents')
 
 const { seedAdminDB } = require('./db/adminSeed')
 
@@ -181,6 +183,8 @@ app.use('/api/quantmind',         quantmindRoutes)
 app.use('/api/polymarket',        polymarketRoutes)
 app.use('/api/macro',            macroRoutes)
 app.use('/api/market-intel',    marketIntelRoutes)
+app.use('/api/scheduler',       schedulerRoutes)
+app.use('/api/agents',          agentResearchRoutes)
 
 /* ── Market data helpers (AISA primary → Finnhub → FMP fallback) ─────────────
    Yahoo Finance is completely removed — its IPs are blocked on Railway.
@@ -1962,6 +1966,11 @@ app.get('*', (_req, res) => {
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`FinSurf listening on 0.0.0.0:${PORT}`)
+  // Start scheduled background jobs after server is ready
+  setTimeout(() => {
+    try { require('./lib/scheduled-jobs').init() }
+    catch (e) { console.error('[scheduled-jobs] init failed:', e.message) }
+  }, 5_000)
 })
 
 // ── Signal performance checker (every 5 min) ─────────────────────────────────

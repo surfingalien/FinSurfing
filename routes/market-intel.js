@@ -19,7 +19,10 @@ const CACHE     = new Map()
 const DEFAULT_TTL = 10 * 60 * 1000  // 10 min
 
 function getKey(req) {
-  return (req.headers['x-fmp-key'] || '').trim() || process.env.FMP_API_KEY || null
+  return (req.headers['x-fmp-key'] || '').trim()
+    || process.env.FMP_API_KEY
+    || process.env.FMP_KEY
+    || null
 }
 
 async function fmpFetch(path, key, ttl = DEFAULT_TTL) {
@@ -34,6 +37,11 @@ async function fmpFetch(path, key, ttl = DEFAULT_TTL) {
     const r    = await fetch(url, { signal: ctrl.signal })
     if (!r.ok) throw new Error(`FMP HTTP ${r.status}`)
     const data = await r.json()
+    // FMP returns plan/auth errors as HTTP 200 with an error object
+    if (data && typeof data === 'object' && !Array.isArray(data)) {
+      if (data['Error Message']) throw new Error(data['Error Message'])
+      if (data.status === 'Failure') throw new Error(data.message || 'FMP plan restriction — upgrade at financialmodelingprep.com')
+    }
     CACHE.set(url, { data, ts: now })
     return data
   } finally { clearTimeout(tid) }
