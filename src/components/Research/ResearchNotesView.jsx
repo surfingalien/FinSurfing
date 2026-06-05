@@ -28,12 +28,12 @@ const STALE_DAYS = 30
 // ── helpers ──────────────────────────────────────────────────────────────────
 
 const TYPE_CONFIG = {
-  note:      { label: 'Note',      icon: FileText,  color: 'text-slate-400',  bg: 'bg-slate-500/15',  border: 'border-slate-500/25'  },
-  thesis:    { label: 'Thesis',    icon: Lightbulb, color: 'text-amber-400',  bg: 'bg-amber-500/15',  border: 'border-amber-500/25'  },
-  braindump: { label: 'Braindump', icon: Brain,     color: 'text-indigo-400', bg: 'bg-indigo-500/15', border: 'border-indigo-500/25' },
-  url:       { label: 'URL Save',  icon: Link,      color: 'text-blue-400',   bg: 'bg-blue-500/15',   border: 'border-blue-500/25'   },
-  think:     { label: 'Think',     icon: Compass,   color: 'text-violet-400', bg: 'bg-violet-500/15', border: 'border-violet-500/25' },
-  synthesis: { label: 'Synthesis', icon: GitMerge,  color: 'text-rose-400',   bg: 'bg-rose-500/15',   border: 'border-rose-500/25'   },
+  note:      { label: 'Note',      icon: FileText,   color: 'text-slate-400',  bg: 'bg-slate-500/15',  border: 'border-slate-500/25'  },
+  thesis:    { label: 'Thesis',    icon: Lightbulb,  color: 'text-amber-400',  bg: 'bg-amber-500/15',  border: 'border-amber-500/25'  },
+  braindump: { label: 'Braindump', icon: Brain,      color: 'text-indigo-400', bg: 'bg-indigo-500/15', border: 'border-indigo-500/25' },
+  url:       { label: 'URL Save',  icon: Link,       color: 'text-blue-400',   bg: 'bg-blue-500/15',   border: 'border-blue-500/25'   },
+  think:     { label: 'Think',     icon: Compass,    color: 'text-violet-400', bg: 'bg-violet-500/15', border: 'border-violet-500/25' },
+  synthesis: { label: 'Synthesis', icon: GitMerge,   color: 'text-rose-400',   bg: 'bg-rose-500/15',   border: 'border-rose-500/25'   },
 }
 
 function TypeBadge({ type }) {
@@ -565,47 +565,70 @@ function DailyBriefModal({ portfolio, notes, onClose, onSave }) {
 }
 
 // ── Auto-Research result modal ────────────────────────────────────────────────
-function AutoResearchModal({ symbol, onClose, onApply }) {
+function AutoResearchModal({ symbol, deep = false, onClose, onApply }) {
   const { authFetch }  = useAuth()
   const { getHeaders } = useApiKeys()
-  const [loading, setLoading] = useState(true)
-  const [result,  setResult]  = useState(null)
-  const [error,   setError]   = useState(null)
+  const [loading,   setLoading]  = useState(true)
+  const [result,    setResult]   = useState(null)
+  const [error,     setError]    = useState(null)
+  const [progress,  setProgress] = useState(deep ? 'Round 1 — gathering data…' : null)
 
   useEffect(() => {
     let cancelled = false
     async function run() {
       try {
-        const res  = await authFetch('/api/research-notes/auto-research', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...getHeaders() },
-          body: JSON.stringify({ symbol, save: false }),
-        })
-        const data = await res.json()
-        if (cancelled) return
-        if (!res.ok) throw new Error(data.error)
-        setResult(data.note)
+        if (deep) {
+          setProgress('Round 1 — gathering market data…')
+          const res  = await authFetch('/api/research-notes/deep-research', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...getHeaders() },
+            body: JSON.stringify({ symbol }),
+          })
+          const data = await res.json()
+          if (cancelled) return
+          if (!res.ok) throw new Error(data.error)
+          setResult(data.note)
+          setProgress(null)
+        } else {
+          const res  = await authFetch('/api/research-notes/auto-research', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...getHeaders() },
+            body: JSON.stringify({ symbol, save: false }),
+          })
+          const data = await res.json()
+          if (cancelled) return
+          if (!res.ok) throw new Error(data.error)
+          setResult(data.note)
+        }
       } catch (e) { if (!cancelled) setError(e.message) }
       if (!cancelled) setLoading(false)
     }
     run()
     return () => { cancelled = true }
-  }, [symbol, authFetch, getHeaders])
+  }, [symbol, deep, authFetch, getHeaders])
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
       <div className="glass rounded-2xl w-full max-w-2xl border border-mint-500/25 shadow-2xl">
         <div className="flex items-center gap-2 px-4 py-3 border-b border-white/[0.06]">
-          <Zap className="w-4 h-4 text-mint-400" />
-          <span className="text-sm font-semibold text-white">Auto-Research</span>
+          {deep ? <Layers className="w-4 h-4 text-mint-400" /> : <Zap className="w-4 h-4 text-mint-400" />}
+          <span className="text-sm font-semibold text-white">{deep ? 'Deep Research' : 'Auto-Research'}</span>
           <span className="text-[11px] font-mono text-mint-400 ml-1">· {symbol}</span>
+          {deep && <span className="text-[10px] text-slate-500 bg-white/[0.04] border border-white/[0.07] rounded px-1.5 py-0.5">3 rounds</span>}
           <button onClick={onClose} className="ml-auto text-slate-500 hover:text-white"><X className="w-4 h-4" /></button>
         </div>
         <div className="p-4 space-y-3">
           {loading && (
-            <div className="flex items-center justify-center py-12 gap-3">
+            <div className="flex items-center justify-center py-12 gap-3 flex-col">
               <RefreshCw className="w-5 h-5 text-mint-400 animate-spin" />
-              <span className="text-sm text-slate-400">Fetching market data & generating research…</span>
+              <span className="text-sm text-slate-400">{progress || 'Fetching market data & generating research…'}</span>
+              {deep && (
+                <div className="flex gap-2 text-[10px] text-slate-600">
+                  <span className="px-2 py-0.5 rounded bg-white/[0.03] border border-white/[0.06]">Round 1: Data</span>
+                  <span className="px-2 py-0.5 rounded bg-white/[0.03] border border-white/[0.06]">Round 2: Analysis</span>
+                  <span className="px-2 py-0.5 rounded bg-white/[0.03] border border-white/[0.06]">Round 3: Synthesis</span>
+                </div>
+              )}
             </div>
           )}
           {error && (
@@ -1156,6 +1179,11 @@ export default function ResearchNotesView({ defaultSymbol, portfolio }) {
     setConsolidating(false)
   }
 
+  const handleSelectNote = (noteId) => {
+    const n = notes.find(x => x.id === noteId)
+    if (n) setActiveNote(n)
+  }
+
   // Called when auto-research result should update the current note or be saved as new
   const handleAutoResearchApply = async (content, saveAsNew = false) => {
     if (saveAsNew) {
@@ -1473,7 +1501,7 @@ export default function ResearchNotesView({ defaultSymbol, portfolio }) {
         <LintModal
           portfolio={portfolio}
           onClose={() => setShowLint(false)}
-          onSelectNote={(noteId) => { const n = notes.find(x => x.id === noteId); if (n) setActiveNote(n) }}
+          onSelectNote={handleSelectNote}
         />
       )}
       {showWeeklySynth && (

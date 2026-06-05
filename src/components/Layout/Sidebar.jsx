@@ -15,7 +15,8 @@ import {
   TrendingUp, SlidersHorizontal, GitBranch, Bell, Bot,
   ShieldCheck, ChevronLeft, ChevronRight, LogIn, LogOut,
   User, KeyRound, Activity, X, Menu, FolderOpen, Calendar,
-  FlaskConical, BarChart3, Settings, Sparkles, Brain, Bookmark, Monitor, BookOpen,
+  FlaskConical, BarChart3, Settings, Sparkles, Brain, Bookmark, Monitor, BookOpen, Globe, Target,
+  Network,
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useApiKeys } from '../../contexts/ApiKeysContext'
@@ -41,10 +42,9 @@ function buildGroups(user, triggeredCount) {
     {
       label: 'Markets',
       items: [
-        { id: 'analyze',     label: 'Analyze',     icon: LineChart },
-        { id: 'screener',    label: 'Screener',     icon: SlidersHorizontal },
-        { id: 'earnings',    label: 'Earnings',     icon: Calendar },
-        { id: 'tradingview', label: 'TradingView',  icon: Monitor },
+        { id: 'analyze',        label: 'Analyze',       icon: LineChart },
+        { id: 'earnings',       label: 'Earnings',      icon: Calendar },
+        { id: 'tradingview',    label: 'TradingView',   icon: Monitor },
       ],
     },
     {
@@ -53,10 +53,12 @@ function buildGroups(user, triggeredCount) {
         { id: 'ai-brain',        label: 'AI Brain',      icon: Brain },
         { id: 'buy-signals',     label: 'AI Buy Signals', icon: Sparkles },
         { id: 'ai-watchlist',    label: 'AI Watchlist',   icon: Bookmark },
+        { id: 'agent-hub',       label: 'Agent Hub',      icon: Network },
         { id: 'research',        label: 'AI Agent',       icon: Bot },
         { id: 'second-brain',    label: 'Second Brain',   icon: BookOpen },
         { id: 'quantmind',       label: 'QuantMind',      icon: FlaskConical },
         { id: 'recommendations', label: 'Advisory',       icon: Lightbulb },
+        { id: 'macro',           label: 'Macro',          icon: Globe },
         { id: 'polymarket',      label: 'Polymarket',     icon: TrendingUp },
       ],
     },
@@ -70,9 +72,12 @@ function buildGroups(user, triggeredCount) {
     {
       label: 'Planning',
       items: [
-        { id: 'analytics',  label: 'Risk Analytics', icon: Activity },
-        { id: 'montecarlo', label: 'Retirement',      icon: TrendingUp },
-        { id: 'rebalancer', label: 'AI Rebalancer',   icon: BarChart3 },
+        { id: 'goals',        label: 'Goals',          icon: Target      },
+        { id: 'analytics',    label: 'Risk Analytics', icon: Activity    },
+        { id: 'risk-rules',   label: 'Risk Rules',     icon: ShieldCheck },
+        { id: 'trade-setups', label: 'Trade Setups',   icon: SlidersHorizontal },
+        { id: 'montecarlo',   label: 'Retirement',     icon: TrendingUp  },
+        { id: 'rebalancer',   label: 'AI Rebalancer',  icon: BarChart3   },
       ],
     },
   ]

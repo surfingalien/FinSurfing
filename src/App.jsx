@@ -19,21 +19,27 @@ import WatchlistView from './components/Watchlist/WatchlistView'
 import AnalysisView from './components/Analysis/AnalysisView'
 import AdvisoryView from './components/Recommendations/AdvisoryView'
 import SimulationView from './components/MonteCarlo/SimulationView'
-import ScreenerView from './components/Screener/ScreenerView'
+
 import StrategiesView from './components/Strategies/StrategiesView'
 import AlertsView from './components/Alerts/AlertsView'
 import StockAgentView from './components/Research/StockAgentView'
 import ResearchNotesView from './components/Research/ResearchNotesView'
 import QuantMindView from './components/Research/QuantMindView'
 import PolymarketView from './components/Polymarket/PolymarketView'
+import MacroView from './components/Macro/MacroView'
+import RiskRulesView from './components/Risk/RiskRulesView'
+import TradeSetupView from './components/Orders/TradeSetupView'
 import EarningsCalendarView from './components/EarningsCalendar/EarningsCalendarView'
 import BacktestView from './components/Backtest/BacktestView'
+
 import BuySignalsView from './components/Recommendations/BuySignalsView'
 import AIBrainView from './components/AIBrain/AIBrainView'
 import AIWatchlistView from './components/AIWatchlist/AIWatchlistView'
+import AgentHubView from './components/AgentHub/AgentHubView'
 import PortfolioAnalyticsView from './components/Analytics/PortfolioAnalyticsView'
 import RebalancerView from './components/Rebalancer/RebalancerView'
 import TradingViewView from './components/TradingView/TradingViewView'
+import GoalsView from './components/Goals/GoalsView'
 import { usePortfolio } from './hooks/usePortfolio'
 import { useWatchlist } from './hooks/useWatchlist'
 import { useAlerts } from './hooks/useAlerts'
@@ -202,9 +208,7 @@ function MainApp({ onSignIn }) {
             {activeTab === 'montecarlo' && (
               <SimulationView portfolio={portfolio} />
             )}
-            {activeTab === 'screener' && (
-              <ScreenerView onSelectSymbol={sym => navigateTo('analyze', sym)} />
-            )}
+
             {activeTab === 'strategies' && (
               <StrategiesView onAnalyze={sym => navigateTo('analyze', sym)} />
             )}
@@ -228,12 +232,22 @@ function MainApp({ onSignIn }) {
             {activeTab === 'polymarket' && (
               <PolymarketView portfolio={portfolio} />
             )}
+            {activeTab === 'macro' && (
+              <MacroView />
+            )}
+            {activeTab === 'risk-rules' && (
+              <RiskRulesView portfolio={portfolio} />
+            )}
+            {activeTab === 'trade-setups' && (
+              <TradeSetupView portfolio={portfolio} />
+            )}
             {activeTab === 'earnings' && (
               <EarningsCalendarView portfolio={portfolio} onAnalyze={navigateToAnalyze} onNavigate={navigateTo} />
             )}
             {activeTab === 'backtest' && (
               <BacktestView />
             )}
+
             {activeTab === 'buy-signals' && (
               <BuySignalsView portfolio={portfolio} onAnalyze={navigateToAnalyze} />
             )}
@@ -251,6 +265,12 @@ function MainApp({ onSignIn }) {
             )}
             {activeTab === 'rebalancer' && (
               <RebalancerView />
+            )}
+            {activeTab === 'goals' && (
+              <GoalsView portfolio={portfolio} />
+            )}
+            {activeTab === 'agent-hub' && (
+              <AgentHubView />
             )}
             {activeTab === 'admin' && (
               <AdminDashboard />

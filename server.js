@@ -25,6 +25,9 @@ const researchNotesRoutes   = require('./routes/research-notes')
 const sentimentRoutes       = require('./routes/sentiment')
 const quantmindRoutes       = require('./routes/quantmind')
 const polymarketRoutes      = require('./routes/polymarket')
+const macroRoutes           = require('./routes/macro')
+const schedulerRoutes       = require('./routes/scheduler')
+const agentResearchRoutes   = require('./routes/agents')
 
 const { seedAdminDB } = require('./db/adminSeed')
 
@@ -177,6 +180,9 @@ app.use('/api/research-notes',    researchNotesRoutes)
 app.use('/api/sentiment',         sentimentRoutes)
 app.use('/api/quantmind',         quantmindRoutes)
 app.use('/api/polymarket',        polymarketRoutes)
+app.use('/api/macro',            macroRoutes)
+app.use('/api/scheduler',       schedulerRoutes)
+app.use('/api/agents',          agentResearchRoutes)
 
 /* ── Market data helpers (AISA primary → Finnhub → FMP fallback) ─────────────
    Yahoo Finance is completely removed — its IPs are blocked on Railway.
@@ -379,6 +385,9 @@ async function getAISAQuotes(symbols, keys = {}) {
           trailingPE:                 d.pe_ratio            ?? null,
         }
         cacheSet(ck, q)
+        // Warm the 24h prevClose cache so Binance WS ticks can compute changePct
+        // even after the 30s quote cache expires (mirrors what getFinnhubQuotes does)
+        if (q.regularMarketPreviousClose) cacheSet(`pc:${sym}`, q.regularMarketPreviousClose)
         results.push(q)
       } catch (e) {
         console.warn(`[AISA] quote error for ${sym}:`, e.message)
@@ -1394,7 +1403,7 @@ function _connectBinWs() {
       const originals = _binToOriginal.get(msg.s.toUpperCase())
       if (!originals?.size) return
       for (const sym of originals) {
-        const prev   = cacheGet(`fhq:${sym}`)
+        const prev   = cacheGet(`fhq:${sym}`) || cacheGet(`aisaq:${sym}`)
         const pc     = prev?.regularMarketPreviousClose ?? cacheGet(`pc:${sym}`) ?? null
         const chg    = pc != null ? +(price - pc).toFixed(6) : null
         const chgPct = pc != null ? +((price - pc) / pc * 100).toFixed(4) : null
@@ -1450,8 +1459,9 @@ app.get('/api/stream/quotes', (req, res) => {
   }
 
   // Immediately flush any cached price so the UI isn't blank while waiting for the next trade
+  // Check both fhq: (Finnhub/WS) and aisaq: (AISA — primary provider) caches
   for (const sym of symbols) {
-    const c = cacheGet(`fhq:${sym}`)
+    const c = cacheGet(`fhq:${sym}`) || cacheGet(`aisaq:${sym}`)
     if (c?.regularMarketPrice != null) {
       res.write(`data: ${JSON.stringify({
         symbol: sym, price: c.regularMarketPrice,
@@ -1513,7 +1523,7 @@ setInterval(async () => {
   }
 
   // REST-fetch for no-tick symbols whose cache has also expired
-  const stale = noRecentTick.filter(s => !isCryptoSymbol(s) && !cacheGet(`fhq:${s}`) && !cacheGet(`aisaq:${s}`))
+  const stale = noRecentTick.filter(s => !cacheGet(`fhq:${s}`) && !cacheGet(`aisaq:${s}`))
   if (!stale.length || _sseRefreshing) return
 
   _sseRefreshing = true
@@ -1971,6 +1981,11 @@ app.get('*', (_req, res) => {
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`FinSurf listening on 0.0.0.0:${PORT}`)
+  // Start scheduled background jobs after server is ready
+  setTimeout(() => {
+    try { require('./lib/scheduled-jobs').init() }
+    catch (e) { console.error('[scheduled-jobs] init failed:', e.message) }
+  }, 5_000)
 })
 
 // ── Signal performance checker (every 5 min) ─────────────────────────────────
