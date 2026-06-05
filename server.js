@@ -181,7 +181,6 @@ app.use('/api/sentiment',         sentimentRoutes)
 app.use('/api/quantmind',         quantmindRoutes)
 app.use('/api/polymarket',        polymarketRoutes)
 app.use('/api/macro',            macroRoutes)
-
 app.use('/api/scheduler',       schedulerRoutes)
 app.use('/api/agents',          agentResearchRoutes)
 
