@@ -135,6 +135,19 @@ export async function fetchSummary(symbol) {
   })
 }
 
+/* ── Market news ─────────────────────────────── */
+export async function fetchMarketNews(symbol = null) {
+  const url = symbol ? `/api/news?symbol=${encodeURIComponent(symbol)}` : `/api/news`
+  const data = await apiFetch(url)
+  return (data?.news || []).map(n => ({
+    title:     n.title,
+    link:      n.link,
+    publisher: n.publisher,
+    time:      n.providerPublishTime ? new Date(n.providerPublishTime * 1000) : null,
+    image:     n.thumbnail?.resolutions?.[0]?.url ?? null,
+  }))
+}
+
 /* ── Search ──────────────────────────────────── */
 export async function searchSymbol(q) {
   if (!q.trim()) return []
