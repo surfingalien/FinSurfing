@@ -15,7 +15,7 @@ import {
   TrendingUp, SlidersHorizontal, GitBranch, Bell, Bot,
   ShieldCheck, ChevronLeft, ChevronRight, LogIn, LogOut,
   User, KeyRound, Activity, X, Menu, FolderOpen, Calendar,
-  FlaskConical, BarChart3, Settings, Sparkles, Brain, Bookmark, Monitor, BookOpen, Globe,
+  FlaskConical, BarChart3, Settings, Sparkles, Brain, Bookmark, Monitor, BookOpen, Globe, Target,
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useApiKeys } from '../../contexts/ApiKeysContext'
@@ -71,9 +71,11 @@ function buildGroups(user, triggeredCount) {
     {
       label: 'Planning',
       items: [
-        { id: 'analytics',  label: 'Risk Analytics', icon: Activity },
-        { id: 'montecarlo', label: 'Retirement',      icon: TrendingUp },
-        { id: 'rebalancer', label: 'AI Rebalancer',   icon: BarChart3 },
+        { id: 'analytics',    label: 'Risk Analytics', icon: Activity },
+        { id: 'risk-rules',   label: 'Risk Rules',     icon: ShieldCheck },
+        { id: 'trade-setups', label: 'Trade Setups',   icon: Target },
+        { id: 'montecarlo',   label: 'Retirement',     icon: TrendingUp },
+        { id: 'rebalancer',   label: 'AI Rebalancer',  icon: BarChart3 },
       ],
     },
   ]

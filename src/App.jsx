@@ -27,6 +27,8 @@ import ResearchNotesView from './components/Research/ResearchNotesView'
 import QuantMindView from './components/Research/QuantMindView'
 import PolymarketView from './components/Polymarket/PolymarketView'
 import MacroView from './components/Macro/MacroView'
+import RiskRulesView from './components/Risk/RiskRulesView'
+import TradeSetupView from './components/Orders/TradeSetupView'
 import EarningsCalendarView from './components/EarningsCalendar/EarningsCalendarView'
 import BacktestView from './components/Backtest/BacktestView'
 import BuySignalsView from './components/Recommendations/BuySignalsView'
@@ -231,6 +233,12 @@ function MainApp({ onSignIn }) {
             )}
             {activeTab === 'macro' && (
               <MacroView />
+            )}
+            {activeTab === 'risk-rules' && (
+              <RiskRulesView portfolio={portfolio} />
+            )}
+            {activeTab === 'trade-setups' && (
+              <TradeSetupView portfolio={portfolio} />
             )}
             {activeTab === 'earnings' && (
               <EarningsCalendarView portfolio={portfolio} onAnalyze={navigateToAnalyze} onNavigate={navigateTo} />
