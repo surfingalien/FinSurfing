@@ -72,11 +72,12 @@ function buildGroups(user, triggeredCount) {
     {
       label: 'Planning',
       items: [
-        { id: 'analytics',    label: 'Risk Analytics', icon: Activity },
+        { id: 'goals',        label: 'Goals',          icon: Target      },
+        { id: 'analytics',    label: 'Risk Analytics', icon: Activity    },
         { id: 'risk-rules',   label: 'Risk Rules',     icon: ShieldCheck },
-        { id: 'trade-setups', label: 'Trade Setups',   icon: Target },
-        { id: 'montecarlo',   label: 'Retirement',     icon: TrendingUp },
-        { id: 'rebalancer',   label: 'AI Rebalancer',  icon: BarChart3 },
+        { id: 'trade-setups', label: 'Trade Setups',   icon: SlidersHorizontal },
+        { id: 'montecarlo',   label: 'Retirement',     icon: TrendingUp  },
+        { id: 'rebalancer',   label: 'AI Rebalancer',  icon: BarChart3   },
       ],
     },
   ]

@@ -39,6 +39,7 @@ import AgentHubView from './components/AgentHub/AgentHubView'
 import PortfolioAnalyticsView from './components/Analytics/PortfolioAnalyticsView'
 import RebalancerView from './components/Rebalancer/RebalancerView'
 import TradingViewView from './components/TradingView/TradingViewView'
+import GoalsView from './components/Goals/GoalsView'
 import { usePortfolio } from './hooks/usePortfolio'
 import { useWatchlist } from './hooks/useWatchlist'
 import { useAlerts } from './hooks/useAlerts'
@@ -264,6 +265,9 @@ function MainApp({ onSignIn }) {
             )}
             {activeTab === 'rebalancer' && (
               <RebalancerView />
+            )}
+            {activeTab === 'goals' && (
+              <GoalsView portfolio={portfolio} />
             )}
             {activeTab === 'agent-hub' && (
               <AgentHubView />

@@ -208,4 +208,122 @@ router.post('/research', async (req, res) => {
   })
 })
 
+// ── POST /api/agents/pipeline ─────────────────────────────────────────────────
+// 3-phase sequential research pipeline (open-team inspired)
+// Phase 1 (Analyst):    fan-out data gather + trend/momentum read
+// Phase 2 (Quant):      risk/reward levels, ATR, 52-week range position
+// Phase 3 (Strategist): final actionable recommendation synthesising both phases
+
+router.post('/pipeline', async (req, res) => {
+  const { symbol } = req.body
+  if (!symbol || typeof symbol !== 'string')
+    return res.status(400).json({ error: 'symbol is required' })
+
+  const sym  = symbol.toUpperCase().replace(/[^A-Z0-9.-]/g, '')
+  const t0   = Date.now()
+  const base = BASE_URL()
+  const hdrs = fwdHeaders(req)
+  const enc  = encodeURIComponent(sym)
+
+  try {
+    // ── Phase 1: Analyst ──
+    const p1t0 = Date.now()
+    const [quoteR, chartR, macroR] = await Promise.all([
+      timedFetch(`${base}/api/quote?symbols=${enc}`,                         { headers: hdrs }),
+      timedFetch(`${base}/api/chart?symbol=${enc}&interval=1d&range=6mo`,    { headers: hdrs }),
+      timedFetch(`${base}/api/macro/summary`,                                { headers: hdrs }),
+    ])
+
+    const q       = quoteR.data?.quoteResponse?.result?.[0] ?? null
+    const closes  = chartR.data?.chart?.result?.[0]?.indicators?.quote?.[0]?.close?.filter(Boolean) ?? []
+    const highs   = chartR.data?.chart?.result?.[0]?.indicators?.quote?.[0]?.high?.filter(Boolean)  ?? []
+    const lows    = chartR.data?.chart?.result?.[0]?.indicators?.quote?.[0]?.low?.filter(Boolean)   ?? []
+    const price   = q?.regularMarketPrice ?? 0
+    const sma20   = closes.length >= 20  ? closes.slice(-20).reduce((s,v)=>s+v,0)/20   : null
+    const sma50   = closes.length >= 50  ? closes.slice(-50).reduce((s,v)=>s+v,0)/50   : null
+    const sma200  = closes.length >= 200 ? closes.slice(-200).reduce((s,v)=>s+v,0)/200 : null
+    const high52  = highs.length >= 50   ? Math.max(...highs.slice(-252)) : null
+    const low52   = lows.length  >= 50   ? Math.min(...lows.slice(-252))  : null
+    const atrArr  = highs.slice(-15).map((h,i) => h - (lows[lows.length-15+i]||h)).filter(v=>v>0)
+    const atr14   = atrArr.length ? atrArr.reduce((s,v)=>s+v,0)/atrArr.length : null
+    const macroStr= typeof macroR.data === 'string' ? macroR.data.slice(0,200) : ''
+
+    const p1Prompt = `Analyst phase for ${sym}. Be precise and brief.
+
+DATA: Price=$${price.toFixed(2)} | Day=${q?.regularMarketChangePercent?.toFixed(2)||'?'}% | MCap=$${((q?.marketCap||0)/1e9).toFixed(1)}B
+SMA20=${sma20?'$'+sma20.toFixed(2):'N/A'} SMA50=${sma50?'$'+sma50.toFixed(2):'N/A'} SMA200=${sma200?'$'+sma200.toFixed(2):'N/A'}
+Macro context: ${macroStr}
+
+Respond ONLY with JSON (no markdown):
+{"trend":"UPTREND or DOWNTREND or SIDEWAYS","momentum":"STRONG or WEAK or NEUTRAL","price_context":"one sentence","bull_points":["b1","b2","b3"],"bear_points":["r1","r2"]}`
+
+    const p1r = await aiRouter.call({ prompt: p1Prompt, maxTokens: 400, symbols: [sym] })
+    let p1d = {}
+    try { p1d = JSON.parse(p1r.text.match(/\{[\s\S]*\}/)?.[0] || '{}') } catch {}
+
+    // ── Phase 2: Quant ──
+    const p2t0    = Date.now()
+    const inRange = high52 && low52 && price ? (((price-low52)/(high52-low52))*100).toFixed(0) : null
+    const stopEst = atr14 ? (price - atr14*1.5).toFixed(2) : (price*0.93).toFixed(2)
+    const t1Est   = atr14 ? (price + atr14*2.5).toFixed(2) : (price*1.10).toFixed(2)
+    const t2Est   = atr14 ? (price + atr14*5.0).toFixed(2) : (price*1.20).toFixed(2)
+
+    const p2Prompt = `Quant phase for ${sym}. Phase-1: trend=${p1d.trend}, momentum=${p1d.momentum}.
+
+METRICS: Price=$${price.toFixed(2)} | 52wHigh=${high52?'$'+high52.toFixed(2):'N/A'} | 52wLow=${low52?'$'+low52.toFixed(2):'N/A'} | ATR14=${atr14?'$'+atr14.toFixed(2):'N/A'} | RangePos=${inRange||'N/A'}%
+
+Compute trade levels. Respond ONLY with JSON:
+{"entry":${price.toFixed(2)},"stop_loss":${stopEst},"target_1":${t1Est},"target_2":${t2Est},"risk_reward":"${atr14?((parseFloat(t1Est)-price)/(price-parseFloat(stopEst))).toFixed(1):'2.0'}","position_quality":"ATTRACTIVE or NEUTRAL or STRETCHED","volatility":"LOW or NORMAL or HIGH"}`
+
+    const p2r = await aiRouter.call({ prompt: p2Prompt, maxTokens: 256, symbols: [sym] })
+    let p2d = {}
+    try { p2d = JSON.parse(p2r.text.match(/\{[\s\S]*\}/)?.[0] || '{}') } catch {}
+
+    // ── Phase 3: Strategist ──
+    const p3t0   = Date.now()
+    const p3Prompt = `Strategist phase — final recommendation for ${sym}.
+
+ANALYST: trend=${p1d.trend}, momentum=${p1d.momentum}
+Bull: ${(p1d.bull_points||[]).join(' | ')}
+Bear: ${(p1d.bear_points||[]).join(' | ')}
+
+QUANT: entry=$${p2d.entry}, stop=$${p2d.stop_loss}, T1=$${p2d.target_1}, T2=$${p2d.target_2}, R/R=${p2d.risk_reward}, quality=${p2d.position_quality}
+
+Write a concise final recommendation (plain text, not JSON). Cover:
+## Verdict — BULLISH / BEARISH / NEUTRAL
+One-sentence rationale with specific numbers.
+
+## Setup Quality
+Rate 1-10 with explanation.
+
+## Trade Plan
+Entry: | Stop: | Target 1: | Target 2: | R/R:
+
+## Key Risk
+One specific risk that could invalidate this setup.
+
+## Catalyst Watch
+What to watch for trade confirmation.`
+
+    const p3r = await aiRouter.call({ prompt: p3Prompt, maxTokens: 600, symbols: [sym] })
+    const p3end = Date.now()
+
+    return res.json({
+      symbol: sym,
+      phases: [
+        { id: 'analyst',    name: 'Analyst',    icon: '🔍', model: p1r.llmUsed, durationMs: p2t0-p1t0, data: p1d, status: 'done' },
+        { id: 'quant',      name: 'Quant',      icon: '📐', model: p2r.llmUsed, durationMs: p3t0-p2t0, data: p2d, status: 'done' },
+        { id: 'strategist', name: 'Strategist', icon: '🎯', model: p3r.llmUsed, durationMs: p3end-p3t0, data: null, status: 'done' },
+      ],
+      synthesis:  p3r.text,
+      llmUsed:    p3r.llmUsed,
+      totalMs:    Date.now() - t0,
+      timestamp:  new Date().toISOString(),
+    })
+  } catch (err) {
+    console.error('[agents/pipeline]', err.message)
+    return res.status(500).json({ error: err.message })
+  }
+})
+
 module.exports = router
