@@ -13,11 +13,12 @@ export function getApiKeyHeaders() {
   try {
     const stored = JSON.parse(localStorage.getItem('finsurf_api_keys') || '{}')
     const h = {}
-    if (stored.aisa?.trim())    h['x-aisa-key']    = stored.aisa.trim()
-    if (stored.finnhub?.trim()) h['x-finnhub-key'] = stored.finnhub.trim()
-    if (stored.fmp?.trim())     h['x-fmp-key']     = stored.fmp.trim()
-    if (stored.td?.trim())      h['x-td-key']      = stored.td.trim()
-    if (stored.av?.trim())      h['x-av-key']      = stored.av.trim()
+    if (stored.aisa?.trim())      h['x-aisa-key']      = stored.aisa.trim()
+    if (stored.finnhub?.trim())   h['x-finnhub-key']   = stored.finnhub.trim()
+    if (stored.fmp?.trim())       h['x-fmp-key']       = stored.fmp.trim()
+    if (stored.td?.trim())        h['x-td-key']        = stored.td.trim()
+    if (stored.av?.trim())        h['x-av-key']        = stored.av.trim()
+    if (stored.marketaux?.trim()) h['x-marketaux-key'] = stored.marketaux.trim()
     return h
   } catch { return {} }
 }
