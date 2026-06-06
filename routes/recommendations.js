@@ -23,6 +23,7 @@ const { CircuitOpenError } = require('../lib/circuit-breaker')
 const { getUserPrefs, saveUserPref } = require('../db/ai_memory')
 const { PERSONAS }        = require('../lib/investor-personas')
 const { getIndicators }   = require('./macro')
+const { getSocialSentiment } = require('../lib/social-sentiment')
 
 const recLimit = rateLimit({
   windowMs: 60 * 1000, max: 5,
@@ -129,10 +130,11 @@ router.post('/', recLimit, async (req, res) => {
 
   // ── Step 1: Pre-fetch live prices + catalyst context + macro in parallel ─────
   const symbolsForContext = focusSymbols.length ? focusSymbols : []
-  const [preLivePrices, { earningsSnippet, sentimentSnippet }, macroData] = await Promise.all([
+  const [preLivePrices, { earningsSnippet, sentimentSnippet }, macroData, socialSentimentSnippet] = await Promise.all([
     focusSymbols.length ? fetchLiveQuotes(focusSymbols, fwdHeaders) : Promise.resolve({}),
     fetchCatalystContext(symbolsForContext, fwdHeaders, port),
     includeMacro ? getIndicators().catch(() => null) : Promise.resolve(null),
+    getSocialSentiment(focusSymbols.length ? focusSymbols.slice(0, 5) : holdings.slice(0, 5)),
   ])
 
   const macroSnippet = macroData?.macroSummary ?? ''
@@ -162,7 +164,7 @@ router.post('/', recLimit, async (req, res) => {
   const prompt = `${personaBlock}You are a senior portfolio strategist channeling the investment philosophy above. Provide specific actionable buy recommendations for a retail investor.
 
 Current portfolio holdings (avoid overlap): ${holdingStr}${focusInstructions}
-${livePriceSnippet}${macroSnippet}${earningsSnippet}${sentimentSnippet}${historySnippet}
+${livePriceSnippet}${macroSnippet}${earningsSnippet}${sentimentSnippet}${socialSentimentSnippet}${historySnippet}
 
 ${countInstructions}
 ${persona.constraints ? '\n' + persona.constraints : ''}

@@ -19,6 +19,7 @@ const fs                  = require('fs')
 const path                = require('path')
 const { getRouter }       = require('../lib/ai-router')
 const { CircuitOpenError } = require('../lib/circuit-breaker')
+const { getSocialSentiment } = require('../lib/social-sentiment')
 
 const router   = express.Router()
 const aiRouter = getRouter('ai-brain')
@@ -336,19 +337,32 @@ router.post('/analyze', brainLimit, async (req, res) => {
   const horizonLabel = { '3m': '3-month', '6m': '6-month', '12m': '12-month' }[horizon]
   const generatedAt  = new Date().toISOString()
 
-  // ── Sub-agent 1: data fetch — live quotes for the universe ───────────────────
-  let marketSnippet = ''
-  let liveQuotes    = []
-  try {
-    const port = process.env.PORT || 3001
-    const r    = await fetch(
-      `http://127.0.0.1:${port}/api/quote?symbols=${universe.join(',')}`,
-      { headers: fwdKeys(req), signal: AbortSignal.timeout(30_000) }
-    )
-    const qd = await r.json()
-    liveQuotes = qd?.quoteResponse?.result ?? []
-  } catch (e) {
-    console.warn('[ai-brain] Quote fetch failed, knowledge-only mode:', e.message)
+  // ── Sub-agent 1: data fetch — live quotes + social sentiment in parallel ─────
+  let marketSnippet   = ''
+  let liveQuotes      = []
+  let socialSnippet   = ''
+
+  const [quoteResult, socialResult] = await Promise.allSettled([
+    (async () => {
+      const port = process.env.PORT || 3001
+      const r    = await fetch(
+        `http://127.0.0.1:${port}/api/quote?symbols=${universe.join(',')}`,
+        { headers: fwdKeys(req), signal: AbortSignal.timeout(30_000) }
+      )
+      const qd = await r.json()
+      return qd?.quoteResponse?.result ?? []
+    })(),
+    getSocialSentiment(universe.slice(0, 5)),
+  ])
+
+  if (quoteResult.status === 'fulfilled') {
+    liveQuotes = quoteResult.value
+  } else {
+    console.warn('[ai-brain] Quote fetch failed, knowledge-only mode:', quoteResult.reason?.message)
+  }
+
+  if (socialResult.status === 'fulfilled') {
+    socialSnippet = socialResult.value
   }
 
   const validQuotes = liveQuotes.filter(q => q?.regularMarketPrice != null && q.regularMarketPrice > 0)
@@ -366,6 +380,7 @@ router.post('/analyze', brainLimit, async (req, res) => {
 
   // ── Step 2: prompt — contradiction engine + zones + assumptions ────────────
   const prompt = `You are a 5-agent investment AI with a Supervisor whose job is to SURFACE CONTRADICTIONS, not average scores.
+${socialSnippet}
 
 CRITICAL: When two agents disagree by 25+ points, that spread IS the primary signal. Do not smooth it. Surface it.
 

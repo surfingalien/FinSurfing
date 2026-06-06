@@ -1,0 +1,31 @@
+{
+  "name": "finsurfing",
+  "version": "2.0.0",
+  "displayName": "FinSurfing — AI Investment Platform",
+  "shortDescription": "Real-time market analysis, AI trade signals, and portfolio management for US equities, ETFs, and crypto.",
+  "longDescription": "FinSurfing is a full-stack AI investment platform powered by a 5-agent contradiction engine (Fundamental, Technical, Sentiment, Macro, Risk). Features include live market scanning across 40+ universes (stocks, ETFs, crypto, mutual funds), persona-based buy signals channeling Buffett/Dalio/Lynch, real-time social sentiment from Reddit/X, macro regime detection via FRED, TradingView chart integration, portfolio analytics, Monte Carlo simulation, and an agentic Copilot with live tool access.",
+  "developerName": "FinSurfing",
+  "category": "finance",
+  "capabilities": [
+    "market-analysis",
+    "portfolio-management",
+    "trade-signals",
+    "ai-agents",
+    "social-sentiment",
+    "macro-analysis",
+    "technical-analysis",
+    "crypto-analysis"
+  ],
+  "skills": [
+    "skills/financial-analysis",
+    "skills/portfolio-management"
+  ],
+  "defaultPrompt": "Scan the market and give me today's top investment opportunities with entry zones and stop losses",
+  "brandColor": "#00ffcc",
+  "logo": "public/logo.svg",
+  "websiteURL": "https://finsurfing.com",
+  "license": "MIT",
+  "keywords": ["finance", "trading", "stocks", "crypto", "ETF", "AI", "portfolio", "market-analysis"],
+  "mcpServers": {},
+  "apps": {}
+}
