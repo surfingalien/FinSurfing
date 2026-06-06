@@ -43,7 +43,6 @@ function buildGroups(user, triggeredCount) {
       label: 'Markets',
       items: [
         { id: 'analyze',        label: 'Analyze',       icon: LineChart },
-        { id: 'earnings',       label: 'Earnings',      icon: Calendar },
         { id: 'tradingview',    label: 'TradingView',   icon: Monitor },
       ],
     },
@@ -55,7 +54,6 @@ function buildGroups(user, triggeredCount) {
         { id: 'ai-watchlist',    label: 'AI Watchlist',   icon: Bookmark },
         { id: 'agent-hub',       label: 'Agent Hub',      icon: Network },
         { id: 'trade-timeline',  label: 'Trade Timeline', icon: Clock },
-        { id: 'remote-control',  label: 'Remote Control', icon: Radio },
         { id: 'research',        label: 'AI Agent',       icon: Bot },
         { id: 'second-brain',    label: 'Second Brain',   icon: BookOpen },
         { id: 'quantmind',       label: 'QuantMind',      icon: FlaskConical },
