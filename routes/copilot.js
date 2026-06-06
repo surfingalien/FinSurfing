@@ -4,19 +4,25 @@
  *
  * POST /api/copilot/chat  — streaming agentic copilot chat (SSE)
  *
- * Agentic copilot inspired by CopilotKit / AG-UI protocol.
- * Uses Claude tool_use to dispatch FinSurfing's own internal APIs:
- *   scan_market        → /api/ai-brain/analyze
- *   get_recommendations → /api/recommendations
- *   analyze_symbol     → /api/trading-analysis/analyze
- *   get_social_sentiment → lib/social-sentiment
- *   get_macro          → /api/macro/summary
+ * Multi-provider agentic copilot inspired by claudian (YishenTu/claudian)
+ * Conversation.providerId + providerState architecture — one conversation
+ * model that routes to the right LLM backend cleanly.
+ *
+ * Supported providers:
+ *   claude  — Anthropic claude-sonnet-4-6 (tool_use, native streaming)
+ *   groq    — Groq llama-3.3-70b (OpenAI-compat function calling)
+ *   codex   — OpenAI GPT-4o (OpenAI-compat function calling)
+ *
+ * Body: { messages, portfolio, watchlist, providerId?, providerState? }
+ *   providerId:   'claude' | 'groq' | 'codex'  (default: 'claude')
+ *   providerState: { model?, baseUrl? }         (optional overrides)
  *
  * Streams back SSE events:
  *   data: { type: "text", delta: "..." }
- *   data: { type: "tool_start", tool: "scan_market", input: {...} }
- *   data: { type: "tool_result", tool: "scan_market", output: "..." }
+ *   data: { type: "tool_start", tools: [{name, input}] }
+ *   data: { type: "tool_results", results: [{tool, preview}] }
  *   data: { type: "done" }
+ *   data: { type: "error", message: "..." }
  */
 
 const express = require('express')
@@ -25,7 +31,7 @@ const Anthropic = require('@anthropic-ai/sdk')
 const { getSocialSentiment } = require('../lib/social-sentiment')
 
 const router = express.Router()
-const client = new Anthropic()
+const anthropic = new Anthropic()
 
 const chatLimit = rateLimit({
   windowMs: 60 * 1000, max: 30,
@@ -224,10 +230,122 @@ async function dispatchTool(name, input, req) {
   }
 }
 
+// ── Provider registry (claudian-style providerId + providerState) ─────────────
+
+const PROVIDER_DEFAULTS = {
+  claude: { model: 'claude-sonnet-4-6' },
+  groq:   { model: 'llama-3.3-70b-versatile', baseUrl: 'https://api.groq.com/openai/v1' },
+  codex:  { model: 'gpt-4o',                  baseUrl: 'https://api.openai.com/v1' },
+}
+
+// Convert Anthropic tool format → OpenAI function calling format
+function toOpenAITools(tools) {
+  return tools.map(t => ({
+    type: 'function',
+    function: { name: t.name, description: t.description, parameters: t.input_schema },
+  }))
+}
+
+// Convert messages to OpenAI format (flatten Anthropic content blocks)
+function toOpenAIMessages(system, messages) {
+  const out = system ? [{ role: 'system', content: system }] : []
+  for (const m of messages) {
+    if (typeof m.content === 'string') {
+      out.push({ role: m.role, content: m.content })
+    } else if (Array.isArray(m.content)) {
+      // Anthropic content blocks → OpenAI
+      const textParts = m.content.filter(b => b.type === 'text').map(b => b.text).join('')
+      const toolResults = m.content.filter(b => b.type === 'tool_result')
+      if (toolResults.length) {
+        for (const tr of toolResults) {
+          out.push({ role: 'tool', tool_call_id: tr.tool_use_id, content: typeof tr.content === 'string' ? tr.content : JSON.stringify(tr.content) })
+        }
+      } else if (m.role === 'assistant') {
+        // Check for tool_use blocks
+        const toolUses = m.content.filter(b => b.type === 'tool_use')
+        if (toolUses.length) {
+          out.push({
+            role: 'assistant',
+            content: textParts || null,
+            tool_calls: toolUses.map(tu => ({
+              id: tu.id, type: 'function',
+              function: { name: tu.name, arguments: JSON.stringify(tu.input) },
+            })),
+          })
+        } else {
+          if (textParts) out.push({ role: m.role, content: textParts })
+        }
+      } else {
+        if (textParts) out.push({ role: m.role, content: textParts })
+      }
+    }
+  }
+  return out
+}
+
+/**
+ * Run one agentic turn using an OpenAI-compatible provider (Groq, Codex).
+ * Non-streaming for simplicity; we fake-stream the text back word by word.
+ */
+async function runOpenAITurn({ model, baseUrl, apiKey, system, messages, tools, send, dispatchFn, req, maxIter = 5 }) {
+  const oaiTools = toOpenAITools(tools)
+  let loopMessages = toOpenAIMessages(system, messages)
+  let iterations = 0
+
+  while (iterations < maxIter) {
+    iterations++
+    const r = await fetch(`${baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({ model, messages: loopMessages, tools: oaiTools, tool_choice: 'auto', max_tokens: 4096 }),
+      signal: AbortSignal.timeout(90_000),
+    })
+    if (!r.ok) {
+      const err = await r.text()
+      throw new Error(`Provider error ${r.status}: ${err.slice(0, 200)}`)
+    }
+    const data = await r.json()
+    const choice = data.choices?.[0]
+    const msg = choice?.message
+
+    // Stream text back word by word for UX parity with Claude streaming
+    if (msg?.content) {
+      const words = msg.content.split(/(\s+)/)
+      for (const w of words) send({ type: 'text', delta: w })
+    }
+
+    // Handle tool calls
+    const toolCalls = msg?.tool_calls || []
+    if (!toolCalls.length) break
+
+    send({ type: 'tool_start', tools: toolCalls.map(tc => ({ name: tc.function.name, input: JSON.parse(tc.function.arguments || '{}') })) })
+
+    const toolResults = await Promise.all(toolCalls.map(async tc => {
+      let parsed = {}
+      try { parsed = JSON.parse(tc.function.arguments || '{}') } catch {}
+      try {
+        const output = await dispatchFn(tc.function.name, parsed, req)
+        return { role: 'tool', tool_call_id: tc.id, content: output }
+      } catch (err) {
+        return { role: 'tool', tool_call_id: tc.id, content: `Error: ${err.message}` }
+      }
+    }))
+
+    send({ type: 'tool_results', results: toolResults.map(tr => ({ tool: tr.tool_call_id, preview: tr.content?.slice?.(0, 120) })) })
+
+    loopMessages.push({
+      role: 'assistant',
+      content: msg.content || null,
+      tool_calls: toolCalls,
+    })
+    loopMessages.push(...toolResults)
+  }
+}
+
 // ── SSE streaming chat handler ─────────────────────────────────────────────────
 
 router.post('/chat', chatLimit, async (req, res) => {
-  const { messages = [], portfolio = [], watchlist = [] } = req.body
+  const { messages = [], portfolio = [], watchlist = [], providerId = 'claude', providerState = {} } = req.body
 
   res.setHeader('Content-Type', 'text/event-stream')
   res.setHeader('Cache-Control', 'no-cache')
@@ -246,7 +364,28 @@ router.post('/chat', chatLimit, async (req, res) => {
 
     const systemPrompt = COPILOT_SYSTEM + contextBlock
 
-    // Agentic loop — supports multi-turn tool use
+    // ── Route to the correct provider ──────────────────────────────────────────
+    const providerKey = (providerId || 'claude').toLowerCase()
+    const defaults = PROVIDER_DEFAULTS[providerKey] || PROVIDER_DEFAULTS.claude
+    const model = providerState.model || defaults.model
+    const baseUrl = providerState.baseUrl || defaults.baseUrl
+
+    if (providerKey === 'groq' || providerKey === 'codex') {
+      const apiKey = providerKey === 'groq' ? process.env.GROQ_API_KEY : process.env.OPENAI_API_KEY
+      if (!apiKey) {
+        send({ type: 'error', message: `${providerKey} API key not configured on server` })
+        res.end(); return
+      }
+      await runOpenAITurn({
+        model, baseUrl, apiKey, system: systemPrompt,
+        messages: messages.map(m => ({ role: m.role, content: m.content })),
+        tools: TOOLS, send, dispatchFn: dispatchTool, req, maxIter: 5,
+      })
+      send({ type: 'done' })
+      res.end(); return
+    }
+
+    // ── Claude provider (default) — native streaming tool_use ──────────────────
     let loopMessages = messages.map(m => ({ role: m.role, content: m.content }))
     let iterations = 0
     const MAX_ITER = 5
@@ -254,8 +393,8 @@ router.post('/chat', chatLimit, async (req, res) => {
     while (iterations < MAX_ITER) {
       iterations++
 
-      const stream = await client.messages.stream({
-        model: 'claude-sonnet-4-6',
+      const stream = await anthropic.messages.stream({
+        model,
         max_tokens: 4096,
         system: systemPrompt,
         tools: TOOLS,

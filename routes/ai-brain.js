@@ -298,15 +298,18 @@ function logPrediction(symbol, agents, zones, generatedAt) {
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
     const record = JSON.stringify({
       symbol, generatedAt,
-      fundamentalScore: agents.fundamentalScore,
-      technicalScore:   agents.technicalScore,
-      sentimentScore:   agents.sentimentScore,
-      macroScore:       agents.macroScore,
-      riskScore:        agents.riskScore,
-      compositeScore:   agents.compositeScore,
-      entryZoneMid:     zones?.entryZoneLow != null ? (zones.entryZoneLow + zones.entryZoneHigh) / 2 : null,
-      targetZoneMid:    zones?.targetZoneLow != null ? (zones.targetZoneLow + zones.targetZoneHigh) / 2 : null,
-      verdict:          agents.agentVerdict,
+      fundamentalScore:  agents.fundamentalScore,
+      technicalScore:    agents.technicalScore,
+      sentimentScore:    agents.sentimentScore,
+      macroScore:        agents.macroScore,
+      riskScore:         agents.riskScore,
+      compositeScore:    agents.compositeScore,
+      entryZoneMid:      zones?.entryZoneLow != null ? (zones.entryZoneLow + zones.entryZoneHigh) / 2 : null,
+      targetZoneMid:     zones?.targetZoneLow != null ? (zones.targetZoneLow + zones.targetZoneHigh) / 2 : null,
+      verdict:           agents.agentVerdict,
+      thesisAssumptions: agents.thesisAssumptions ?? [],
+      agentConflict:     agents.agentConflict ?? null,
+      supervisorNote:    agents.supervisorSynthesis ?? null,
       // outcome fields filled later by a scheduled job
       price7d: null, price30d: null, price90d: null,
     })
