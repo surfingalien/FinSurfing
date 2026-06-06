@@ -36,6 +36,7 @@ import BuySignalsView from './components/Recommendations/BuySignalsView'
 import AIBrainView from './components/AIBrain/AIBrainView'
 import AIWatchlistView from './components/AIWatchlist/AIWatchlistView'
 import AgentHubView from './components/AgentHub/AgentHubView'
+import TradeTimelineView from './components/Timeline/TradeTimelineView'
 import PortfolioAnalyticsView from './components/Analytics/PortfolioAnalyticsView'
 import RebalancerView from './components/Rebalancer/RebalancerView'
 import TradingViewView from './components/TradingView/TradingViewView'
@@ -272,6 +273,9 @@ function MainApp({ onSignIn }) {
             )}
             {activeTab === 'agent-hub' && (
               <AgentHubView />
+            )}
+            {activeTab === 'trade-timeline' && (
+              <TradeTimelineView portfolio={portfolio} />
             )}
             {activeTab === 'admin' && (
               <AdminDashboard />

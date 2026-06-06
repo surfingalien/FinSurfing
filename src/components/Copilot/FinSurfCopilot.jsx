@@ -75,16 +75,25 @@ function FormattedText({ text }) {
   return <>{parts}</>
 }
 
+// Available providers — claudian-style providerId + providerState
+const PROVIDERS = [
+  { id: 'claude', label: 'Claude',  color: '#00ffcc', description: 'claude-sonnet-4-6' },
+  { id: 'groq',   label: 'Groq',    color: '#f472b6', description: 'llama-3.3-70b' },
+  { id: 'codex',  label: 'Codex',   color: '#60a5fa', description: 'gpt-4o' },
+]
+
 export default function FinSurfCopilot({ portfolio = [], watchlist = [] }) {
   const [open, setOpen] = useState(false)
   const [messages, setMessages] = useState([{ role: 'assistant', content: WELCOME }])
   const [input, setInput] = useState('')
   const [streaming, setStreaming] = useState(false)
   const [activeTools, setActiveTools] = useState([])
+  const [providerId, setProviderId] = useState('claude')
   const messagesEndRef = useRef(null)
   const inputRef = useRef(null)
   const abortRef = useRef(null)
   const { keys } = useApiKeys?.() ?? { keys: {} }
+  const activeProvider = PROVIDERS.find(p => p.id === providerId) || PROVIDERS[0]
 
   useEffect(() => {
     if (open) {
@@ -126,6 +135,7 @@ export default function FinSurfCopilot({ portfolio = [], watchlist = [] }) {
           messages: apiMessages,
           portfolio: portfolio.map?.(p => p.symbol || p).filter(Boolean),
           watchlist: watchlist.map?.(w => w.symbol || w).filter(Boolean),
+          providerId,
         }),
         signal: abortRef.current.signal,
       })
@@ -221,16 +231,40 @@ export default function FinSurfCopilot({ portfolio = [], watchlist = [] }) {
             {/* Header */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.06] flex-shrink-0">
               <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-full bg-[#00ffcc]/20 border border-[#00ffcc]/30 flex items-center justify-center">
-                  <Bot size={15} className="text-[#00ffcc]" />
+                <div
+                  className="w-7 h-7 rounded-full border flex items-center justify-center transition-colors"
+                  style={{ background: activeProvider.color + '20', borderColor: activeProvider.color + '50' }}
+                >
+                  <Bot size={15} style={{ color: activeProvider.color }} />
                 </div>
                 <div>
                   <div className="text-sm font-semibold text-white">FinSurf Copilot</div>
-                  <div className="text-[10px] text-slate-500">Live market access · AG-UI inspired</div>
+                  <div className="text-[10px] text-slate-500">
+                    {activeProvider.description} · multi-provider
+                  </div>
                 </div>
               </div>
-              <div className="flex items-center gap-1">
-                {streaming && <Loader2 size={14} className="text-[#00ffcc] animate-spin mr-1" />}
+              <div className="flex items-center gap-1.5">
+                {streaming && <Loader2 size={14} className="animate-spin mr-1" style={{ color: activeProvider.color }} />}
+                {/* Provider switcher */}
+                <div className="flex rounded-lg overflow-hidden border border-white/[0.08]">
+                  {PROVIDERS.map(p => (
+                    <button
+                      key={p.id}
+                      onClick={() => setProviderId(p.id)}
+                      disabled={streaming}
+                      title={p.description}
+                      className={`px-2 py-1 text-[10px] font-medium transition-all disabled:opacity-40 ${
+                        providerId === p.id
+                          ? 'text-[#060810]'
+                          : 'text-slate-500 hover:text-white bg-transparent'
+                      }`}
+                      style={providerId === p.id ? { background: p.color } : {}}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
                 <button onClick={() => setOpen(false)} className="p-1.5 rounded-lg hover:bg-white/[0.06] text-slate-500 hover:text-white transition-colors">
                   <X size={16} />
                 </button>
