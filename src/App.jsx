@@ -45,6 +45,7 @@ import { usePortfolio } from './hooks/usePortfolio'
 import { useWatchlist } from './hooks/useWatchlist'
 import { useAlerts } from './hooks/useAlerts'
 import FinSurfCopilot from './components/Copilot/FinSurfCopilot'
+import RemoteControlPanel from './components/RemoteControl/RemoteControlPanel'
 
 // ── Inner app (renders once auth state is known) ──────────────────────────────
 function AppInner() {
@@ -276,6 +277,9 @@ function MainApp({ onSignIn }) {
             )}
             {activeTab === 'trade-timeline' && (
               <TradeTimelineView portfolio={portfolio} />
+            )}
+            {activeTab === 'remote-control' && (
+              <RemoteControlPanel />
             )}
             {activeTab === 'admin' && (
               <AdminDashboard />

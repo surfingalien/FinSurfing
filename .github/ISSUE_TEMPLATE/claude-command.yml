@@ -1,0 +1,29 @@
+name: Claude Code Command
+description: Send a remote command to the active Claude Code session
+labels: ["claude-cmd"]
+body:
+  - type: input
+    id: command
+    attributes:
+      label: Command
+      description: What should Claude do? Be specific (e.g. "add dark mode toggle to Sidebar").
+      placeholder: "Add a price alert bell icon to the watchlist row"
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context (optional)
+      description: File paths, constraints, or acceptance criteria.
+    validations:
+      required: false
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      options:
+        - normal
+        - high
+        - low
+    validations:
+      required: true
