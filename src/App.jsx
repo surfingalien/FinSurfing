@@ -29,7 +29,6 @@ import PolymarketView from './components/Polymarket/PolymarketView'
 import MacroView from './components/Macro/MacroView'
 import RiskRulesView from './components/Risk/RiskRulesView'
 import TradeSetupView from './components/Orders/TradeSetupView'
-import EarningsCalendarView from './components/EarningsCalendar/EarningsCalendarView'
 import BacktestView from './components/Backtest/BacktestView'
 
 import BuySignalsView from './components/Recommendations/BuySignalsView'
@@ -45,7 +44,6 @@ import { usePortfolio } from './hooks/usePortfolio'
 import { useWatchlist } from './hooks/useWatchlist'
 import { useAlerts } from './hooks/useAlerts'
 import FinSurfCopilot from './components/Copilot/FinSurfCopilot'
-import RemoteControlPanel from './components/RemoteControl/RemoteControlPanel'
 
 // ── Inner app (renders once auth state is known) ──────────────────────────────
 function AppInner() {
@@ -244,9 +242,7 @@ function MainApp({ onSignIn }) {
             {activeTab === 'trade-setups' && (
               <TradeSetupView portfolio={portfolio} />
             )}
-            {activeTab === 'earnings' && (
-              <EarningsCalendarView portfolio={portfolio} onAnalyze={navigateToAnalyze} onNavigate={navigateTo} />
-            )}
+
             {activeTab === 'backtest' && (
               <BacktestView />
             )}
@@ -278,9 +274,7 @@ function MainApp({ onSignIn }) {
             {activeTab === 'trade-timeline' && (
               <TradeTimelineView portfolio={portfolio} />
             )}
-            {activeTab === 'remote-control' && (
-              <RemoteControlPanel />
-            )}
+
             {activeTab === 'admin' && (
               <AdminDashboard />
             )}

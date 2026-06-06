@@ -29,6 +29,7 @@ const express = require('express')
 const rateLimit = require('express-rate-limit')
 const Anthropic = require('@anthropic-ai/sdk')
 const { getSocialSentiment } = require('../lib/social-sentiment')
+const { getAltDataSnippet }  = require('../lib/alt-data')
 
 const router = express.Router()
 const anthropic = new Anthropic()
@@ -239,11 +240,14 @@ async function dispatchTool(name, input, req) {
     case 'analyze_symbol': {
       const sym = encodeURIComponent(input.symbol || '')
       const interval = input.interval || '1d'
-      const r = await fetch(`http://127.0.0.1:${port}/api/trading-analysis/analyze?symbol=${sym}&interval=${interval}`, {
-        method: 'POST', headers: fwdHeaders,
-        body: JSON.stringify({}),
-        signal: AbortSignal.timeout(30_000),
-      })
+      const [r, altSnippet] = await Promise.all([
+        fetch(`http://127.0.0.1:${port}/api/trading-analysis/analyze?symbol=${sym}&interval=${interval}`, {
+          method: 'POST', headers: fwdHeaders,
+          body: JSON.stringify({}),
+          signal: AbortSignal.timeout(30_000),
+        }),
+        getAltDataSnippet(input.symbol || '').catch(() => null),
+      ])
       const data = await r.json()
       if (!data.signal) return `Analysis failed for ${input.symbol}: ${data.error || 'unknown error'}`
       return (
@@ -253,7 +257,8 @@ async function dispatchTool(name, input, req) {
         `Stop $${data.stopLoss} · Target $${data.takeProfit?.[0]}–$${data.takeProfit?.[1]}\n\n` +
         `${data.reasoning}\n\n` +
         (data.contradictions?.length ? `⚠️ Contradictions: ${data.contradictions.join('; ')}\n` : '') +
-        `Risks: ${data.risks?.join(' | ')}`
+        `Risks: ${data.risks?.join(' | ')}` +
+        (altSnippet ? `\n${altSnippet}` : '')
       )
     }
 
