@@ -43,6 +43,7 @@ import GoalsView from './components/Goals/GoalsView'
 import { usePortfolio } from './hooks/usePortfolio'
 import { useWatchlist } from './hooks/useWatchlist'
 import { useAlerts } from './hooks/useAlerts'
+import FinSurfCopilot from './components/Copilot/FinSurfCopilot'
 
 // ── Inner app (renders once auth state is known) ──────────────────────────────
 function AppInner() {
@@ -286,6 +287,12 @@ function MainApp({ onSignIn }) {
           </footer>
         </main>
       </div>
+
+      {/* ── FinSurf Copilot — floating agentic AI panel ── */}
+      <FinSurfCopilot
+        portfolio={portfolio.positions}
+        watchlist={watchlist.symbols}
+      />
     </div>
   )
 }
