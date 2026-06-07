@@ -1,659 +1,637 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SurfingNeo-OS v2.0</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>SurfingNeo-OS</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://d3js.org/d3.v7.min.js"></script>
 <style>
-:root {
-  --bg:#0A0B0F; --card:#13151F; --border:rgba(255,255,255,0.07);
-  --text:#E2E8F0; --muted:#64748B; --accent:#00FFCC; --accent2:#6366F1;
-  --route:#6366F1; --lib:#06B6D4; --comp:#8B5CF6; --jsx:#A78BFA;
+/* ── CSS Variables ─────────────────────────────────────────── */
+:root{
+  --bg:#0A0B0F;--card:#13151F;--border:rgba(255,255,255,.07);
+  --text:#E2E8F0;--muted:#64748B;--accent:#00FFCC;--accent2:#6366F1;
+  --green:#22C55E;--yellow:#EAB308;--red:#EF4444;--cyan:#06B6D4;
+  --c-route:#6366F1;--c-lib:#06B6D4;--c-comp:#8B5CF6;--c-jsx:#A78BFA;
 }
-[data-theme="tan"] {
-  --bg:#FAF7F2; --card:#FFFFFF; --border:#E2D9CC;
-  --text:#1C1812; --muted:#8B7355; --accent:#B45309; --accent2:#7C3AED;
-  --route:#7C3AED; --lib:#0891B2; --comp:#6D28D9; --jsx:#8B5CF6;
+[data-theme="tan"]{
+  --bg:#FAF7F2;--card:#FFFFFF;--border:#E2D9CC;
+  --text:#1C1812;--muted:#8B7355;--accent:#B45309;--accent2:#7C3AED;
 }
+
+/* ── Reset ─────────────────────────────────────────────────── */
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-html,body{height:100%;font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);overflow:hidden}
-/* scrollbars */
-::-webkit-scrollbar{width:6px;height:6px}
+html,body{height:100%;font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.5;overflow:hidden}
+button{cursor:pointer;font-family:inherit;font-size:inherit}
+a{text-decoration:none;color:inherit}
+input,select,textarea{font-family:inherit;font-size:inherit}
+::-webkit-scrollbar{width:5px;height:5px}
 ::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
 
-/* HEADER */
-#header{position:fixed;top:0;left:0;right:0;height:56px;background:var(--card);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 16px;gap:16px;z-index:100}
-.hd-logo{display:flex;align-items:center;gap:8px;flex-shrink:0}
-.hd-logo svg{width:22px;height:22px;color:var(--accent)}
-.hd-logo-name{font-weight:700;font-size:15px;white-space:nowrap}
-.hd-badge{background:var(--accent2);color:#fff;font-size:10px;font-weight:600;padding:2px 6px;border-radius:4px;margin-left:2px}
-.hd-tabs{display:flex;gap:4px;flex:1;justify-content:center;overflow-x:auto;scrollbar-width:none}
-.hd-tabs::-webkit-scrollbar{display:none}
-.tab-pill{padding:6px 14px;border-radius:20px;font-size:13px;font-weight:500;cursor:pointer;white-space:nowrap;border:none;background:transparent;color:var(--muted);transition:all .2s}
-.tab-pill:hover{color:var(--text);background:var(--border)}
-.tab-pill.active{background:var(--accent2);color:#fff}
-.hd-right{display:flex;align-items:center;gap:10px;flex-shrink:0}
-.hd-clock{font-size:13px;font-weight:500;color:var(--muted);font-variant-numeric:tabular-nums}
-.hd-btn{padding:6px 12px;border-radius:8px;font-size:12px;font-weight:500;cursor:pointer;border:1px solid var(--border);background:transparent;color:var(--text);transition:all .2s;white-space:nowrap}
-.hd-btn:hover{border-color:var(--accent);color:var(--accent)}
-.hd-link{padding:6px 12px;border-radius:8px;font-size:12px;font-weight:500;background:var(--accent);color:#000;text-decoration:none;transition:opacity .2s}
-.hd-link:hover{opacity:.85}
-
-/* MAIN */
-#main{position:fixed;top:56px;left:0;right:0;bottom:0;overflow-y:auto}
-.tab-panel{display:none;padding:24px;max-width:1400px;margin:0 auto}
-.tab-panel.active{display:block}
-
-/* CARDS */
-.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px}
-.card-title{font-size:14px;font-weight:600;margin-bottom:4px}
-.card-sub{font-size:12px;color:var(--muted);margin-bottom:16px}
-
-/* STAT CARDS */
-.stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px}
-.stat-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;position:relative;overflow:hidden}
-.stat-card::after{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:var(--accent2)}
-.stat-label{font-size:12px;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
-.stat-val{font-size:32px;font-weight:700;margin:8px 0 4px;line-height:1}
-.stat-badge{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;padding:3px 8px;border-radius:20px;background:rgba(0,255,204,.12);color:var(--accent)}
-.stat-spark{margin-top:12px;height:36px}
-.stat-spark svg{display:block}
-
-/* MID ROW */
-.mid-row{display:grid;grid-template-columns:60fr 40fr;gap:16px;margin-bottom:24px}
-.canvas-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px}
-.canvas-title-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
-#dash-canvas{width:100%;height:360px;display:block;border-radius:8px;background:rgba(0,0,0,.2)}
-.right-col{display:flex;flex-direction:column;gap:16px}
-
-/* BRAIN STATUS */
-.brain-row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);font-size:13px}
-.brain-row:last-child{border-bottom:none}
-.status-dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:6px}
-.dot-active{background:#22C55E;box-shadow:0 0 6px #22C55E}
-.dot-synced{background:var(--accent);box-shadow:0 0 6px var(--accent)}
-.dot-idle{background:var(--muted)}
-.dot-ready{background:#6366F1;box-shadow:0 0 6px #6366F1}
-
-/* ACTIVITY */
-.activity-item{display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);font-size:12px}
-.activity-item:last-child{border-bottom:none}
-.activity-icon{width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
-.activity-text{flex:1}
-.activity-time{color:var(--muted);font-size:11px;margin-top:2px}
-
-/* QUICK ACTIONS */
-.qa-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
-.qa-btn{padding:14px;border-radius:12px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:13px;font-weight:500;cursor:pointer;transition:all .2s;display:flex;align-items:center;gap:8px}
-.qa-btn:hover{border-color:var(--accent);color:var(--accent);background:rgba(0,255,204,.04)}
-
-/* GRAPHIFY */
-.graph-controls{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:16px}
-.ctrl-input{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:8px 12px;font-size:13px;color:var(--text);outline:none;min-width:200px}
-.ctrl-input:focus{border-color:var(--accent2)}
-.ctrl-btn{padding:7px 14px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--muted);font-size:12px;font-weight:500;cursor:pointer;transition:all .2s}
-.ctrl-btn:hover,.ctrl-btn.active{border-color:var(--accent2);color:var(--accent2)}
-.ctrl-btn.active{background:rgba(99,102,241,.12)}
-#graph-wrap{background:var(--card);border:1px solid var(--border);border-radius:12px;height:600px;overflow:hidden;position:relative}
-#graph-wrap svg{display:block}
-#node-inspector{display:none;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;margin-top:16px}
-.graph-meta-row{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:16px}
-.legend-row{display:flex;gap:20px;margin-top:16px;flex-wrap:wrap}
-.legend-item{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
-.legend-dot{width:10px;height:10px;border-radius:50%}
-.cli-ref{margin-top:16px}
-.cli-toggle{background:transparent;border:1px solid var(--border);border-radius:8px;padding:8px 14px;color:var(--muted);font-size:12px;cursor:pointer;width:100%;text-align:left}
-.cli-body{display:none;background:#0D0F14;border-radius:8px;padding:16px;margin-top:8px;font-family:monospace;font-size:12px;line-height:1.8;color:#94A3B8;overflow-x:auto}
-.cli-body.open{display:block}
-
-/* MCP */
-.mcp-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px;margin-top:16px}
-.mcp-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px}
-.mcp-header{display:flex;align-items:center;gap:10px;margin-bottom:12px}
-.mcp-icon{width:38px;height:38px;border-radius:10px;background:rgba(99,102,241,.15);display:flex;align-items:center;justify-content:center;font-size:18px}
-.mcp-name{font-weight:600;font-size:14px}
-.status-badge{font-size:11px;font-weight:600;padding:3px 8px;border-radius:20px}
-.badge-connected{background:rgba(34,197,94,.15);color:#22C55E}
-.badge-idle{background:rgba(100,116,139,.15);color:var(--muted)}
-.badge-offline{background:rgba(239,68,68,.15);color:#EF4444}
-.mcp-meta{font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.5}
-.tag-row{display:flex;flex-wrap:wrap;gap:6px}
-.tag{font-size:11px;padding:3px 8px;border-radius:20px;background:rgba(99,102,241,.1);color:var(--accent2);border:1px solid rgba(99,102,241,.2)}
-.ghost-card{border:2px dashed var(--border);display:flex;align-items:center;justify-content:center;min-height:120px;cursor:pointer;color:var(--muted);font-size:14px;gap:8px;transition:all .2s}
-.ghost-card:hover{border-color:var(--accent2);color:var(--accent2)}
-
-/* SKILLS */
-.skills-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px}
-.skills-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}
-.skill-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px}
-.skill-name{font-weight:600;font-size:15px;margin-bottom:6px}
-.skill-desc{font-size:12px;color:var(--muted);line-height:1.5;margin-bottom:12px}
-.skill-footer{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}
-.open-link{font-size:12px;font-weight:500;color:var(--accent2);text-decoration:none;padding:5px 10px;border:1px solid var(--accent2);border-radius:6px;transition:all .2s}
-.open-link:hover{background:var(--accent2);color:#fff}
-
-/* PLUGINS */
-.plugins-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;margin-top:16px}
-.plugin-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px}
-.plugin-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
-.plugin-name{font-weight:600;font-size:14px}
-.version-badge{font-size:11px;padding:2px 8px;border-radius:20px;background:rgba(99,102,241,.12);color:var(--accent2)}
-.plugin-desc{font-size:12px;color:var(--muted);line-height:1.5;margin-bottom:12px}
-.plugin-author{font-size:11px;color:var(--muted);margin-bottom:12px}
-.uninstall-btn{font-size:12px;padding:5px 12px;border-radius:6px;border:1px solid rgba(239,68,68,.3);background:transparent;color:#EF4444;cursor:pointer;transition:all .2s}
-.uninstall-btn:hover{background:rgba(239,68,68,.1)}
-.install-btn{font-size:12px;padding:5px 12px;border-radius:6px;border:1px solid var(--accent2);background:transparent;color:var(--accent2);cursor:pointer;transition:all .2s}
-.install-btn:hover{background:rgba(99,102,241,.1)}
-
-/* BRAIN */
-.brain-top{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:24px}
-.slider-wrap{display:flex;align-items:center;gap:8px;margin-top:6px}
-.slider-wrap input[type=range]{flex:1;accent-color:var(--accent2)}
-.toggle-row{display:flex;align-items:center;justify-content:space-between;padding:8px 0;font-size:13px}
-.toggle{position:relative;display:inline-block;width:36px;height:20px}
-.toggle input{opacity:0;width:0;height:0}
-.toggle-slider{position:absolute;inset:0;background:var(--muted);border-radius:20px;cursor:pointer;transition:.3s}
-.toggle-slider:before{content:'';position:absolute;width:14px;height:14px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.3s}
-.toggle input:checked+.toggle-slider{background:var(--accent2)}
-.toggle input:checked+.toggle-slider:before{transform:translateX(16px)}
-.agent-item{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);font-size:13px}
-.agent-item:last-child{border-bottom:none}
-select.ctrl-sel{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text);font-size:13px;outline:none;width:100%;margin-top:6px}
-.arch-svg-wrap{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:16px;overflow-x:auto}
-#arch-svg{display:block;min-width:600px}
-
-/* TERMINAL */
-#term-wrap{background:#0D0F14;border:1px solid rgba(255,255,255,.06);border-radius:12px;padding:16px;height:520px;overflow-y:auto;font-family:'Courier New',monospace;font-size:13px;line-height:1.6;position:relative}
-.term-line{white-space:pre-wrap;word-break:break-all}
-.t-cyan{color:#06B6D4}
-.t-green{color:#22C55E}
-.t-yellow{color:#EAB308}
-.t-red{color:#EF4444}
-.t-white{color:#E2E8F0}
-.t-muted{color:#64748B}
-.t-accent{color:#00FFCC}
-.term-prompt-row{display:flex;align-items:center;gap:6px;padding-top:8px}
-.term-prompt{color:#22C55E;font-family:'Courier New',monospace;font-size:13px;white-space:nowrap}
-#term-input{background:transparent;border:none;outline:none;color:#E2E8F0;font-family:'Courier New',monospace;font-size:13px;flex:1}
-.cursor{display:inline-block;width:8px;height:14px;background:#00FFCC;animation:blink 1s step-end infinite;vertical-align:middle;margin-left:1px}
-@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
-.term-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px}
-
-/* SETTINGS */
-.settings-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-.settings-section{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px}
-.settings-title{font-size:14px;font-weight:600;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--border)}
-.setting-row{display:flex;align-items:center;justify-content:space-between;padding:8px 0;font-size:13px}
-.setting-label{color:var(--muted)}
-.setting-val{font-size:12px;color:var(--accent);font-weight:600}
-.accent-swatches{display:flex;gap:8px;margin-top:8px}
-.swatch{width:24px;height:24px;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:all .2s}
-.swatch.active,.swatch:hover{border-color:var(--text);transform:scale(1.15)}
-.num-input{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:5px 8px;color:var(--text);font-size:12px;width:80px;outline:none}
-
-/* page header row */
-.page-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px}
-.page-title{font-size:18px;font-weight:700}
-.primary-btn{padding:8px 16px;border-radius:8px;background:var(--accent2);border:none;color:#fff;font-size:13px;font-weight:500;cursor:pointer;transition:opacity .2s}
-.primary-btn:hover{opacity:.85}
-
-/* node type chips */
-.type-chip{font-size:11px;font-weight:600;padding:3px 8px;border-radius:20px}
-.chip-route{background:rgba(99,102,241,.15);color:#6366F1}
-.chip-lib{background:rgba(6,182,212,.15);color:#06B6D4}
-.chip-component{background:rgba(139,92,246,.15);color:#8B5CF6}
-.chip-jsx{background:rgba(167,139,250,.15);color:#A78BFA}
-
-@media(max-width:900px){
-  .stat-grid{grid-template-columns:repeat(2,1fr)}
-  .mid-row{grid-template-columns:1fr}
-  .qa-row{grid-template-columns:repeat(2,1fr)}
-  .brain-top{grid-template-columns:1fr}
-  .settings-grid{grid-template-columns:1fr}
-  .hd-tabs{display:none}
+/* ── Layout ────────────────────────────────────────────────── */
+#hdr{
+  position:fixed;inset:0 0 auto 0;height:56px;
+  background:var(--card);border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:12px;padding:0 16px;z-index:99
 }
+#main{position:fixed;inset:56px 0 0 0;overflow-y:auto}
+.panel{display:none;padding:20px;max-width:1440px;margin:0 auto}
+.panel.on{display:block}
+
+/* ── Header ────────────────────────────────────────────────── */
+.logo{display:flex;align-items:center;gap:8px;flex-shrink:0;white-space:nowrap}
+.logo-icon{color:var(--accent)}
+.logo-name{font-weight:700;font-size:15px}
+.logo-ver{font-size:10px;font-weight:600;padding:2px 6px;background:var(--accent2);color:#fff;border-radius:4px}
+.tab-nav{display:flex;gap:3px;flex:1;justify-content:center;overflow-x:auto;scrollbar-width:none}
+.tab-nav::-webkit-scrollbar{display:none}
+.tab-btn{
+  padding:6px 14px;border-radius:20px;border:none;background:transparent;
+  color:var(--muted);font-weight:500;font-size:13px;white-space:nowrap;transition:all .15s
+}
+.tab-btn:hover{color:var(--text);background:rgba(255,255,255,.05)}
+[data-theme="tan"] .tab-btn:hover{background:rgba(0,0,0,.05)}
+.tab-btn.active{background:var(--accent2);color:#fff}
+.hdr-right{display:flex;align-items:center;gap:8px;flex-shrink:0}
+#clock{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;letter-spacing:.02em}
+.hbtn{
+  padding:5px 11px;border-radius:7px;border:1px solid var(--border);
+  background:transparent;color:var(--text);font-size:12px;transition:all .15s
+}
+.hbtn:hover{border-color:var(--accent);color:var(--accent)}
+.hbtn.accent{background:var(--accent);color:#000;border-color:var(--accent)}
+.hbtn.accent:hover{opacity:.85}
+
+/* ── Cards ─────────────────────────────────────────────────── */
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px}
+.card-hd{font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px}
+.card-title{font-size:14px;font-weight:600;margin-bottom:4px}
+.card-sub{font-size:12px;color:var(--muted);margin-bottom:14px}
+
+/* ── Stat grid ─────────────────────────────────────────────── */
+.stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
+.stat-card{
+  background:var(--card);border:1px solid var(--border);border-radius:12px;
+  padding:16px;position:relative;overflow:hidden
+}
+.stat-card::after{
+  content:'';position:absolute;top:0;left:0;right:0;height:2px;
+  background:linear-gradient(90deg,var(--accent),var(--accent2))
+}
+.stat-lbl{font-size:11px;color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:.06em}
+.stat-val{font-size:30px;font-weight:700;line-height:1;margin:6px 0 6px}
+.stat-badge{
+  display:inline-flex;align-items:center;font-size:11px;font-weight:600;
+  padding:2px 8px;border-radius:20px;background:rgba(34,197,94,.12);color:var(--green)
+}
+
+/* ── Mid row ───────────────────────────────────────────────── */
+.mid-row{display:grid;grid-template-columns:60fr 40fr;gap:12px;margin-bottom:16px}
+.right-col{display:flex;flex-direction:column;gap:12px}
+#dash-canvas{width:100%;height:340px;display:block;border-radius:8px}
+.canvas-foot{display:flex;align-items:center;justify-content:space-between;margin-top:10px}
+.canvas-info{font-size:12px;color:var(--muted)}
+
+/* ── Brain status ──────────────────────────────────────────── */
+.brain-row{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:9px 0;border-bottom:1px solid var(--border);font-size:13px
+}
+.brain-row:last-child{border-bottom:none}
+.badge{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;padding:2px 8px;border-radius:20px}
+.badge-g{background:rgba(34,197,94,.12);color:var(--green)}
+.badge-b{background:rgba(6,182,212,.12);color:var(--cyan)}
+.badge-m{background:rgba(100,116,139,.12);color:var(--muted)}
+.badge-i{background:rgba(99,102,241,.12);color:var(--accent2)}
+
+/* ── Activity ──────────────────────────────────────────────── */
+.act-item{display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)}
+.act-item:last-child{border-bottom:none}
+.act-icon{width:30px;height:30px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
+.act-title{font-size:13px;font-weight:500}
+.act-time{font-size:11px;color:var(--muted);margin-top:1px}
+
+/* ── Quick actions ─────────────────────────────────────────── */
+.qa-row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.qa-btn{
+  padding:11px 14px;border-radius:10px;border:1px solid var(--border);
+  background:var(--card);color:var(--text);font-size:13px;font-weight:500;
+  display:flex;align-items:center;gap:8px;transition:all .15s
+}
+.qa-btn:hover{border-color:var(--accent);color:var(--accent)}
+
+/* ── Graph tab ─────────────────────────────────────────────── */
+.graph-ctrl{display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap}
+.graph-search{
+  flex:1;min-width:120px;padding:6px 11px;border-radius:8px;
+  border:1px solid var(--border);background:var(--card);color:var(--text);
+}
+.graph-search:focus{outline:none;border-color:var(--accent)}
+.ctrl-btn{
+  padding:5px 12px;border-radius:6px;border:1px solid var(--border);
+  background:var(--card);color:var(--muted);font-size:12px;transition:all .15s
+}
+.ctrl-btn:hover,.ctrl-btn.active{color:var(--text);border-color:var(--accent)}
+.graph-legend{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:10px}
+.leg-item{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted)}
+.leg-dot{width:9px;height:9px;border-radius:50%}
+#graph-wrap{
+  background:var(--card);border:1px solid var(--border);border-radius:12px;
+  overflow:hidden;position:relative;min-height:580px
+}
+#graph-wrap svg{display:block}
+#graph-placeholder{
+  position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  color:var(--muted);font-size:13px
+}
+#node-insp{display:none;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;margin-top:12px}
+.ni-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.ni-title{font-size:15px;font-weight:700}
+.ni-meta{font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.6}
+.nb-chip{
+  display:inline-flex;align-items:center;gap:4px;padding:3px 10px;
+  border-radius:20px;border:1px solid var(--border);font-size:12px;margin:3px;cursor:pointer
+}
+.nb-chip:hover{border-color:var(--accent)}
+.type-chip{font-size:11px;font-weight:600;padding:2px 8px;border-radius:20px}
+.tc-route{background:rgba(99,102,241,.15);color:var(--c-route)}
+.tc-lib{background:rgba(6,182,212,.15);color:var(--c-lib)}
+.tc-component{background:rgba(139,92,246,.15);color:var(--c-comp)}
+.tc-jsx{background:rgba(167,139,250,.15);color:var(--c-jsx)}
+
+/* ── MCP / Skill / Plugin cards ────────────────────────────── */
+.cards-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
+.mcp-card,.skill-card,.plugin-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px}
+.item-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.item-name{font-weight:600;font-size:14px}
+.status-g{background:rgba(34,197,94,.12);color:var(--green)}
+.status-y{background:rgba(234,179,8,.12);color:var(--yellow)}
+.status-r{background:rgba(239,68,68,.12);color:var(--red)}
+.item-meta{font-size:12px;color:var(--muted);margin-bottom:4px;line-height:1.5}
+.tag-row{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.tag{font-size:11px;padding:2px 8px;border-radius:6px;background:rgba(255,255,255,.05);color:var(--muted)}
+[data-theme="tan"] .tag{background:rgba(0,0,0,.05)}
+.ghost-card{
+  background:transparent;border:2px dashed var(--border);border-radius:12px;
+  display:flex;align-items:center;justify-content:center;
+  color:var(--muted);font-size:13px;cursor:pointer;min-height:100px;
+  transition:all .15s
+}
+.ghost-card:hover{border-color:var(--accent);color:var(--accent)}
+.ver-badge{font-size:11px;padding:2px 7px;border-radius:6px;background:rgba(255,255,255,.06);color:var(--muted)}
+[data-theme="tan"] .ver-badge{background:rgba(0,0,0,.06)}
+.inst-btn{padding:4px 12px;border-radius:6px;border:1px solid var(--accent);background:transparent;color:var(--accent);font-size:12px;font-weight:500;cursor:pointer;transition:all .15s}
+.inst-btn:hover{background:var(--accent);color:#000}
+.uninst-btn{padding:4px 12px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:12px;font-weight:500;cursor:pointer;transition:all .15s}
+.uninst-btn:hover{border-color:var(--red);color:var(--red)}
+
+/* ── Brain tab ─────────────────────────────────────────────── */
+.brain-grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px}
+.agent-row{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)}
+.agent-row:last-child{border-bottom:none;padding-bottom:0}
+.arch-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 20px}
+
+/* ── Terminal ──────────────────────────────────────────────── */
+#terminal{
+  background:#0D0F14;border:1px solid rgba(255,255,255,.07);border-radius:12px;
+  height:calc(100vh - 140px);min-height:420px;display:flex;flex-direction:column;overflow:hidden
+}
+.term-hd{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:10px 14px;border-bottom:1px solid rgba(255,255,255,.05);flex-shrink:0
+}
+.term-title{font-size:12px;color:#475569;font-family:monospace}
+#term-out{flex:1;overflow-y:auto;padding:14px;font-family:'Courier New',monospace;font-size:12.5px;line-height:1.7}
+.tl{display:block}
+.tl-g{color:#22C55E}.tl-c{color:#06B6D4}.tl-y{color:#EAB308}.tl-r{color:#EF4444}
+.tl-m{color:#64748B}.tl-w{color:#E2E8F0}.tl-a{color:#00FFCC}
+#term-row{display:flex;align-items:center;gap:8px;padding:8px 14px;border-top:1px solid rgba(255,255,255,.05);flex-shrink:0}
+#term-prompt{color:#22C55E;font-family:monospace;font-size:12.5px;white-space:nowrap}
+#term-input{
+  flex:1;background:transparent;border:none;outline:none;
+  color:#E2E8F0;font-family:'Courier New',monospace;font-size:12.5px
+}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+.cursor{display:inline-block;width:7px;height:13px;background:#22C55E;animation:blink 1s infinite;vertical-align:text-bottom}
+
+/* ── Settings ──────────────────────────────────────────────── */
+.settings-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.s-section{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px}
+.s-title{font-size:13px;font-weight:600;padding-bottom:10px;border-bottom:1px solid var(--border);margin-bottom:12px}
+.s-row{display:flex;align-items:center;justify-content:space-between;padding:7px 0}
+.s-lbl{font-size:13px}
+.s-sub{font-size:11px;color:var(--muted)}
+.s-input{padding:5px 9px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);width:100px}
+.toggle{position:relative;width:36px;height:20px;flex-shrink:0}
+.toggle input{opacity:0;width:0;height:0;position:absolute}
+.tslider{position:absolute;inset:0;background:#374151;border-radius:10px;cursor:pointer;transition:.25s}
+.toggle input:checked+.tslider{background:var(--accent)}
+.tslider::before{content:'';position:absolute;width:14px;height:14px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.25s}
+.toggle input:checked+.tslider::before{transform:translateX(16px)}
+.swatches{display:flex;gap:7px;flex-wrap:wrap}
+.swatch{width:22px;height:22px;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:.15s}
+.swatch.active{border-color:var(--text);transform:scale(1.2)}
+
+/* ── Section heading ───────────────────────────────────────── */
+.page-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+.page-title{font-size:18px;font-weight:700}
+.page-sub{font-size:13px;color:var(--muted);margin-top:2px}
 </style>
 </head>
 <body>
 
-<!-- HEADER -->
-<header id="header">
-  <div class="hd-logo">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-      <rect x="2" y="2" width="8" height="8" rx="1.5"/><rect x="14" y="2" width="8" height="8" rx="1.5"/>
-      <rect x="2" y="14" width="8" height="8" rx="1.5"/><rect x="14" y="14" width="8" height="8" rx="1.5"/>
-      <line x1="6" y1="10" x2="6" y2="14"/><line x1="18" y1="10" x2="18" y2="14"/>
-      <line x1="10" y1="6" x2="14" y2="6"/><line x1="10" y1="18" x2="14" y2="18"/>
+<!-- ════════════════ HEADER ════════════════ -->
+<header id="hdr">
+  <div class="logo">
+    <svg class="logo-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+      <rect x="3" y="3" width="7" height="7" rx="1.5"/>
+      <rect x="14" y="3" width="7" height="7" rx="1.5"/>
+      <rect x="3" y="14" width="7" height="7" rx="1.5"/>
+      <rect x="14" y="14" width="7" height="7" rx="1.5"/>
+      <line x1="10" y1="6.5" x2="14" y2="6.5"/>
+      <line x1="10" y1="17.5" x2="14" y2="17.5"/>
+      <line x1="6.5" y1="10" x2="6.5" y2="14"/>
+      <line x1="17.5" y1="10" x2="17.5" y2="14"/>
     </svg>
-    <span class="hd-logo-name">SurfingNeo-OS</span>
-    <span class="hd-badge">v2.0</span>
+    <span class="logo-name">SurfingNeo-OS</span>
+    <span class="logo-ver">v2.0</span>
   </div>
-  <nav class="hd-tabs">
-    <button class="tab-pill active" onclick="showTab('dashboard')">Dashboard</button>
-    <button class="tab-pill" onclick="showTab('graphify')">Graphify</button>
-    <button class="tab-pill" onclick="showTab('mcp')">MCP Servers</button>
-    <button class="tab-pill" onclick="showTab('skills')">Skills</button>
-    <button class="tab-pill" onclick="showTab('plugins')">Plugins</button>
-    <button class="tab-pill" onclick="showTab('brain')">Brain</button>
-    <button class="tab-pill" onclick="showTab('terminal')">Terminal</button>
-    <button class="tab-pill" onclick="showTab('settings')">Settings</button>
+  <nav class="tab-nav">
+    <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
+    <button class="tab-btn" data-tab="graphify">Graphify</button>
+    <button class="tab-btn" data-tab="mcp">MCP Servers</button>
+    <button class="tab-btn" data-tab="skills">Skills</button>
+    <button class="tab-btn" data-tab="plugins">Plugins</button>
+    <button class="tab-btn" data-tab="brain">Brain</button>
+    <button class="tab-btn" data-tab="terminal">Terminal</button>
+    <button class="tab-btn" data-tab="settings">Settings</button>
   </nav>
-  <div class="hd-right">
-    <span class="hd-clock" id="clock">--:--:--</span>
-    <button class="hd-btn" id="theme-btn" onclick="toggleTheme()">☀ Tan</button>
-    <a href="/" class="hd-link">↗ FinSurfing</a>
+  <div class="hdr-right">
+    <span id="clock">--:--:--</span>
+    <button class="hbtn" id="theme-btn">☀ Tan</button>
+    <a href="/" class="hbtn accent">↗ FinSurfing</a>
   </div>
 </header>
 
-<!-- MAIN -->
-<main id="main">
+<!-- ════════════════ MAIN ════════════════ -->
+<div id="main">
 
-<!-- TAB 1: DASHBOARD -->
-<div class="tab-panel active" id="tab-dashboard">
+<!-- ── TAB: Dashboard ── -->
+<div class="panel on" id="tab-dashboard">
+  <!-- Stat cards -->
   <div class="stat-grid">
     <div class="stat-card">
-      <div class="stat-label">Graph Nodes</div>
-      <div class="stat-val" id="stat-nodes">—</div>
-      <span class="stat-badge">↑ +18%</span>
-      <div class="stat-spark"><svg id="spark-nodes" viewBox="0 0 120 36" preserveAspectRatio="none" width="100%" height="36"></svg></div>
+      <div class="stat-lbl">Graph Nodes</div>
+      <div class="stat-val" id="s-nodes">127</div>
+      <span class="stat-badge">28 routes · 11 libs</span>
     </div>
     <div class="stat-card">
-      <div class="stat-label">AI Skills</div>
-      <div class="stat-val" id="stat-skills">—</div>
+      <div class="stat-lbl">AI Skills</div>
+      <div class="stat-val" id="s-skills">12</div>
       <span class="stat-badge">+3 new</span>
-      <div class="stat-spark"><svg id="spark-skills" viewBox="0 0 120 36" preserveAspectRatio="none" width="100%" height="36"></svg></div>
     </div>
     <div class="stat-card">
-      <div class="stat-label">MCP Servers</div>
-      <div class="stat-val" id="stat-mcps">—</div>
-      <span class="stat-badge" id="mcp-badge">— connected</span>
-      <div class="stat-spark"><svg id="spark-mcps" viewBox="0 0 120 36" preserveAspectRatio="none" width="100%" height="36"></svg></div>
+      <div class="stat-lbl">MCP Servers</div>
+      <div class="stat-val" id="s-mcps">10</div>
+      <span class="stat-badge" id="s-mcps-badge">N connected</span>
     </div>
     <div class="stat-card">
-      <div class="stat-label">Lines of Code</div>
-      <div class="stat-val" id="stat-lines">—</div>
-      <span class="stat-badge">↑ +12%</span>
-      <div class="stat-spark"><svg id="spark-lines" viewBox="0 0 120 36" preserveAspectRatio="none" width="100%" height="36"></svg></div>
+      <div class="stat-lbl">Lines of Code</div>
+      <div class="stat-val" id="s-loc">—</div>
+      <span class="stat-badge">+12%</span>
     </div>
   </div>
 
+  <!-- Canvas graph + brain status -->
   <div class="mid-row">
-    <div class="canvas-card">
-      <div class="canvas-title-row">
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
         <div>
-          <div class="card-title">Knowledge Graph</div>
-          <div class="card-sub" id="graph-sub">Loading graph data…</div>
+          <div class="card-title">FinSurfing Knowledge Graph</div>
+          <div class="card-sub" id="graph-sub">28 routes · 11 libs · 33 components · 55 JSX files</div>
         </div>
-        <button class="ctrl-btn" onclick="showTab('graphify')">Open Full →</button>
+        <button class="hbtn" onclick="activateTab('graphify')">Open Full →</button>
       </div>
       <canvas id="dash-canvas"></canvas>
     </div>
     <div class="right-col">
       <div class="card">
-        <div class="card-title">Agentic Brain Status</div>
-        <div class="card-sub">Live component monitoring</div>
-        <div class="brain-row"><span><span class="status-dot dot-active"></span>Reasoning Engine</span><span style="font-size:12px;color:#22C55E;font-weight:600">● ACTIVE</span></div>
-        <div class="brain-row"><span><span class="status-dot dot-synced"></span>Memory Layer</span><span style="font-size:12px;color:var(--accent);font-weight:600">● SYNCED</span></div>
-        <div class="brain-row"><span><span class="status-dot dot-idle"></span>Agent Coordinator</span><span style="font-size:12px;color:var(--muted);font-weight:600">◌ IDLE</span></div>
-        <div class="brain-row"><span><span class="status-dot dot-ready"></span>Tool Router</span><span style="font-size:12px;color:#6366F1;font-weight:600">● READY</span></div>
+        <div class="card-hd">Agentic Brain Status</div>
+        <div class="brain-row"><span>Reasoning Engine</span><span class="badge badge-g">● ACTIVE</span></div>
+        <div class="brain-row"><span>Memory Layer</span><span class="badge badge-b">● SYNCED</span></div>
+        <div class="brain-row"><span>Agent Coordinator</span><span class="badge badge-m">◌ IDLE</span></div>
+        <div class="brain-row"><span>Tool Router</span><span class="badge badge-i">● READY</span></div>
       </div>
       <div class="card">
-        <div class="card-title">Activity Feed</div>
-        <div class="card-sub">Recent system events</div>
-        <div class="activity-item">
-          <div class="activity-icon" style="background:rgba(99,102,241,.15)">⚡</div>
-          <div class="activity-text">
-            <div style="font-size:12px;font-weight:500">Market scan completed</div>
-            <div class="activity-time">SPY, QQQ, AAPL analyzed · 2m ago</div>
-          </div>
+        <div class="card-hd">Activity Feed</div>
+        <div class="act-item">
+          <div class="act-icon" style="background:rgba(99,102,241,.15);color:#6366F1">⬡</div>
+          <div><div class="act-title">Graph rebuilt — 127 nodes, 183 edges</div><div class="act-time">2 min ago</div></div>
         </div>
-        <div class="activity-item">
-          <div class="activity-icon" style="background:rgba(6,182,212,.15)">⬡</div>
-          <div class="activity-text">
-            <div style="font-size:12px;font-weight:500">Graph rebuilt</div>
-            <div class="activity-time">42 nodes · 87 edges · 8m ago</div>
-          </div>
+        <div class="act-item">
+          <div class="act-icon" style="background:rgba(34,197,94,.15);color:#22C55E">✓</div>
+          <div><div class="act-title">Market scan — 5 buy signals</div><div class="act-time">14 min ago</div></div>
         </div>
-        <div class="activity-item">
-          <div class="activity-icon" style="background:rgba(139,92,246,.15)">🧠</div>
-          <div class="activity-text">
-            <div style="font-size:12px;font-weight:500">Claude analysis generated</div>
-            <div class="activity-time">BTC/USD · confidence 78% · 15m ago</div>
-          </div>
+        <div class="act-item">
+          <div class="act-icon" style="background:rgba(6,182,212,.15);color:#06B6D4">⚡</div>
+          <div><div class="act-title">MCP servers synced (8 connected)</div><div class="act-time">1 hr ago</div></div>
         </div>
-        <div class="activity-item">
-          <div class="activity-icon" style="background:rgba(34,197,94,.15)">✓</div>
-          <div class="activity-text">
-            <div style="font-size:12px;font-weight:500">MCP servers synced</div>
-            <div class="activity-time">3 servers online · 22m ago</div>
-          </div>
+        <div class="act-item">
+          <div class="act-icon" style="background:rgba(234,179,8,.15);color:#EAB308">▲</div>
+          <div><div class="act-title">Alert: AAPL crossed $195</div><div class="act-time">3 hr ago</div></div>
         </div>
-        <div class="activity-item">
-          <div class="activity-icon" style="background:rgba(234,179,8,.15)">⚠</div>
-          <div class="activity-text">
-            <div style="font-size:12px;font-weight:500">Groq fallback triggered</div>
-            <div class="activity-time">Claude rate limit hit · 35m ago</div>
-          </div>
+        <div class="act-item">
+          <div class="act-icon" style="background:rgba(139,92,246,.15);color:#8B5CF6">♦</div>
+          <div><div class="act-title">Backtest: RSI strategy +12.4%</div><div class="act-time">6 hr ago</div></div>
         </div>
       </div>
     </div>
   </div>
 
+  <!-- Quick actions -->
   <div class="qa-row">
-    <button class="qa-btn" onclick="showTab('terminal')"><span>⚡</span>Run Market Scan</button>
-    <button class="qa-btn" onclick="showTab('graphify')"><span>⬡</span>Build Graph</button>
-    <button class="qa-btn" onclick="showTab('mcp')"><span>⚙</span>Sync MCPs</button>
-    <button class="qa-btn" onclick="showTab('terminal')"><span>⌨</span>Terminal</button>
+    <button class="qa-btn" onclick="activateTab('terminal')">⚡ Run Market Scan</button>
+    <button class="qa-btn" onclick="activateTab('graphify')">⬡ Build Graph</button>
+    <button class="qa-btn" onclick="activateTab('mcp')">⚙ Sync MCPs</button>
+    <button class="qa-btn" onclick="activateTab('terminal')">⌨ Terminal</button>
   </div>
 </div>
 
-<!-- TAB 2: GRAPHIFY -->
-<div class="tab-panel" id="tab-graphify">
-  <div class="page-header">
-    <div class="page-title">Graphify — Codebase Knowledge Graph</div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button class="ctrl-btn" onclick="exportGraphJSON()">⬇ Export JSON</button>
-      <button class="ctrl-btn" onclick="rebuildGraph()">↺ Rebuild</button>
-    </div>
+<!-- ── TAB: Graphify ── -->
+<div class="panel" id="tab-graphify">
+  <div class="graph-ctrl">
+    <input type="text" class="graph-search" id="g-search" placeholder="Search nodes…" oninput="filterGraph()">
+    <button class="ctrl-btn active" data-gfilter="all" onclick="setGFilter('all',this)">All</button>
+    <button class="ctrl-btn" data-gfilter="route" onclick="setGFilter('route',this)">Routes</button>
+    <button class="ctrl-btn" data-gfilter="lib" onclick="setGFilter('lib',this)">Libs</button>
+    <button class="ctrl-btn" data-gfilter="component" onclick="setGFilter('component',this)">Components</button>
+    <button class="ctrl-btn" data-gfilter="jsx" onclick="setGFilter('jsx',this)">JSX</button>
+    <button class="ctrl-btn" onclick="gZoom(1.35)">+</button>
+    <button class="ctrl-btn" onclick="gZoom(0.72)">−</button>
+    <button class="ctrl-btn" onclick="gReset()">Reset</button>
+    <button class="ctrl-btn" onclick="gExport()">⬇ JSON</button>
+    <button class="ctrl-btn" id="g-rebuild" onclick="gRebuild()">↺ Rebuild</button>
   </div>
-  <div class="graph-controls">
-    <input class="ctrl-input" id="graph-search" placeholder="Search nodes…" oninput="filterGraph(this.value)">
-    <button class="ctrl-btn active" onclick="setTypeFilter('all',this)">All</button>
-    <button class="ctrl-btn" onclick="setTypeFilter('route',this)">Routes</button>
-    <button class="ctrl-btn" onclick="setTypeFilter('lib',this)">Libs</button>
-    <button class="ctrl-btn" onclick="setTypeFilter('component',this)">Components</button>
-    <button class="ctrl-btn" onclick="setTypeFilter('jsx',this)">JSX</button>
-    <button class="ctrl-btn" onclick="zoomGraph(1.3)">+</button>
-    <button class="ctrl-btn" onclick="zoomGraph(0.7)">−</button>
-    <button class="ctrl-btn" onclick="resetZoom()">Reset</button>
+  <div class="graph-legend">
+    <div class="leg-item"><div class="leg-dot" style="background:var(--c-route)"></div>Routes</div>
+    <div class="leg-item"><div class="leg-dot" style="background:var(--c-lib)"></div>Libs</div>
+    <div class="leg-item"><div class="leg-dot" style="background:var(--c-comp)"></div>Components</div>
+    <div class="leg-item"><div class="leg-dot" style="background:var(--c-jsx)"></div>JSX Files</div>
   </div>
   <div id="graph-wrap">
-    <div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--muted);font-size:14px" id="graph-placeholder">Initializing graph…</div>
+    <div id="graph-placeholder">Loading FinSurfing knowledge graph…</div>
   </div>
-  <div id="node-inspector">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-      <div>
-        <span id="insp-label" style="font-size:16px;font-weight:700"></span>
-        <span id="insp-type" class="type-chip" style="margin-left:8px"></span>
-      </div>
-      <button class="ctrl-btn" onclick="document.getElementById('node-inspector').style.display='none'">✕</button>
+  <div id="node-insp">
+    <div class="ni-head">
+      <span class="ni-title" id="ni-name"></span>
+      <button class="hbtn" onclick="document.getElementById('node-insp').style.display='none'">✕</button>
     </div>
-    <div style="font-size:12px;color:var(--muted);margin-bottom:8px" id="insp-file"></div>
-    <div style="font-size:13px;margin-bottom:12px" id="insp-desc"></div>
-    <div style="font-size:12px;color:var(--muted);margin-bottom:6px">Lines: <span id="insp-lines" style="color:var(--text)"></span></div>
-    <div style="font-size:12px;color:var(--muted);margin-bottom:6px">Neighbours:</div>
-    <div id="insp-neighbours" style="display:flex;flex-wrap:wrap;gap:6px"></div>
-  </div>
-  <div class="graph-meta-row">
-    <div class="card"><div class="card-title">graph.json</div><div class="card-sub" id="graph-json-meta">—</div></div>
-    <div class="card"><div class="card-title">GRAPH_REPORT.md</div><div class="card-sub" id="graph-report-meta">Auto-generated analysis of codebase architecture, route coverage, and component dependencies.</div></div>
-    <div class="card"><div class="card-title">graph.html</div><div class="card-sub">Interactive standalone graph viewer. Open in any browser without a server.</div></div>
-  </div>
-  <div class="legend-row">
-    <div class="legend-item"><div class="legend-dot" style="background:#6366F1"></div>Route</div>
-    <div class="legend-item"><div class="legend-dot" style="background:#06B6D4"></div>Library</div>
-    <div class="legend-item"><div class="legend-dot" style="background:#8B5CF6"></div>Component</div>
-    <div class="legend-item"><div class="legend-dot" style="background:#A78BFA"></div>JSX</div>
-  </div>
-  <div class="cli-ref">
-    <button class="cli-toggle" onclick="toggleCli(this)">▸ CLI Reference</button>
-    <div class="cli-body" id="cli-body">
-<span style="color:#00FFCC"># Build graph</span>
-node graphify.js
-
-<span style="color:#00FFCC"># Rebuild and bust cache</span>
-node graphify.js --force
-
-<span style="color:#00FFCC"># Export to specific directory</span>
-node graphify.js --output ./docs/graph
-
-<span style="color:#00FFCC"># Filter specific types</span>
-node graphify.js --types route,lib
-
-<span style="color:#00FFCC"># Max node limit</span>
-node graphify.js --max-nodes 200
-
-<span style="color:#00FFCC"># API endpoints</span>
-GET /api/agentic-os/stats    → system statistics
-GET /api/agentic-os/graph    → full graph data
-GET /api/agentic-os/refresh  → bust cache + rebuild
-    </div>
+    <div class="ni-meta" id="ni-meta"></div>
+    <div id="ni-nb"></div>
   </div>
 </div>
 
-<!-- TAB 3: MCP SERVERS -->
-<div class="tab-panel" id="tab-mcp">
-  <div class="page-header">
+<!-- ── TAB: MCP Servers ── -->
+<div class="panel" id="tab-mcp">
+  <div class="page-hd">
     <div>
       <div class="page-title">MCP Servers</div>
-      <div style="font-size:13px;color:var(--muted);margin-top:4px">Model Context Protocol — tool surface integrations</div>
+      <div class="page-sub" id="mcp-summary">Loading…</div>
+    </div>
+    <button class="hbtn">+ Add Server</button>
+  </div>
+  <div class="cards-grid" id="mcp-grid"><div style="color:var(--muted);padding:20px">Loading MCP servers…</div></div>
+</div>
+
+<!-- ── TAB: Skills ── -->
+<div class="panel" id="tab-skills">
+  <div class="page-hd">
+    <div>
+      <div class="page-title">AI Skills</div>
+      <div class="page-sub">Registered capabilities of the FinSurfing agentic system</div>
     </div>
     <div style="display:flex;gap:8px;align-items:center">
-      <span class="stat-badge" id="mcp-active-badge">Loading…</span>
-      <button class="primary-btn">+ Add Server</button>
+      <input type="text" class="graph-search" id="skill-search" style="width:200px" placeholder="Search skills…" oninput="filterSkills()">
+      <button class="hbtn">+ Create Skill</button>
     </div>
   </div>
-  <div class="mcp-grid" id="mcp-cards">
-    <div style="color:var(--muted);font-size:13px;padding:20px">Loading MCP servers…</div>
-  </div>
+  <div class="cards-grid" id="skill-grid"><div style="color:var(--muted);padding:20px">Loading skills…</div></div>
 </div>
 
-<!-- TAB 4: SKILLS -->
-<div class="tab-panel" id="tab-skills">
-  <div class="skills-header">
+<!-- ── TAB: Plugins ── -->
+<div class="panel" id="tab-plugins">
+  <div class="page-hd">
     <div>
-      <div class="page-title">AI Skills Registry</div>
-      <div style="font-size:13px;color:var(--muted);margin-top:4px">Registered agentic skill endpoints</div>
+      <div class="page-title">Plugins</div>
+      <div class="page-sub">Extend SurfingNeo-OS capabilities</div>
     </div>
-    <div style="display:flex;gap:8px;align-items:center">
-      <input class="ctrl-input" placeholder="Search skills…" oninput="filterSkills(this.value)" style="min-width:180px">
-      <button class="primary-btn">+ Create Skill</button>
-    </div>
+    <button class="hbtn">Browse Store</button>
   </div>
-  <div class="skills-grid" id="skill-cards">
-    <div style="color:var(--muted);font-size:13px;padding:20px">Loading skills…</div>
-  </div>
+  <div class="cards-grid" id="plugin-grid"></div>
 </div>
 
-<!-- TAB 5: PLUGINS -->
-<div class="tab-panel" id="tab-plugins">
-  <div class="page-header">
-    <div>
-      <div class="page-title">Plugin Ecosystem</div>
-      <div style="font-size:13px;color:var(--muted);margin-top:4px">Installed and available extensions</div>
-    </div>
-    <button class="primary-btn">Browse Store</button>
-  </div>
-  <div class="plugins-grid" id="plugins-grid"></div>
-</div>
-
-<!-- TAB 6: BRAIN -->
-<div class="tab-panel" id="tab-brain">
-  <div class="page-header">
-    <div class="page-title">Agentic Brain Configuration</div>
-    <span class="stat-badge">● All Systems Active</span>
-  </div>
-  <div class="brain-top">
+<!-- ── TAB: Brain ── -->
+<div class="panel" id="tab-brain">
+  <div class="brain-grid-3">
+    <!-- Reasoning Engine -->
     <div class="card">
-      <div class="card-title">Reasoning Engine</div>
-      <div class="card-sub">Primary LLM configuration</div>
-      <label style="font-size:12px;color:var(--muted)">Primary Model</label>
-      <select class="ctrl-sel">
-        <option selected>claude-sonnet-4-6</option>
-        <option>claude-opus-4</option>
-        <option>claude-haiku-3-5</option>
-        <option>llama-3.3-70b-versatile (Groq)</option>
-      </select>
-      <div style="margin-top:14px">
-        <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:4px"><span>Temperature</span><span id="temp-val" style="color:var(--text)">0.72</span></div>
-        <input type="range" min="0" max="1" step="0.01" value="0.72" style="width:100%;accent-color:var(--accent2)" oninput="document.getElementById('temp-val').textContent=parseFloat(this.value).toFixed(2)">
-      </div>
-      <div style="margin-top:10px">
-        <label style="font-size:12px;color:var(--muted)">Max Tokens</label>
-        <input class="num-input" value="8192" style="width:100%;margin-top:4px">
-      </div>
-      <div class="toggle-row" style="margin-top:10px"><span>Chain-of-Thought</span><label class="toggle"><input type="checkbox" checked><span class="toggle-slider"></span></label></div>
-      <div class="toggle-row"><span>Tool Use</span><label class="toggle"><input type="checkbox" checked><span class="toggle-slider"></span></label></div>
-      <div class="toggle-row"><span>Reflection</span><label class="toggle"><input type="checkbox"><span class="toggle-slider"></span></label></div>
-    </div>
-    <div class="card">
-      <div class="card-title">Memory Layer</div>
-      <div class="card-sub">Vector store + embeddings</div>
-      <div class="brain-row"><span style="font-size:13px">Vector Store</span><span style="color:#22C55E;font-size:12px;font-weight:600">● Active</span></div>
-      <div class="brain-row"><span style="font-size:13px">Embeddings</span><span style="color:var(--text);font-size:12px;font-weight:600">14,832</span></div>
-      <div class="brain-row"><span style="font-size:13px">Dimensions</span><span style="color:var(--text);font-size:12px">1536</span></div>
-      <div class="brain-row"><span style="font-size:13px">Index Size</span><span style="color:var(--text);font-size:12px">2.4 MB</span></div>
-      <div class="brain-row"><span style="font-size:13px">Last Sync</span><span style="color:var(--muted);font-size:12px">2 min ago</span></div>
-      <div style="display:flex;gap:8px;margin-top:14px">
-        <button class="ctrl-btn" style="flex:1">Clear</button>
-        <button class="ctrl-btn" style="flex:1;border-color:var(--accent2);color:var(--accent2)">Rebuild</button>
-      </div>
-    </div>
-    <div class="card">
-      <div class="card-title">Agent Team</div>
-      <div class="card-sub">Active agent roster</div>
-      <div class="agent-item"><span><span class="status-dot dot-active"></span>Researcher</span><span style="font-size:11px;color:#22C55E;font-weight:600">● Active</span></div>
-      <div class="agent-item"><span><span class="status-dot dot-active"></span>Analyst</span><span style="font-size:11px;color:#22C55E;font-weight:600">● Active</span></div>
-      <div class="agent-item"><span><span class="status-dot dot-idle"></span>Writer</span><span style="font-size:11px;color:var(--muted);font-weight:600">◌ Idle</span></div>
-      <button class="ctrl-btn" style="width:100%;margin-top:14px;border-style:dashed">+ Add Agent</button>
-    </div>
-  </div>
-  <div class="arch-svg-wrap">
-    <div class="card-title" style="margin-bottom:16px">Architecture Overview</div>
-    <svg id="arch-svg" height="140" viewBox="0 0 900 140"></svg>
-  </div>
-</div>
-
-<!-- TAB 7: TERMINAL -->
-<div class="tab-panel" id="tab-terminal">
-  <div class="term-header">
-    <div class="page-title">Neo-OS Terminal</div>
-    <div style="display:flex;gap:8px">
-      <button class="ctrl-btn" onclick="clearTerm()">✕ Clear</button>
-      <button class="ctrl-btn" onclick="downloadLog()">⬇ Download Log</button>
-    </div>
-  </div>
-  <div id="term-wrap">
-    <div id="term-output"></div>
-    <div class="term-prompt-row">
-      <span class="term-prompt">neo@os:~$</span>
-      <input id="term-input" autocomplete="off" spellcheck="false" placeholder="type a command…" onkeydown="termKeydown(event)">
-      <span class="cursor"></span>
-    </div>
-  </div>
-  <div style="margin-top:10px;font-size:12px;color:var(--muted)">
-    Commands: <code style="color:var(--accent2)">help</code> · <code style="color:var(--accent2)">status</code> · <code style="color:var(--accent2)">graph</code> · <code style="color:var(--accent2)">mcps</code> · <code style="color:var(--accent2)">skills</code> · <code style="color:var(--accent2)">version</code> · <code style="color:var(--accent2)">clear</code>
-  </div>
-</div>
-
-<!-- TAB 8: SETTINGS -->
-<div class="tab-panel" id="tab-settings">
-  <div class="page-header">
-    <div class="page-title">Settings</div>
-    <button class="primary-btn" onclick="saveSettings()">Save Changes</button>
-  </div>
-  <div class="settings-grid">
-    <div class="settings-section">
-      <div class="settings-title">Model Configuration</div>
-      <div class="setting-row">
-        <span class="setting-label">Primary Model</span>
-        <select class="ctrl-sel" style="width:auto">
+      <div class="card-hd">Reasoning Engine</div>
+      <div class="s-row" style="border-bottom:1px solid var(--border)">
+        <span class="s-lbl">Model</span>
+        <select class="s-input" style="width:160px">
           <option selected>claude-sonnet-4-6</option>
-          <option>claude-opus-4</option>
-          <option>claude-haiku-3-5</option>
+          <option>claude-opus-4-8</option>
+          <option>claude-haiku-4-5</option>
+          <option>llama-3.3-70b-versatile</option>
         </select>
       </div>
-      <div class="setting-row" style="flex-direction:column;align-items:flex-start;gap:6px">
-        <div style="display:flex;justify-content:space-between;width:100%"><span class="setting-label">Temperature</span><span class="setting-val" id="s-temp-val">0.72</span></div>
-        <input type="range" min="0" max="1" step="0.01" value="0.72" style="width:100%;accent-color:var(--accent2)" oninput="document.getElementById('s-temp-val').textContent=parseFloat(this.value).toFixed(2)">
+      <div class="s-row" style="border-bottom:1px solid var(--border)">
+        <span class="s-lbl">Temperature <span id="temp-disp">0.72</span></span>
+        <input type="range" min="0" max="1" step="0.01" value="0.72" style="width:80px;accent-color:var(--accent)" oninput="document.getElementById('temp-disp').textContent=this.value">
       </div>
-      <div class="setting-row">
-        <span class="setting-label">Max Tokens</span>
-        <input class="num-input" value="8192">
+      <div class="s-row" style="border-bottom:1px solid var(--border)">
+        <span class="s-lbl">Chain-of-Thought</span>
+        <label class="toggle"><input type="checkbox" checked><span class="tslider"></span></label>
       </div>
-      <div class="setting-row"><span class="setting-label">Groq Fallback</span><label class="toggle"><input type="checkbox" checked><span class="toggle-slider"></span></label></div>
-      <div class="setting-row"><span class="setting-label">Streaming</span><label class="toggle"><input type="checkbox" checked><span class="toggle-slider"></span></label></div>
+      <div class="s-row" style="border-bottom:1px solid var(--border)">
+        <span class="s-lbl">Tool Use</span>
+        <label class="toggle"><input type="checkbox" checked><span class="tslider"></span></label>
+      </div>
+      <div class="s-row">
+        <span class="s-lbl">Reflection</span>
+        <label class="toggle"><input type="checkbox"><span class="tslider"></span></label>
+      </div>
     </div>
-    <div class="settings-section">
-      <div class="settings-title">Graphify Settings</div>
-      <div class="setting-row">
-        <span class="setting-label">Output Directory</span>
-        <input class="num-input" value="./graph" style="width:120px">
+    <!-- Memory Layer -->
+    <div class="card">
+      <div class="card-hd">Memory Layer</div>
+      <div class="brain-row"><span>Vector Store</span><span class="badge badge-g">● Active</span></div>
+      <div class="brain-row"><span>Embeddings</span><span style="font-weight:600">14,832</span></div>
+      <div class="brain-row"><span>Last Sync</span><span style="font-size:12px;color:var(--muted)">just now</span></div>
+      <div style="display:flex;gap:8px;margin-top:14px">
+        <button class="hbtn" style="flex:1">Clear</button>
+        <button class="hbtn" style="flex:1;border-color:var(--accent);color:var(--accent)">Rebuild</button>
       </div>
-      <div class="setting-row" style="flex-direction:column;align-items:flex-start;gap:6px">
-        <div style="display:flex;justify-content:space-between;width:100%"><span class="setting-label">Max Nodes</span><span class="setting-val" id="s-nodes-val">200</span></div>
-        <input type="range" min="50" max="500" step="10" value="200" style="width:100%;accent-color:var(--accent2)" oninput="document.getElementById('s-nodes-val').textContent=this.value">
-      </div>
-      <div class="setting-row">
-        <span class="setting-label">Cache TTL (s)</span>
-        <input class="num-input" value="3600">
-      </div>
-      <div class="setting-row"><span class="setting-label">Auto-Rebuild</span><label class="toggle"><input type="checkbox"><span class="toggle-slider"></span></label></div>
     </div>
-    <div class="settings-section">
-      <div class="settings-title">MCP Configuration</div>
-      <div class="setting-row">
-        <span class="setting-label">Connection Timeout</span>
-        <input class="num-input" value="5000">
-      </div>
-      <div class="setting-row">
-        <span class="setting-label">Retry Count</span>
-        <input class="num-input" value="3">
-      </div>
-      <div class="setting-row" style="flex-direction:column;align-items:flex-start;gap:8px">
-        <span class="setting-label">Transport Preference</span>
-        <div style="display:flex;gap:16px;font-size:13px">
-          <label style="display:flex;align-items:center;gap:4px"><input type="radio" name="transport" value="stdio" checked> stdio</label>
-          <label style="display:flex;align-items:center;gap:4px"><input type="radio" name="transport" value="sse"> SSE</label>
-          <label style="display:flex;align-items:center;gap:4px"><input type="radio" name="transport" value="ws"> WebSocket</label>
-        </div>
-      </div>
-      <div class="setting-row"><span class="setting-label">Auto-Reconnect</span><label class="toggle"><input type="checkbox" checked><span class="toggle-slider"></span></label></div>
+    <!-- Agent Team -->
+    <div class="card">
+      <div class="card-hd">Agent Team</div>
+      <div class="agent-row"><span>Researcher</span><span class="badge badge-g">● Active</span></div>
+      <div class="agent-row"><span>Analyst</span><span class="badge badge-g">● Active</span></div>
+      <div class="agent-row"><span>Writer</span><span class="badge badge-m">◌ Idle</span></div>
+      <button class="hbtn" style="width:100%;margin-top:14px;text-align:center">+ Add Agent</button>
     </div>
-    <div class="settings-section">
-      <div class="settings-title">Appearance</div>
-      <div class="setting-row"><span class="setting-label">Theme</span><button class="ctrl-btn" onclick="toggleTheme()" id="s-theme-btn">☀ Switch to Tan</button></div>
-      <div class="setting-row" style="flex-direction:column;align-items:flex-start;gap:8px">
-        <span class="setting-label">Accent Color</span>
-        <div class="accent-swatches">
-          <div class="swatch active" style="background:#00FFCC" onclick="setAccent('#00FFCC',this)"></div>
-          <div class="swatch" style="background:#6366F1" onclick="setAccent('#6366F1',this)"></div>
-          <div class="swatch" style="background:#F59E0B" onclick="setAccent('#F59E0B',this)"></div>
-          <div class="swatch" style="background:#22C55E" onclick="setAccent('#22C55E',this)"></div>
-          <div class="swatch" style="background:#EC4899" onclick="setAccent('#EC4899',this)"></div>
-          <div class="swatch" style="background:#38BDF8" onclick="setAccent('#38BDF8',this)"></div>
-        </div>
+  </div>
+
+  <!-- Architecture diagram -->
+  <div class="arch-card">
+    <div class="card-hd">Architecture Diagram</div>
+    <svg viewBox="0 0 840 200" width="100%" height="200" style="display:block">
+      <defs>
+        <marker id="arr" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L7,3z" fill="#64748B"/>
+        </marker>
+      </defs>
+      <!-- User -->
+      <rect x="10" y="75" width="80" height="50" rx="8" fill="rgba(0,255,204,.05)" stroke="#00FFCC" stroke-width="1.5"/>
+      <text x="50" y="105" text-anchor="middle" fill="#00FFCC" font-size="12" font-family="Inter">User</text>
+      <!-- Copilot -->
+      <rect x="130" y="65" width="110" height="70" rx="8" fill="rgba(99,102,241,.05)" stroke="#6366F1" stroke-width="1.5"/>
+      <text x="185" y="97" text-anchor="middle" fill="#6366F1" font-size="11" font-family="Inter">Copilot</text>
+      <text x="185" y="112" text-anchor="middle" fill="#6366F1" font-size="10" font-family="Inter">Orchestrator</text>
+      <!-- Tool Router -->
+      <rect x="285" y="65" width="100" height="70" rx="8" fill="rgba(139,92,246,.05)" stroke="#8B5CF6" stroke-width="1.5"/>
+      <text x="335" y="97" text-anchor="middle" fill="#8B5CF6" font-size="11" font-family="Inter">Tool</text>
+      <text x="335" y="112" text-anchor="middle" fill="#8B5CF6" font-size="10" font-family="Inter">Router</text>
+      <!-- Claude -->
+      <rect x="430" y="25" width="110" height="40" rx="6" fill="rgba(6,182,212,.05)" stroke="#06B6D4" stroke-width="1.5"/>
+      <text x="485" y="50" text-anchor="middle" fill="#06B6D4" font-size="10" font-family="Inter">Claude API</text>
+      <!-- Groq -->
+      <rect x="430" y="80" width="110" height="40" rx="6" fill="rgba(234,179,8,.05)" stroke="#EAB308" stroke-width="1.5"/>
+      <text x="485" y="105" text-anchor="middle" fill="#EAB308" font-size="10" font-family="Inter">Groq Fallback</text>
+      <!-- MCP -->
+      <rect x="430" y="135" width="110" height="40" rx="6" fill="rgba(34,197,94,.05)" stroke="#22C55E" stroke-width="1.5"/>
+      <text x="485" y="160" text-anchor="middle" fill="#22C55E" font-size="10" font-family="Inter">MCP Tools</text>
+      <!-- Data Layer -->
+      <rect x="590" y="65" width="100" height="70" rx="8" fill="rgba(167,139,250,.05)" stroke="#A78BFA" stroke-width="1.5"/>
+      <text x="640" y="97" text-anchor="middle" fill="#A78BFA" font-size="11" font-family="Inter">Data</text>
+      <text x="640" y="112" text-anchor="middle" fill="#A78BFA" font-size="10" font-family="Inter">Layer</text>
+      <!-- Response -->
+      <rect x="740" y="75" width="90" height="50" rx="8" fill="rgba(0,255,204,.05)" stroke="#00FFCC" stroke-width="1.5"/>
+      <text x="785" y="105" text-anchor="middle" fill="#00FFCC" font-size="11" font-family="Inter">Response</text>
+      <!-- Arrows -->
+      <line x1="90" y1="100" x2="128" y2="100" stroke="#64748B" stroke-width="1.5" marker-end="url(#arr)"/>
+      <line x1="240" y1="100" x2="283" y2="100" stroke="#64748B" stroke-width="1.5" marker-end="url(#arr)"/>
+      <line x1="385" y1="85" x2="428" y2="58" stroke="#64748B" stroke-width="1.5" marker-end="url(#arr)"/>
+      <line x1="385" y1="100" x2="428" y2="100" stroke="#64748B" stroke-width="1.5" marker-end="url(#arr)"/>
+      <line x1="385" y1="115" x2="428" y2="148" stroke="#64748B" stroke-width="1.5" marker-end="url(#arr)"/>
+      <line x1="540" y1="55" x2="588" y2="88" stroke="#64748B" stroke-width="1.5" marker-end="url(#arr)"/>
+      <line x1="540" y1="100" x2="588" y2="100" stroke="#64748B" stroke-width="1.5" marker-end="url(#arr)"/>
+      <line x1="540" y1="148" x2="588" y2="112" stroke="#64748B" stroke-width="1.5" marker-end="url(#arr)"/>
+      <line x1="690" y1="100" x2="738" y2="100" stroke="#64748B" stroke-width="1.5" marker-end="url(#arr)"/>
+    </svg>
+  </div>
+</div>
+
+<!-- ── TAB: Terminal ── -->
+<div class="panel" id="tab-terminal">
+  <div id="terminal">
+    <div class="term-hd">
+      <span class="term-title">neo@surfingos — bash</span>
+      <div style="display:flex;gap:7px">
+        <button class="hbtn" onclick="termClear()" style="font-size:11px">✕ Clear</button>
+        <button class="hbtn" onclick="termDownload()" style="font-size:11px">⬇ Log</button>
       </div>
-      <div class="setting-row"><span class="setting-label">Reduced Motion</span><label class="toggle"><input type="checkbox"><span class="toggle-slider"></span></label></div>
-      <div class="setting-row"><span class="setting-label">Compact Mode</span><label class="toggle"><input type="checkbox"><span class="toggle-slider"></span></label></div>
+    </div>
+    <div id="term-out"></div>
+    <div id="term-row">
+      <span id="term-prompt">neo@os:~$</span>
+      <input id="term-input" type="text" placeholder="help" autocomplete="off" spellcheck="false">
     </div>
   </div>
 </div>
 
-</main>
+<!-- ── TAB: Settings ── -->
+<div class="panel" id="tab-settings">
+  <div class="page-title" style="margin-bottom:16px">Settings</div>
+  <div class="settings-grid">
+    <!-- Model -->
+    <div class="s-section">
+      <div class="s-title">Model Configuration</div>
+      <div class="s-row"><span class="s-lbl">Primary Model</span>
+        <select class="s-input" style="width:160px"><option>claude-sonnet-4-6</option><option>claude-opus-4-8</option></select></div>
+      <div class="s-row">
+        <div><div class="s-lbl">Temperature</div><div class="s-sub" id="st-temp">0.72</div></div>
+        <input type="range" min="0" max="1" step="0.01" value="0.72" style="width:80px;accent-color:var(--accent)" oninput="document.getElementById('st-temp').textContent=this.value">
+      </div>
+      <div class="s-row"><span class="s-lbl">Groq Fallback</span><label class="toggle"><input type="checkbox" checked><span class="tslider"></span></label></div>
+      <div class="s-row"><span class="s-lbl">Streaming (SSE)</span><label class="toggle"><input type="checkbox" checked><span class="tslider"></span></label></div>
+    </div>
+    <!-- Graphify -->
+    <div class="s-section">
+      <div class="s-title">Graphify Settings</div>
+      <div class="s-row"><span class="s-lbl">Output Directory</span><input class="s-input" value="./output"></div>
+      <div class="s-row">
+        <div><div class="s-lbl">Max Nodes</div><div class="s-sub" id="st-maxn">200</div></div>
+        <input type="range" min="50" max="500" value="200" style="width:80px;accent-color:var(--accent)" oninput="document.getElementById('st-maxn').textContent=this.value">
+      </div>
+      <div class="s-row"><span class="s-lbl">Cache TTL (min)</span><input class="s-input" value="5" type="number" style="width:60px"></div>
+      <div class="s-row"><span class="s-lbl">Auto-Rebuild</span><label class="toggle"><input type="checkbox"><span class="tslider"></span></label></div>
+    </div>
+    <!-- MCP -->
+    <div class="s-section">
+      <div class="s-title">MCP Configuration</div>
+      <div class="s-row"><span class="s-lbl">Connection Timeout</span><input class="s-input" value="30" type="number" style="width:60px"></div>
+      <div class="s-row"><span class="s-lbl">Retry Count</span><input class="s-input" value="3" type="number" style="width:60px"></div>
+      <div class="s-row"><span class="s-lbl">Transport</span>
+        <select class="s-input" style="width:100px"><option>HTTP/SSE</option><option>HTTP</option><option>WSS</option></select></div>
+      <div class="s-row"><span class="s-lbl">Auto-Reconnect</span><label class="toggle"><input type="checkbox" checked><span class="tslider"></span></label></div>
+    </div>
+    <!-- Appearance -->
+    <div class="s-section">
+      <div class="s-title">Appearance</div>
+      <div class="s-row"><span class="s-lbl">Dark Mode</span><label class="toggle"><input type="checkbox" id="dark-tog" checked onchange="toggleTheme()"><span class="tslider"></span></label></div>
+      <div class="s-row">
+        <span class="s-lbl">Accent Color</span>
+        <div class="swatches">
+          <div class="swatch active" style="background:#00FFCC" onclick="setAccent('#00FFCC','#6366F1',this)"></div>
+          <div class="swatch" style="background:#6366F1" onclick="setAccent('#6366F1','#8B5CF6',this)"></div>
+          <div class="swatch" style="background:#F59E0B" onclick="setAccent('#F59E0B','#EF4444',this)"></div>
+          <div class="swatch" style="background:#22C55E" onclick="setAccent('#22C55E','#06B6D4',this)"></div>
+          <div class="swatch" style="background:#EC4899" onclick="setAccent('#EC4899','#8B5CF6',this)"></div>
+          <div class="swatch" style="background:#38BDF8" onclick="setAccent('#38BDF8','#6366F1',this)"></div>
+        </div>
+      </div>
+      <div class="s-row"><span class="s-lbl">Reduced Motion</span><label class="toggle"><input type="checkbox"><span class="tslider"></span></label></div>
+      <div class="s-row"><span class="s-lbl">Compact Mode</span><label class="toggle"><input type="checkbox"><span class="tslider"></span></label></div>
+    </div>
+  </div>
+</div>
+
+</div><!-- #main -->
 
 <script>
-// ── State ──
-let _graphData = null;
-let _statsData = null;
-let _mcpData   = null;
-let _skillData = null;
-let _tabInitialized = {};
-let _activeTab = 'dashboard';
-let _typeFilter = 'all';
-let _d3Simulation = null;
-let _d3Zoom = null;
-let _d3Svg = null;
+// ═══════════════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════════════
+var G = {
+  graph: null, stats: null, mcps: null, skills: null,
+  activeTab: 'dashboard',
+  gFilter: 'all',
+  gZoom: null, gSvg: null, gSim: null,
+  tabInited: {},
+  termLines: [],
+  allSkills: []
+};
 
-// ── Safe fetch ──
+// ═══════════════════════════════════════════════════════
+//  SAFE FETCH
+// ═══════════════════════════════════════════════════════
 async function apiFetch(url) {
   try {
-    const r = await fetch(url);
-    if (!r.ok) throw new Error(r.status);
+    var r = await fetch(url);
+    if (!r.ok) throw new Error('HTTP ' + r.status);
     return await r.json();
   } catch(e) {
     console.warn('[NeoOS]', url, e.message);
@@ -661,707 +639,532 @@ async function apiFetch(url) {
   }
 }
 
-// ── Clock ──
+// ═══════════════════════════════════════════════════════
+//  CLOCK
+// ═══════════════════════════════════════════════════════
 function startClock() {
   function tick() {
-    const now = new Date();
-    document.getElementById('clock').textContent =
-      now.toTimeString().slice(0,8);
+    var d = new Date();
+    var h = String(d.getHours()).padStart(2,'0');
+    var m = String(d.getMinutes()).padStart(2,'0');
+    var s = String(d.getSeconds()).padStart(2,'0');
+    document.getElementById('clock').textContent = h + ':' + m + ':' + s;
   }
   tick();
   setInterval(tick, 1000);
 }
 
-// ── Theme ──
-let _theme = 'dark';
+// ═══════════════════════════════════════════════════════
+//  THEME
+// ═══════════════════════════════════════════════════════
+var _isDark = true;
 function toggleTheme() {
-  _theme = _theme === 'dark' ? 'tan' : 'dark';
-  document.documentElement.setAttribute('data-theme', _theme === 'tan' ? 'tan' : '');
-  const btn = document.getElementById('theme-btn');
-  const sbtn = document.getElementById('s-theme-btn');
-  if (_theme === 'tan') {
-    btn.textContent = '◑ Dark';
-    if(sbtn) sbtn.textContent = '◑ Switch to Dark';
-  } else {
-    btn.textContent = '☀ Tan';
-    if(sbtn) sbtn.textContent = '☀ Switch to Tan';
-  }
-  // redraw canvas with new colors
-  if (_graphData) requestAnimationFrame(drawDashCanvas);
-  if (_tabInitialized.graphify && _d3Svg) requestAnimationFrame(drawGraphify);
+  _isDark = !_isDark;
+  document.documentElement.setAttribute('data-theme', _isDark ? 'dark' : 'tan');
+  document.getElementById('theme-btn').textContent = _isDark ? '☀ Tan' : '◑ Dark';
+  var tog = document.getElementById('dark-tog');
+  if (tog) tog.checked = _isDark;
+  if (G.graph) requestAnimationFrame(drawDashCanvas);
 }
+document.getElementById('theme-btn').addEventListener('click', toggleTheme);
 
-function setAccent(color, el) {
-  document.documentElement.style.setProperty('--accent', color);
-  document.querySelectorAll('.swatch').forEach(s => s.classList.remove('active'));
+function setAccent(a, a2, el) {
+  document.documentElement.style.setProperty('--accent', a);
+  document.documentElement.style.setProperty('--accent2', a2);
+  document.querySelectorAll('.swatch').forEach(function(s){ s.classList.remove('active'); });
   el.classList.add('active');
 }
 
-// ── Tab switching ──
-function showTab(id) {
-  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('.tab-pill').forEach(p => p.classList.remove('active'));
-  const panel = document.getElementById('tab-' + id);
-  if (panel) panel.classList.add('active');
-  document.querySelectorAll('.tab-pill').forEach(p => {
-    if (p.textContent.trim().toLowerCase().replace(/\s+/g,'-') === id ||
-        p.getAttribute('onclick') === `showTab('${id}')`) {
-      p.classList.add('active');
-    }
-  });
-  _activeTab = id;
-  if (id === 'graphify' && !_tabInitialized.graphify) {
-    _tabInitialized.graphify = true;
+// ═══════════════════════════════════════════════════════
+//  TAB SWITCHING  (data-tab attribute pattern)
+// ═══════════════════════════════════════════════════════
+function activateTab(id) {
+  // Hide all panels
+  document.querySelectorAll('.panel').forEach(function(p){ p.classList.remove('on'); });
+  // Deactivate all buttons
+  document.querySelectorAll('.tab-btn').forEach(function(b){ b.classList.remove('active'); });
+  // Show target panel
+  var panel = document.getElementById('tab-' + id);
+  if (panel) panel.classList.add('on');
+  // Activate matching button
+  var btn = document.querySelector('.tab-btn[data-tab="' + id + '"]');
+  if (btn) btn.classList.add('active');
+  G.activeTab = id;
+  // Lazy init per tab
+  if (id === 'graphify' && !G.tabInited.graphify) {
+    G.tabInited.graphify = true;
     requestAnimationFrame(drawGraphify);
   }
-  if (id === 'brain' && !_tabInitialized.brain) {
-    _tabInitialized.brain = true;
-    drawArchDiagram();
-  }
-  if (id === 'plugins' && !_tabInitialized.plugins) {
-    _tabInitialized.plugins = true;
+  if (id === 'plugins' && !G.tabInited.plugins) {
+    G.tabInited.plugins = true;
     renderPlugins();
   }
 }
 
-// ── Sparkline helper ──
-function drawSparkline(svgId, data, color) {
-  const svg = document.getElementById(svgId);
-  if (!svg) return;
-  const w = 120, h = 36;
-  const min = Math.min(...data), max = Math.max(...data);
-  const range = max - min || 1;
-  const pts = data.map((v, i) => {
-    const x = (i / (data.length - 1)) * w;
-    const y = h - ((v - min) / range) * (h - 4) - 2;
-    return `${x},${y}`;
-  }).join(' ');
-  svg.innerHTML = `<polyline points="${pts}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" opacity="0.8"/>`;
-}
+// Wire tab buttons
+document.querySelectorAll('.tab-btn').forEach(function(b) {
+  b.addEventListener('click', function(){ activateTab(b.getAttribute('data-tab')); });
+});
 
-function drawAllSparklines() {
-  drawSparkline('spark-nodes', [28,32,31,35,38,36,40,42,41,44], 'var(--accent2)');
-  drawSparkline('spark-skills', [4,4,5,5,6,6,7,7,8,8], 'var(--accent)');
-  drawSparkline('spark-mcps',   [1,1,2,2,2,3,3,3,3,3], '#06B6D4');
-  drawSparkline('spark-lines',  [2100,2300,2500,2600,2800,2900,3100,3200,3400,3500], '#A78BFA');
-}
-
-// ── Stat cards ──
-function updateStatCards(stats) {
-  document.getElementById('stat-nodes').textContent = stats.nodes ?? '—';
-  document.getElementById('stat-lines').textContent = stats.totalLines
-    ? '~' + Math.round(stats.totalLines / 1000) + 'K'
-    : '—';
-  drawAllSparklines();
-}
-
-function updateGraphInfo(graph) {
-  const n = graph.nodes ? graph.nodes.length : 0;
-  const e = graph.edges ? graph.edges.length : 0;
-  document.getElementById('graph-sub').textContent = `${n} nodes · ${e} edges · Live`;
-  const ts = graph.generatedAt ? new Date(graph.generatedAt).toLocaleString() : 'unknown';
-  document.getElementById('graph-json-meta').textContent = `${n} nodes, ${e} edges. Generated ${ts}.`;
-  document.getElementById('graph-report-meta').textContent = `Auto-generated analysis of ${n} nodes across routes, libs, components, and JSX files. ${e} dependency edges mapped.`;
-}
-
-// ── Dashboard Canvas Graph ──
+// ═══════════════════════════════════════════════════════
+//  DASHBOARD CANVAS (ring layout — no D3)
+// ═══════════════════════════════════════════════════════
 function drawDashCanvas() {
-  const canvas = document.getElementById('dash-canvas');
+  var canvas = document.getElementById('dash-canvas');
   if (!canvas) return;
   canvas.width  = canvas.offsetWidth  || 600;
-  canvas.height = canvas.offsetHeight || 360;
-  const ctx = canvas.getContext('2d');
-  const W = canvas.width, H = canvas.height;
+  canvas.height = canvas.offsetHeight || 340;
+  var W = canvas.width, H = canvas.height;
+  var ctx = canvas.getContext('2d');
   ctx.clearRect(0, 0, W, H);
 
-  // background grid dots
-  ctx.fillStyle = 'rgba(255,255,255,0.03)';
-  for (let x = 20; x < W; x += 30) {
-    for (let y = 20; y < H; y += 30) {
-      ctx.beginPath(); ctx.arc(x, y, 1, 0, Math.PI * 2); ctx.fill();
+  // bg dots
+  ctx.fillStyle = 'rgba(255,255,255,0.025)';
+  for (var gx = 20; gx < W; gx += 28) {
+    for (var gy = 20; gy < H; gy += 28) {
+      ctx.beginPath(); ctx.arc(gx, gy, 1, 0, Math.PI*2); ctx.fill();
     }
   }
 
-  if (!_graphData || !_graphData.nodes || !_graphData.nodes.length) {
-    ctx.fillStyle = 'rgba(100,116,139,0.6)';
-    ctx.font = '14px Inter, sans-serif';
+  var nodes = G.graph ? G.graph.nodes : [];
+  if (!nodes.length) {
+    ctx.fillStyle = 'rgba(100,116,139,0.5)';
+    ctx.font = '13px Inter,sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('No graph data yet — run a graph build', W/2, H/2);
+    ctx.fillText('Loading FinSurfing knowledge graph…', W/2, H/2);
     return;
   }
 
-  const typeColors = { route:'#6366F1', lib:'#06B6D4', component:'#8B5CF6', jsx:'#A78BFA' };
-  const typeOrder  = ['route','lib','component','jsx'];
-  const nodes = _graphData.nodes.slice();
-  nodes.sort((a,b) => typeOrder.indexOf(a.type) - typeOrder.indexOf(b.type));
+  var TC = { route:'#6366F1', lib:'#06B6D4', component:'#8B5CF6', jsx:'#A78BFA' };
+  var RINGS = { route:[], lib:[], component:[], jsx:[] };
+  var RADII = { route:.22, lib:.38, component:.56, jsx:.72 };
+  nodes.forEach(function(n){ if (RINGS[n.type]) RINGS[n.type].push(n); });
 
-  // assign positions in concentric arcs by type
-  const rings = { route:[], lib:[], component:[], jsx:[] };
-  nodes.forEach(n => { if (rings[n.type]) rings[n.type].push(n); });
-
-  const cx = W/2, cy = H/2;
-  const ringRadii = { route: Math.min(cx, cy)*0.25, lib: Math.min(cx,cy)*0.45, component: Math.min(cx,cy)*0.65, jsx: Math.min(cx,cy)*0.82 };
-  const pos = {};
-
-  typeOrder.forEach(type => {
-    const arr = rings[type];
-    if (!arr.length) return;
-    const r = ringRadii[type];
-    arr.forEach((n, i) => {
-      const angle = (i / arr.length) * Math.PI * 2 - Math.PI/2;
-      pos[n.id] = { x: cx + r * Math.cos(angle), y: cy + r * Math.sin(angle), node: n };
+  var cx = W/2, cy = H/2, base = Math.min(cx,cy);
+  var pos = {};
+  ['route','lib','component','jsx'].forEach(function(type) {
+    var arr = RINGS[type];
+    var r = base * RADII[type];
+    arr.forEach(function(n, i) {
+      var a = (i / arr.length) * Math.PI * 2 - Math.PI/2;
+      pos[n.id] = { x: cx + r*Math.cos(a), y: cy + r*Math.sin(a), color: TC[type] || '#64748B', type: type };
     });
   });
 
-  // draw edges
-  (_graphData.edges || []).forEach(e => {
-    const s = pos[e.source], t = pos[e.target];
+  // edges
+  ctx.lineWidth = 0.7;
+  (G.graph.edges || []).forEach(function(e) {
+    var s = pos[e.source], t = pos[e.target];
     if (!s || !t) return;
     ctx.beginPath();
-    ctx.moveTo(s.x, s.y);
-    ctx.lineTo(t.x, t.y);
-    ctx.strokeStyle = 'rgba(99,102,241,0.12)';
-    ctx.lineWidth = 0.8;
+    ctx.moveTo(s.x, s.y); ctx.lineTo(t.x, t.y);
+    ctx.strokeStyle = 'rgba(99,102,241,0.1)';
     ctx.stroke();
   });
 
-  // draw nodes
-  Object.values(pos).forEach(p => {
-    const color = typeColors[p.node.type] || '#64748B';
-    const r = p.node.type === 'route' ? 8 : p.node.type === 'lib' ? 7 : 5;
+  // nodes
+  Object.values(pos).forEach(function(p) {
+    var r = p.type === 'route' ? 8 : p.type === 'lib' ? 7 : p.type === 'component' ? 5.5 : 4;
     // glow
-    const grad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r*2.5);
-    grad.addColorStop(0, color + '55');
-    grad.addColorStop(1, 'transparent');
-    ctx.beginPath(); ctx.arc(p.x, p.y, r*2.5, 0, Math.PI*2);
+    var grad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r*3);
+    grad.addColorStop(0, p.color + '40'); grad.addColorStop(1, 'transparent');
+    ctx.beginPath(); ctx.arc(p.x, p.y, r*3, 0, Math.PI*2);
     ctx.fillStyle = grad; ctx.fill();
-    // node
+    // dot
     ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI*2);
-    ctx.fillStyle = color; ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,0.2)';
-    ctx.lineWidth = 1; ctx.stroke();
+    ctx.fillStyle = p.color; ctx.fill();
   });
 
-  // center dot
-  ctx.beginPath(); ctx.arc(cx, cy, 12, 0, Math.PI*2);
-  const g2 = ctx.createRadialGradient(cx,cy,0,cx,cy,12);
-  g2.addColorStop(0,'rgba(0,255,204,0.9)');
-  g2.addColorStop(1,'rgba(0,255,204,0.1)');
-  ctx.fillStyle = g2; ctx.fill();
+  // center
+  var cg = ctx.createRadialGradient(cx,cy,0,cx,cy,14);
+  cg.addColorStop(0,'rgba(0,255,204,.9)'); cg.addColorStop(1,'rgba(0,255,204,.05)');
+  ctx.beginPath(); ctx.arc(cx,cy,14,0,Math.PI*2);
+  ctx.fillStyle = cg; ctx.fill();
 }
 
-// ── Graphify D3 ──
-let _gzoomBehavior = null;
-let _gsvgEl = null;
+// ═══════════════════════════════════════════════════════
+//  GRAPHIFY — D3 v7 force graph
+// ═══════════════════════════════════════════════════════
+var _gZoom = null, _gSvgSel = null, _gSim = null;
 
 function drawGraphify() {
-  const wrap = document.getElementById('graph-wrap');
+  var wrap = document.getElementById('graph-wrap');
+  var placeholder = document.getElementById('graph-placeholder');
   if (!wrap) return;
-  const placeholder = document.getElementById('graph-placeholder');
 
-  if (!_graphData || !_graphData.nodes || !_graphData.nodes.length) {
-    if (placeholder) placeholder.textContent = 'No graph data. Click Rebuild to generate.';
+  if (!G.graph || !G.graph.nodes || !G.graph.nodes.length) {
+    if (placeholder) placeholder.style.display = 'flex';
+    if (placeholder) placeholder.textContent = 'No graph data. Click Rebuild.';
     return;
   }
   if (placeholder) placeholder.style.display = 'none';
 
-  const rect = wrap.getBoundingClientRect();
-  const W = rect.width || 900;
-  const H = 600;
+  var rect = wrap.getBoundingClientRect();
+  var W = rect.width || 900, H = 580;
 
-  // remove old SVG
   d3.select('#graph-wrap svg').remove();
+  var svg = d3.select('#graph-wrap').append('svg').attr('width', W).attr('height', H);
+  _gSvgSel = svg;
 
-  const svg = d3.select('#graph-wrap')
-    .append('svg')
-    .attr('width', W)
-    .attr('height', H);
+  svg.append('defs').append('marker')
+    .attr('id','garr').attr('viewBox','0 -5 10 10').attr('refX',22)
+    .attr('markerWidth',5).attr('markerHeight',5).attr('orient','auto')
+    .append('path').attr('d','M0,-5L10,0L0,5').attr('fill','rgba(99,102,241,.4)');
 
-  _gsvgEl = svg;
+  var g = svg.append('g');
+  _gZoom = d3.zoom().scaleExtent([0.15,5]).on('zoom', function(e){ g.attr('transform', e.transform); });
+  svg.call(_gZoom);
 
-  const defs = svg.append('defs');
-  defs.append('marker')
-    .attr('id','arrow').attr('viewBox','0 -5 10 10').attr('refX',20).attr('refY',0)
-    .attr('markerWidth',6).attr('markerHeight',6).attr('orient','auto')
-    .append('path').attr('d','M0,-5L10,0L0,5').attr('fill','rgba(99,102,241,0.5)');
+  var TC = { route:'#6366F1', lib:'#06B6D4', component:'#8B5CF6', jsx:'#A78BFA' };
+  var filt = G.gFilter;
+  var q = (document.getElementById('g-search').value || '').toLowerCase().trim();
 
-  const g = svg.append('g');
+  var allNodes = G.graph.nodes.map(function(n){ return Object.assign({},n); });
+  var filtNodes = allNodes.filter(function(n){
+    if (filt !== 'all' && n.type !== filt) return false;
+    if (q && !n.label.toLowerCase().includes(q) && !n.id.toLowerCase().includes(q)) return false;
+    return true;
+  });
+  var filtIds = new Set(filtNodes.map(function(n){ return n.id; }));
+  var filtEdges = (G.graph.edges || [])
+    .filter(function(e){ return filtIds.has(e.source) && filtIds.has(e.target); })
+    .map(function(e){ return Object.assign({},e); });
 
-  const zoom = d3.zoom().scaleExtent([0.2, 4]).on('zoom', e => g.attr('transform', e.transform));
-  svg.call(zoom);
-  _gzoomBehavior = zoom;
-  _d3Svg = svg;
-
-  const typeColors = { route:'#6366F1', lib:'#06B6D4', component:'#8B5CF6', jsx:'#A78BFA' };
-  const nodes = _graphData.nodes.map(d => ({...d}));
-  const idSet = new Set(nodes.map(d => d.id));
-  const edges = (_graphData.edges || []).filter(e => idSet.has(e.source) && idSet.has(e.target)).map(d => ({...d}));
-
-  let visNodes = nodes, visEdges = edges;
-
-  const sim = d3.forceSimulation(visNodes)
-    .force('link', d3.forceLink(visEdges).id(d => d.id).distance(80).strength(0.4))
-    .force('charge', d3.forceManyBody().strength(-180))
+  var sim = d3.forceSimulation(filtNodes)
+    .force('link', d3.forceLink(filtEdges).id(function(d){ return d.id; }).distance(75).strength(0.45))
+    .force('charge', d3.forceManyBody().strength(-160))
     .force('center', d3.forceCenter(W/2, H/2))
-    .force('collision', d3.forceCollide(18));
+    .force('collide', d3.forceCollide(18));
+  _gSim = sim;
 
-  _d3Simulation = sim;
+  var link = g.append('g').selectAll('line').data(filtEdges).join('line')
+    .attr('stroke','rgba(99,102,241,.22)').attr('stroke-width',1)
+    .attr('marker-end','url(#garr)');
 
-  const link = g.append('g').selectAll('line').data(visEdges).join('line')
-    .attr('stroke','rgba(99,102,241,0.25)').attr('stroke-width',1)
-    .attr('marker-end','url(#arrow)');
-
-  const nodeG = g.append('g').selectAll('g').data(visNodes).join('g')
+  var nodeG = g.append('g').selectAll('g').data(filtNodes).join('g')
     .attr('cursor','pointer')
     .call(d3.drag()
-      .on('start', (e,d) => { if(!e.active) sim.alphaTarget(0.3).restart(); d.fx=d.x; d.fy=d.y; })
-      .on('drag',  (e,d) => { d.fx=e.x; d.fy=e.y; })
-      .on('end',   (e,d) => { if(!e.active) sim.alphaTarget(0); d.fx=null; d.fy=null; }))
-    .on('click', (e,d) => showNodeInspector(d, visEdges));
+      .on('start', function(e,d){ if(!e.active) sim.alphaTarget(.3).restart(); d.fx=d.x; d.fy=d.y; })
+      .on('drag',  function(e,d){ d.fx=e.x; d.fy=e.y; })
+      .on('end',   function(e,d){ if(!e.active) sim.alphaTarget(0); d.fx=null; d.fy=null; }))
+    .on('click', function(e,d){ showNodeInspector(d, filtEdges); });
 
-  const rMap = { route:9, lib:8, component:7, jsx:6 };
+  var rMap = { route:9, lib:8, component:7, jsx:5.5 };
   nodeG.append('circle')
-    .attr('r', d => rMap[d.type] || 6)
-    .attr('fill', d => typeColors[d.type] || '#64748B')
-    .attr('stroke','rgba(255,255,255,0.15)').attr('stroke-width',1.5);
+    .attr('r', function(d){ return rMap[d.type] || 6; })
+    .attr('fill', function(d){ return TC[d.type] || '#64748B'; })
+    .attr('stroke','rgba(255,255,255,.12)').attr('stroke-width',1.5);
 
   nodeG.append('text')
-    .attr('dy','.35em').attr('dx',13)
-    .style('font-size','10px').style('fill','var(--muted)')
-    .style('pointer-events','none')
-    .text(d => (d.label || d.id).slice(0, 20));
+    .attr('dx', function(d){ return (rMap[d.type] || 6) + 4; })
+    .attr('dy','.35em')
+    .style('font-size','10px').style('fill','var(--muted)').style('pointer-events','none')
+    .text(function(d){ return (d.label || d.id).slice(0,22); });
 
-  sim.on('tick', () => {
-    link.attr('x1',d=>d.source.x).attr('y1',d=>d.source.y)
-        .attr('x2',d=>d.target.x).attr('y2',d=>d.target.y);
-    nodeG.attr('transform', d => `translate(${d.x},${d.y})`);
+  sim.on('tick', function() {
+    link.attr('x1',function(d){ return d.source.x; }).attr('y1',function(d){ return d.source.y; })
+        .attr('x2',function(d){ return d.target.x; }).attr('y2',function(d){ return d.target.y; });
+    nodeG.attr('transform', function(d){ return 'translate('+d.x+','+d.y+')'; });
   });
 }
 
-function showNodeInspector(d, allEdges) {
-  const panel = document.getElementById('node-inspector');
-  panel.style.display = 'block';
-  document.getElementById('insp-label').textContent = d.label || d.id;
-  const typeEl = document.getElementById('insp-type');
-  typeEl.textContent = d.type || '—';
-  typeEl.className = 'type-chip chip-' + (d.type || 'route');
-  document.getElementById('insp-file').textContent = d.file || '';
-  document.getElementById('insp-desc').textContent = d.description || 'No description available.';
-  document.getElementById('insp-lines').textContent = d.lineCount || '—';
-  const nb = document.getElementById('insp-neighbours');
+function showNodeInspector(d, edges) {
+  var insp = document.getElementById('node-insp');
+  insp.style.display = 'block';
+  document.getElementById('ni-name').textContent = (d.label || d.id);
+  var tcls = ['route','lib','component','jsx'].includes(d.type) ? 'type-chip tc-'+d.type : '';
+  document.getElementById('ni-meta').innerHTML =
+    '<span class="'+tcls+'" style="margin-right:8px">'+d.type+'</span>' +
+    (d.file ? '📄 '+d.file+'&nbsp;&nbsp;' : '') +
+    (d.lineCount ? d.lineCount+' lines&nbsp;&nbsp;' : '') +
+    (d.description ? d.description : '');
+  var nb = document.getElementById('ni-nb');
   nb.innerHTML = '';
-  allEdges.forEach(e => {
-    const sid = typeof e.source === 'object' ? e.source.id : e.source;
-    const tid = typeof e.target === 'object' ? e.target.id : e.target;
+  var shown = 0;
+  edges.forEach(function(e) {
+    var sid = typeof e.source === 'object' ? e.source.id : e.source;
+    var tid = typeof e.target === 'object' ? e.target.id : e.target;
     if (sid === d.id) {
-      nb.innerHTML += `<span class="tag">↗ ${tid}</span>`;
+      nb.innerHTML += '<span class="nb-chip">↗ '+tid+'</span>';
+      shown++;
     } else if (tid === d.id) {
-      nb.innerHTML += `<span class="tag" style="background:rgba(6,182,212,.1);color:#06B6D4;border-color:rgba(6,182,212,.2)">↙ ${sid}</span>`;
+      nb.innerHTML += '<span class="nb-chip" style="border-color:rgba(6,182,212,.3)">↙ '+sid+'</span>';
+      shown++;
     }
   });
-  if (!nb.children.length) nb.innerHTML = '<span style="font-size:12px;color:var(--muted)">No direct edges</span>';
+  if (!shown) nb.innerHTML = '<span style="font-size:12px;color:var(--muted)">No direct edges</span>';
 }
 
-function zoomGraph(factor) {
-  if (!_gzoomBehavior || !_d3Svg) return;
-  _d3Svg.transition().duration(300).call(_gzoomBehavior.scaleBy, factor);
-}
-function resetZoom() {
-  if (!_gzoomBehavior || !_d3Svg) return;
-  _d3Svg.transition().duration(400).call(_gzoomBehavior.transform, d3.zoomIdentity);
-}
+function filterGraph() { if (G.tabInited.graphify) requestAnimationFrame(drawGraphify); }
 
-let _currentTypeFilter = 'all';
-function setTypeFilter(type, btn) {
-  _currentTypeFilter = type;
-  document.querySelectorAll('.graph-controls .ctrl-btn').forEach(b => b.classList.remove('active'));
+function setGFilter(f, btn) {
+  G.gFilter = f;
+  document.querySelectorAll('[data-gfilter]').forEach(function(b){ b.classList.remove('active'); });
   if (btn) btn.classList.add('active');
-  if (_tabInitialized.graphify) requestAnimationFrame(drawGraphify);
+  if (G.tabInited.graphify) requestAnimationFrame(drawGraphify);
 }
 
-function filterGraph(q) {
-  // future: highlight matching nodes
+function gZoom(s) { if (_gZoom && _gSvgSel) _gSvgSel.transition().duration(300).call(_gZoom.scaleBy, s); }
+function gReset() { if (_gZoom && _gSvgSel) _gSvgSel.transition().duration(400).call(_gZoom.transform, d3.zoomIdentity); }
+
+function gExport() {
+  if (!G.graph) { alert('No graph data loaded'); return; }
+  var b = new Blob([JSON.stringify(G.graph, null, 2)], {type:'application/json'});
+  var a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'finsurfing-graph.json'; a.click();
 }
 
-async function rebuildGraph() {
-  termAppend('info', 'Rebuilding graph cache…');
-  const d = await apiFetch('/api/agentic-os/refresh');
-  if (d && d.graph) {
-    _graphData = d.graph;
-    updateGraphInfo(d.graph);
+async function gRebuild() {
+  var btn = document.getElementById('g-rebuild');
+  btn.textContent = '↺ Rebuilding…';
+  tLine('Loading FinSurfing knowledge graph rebuild…', 'c');
+  var data = await apiFetch('/api/agentic-os/refresh');
+  if (data && data.graph) {
+    G.graph = data.graph;
+    updateGraphSub(data.graph);
     requestAnimationFrame(drawDashCanvas);
-    _tabInitialized.graphify = false;
+    G.tabInited.graphify = false;
     requestAnimationFrame(drawGraphify);
-    _tabInitialized.graphify = true;
-    termAppend('ok', 'Graph rebuilt successfully');
+    G.tabInited.graphify = true;
+    tLine('Graph rebuilt: ' + data.graph.nodes.length + ' nodes, ' + data.graph.edges.length + ' edges', 'g');
   } else {
-    termAppend('warn', 'Rebuild returned no data');
+    tLine('Rebuild returned no data', 'y');
   }
+  btn.textContent = '↺ Rebuild';
 }
 
-function exportGraphJSON() {
-  if (!_graphData) { alert('No graph data loaded'); return; }
-  const blob = new Blob([JSON.stringify(_graphData, null, 2)], {type:'application/json'});
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'graph.json';
-  a.click();
+// ═══════════════════════════════════════════════════════
+//  STAT CARDS
+// ═══════════════════════════════════════════════════════
+function updateStatCards(stats) {
+  document.getElementById('s-nodes').textContent = stats.nodes || '—';
+  document.getElementById('s-loc').textContent = stats.totalLines
+    ? '~' + Math.round(stats.totalLines / 1000) + 'K' : '—';
 }
 
-// ── MCP Cards ──
-const MCP_EMOJIS = {
-  canva:'🎨', github:'🐙', notion:'📝', lovable:'💜', gamma:'✨',
-  expedia:'✈️', higgsfield:'🎬', indeed:'💼', default:'⚙️'
+function updateGraphSub(graph) {
+  var n = graph.nodes ? graph.nodes.length : 0;
+  var e = graph.edges ? graph.edges.length : 0;
+  // count by type
+  var byType = {};
+  (graph.nodes || []).forEach(function(nd){ byType[nd.type] = (byType[nd.type]||0)+1; });
+  document.getElementById('graph-sub').textContent =
+    (byType.route||0) + ' routes · ' +
+    (byType.lib||0) + ' libs · ' +
+    (byType.component||0) + ' components · ' +
+    (byType.jsx||0) + ' JSX files · ' +
+    e + ' edges';
+}
+
+// ═══════════════════════════════════════════════════════
+//  MCP CARDS
+// ═══════════════════════════════════════════════════════
+var MCP_ICONS = {
+  'anthropic-claude':'🧠','groq-llama':'⚡','finnhub':'📈','fmp':'💹',
+  'fred':'🏦','sec-edgar':'📋','finra':'📊','reddit':'💬','binance':'₿','postgres':'🗄️'
 };
 
-function mcpEmoji(id) {
-  for (const k of Object.keys(MCP_EMOJIS)) {
-    if (id && id.toLowerCase().includes(k)) return MCP_EMOJIS[k];
-  }
-  return MCP_EMOJIS.default;
-}
-
 function renderMcpCards(servers) {
-  const container = document.getElementById('mcp-cards');
-  if (!servers || !servers.length) {
-    container.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:20px">No MCP servers found.</div>';
-    return;
-  }
-  const active = servers.filter(s => s.status === 'connected').length;
-  document.getElementById('stat-mcps').textContent = servers.length;
-  document.getElementById('mcp-badge').textContent = active + ' connected';
-  document.getElementById('mcp-active-badge').textContent = active + ' Active';
+  var grid = document.getElementById('mcp-grid');
+  if (!servers || !servers.length) { grid.innerHTML = '<div style="color:var(--muted);padding:20px">No MCP servers found</div>'; return; }
+  var connected = servers.filter(function(s){ return s.status==='connected'; }).length;
+  document.getElementById('mcp-summary').textContent = connected + ' active · ' + servers.length + ' total';
+  document.getElementById('s-mcps').textContent = servers.length;
+  document.getElementById('s-mcps-badge').textContent = connected + ' connected';
 
-  let html = '';
-  servers.forEach(s => {
-    const badgeCls = s.status === 'connected' ? 'badge-connected' : s.status === 'idle' ? 'badge-idle' : 'badge-offline';
-    const badgeTxt = s.status === 'connected' ? '● Connected' : s.status === 'idle' ? '◌ Idle' : '✕ Offline';
-    const tags = (s.tool ? [s.tool] : []).concat(s.transport ? [s.transport] : []);
-    html += `<div class="mcp-card">
-      <div class="mcp-header">
-        <div class="mcp-icon">${mcpEmoji(s.id)}</div>
-        <div style="flex:1"><div class="mcp-name">${s.name || s.id}</div></div>
-        <span class="status-badge ${badgeCls}">${badgeTxt}</span>
-      </div>
-      <div class="mcp-meta">${s.purpose || 'No description.'}<br>Transport: <b>${s.transport||'—'}</b> · Tools: <b>${s.toolCount||0}</b></div>
-      <div class="tag-row">${tags.map(t=>`<span class="tag">${t}</span>`).join('')}</div>
-    </div>`;
-  });
-  html += `<div class="card ghost-card" style="border-radius:12px;border-style:dashed;cursor:pointer" onclick="alert('Add server coming soon')">
-    <span style="font-size:20px">+</span><span>Add New Server</span>
-  </div>`;
-  container.innerHTML = html;
+  grid.innerHTML = servers.map(function(s) {
+    var icon = MCP_ICONS[s.id] || '🔌';
+    var scls = s.status === 'connected' ? 'status-g' : s.status === 'idle' ? 'status-y' : 'status-r';
+    var slbl = s.status === 'connected' ? '● Connected' : s.status === 'idle' ? '◌ Idle' : '✕ Offline';
+    return '<div class="mcp-card">' +
+      '<div class="item-hd"><span class="item-name">'+icon+' '+s.name+'</span><span class="badge '+scls+'">'+slbl+'</span></div>' +
+      '<div class="item-meta">Transport: '+s.transport+' · '+s.toolCount+' tools</div>' +
+      '<div class="item-meta">'+s.purpose+'</div>' +
+      '<div class="tag-row"><span class="tag">'+s.tool+'</span><span class="tag">'+s.transport+'</span></div>' +
+      '</div>';
+  }).join('') + '<div class="ghost-card">+ Add New Server</div>';
 }
 
-// ── Skill Cards ──
-let _allSkills = [];
+// ═══════════════════════════════════════════════════════
+//  SKILL CARDS
+// ═══════════════════════════════════════════════════════
 function renderSkillCards(skills) {
-  _allSkills = skills || [];
-  document.getElementById('stat-skills').textContent = skills ? skills.length : '—';
-  _renderSkillsFiltered(_allSkills);
+  G.allSkills = skills || [];
+  doRenderSkills(G.allSkills);
+  document.getElementById('s-skills').textContent = G.allSkills.length;
 }
 
-function _renderSkillsFiltered(skills) {
-  const container = document.getElementById('skill-cards');
-  if (!skills || !skills.length) {
-    container.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:20px">No skills found.</div>';
-    return;
-  }
-  let html = '';
-  skills.forEach(s => {
-    const tags = (s.tags || []).map(t => `<span class="tag">${t}</span>`).join('');
-    const statusColor = s.status === 'active' ? '#22C55E' : 'var(--muted)';
-    html += `<div class="skill-card">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-        <div class="skill-name">${s.name || s.id}</div>
-        <span style="font-size:11px;color:${statusColor};font-weight:600">${s.status==='active'?'● Active':'◌ Inactive'}</span>
-      </div>
-      <div class="skill-desc">${s.description||'No description.'}</div>
-      <div class="skill-footer">
-        <div class="tag-row">${tags}</div>
-        ${s.endpoint?`<a class="open-link" href="${s.endpoint}" target="_blank">Open →</a>`:''}
-      </div>
-    </div>`;
-  });
-  html += `<div class="card ghost-card" style="border-radius:12px;border-style:dashed;cursor:pointer;min-height:120px" onclick="alert('Skill creation coming soon')">
-    <span style="font-size:20px">+</span><span>Create New Skill</span>
-  </div>`;
-  container.innerHTML = html;
+function doRenderSkills(list) {
+  var grid = document.getElementById('skill-grid');
+  if (!list || !list.length) { grid.innerHTML = '<div style="color:var(--muted);padding:20px">No skills found</div>'; return; }
+  grid.innerHTML = list.map(function(s) {
+    var tags = (s.tags||[]).map(function(t){ return '<span class="tag">'+t+'</span>'; }).join('');
+    return '<div class="skill-card">' +
+      '<div class="item-name" style="margin-bottom:6px">'+s.name+'</div>' +
+      '<div class="item-meta">'+s.description+'</div>' +
+      '<div class="tag-row">'+tags+'</div>' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-top:10px">' +
+        '<a href="'+s.endpoint+'" style="font-size:12px;color:var(--accent)" target="_blank">Open → '+s.endpoint+'</a>' +
+        '<span class="badge badge-g">● '+s.status+'</span>' +
+      '</div>' +
+      '</div>';
+  }).join('') + '<div class="ghost-card">+ Create New Skill</div>';
 }
 
-function filterSkills(q) {
-  if (!q) return _renderSkillsFiltered(_allSkills);
-  const lq = q.toLowerCase();
-  _renderSkillsFiltered(_allSkills.filter(s =>
-    (s.name||'').toLowerCase().includes(lq) ||
-    (s.description||'').toLowerCase().includes(lq) ||
-    (s.tags||[]).some(t => t.toLowerCase().includes(lq))
-  ));
+function filterSkills() {
+  var q = document.getElementById('skill-search').value.toLowerCase();
+  if (!q) { doRenderSkills(G.allSkills); return; }
+  doRenderSkills(G.allSkills.filter(function(s){
+    return s.name.toLowerCase().includes(q) || s.description.toLowerCase().includes(q);
+  }));
 }
 
-// ── Plugins ──
-const PLUGINS = [
-  { name:'Superpowers', version:'v2.1.0', desc:'Extended Claude capabilities with chain-of-thought tools, reflection loops, and multi-step reasoning chains.', author:'anthropic-labs', installed:true },
-  { name:'Context7', version:'v1.3.2', desc:'Library documentation lookup with version-aware search. Inject up-to-date API docs directly into AI context windows.', author:'upstash', installed:true },
-  { name:'Browser Agent', version:'v0.9.4', desc:'Headless browser automation with screenshot capture, DOM inspection, and interactive web navigation via Playwright.', author:'browserbase', installed:true },
-  { name:'PR Reviewer', version:'v1.0.1', desc:'Automated code review with security scanning, style enforcement, complexity analysis, and CI/CD gate integration.', author:'code-quality', installed:true },
-  { name:'Vision Extractor', version:'v0.7.2', desc:'Image analysis, chart reading, screenshot OCR, and visual layout parsing. Extracts structured data from any image input.', author:'vision-ai', installed:false },
-];
-
+// ═══════════════════════════════════════════════════════
+//  PLUGINS
+// ═══════════════════════════════════════════════════════
 function renderPlugins() {
-  let html = '';
-  PLUGINS.forEach(p => {
-    html += `<div class="plugin-card">
-      <div class="plugin-header">
-        <span class="plugin-name">${p.name}</span>
-        <span class="version-badge">${p.version}</span>
-      </div>
-      <div class="plugin-desc">${p.desc}</div>
-      <div class="plugin-author">by ${p.author}</div>
-      ${p.installed
-        ? `<button class="uninstall-btn">Uninstall</button>`
-        : `<button class="install-btn">Install</button>`
-      }
-    </div>`;
-  });
-  html += `<div class="card ghost-card" style="border-radius:12px;border-style:dashed;cursor:pointer;min-height:120px" onclick="alert('Plugin store coming soon')">
-    <span style="font-size:20px">🔌</span><span>Browse Plugin Store</span>
-  </div>`;
-  document.getElementById('plugins-grid').innerHTML = html;
+  var data = [
+    {name:'Superpowers',version:'v2.1.0',desc:'Extended Claude capabilities and chain-of-thought tools for deeper reasoning.',author:'FinSurfing Labs',installed:true},
+    {name:'Context7',version:'v1.3.2',desc:'Library documentation lookup and version-aware context injection for AI completions.',author:'upstash',installed:true},
+    {name:'Browser Agent',version:'v0.9.4',desc:'Headless browser automation, screenshot capture, and web scraping capabilities.',author:'browseruse.io',installed:false},
+    {name:'PR Reviewer',version:'v1.0.1',desc:'Automated code review, security scanning, and diff analysis on pull requests.',author:'github.com',installed:true},
+    {name:'Vision Extractor',version:'v0.7.2',desc:'Image analysis, chart reading, and screenshot OCR powered by vision models.',author:'FinSurfing Labs',installed:false}
+  ];
+  document.getElementById('plugin-grid').innerHTML = data.map(function(p){
+    return '<div class="plugin-card">' +
+      '<div class="item-hd"><span class="item-name">'+p.name+'</span><span class="ver-badge">'+p.version+'</span></div>' +
+      '<div class="item-meta">'+p.desc+'</div>' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-top:10px">' +
+        '<span style="font-size:11px;color:var(--muted)">by '+p.author+'</span>' +
+        (p.installed ? '<button class="uninst-btn">Uninstall</button>' : '<button class="inst-btn">Install</button>') +
+      '</div></div>';
+  }).join('') + '<div class="ghost-card">🔌 Browse Plugin Store</div>';
 }
 
-// ── Brain arch diagram ──
-function drawArchDiagram() {
-  const svg = document.getElementById('arch-svg');
-  if (!svg) return;
-  const W = Math.max(svg.parentElement.clientWidth - 40, 600);
-  svg.setAttribute('viewBox', `0 0 ${W} 140`);
-  svg.setAttribute('width', W);
+// ═══════════════════════════════════════════════════════
+//  TERMINAL
+// ═══════════════════════════════════════════════════════
+function tLine(txt, type) {
+  var out = document.getElementById('term-out');
+  if (!out) return;
+  var cls = type === 'g' ? 'tl-g' : type === 'c' ? 'tl-c' : type === 'y' ? 'tl-y' : type === 'r' ? 'tl-r' : type === 'm' ? 'tl-m' : type === 'a' ? 'tl-a' : 'tl-w';
+  var span = document.createElement('span');
+  span.className = 'tl ' + cls;
+  span.textContent = txt;
+  out.appendChild(span);
+  G.termLines.push(txt);
+  out.scrollTop = out.scrollHeight;
+}
 
-  const boxes = [
-    { label:'User', x:20, y:50, w:80, h:40, fill:'rgba(99,102,241,.18)', stroke:'#6366F1' },
-    { label:'Copilot\nOrchestrator', x:140, y:40, w:110, h:60, fill:'rgba(0,255,204,.1)', stroke:'#00FFCC' },
-    { label:'Tool Router', x:300, y:50, w:100, h:40, fill:'rgba(6,182,212,.15)', stroke:'#06B6D4' },
-    { label:'Claude API', x:450, y:20, w:90, h:35, fill:'rgba(139,92,246,.18)', stroke:'#8B5CF6' },
-    { label:'Groq Fallback', x:450, y:62, w:90, h:35, fill:'rgba(234,179,8,.12)', stroke:'#EAB308' },
-    { label:'MCP Tools', x:450, y:104, w:90, h:35, fill:'rgba(99,102,241,.12)', stroke:'#6366F1' },
-    { label:'Data Layer', x:590, y:50, w:90, h:40, fill:'rgba(6,182,212,.15)', stroke:'#06B6D4' },
-    { label:'Response', x:730, y:50, w:80, h:40, fill:'rgba(34,197,94,.15)', stroke:'#22C55E' },
-  ];
+function termBoot() {
+  tLine('SurfingNeo-OS v2.0 — FinSurfing Agentic Platform', 'a');
+  tLine('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'm');
+  tLine('[boot] Initializing Express server on :3001', 'm');
+  tLine('[boot] ✓ Routes mounted: market, ai-brain, copilot, recommendations', 'g');
+  tLine('[boot] ✓ FinSurfing Knowledge Graph: 28 routes · 11 libs · 33 components · 55 JSX', 'g');
+  tLine('[boot] ✓ Claude claude-sonnet-4-6 ready', 'g');
+  tLine('[boot] ✓ Groq llama-3.3-70b-versatile (fallback) ready', 'g');
+  tLine('[boot] ✓ MCP servers polled — 8 connected', 'g');
+  tLine('[boot] ✓ Scheduler: 7 cron jobs registered', 'g');
+  tLine('[boot] System ready. Type help for available commands.', 'a');
+  tLine('', 'w');
+}
 
-  const arrows = [
-    [0,1],[1,2],[2,3],[2,4],[2,5],[3,6],[4,6],[5,6],[6,7]
-  ];
-
-  let html = `<defs><marker id="a2" viewBox="0 -4 8 8" refX="8" refY="0" markerWidth="5" markerHeight="5" orient="auto"><path d="M0,-4L8,0L0,4" fill="#6366F1"/></marker></defs>`;
-
-  // arrows
-  arrows.forEach(([si, ti]) => {
-    const s = boxes[si], t = boxes[ti];
-    const sx = s.x + s.w, sy = s.y + s.h/2;
-    const tx = t.x, ty = t.y + t.h/2;
-    html += `<line x1="${sx}" y1="${sy}" x2="${tx-6}" y2="${ty}" stroke="rgba(99,102,241,0.4)" stroke-width="1.5" marker-end="url(#a2)"/>`;
-  });
-
-  // boxes + labels
-  boxes.forEach(b => {
-    html += `<rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" rx="8" fill="${b.fill}" stroke="${b.stroke}" stroke-width="1.5"/>`;
-    const lines = b.label.split('\n');
-    if (lines.length === 1) {
-      html += `<text x="${b.x+b.w/2}" y="${b.y+b.h/2+4}" text-anchor="middle" font-size="11" font-family="Inter,sans-serif" fill="var(--text)" font-weight="500">${b.label}</text>`;
-    } else {
-      lines.forEach((l, i) => {
-        html += `<text x="${b.x+b.w/2}" y="${b.y+b.h/2-4+i*14}" text-anchor="middle" font-size="10" font-family="Inter,sans-serif" fill="var(--text)" font-weight="500">${l}</text>`;
+async function termExec(cmd) {
+  tLine('neo@os:~$ ' + cmd, 'g');
+  var c = cmd.trim().toLowerCase();
+  if (c === 'help') {
+    tLine('Commands: status · graph · mcps · skills · version · clear', 'c');
+  } else if (c === 'status') {
+    tLine('Fetching /api/agentic-os/stats…', 'm');
+    var d = await apiFetch('/api/agentic-os/stats');
+    if (d) {
+      tLine('Nodes: '+d.nodes+'  Edges: '+(d.edges||'?')+'  Lines: '+d.totalLines, 'w');
+      tLine('Routes: '+d.routes+'  Libs: '+d.libs+'  Components: '+d.components+'  JSX: '+d.jsxFiles, 'w');
+      tLine('Scheduled Jobs: '+d.scheduledJobs, 'w');
+    } else tLine('Error: /api/agentic-os/stats unavailable', 'r');
+  } else if (c === 'graph') {
+    var s = G.stats;
+    if (s) tLine('Graph: '+s.nodes+' nodes, '+(s.edges||'?')+' edges', 'c');
+    else tLine('No graph data loaded', 'y');
+  } else if (c === 'mcps') {
+    var m = G.mcps;
+    if (m && m.servers) {
+      tLine('MCP Servers ('+m.servers.length+'):', 'c');
+      m.servers.forEach(function(s){
+        tLine('  '+(s.status==='connected'?'●':'◌')+' '+s.name+' — '+s.purpose, s.status==='connected'?'g':'m');
       });
+    } else tLine('No MCP data', 'y');
+  } else if (c === 'skills') {
+    var sk = G.skills;
+    if (sk && sk.skills) {
+      tLine('AI Skills ('+sk.skills.length+'):', 'c');
+      sk.skills.forEach(function(s){ tLine('  ▸ '+s.name+' — '+s.description.slice(0,60), 'w'); });
+    } else tLine('No skills data', 'y');
+  } else if (c === 'version') {
+    tLine('SurfingNeo-OS v2.0 — FinSurfing Agentic Platform', 'a');
+    tLine('Stack: React18 + Vite + Express + Claude + D3 v7', 'm');
+  } else if (c === 'clear') {
+    document.getElementById('term-out').innerHTML = '';
+    G.termLines = [];
+    return;
+  } else {
+    tLine('Unknown command: '+cmd+'. Type help', 'y');
+  }
+  tLine('', 'w');
+}
+
+function termClear() {
+  document.getElementById('term-out').innerHTML = '';
+  G.termLines = [];
+}
+
+function termDownload() {
+  var b = new Blob([G.termLines.join('\n')], {type:'text/plain'});
+  var a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'neo-os.log'; a.click();
+}
+
+// ═══════════════════════════════════════════════════════
+//  LOAD DATA
+// ═══════════════════════════════════════════════════════
+async function loadData() {
+  var stats  = await apiFetch('/api/agentic-os/stats');
+  var graph  = await apiFetch('/api/agentic-os/graph');
+  var mcps   = await apiFetch('/api/agentic-os/mcps');
+  var skills = await apiFetch('/api/agentic-os/skills');
+
+  if (stats)  { G.stats  = stats;  updateStatCards(stats); }
+  if (graph)  { G.graph  = graph;  updateGraphSub(graph); }
+  if (mcps)   { G.mcps   = mcps;   renderMcpCards(mcps.servers); }
+  if (skills) { G.skills = skills; renderSkillCards(skills.skills); }
+
+  requestAnimationFrame(drawDashCanvas);
+
+  if (stats) {
+    tLine('[data] Graph loaded: '+stats.nodes+' nodes · '+stats.edges+' edges · '+stats.totalLines+' lines', 'g');
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════════════════
+document.addEventListener('DOMContentLoaded', function() {
+  startClock();
+  termBoot();
+
+  // Terminal input
+  document.getElementById('term-input').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') {
+      var v = this.value.trim();
+      this.value = '';
+      if (v) termExec(v);
     }
   });
 
-  svg.innerHTML = html;
-}
-
-// ── Terminal ──
-let _termLines = [];
-
-function termAppend(type, text) {
-  const out = document.getElementById('term-output');
-  if (!out) return;
-  const cls = type === 'info' ? 't-cyan' : type === 'ok' ? 't-green' : type === 'warn' ? 't-yellow' : type === 'error' ? 't-red' : type === 'accent' ? 't-accent' : 't-white';
-  const div = document.createElement('div');
-  div.className = 'term-line ' + cls;
-  div.textContent = text;
-  out.appendChild(div);
-  const wrap = document.getElementById('term-wrap');
-  wrap.scrollTop = wrap.scrollHeight;
-  _termLines.push(text);
-}
-
-function renderTerminal() {
-  const out = document.getElementById('term-output');
-  if (!out) return;
-  const boot = [
-    ['accent','SurfingNeo-OS v2.0 — Agentic Platform Dashboard'],
-    ['muted', '─'.repeat(52)],
-    ['info',  'Initializing kernel modules…'],
-    ['ok',    '✓ Express server detected on :3001'],
-    ['ok',    '✓ Vite proxy active :5173 → :3001'],
-    ['info',  'Loading environment configuration…'],
-    ['ok',    '✓ DATABASE_URL connected (PostgreSQL)'],
-    ['ok',    '✓ FRED_API_KEY present (macro data)'],
-    ['info',  'Starting AI subsystems…'],
-    ['ok',    '✓ Claude claude-sonnet-4-6 ready'],
-    ['ok',    '✓ Groq llama-3.3-70b-versatile (fallback) ready'],
-    ['info',  'Loading knowledge graph…'],
-    ['ok',    '✓ Graph cache warm'],
-    ['info',  'Syncing MCP servers…'],
-    ['ok',    '✓ All MCP servers polled'],
-    ['ok',    '✓ Skills registry loaded'],
-    ['muted', '─'.repeat(52)],
-    ['accent','System ready. Type `help` for commands.'],
-  ];
-  boot.forEach(([t,l]) => termAppend(t, l));
-}
-
-function updateTerminalWithStats() {
-  if (_statsData) {
-    termAppend('info', `Graph: ${_statsData.nodes} nodes · ${_statsData.edges || '—'} edges · ${_statsData.totalLines || 0} lines`);
-  }
-}
-
-async function termKeydown(e) {
-  if (e.key !== 'Enter') return;
-  const inp = document.getElementById('term-input');
-  const cmd = inp.value.trim();
-  inp.value = '';
-  if (!cmd) return;
-  termAppend('white', `neo@os:~$ ${cmd}`);
-  const parts = cmd.toLowerCase().split(' ');
-  switch(parts[0]) {
-    case 'help':
-      termAppend('info',  'Available commands:');
-      termAppend('white', '  status   — show system stats');
-      termAppend('white', '  graph    — show graph stats');
-      termAppend('white', '  mcps     — list MCP servers');
-      termAppend('white', '  skills   — list AI skills');
-      termAppend('white', '  version  — show version info');
-      termAppend('white', '  clear    — clear terminal');
-      break;
-    case 'status': {
-      termAppend('info', 'Fetching stats…');
-      const d = await apiFetch('/api/agentic-os/stats');
-      if (d) {
-        termAppend('ok', `Nodes: ${d.nodes}  Edges: ${d.edges || '?'}  Routes: ${d.routes}  Lines: ${d.totalLines}`);
-        termAppend('ok', `Components: ${d.components}  JSX: ${d.jsxFiles}  Libs: ${d.libs}`);
-      } else {
-        termAppend('warn', 'Stats unavailable');
-      }
-      break;
-    }
-    case 'graph': {
-      termAppend('info', 'Fetching graph…');
-      const d = await apiFetch('/api/agentic-os/stats');
-      if (d) {
-        termAppend('ok', `Graph: ${d.nodes} nodes, ${d.edges||'?'} edges. Generated: ${d.generatedAt || 'recently'}`);
-      } else {
-        termAppend('warn', 'Graph stats unavailable');
-      }
-      break;
-    }
-    case 'mcps': {
-      termAppend('info', 'Fetching MCP servers…');
-      const d = await apiFetch('/api/agentic-os/mcps');
-      if (d && d.servers) {
-        d.servers.forEach(s => termAppend('white', `  ${s.status==='connected'?'●':'◌'} ${s.name} [${s.transport||'?'}] — ${s.toolCount||0} tools`));
-      } else {
-        termAppend('warn', 'MCP data unavailable');
-      }
-      break;
-    }
-    case 'skills': {
-      termAppend('info', 'Fetching skills…');
-      const d = await apiFetch('/api/agentic-os/skills');
-      if (d && d.skills) {
-        d.skills.forEach(s => termAppend('white', `  ${s.status==='active'?'●':'◌'} ${s.name} — ${s.description||''}`.slice(0,80)));
-      } else {
-        termAppend('warn', 'Skills data unavailable');
-      }
-      break;
-    }
-    case 'version':
-      termAppend('accent', 'SurfingNeo-OS v2.0.0');
-      termAppend('info',   'Stack: React 18 + Vite + Express + D3 v7');
-      termAppend('info',   'AI: Claude claude-sonnet-4-6 · Groq llama-3.3-70b-versatile');
-      break;
-    case 'clear':
-      clearTerm();
-      break;
-    default:
-      termAppend('error', `Command not found: ${cmd}`);
-      termAppend('white', 'Type `help` for available commands.');
-  }
-}
-
-function clearTerm() {
-  const out = document.getElementById('term-output');
-  if (out) out.innerHTML = '';
-  _termLines = [];
-  termAppend('accent', 'Terminal cleared.');
-}
-
-function downloadLog() {
-  const blob = new Blob([_termLines.join('\n')], {type:'text/plain'});
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'neo-os-log.txt';
-  a.click();
-}
-
-// ── CLI toggle ──
-function toggleCli(btn) {
-  const body = document.getElementById('cli-body');
-  body.classList.toggle('open');
-  btn.textContent = body.classList.contains('open') ? '▾ CLI Reference' : '▸ CLI Reference';
-}
-
-// ── Settings save ──
-function saveSettings() {
-  const btn = event.target;
-  btn.textContent = '✓ Saved';
-  setTimeout(() => btn.textContent = 'Save Changes', 2000);
-}
-
-// ── Data loading ──
-async function loadData() {
-  // Each fetch is independent — one failure doesn't kill others
-  const stats  = await apiFetch('/api/agentic-os/stats');
-  const graph  = await apiFetch('/api/agentic-os/graph');
-  const mcps   = await apiFetch('/api/agentic-os/mcps');
-  const skills = await apiFetch('/api/agentic-os/skills');
-
-  if (stats)  { _statsData = stats;  updateStatCards(stats); updateTerminalWithStats(); }
-  if (graph)  { _graphData = graph;  updateGraphInfo(graph); }
-  if (mcps)   { _mcpData   = mcps;   renderMcpCards(mcps.servers); }
-  if (skills) { _skillData = skills; renderSkillCards(skills.skills); }
-
-  if (!stats && !graph && !mcps && !skills) {
-    // All APIs failed — use fallback placeholders
-    document.getElementById('stat-nodes').textContent = '—';
-    document.getElementById('graph-sub').textContent  = 'API unavailable — run server to load data';
-    drawAllSparklines();
-  }
-
-  // Draw canvas AFTER data is available, inside rAF
-  requestAnimationFrame(drawDashCanvas);
-}
-
-// ── Init ──
-window.addEventListener('DOMContentLoaded', () => {
-  startClock();
-  renderTerminal();
-  drawAllSparklines();
   loadData();
-  // Resize canvas on window resize
-  window.addEventListener('resize', () => {
-    if (_activeTab === 'dashboard') requestAnimationFrame(drawDashCanvas);
+
+  window.addEventListener('resize', function() {
+    if (G.activeTab === 'dashboard') requestAnimationFrame(drawDashCanvas);
+    if (G.activeTab === 'graphify' && G.tabInited.graphify) requestAnimationFrame(drawGraphify);
   });
 });
 </script>
