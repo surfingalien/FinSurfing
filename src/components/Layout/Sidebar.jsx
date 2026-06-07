@@ -54,7 +54,6 @@ function buildGroups(user, triggeredCount) {
         { id: 'ai-watchlist',    label: 'AI Watchlist',   icon: Bookmark },
         { id: 'agent-hub',       label: 'Agent Hub',      icon: Network },
         { id: 'agentic-os',      label: 'Agentic OS',     icon: BrainCircuit },
-        { id: 'neo-os',          label: 'SurfingNeo-OS',  icon: Monitor, href: '/neo-os' },
         { id: 'trade-timeline',  label: 'Trade Timeline', icon: Clock },
         { id: 'research',        label: 'AI Agent',       icon: Bot },
         { id: 'second-brain',    label: 'Second Brain',   icon: BookOpen },
