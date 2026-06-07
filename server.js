@@ -36,6 +36,7 @@ const alertsRoutes          = require('./routes/alerts')
 const backtestQueueRoutes   = require('./routes/backtest-queue')
 
 
+
 const { seedAdminDB } = require('./db/adminSeed')
 
 // ── Auto-migrate: run schema.sql when DATABASE_URL is present ────────────────
