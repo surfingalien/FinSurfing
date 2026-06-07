@@ -793,8 +793,9 @@ function drawGraphify() {
   if (!wrap) return;
 
   if (!G.graph || !G.graph.nodes || !G.graph.nodes.length) {
-    if (placeholder) placeholder.style.display = 'flex';
-    if (placeholder) placeholder.textContent = 'No graph data. Click Rebuild.';
+    if (placeholder) { placeholder.style.display = 'flex'; placeholder.textContent = 'Loading graph data…'; }
+    // retry in 600ms in case data is still loading
+    setTimeout(function(){ if (G.graph && G.graph.nodes && G.graph.nodes.length) requestAnimationFrame(drawGraphify); }, 600);
     return;
   }
   if (placeholder) placeholder.style.display = 'none';
@@ -1137,7 +1138,18 @@ async function loadData() {
   if (mcps)   { G.mcps   = mcps;   renderMcpCards(mcps.servers); }
   if (skills) { G.skills = skills; renderSkillCards(skills.skills); }
 
+  // Always redraw dashboard canvas after data loads
   requestAnimationFrame(drawDashCanvas);
+
+  // If Graphify tab is active or was already initialized (blank), redraw now that data is here
+  if (G.graph) {
+    if (G.activeTab === 'graphify') {
+      requestAnimationFrame(drawGraphify);
+    } else if (G.tabInited.graphify) {
+      // tab was opened before data arrived — redraw it
+      requestAnimationFrame(drawGraphify);
+    }
+  }
 
   if (stats) {
     tLine('[data] Graph loaded: '+stats.nodes+' nodes · '+stats.edges+' edges · '+stats.totalLines+' lines', 'g');
