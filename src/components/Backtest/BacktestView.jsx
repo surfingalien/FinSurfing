@@ -688,8 +688,8 @@ export default function BacktestView() {
 
 // ── Backtest Queue Panel ───────────────────────────────────────────────────────
 
-const STRATEGIES = ['sma_crossover', 'rsi_threshold', 'macd_signal', 'bb_reversion']
-const RANGES     = ['1y', '2y', '5y']
+const QUEUE_STRATEGY_IDS = ['sma_crossover', 'rsi_threshold', 'macd_signal', 'bb_reversion']
+const QUEUE_RANGES       = ['1y', '2y', '5y']
 
 function QueuePanel() {
   const [queueState, setQueueState] = useState({ pending: [], running: null, completedCount: 0 })
@@ -743,11 +743,11 @@ function QueuePanel() {
             className="col-span-2 sm:col-span-1 bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2 text-sm text-white placeholder-slate-600 outline-none focus:border-indigo-500/40" />
           <select value={form.strategy} onChange={e => setForm(f => ({ ...f, strategy: e.target.value }))}
             className="bg-white/[0.04] border border-white/[0.08] rounded-lg px-2 py-2 text-sm text-white outline-none">
-            {STRATEGIES.map(s => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
+            {QUEUE_STRATEGY_IDS.map(s => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
           </select>
           <select value={form.range} onChange={e => setForm(f => ({ ...f, range: e.target.value }))}
             className="bg-white/[0.04] border border-white/[0.08] rounded-lg px-2 py-2 text-sm text-white outline-none">
-            {RANGES.map(r => <option key={r} value={r}>{r}</option>)}
+            {QUEUE_RANGES.map(r => <option key={r} value={r}>{r}</option>)}
           </select>
           <button onClick={submit} disabled={submitting || !form.symbol.trim()}
             className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-indigo-500/15 border border-indigo-500/25 text-indigo-400 text-sm hover:bg-indigo-500/25 disabled:opacity-30 disabled:cursor-not-allowed transition-all">
