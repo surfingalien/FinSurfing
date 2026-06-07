@@ -89,7 +89,7 @@ input,select,textarea{font-family:inherit;font-size:inherit}
 /* ── Mid row ───────────────────────────────────────────────── */
 .mid-row{display:grid;grid-template-columns:60fr 40fr;gap:12px;margin-bottom:16px}
 .right-col{display:flex;flex-direction:column;gap:12px}
-#dash-canvas{width:100%;height:340px;display:block;border-radius:8px}
+#dash-canvas{width:100%;height:190px;display:block;border-radius:8px}
 .canvas-foot{display:flex;align-items:center;justify-content:space-between;margin-top:10px}
 .canvas-info{font-size:12px;color:var(--muted)}
 
@@ -237,6 +237,47 @@ input,select,textarea{font-family:inherit;font-size:inherit}
 .page-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
 .page-title{font-size:18px;font-weight:700}
 .page-sub{font-size:13px;color:var(--muted);margin-top:2px}
+
+/* ── Bloomberg 4-panel grid ────────────────────────────────── */
+.bb-grid{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:auto auto;gap:12px;margin-bottom:16px}
+.bb-panel{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px;overflow:hidden;min-height:240px}
+.bb-panel-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--border)}
+.bb-panel-title{font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.08em;text-transform:uppercase}
+.bb-tag{font-size:10px;font-weight:600;padding:2px 7px;border-radius:4px;background:rgba(255,255,255,.06);color:var(--muted)}
+[data-theme="tan"] .bb-tag{background:rgba(0,0,0,.06)}
+.bb-expand{background:transparent;border:none;color:var(--muted);font-size:15px;padding:2px 5px;border-radius:4px;line-height:1;transition:.15s}
+.bb-expand:hover{color:var(--accent)}
+
+/* ── Agentic Inbox ─────────────────────────────────────────── */
+.inbox-filters{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap}
+.inbox-filter-btn{padding:4px 12px;border-radius:20px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:12px;font-weight:500;transition:all .15s}
+.inbox-filter-btn:hover{color:var(--text)}
+.inbox-filter-btn.active{background:var(--accent2);color:#fff;border-color:var(--accent2)}
+.inbox-action-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:10px;transition:border-color .15s}
+.inbox-action-card:hover{border-color:rgba(99,102,241,.4)}
+.inbox-action-card.urgent{border-left:3px solid var(--red)}
+.inbox-action-card.medium{border-left:3px solid var(--yellow)}
+.inbox-action-card.low{border-left:3px solid var(--green)}
+.inbox-action-hd{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:6px}
+.inbox-action-title{font-size:13px;font-weight:600;line-height:1.4}
+.inbox-action-meta{font-size:11px;color:var(--muted);margin-bottom:8px;line-height:1.5}
+.inbox-action-btns{display:flex;gap:6px;flex-wrap:wrap}
+.ibtn-approve{padding:4px 12px;border-radius:6px;border:none;background:rgba(34,197,94,.15);color:var(--green);font-size:12px;font-weight:600;cursor:pointer;transition:.15s}
+.ibtn-approve:hover{background:rgba(34,197,94,.3)}
+.ibtn-reject{padding:4px 12px;border-radius:6px;border:none;background:rgba(239,68,68,.12);color:var(--red);font-size:12px;font-weight:600;cursor:pointer;transition:.15s}
+.ibtn-reject:hover{background:rgba(239,68,68,.25)}
+.ibtn-modify{padding:4px 12px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:12px;font-weight:500;cursor:pointer;transition:.15s}
+.ibtn-modify:hover{border-color:var(--accent);color:var(--accent)}
+.inbox-history-item{display:flex;align-items:flex-start;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)}
+.inbox-history-item:last-child{border-bottom:none}
+.ih-icon{width:28px;height:28px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0}
+.ih-title{font-size:12px;font-weight:500;line-height:1.4}
+.ih-time{font-size:11px;color:var(--muted);margin-top:2px}
+.inbox-empty{text-align:center;padding:40px 20px;color:var(--muted);font-size:13px}
+.priority-chip{font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;flex-shrink:0}
+.pc-urgent{background:rgba(239,68,68,.15);color:var(--red)}
+.pc-medium{background:rgba(234,179,8,.12);color:var(--yellow)}
+.pc-low{background:rgba(34,197,94,.12);color:var(--green)}
 </style>
 </head>
 <body>
@@ -260,6 +301,7 @@ input,select,textarea{font-family:inherit;font-size:inherit}
   <nav class="tab-nav">
     <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
     <button class="tab-btn" data-tab="graphify">Graphify</button>
+    <button class="tab-btn" data-tab="inbox">Inbox <span id="inbox-badge" style="display:none;background:#EF4444;color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:8px;margin-left:3px">0</span></button>
     <button class="tab-btn" data-tab="mcp">MCP Servers</button>
     <button class="tab-btn" data-tab="skills">Skills</button>
     <button class="tab-btn" data-tab="plugins">Plugins</button>
@@ -303,57 +345,76 @@ input,select,textarea{font-family:inherit;font-size:inherit}
     </div>
   </div>
 
-  <!-- Canvas graph + brain status -->
-  <div class="mid-row">
-    <div class="card">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-        <div>
-          <div class="card-title">FinSurfing Knowledge Graph</div>
-          <div class="card-sub" id="graph-sub">28 routes · 11 libs · 33 components · 55 JSX files</div>
+  <!-- Bloomberg-style 4-panel grid -->
+  <div class="bb-grid">
+    <!-- Panel A: Knowledge Graph canvas -->
+    <div class="bb-panel" id="bb-a">
+      <div class="bb-panel-hd">
+        <span class="bb-panel-title">KNOWLEDGE GRAPH</span>
+        <div style="display:flex;gap:6px;align-items:center">
+          <span class="bb-tag" id="graph-sub-mini">Loading…</span>
+          <button class="bb-expand" onclick="activateTab('graphify')" title="Open full graph">⤢</button>
         </div>
-        <button class="hbtn" onclick="activateTab('graphify')">Open Full →</button>
       </div>
       <canvas id="dash-canvas"></canvas>
     </div>
-    <div class="right-col">
-      <div class="card">
-        <div class="card-hd">Agentic Brain Status</div>
-        <div class="brain-row"><span>Reasoning Engine</span><span class="badge badge-g">● ACTIVE</span></div>
-        <div class="brain-row"><span>Memory Layer</span><span class="badge badge-b">● SYNCED</span></div>
-        <div class="brain-row"><span>Agent Coordinator</span><span class="badge badge-m">◌ IDLE</span></div>
-        <div class="brain-row"><span>Tool Router</span><span class="badge badge-i">● READY</span></div>
+    <!-- Panel B: Brain + Jobs -->
+    <div class="bb-panel" id="bb-b">
+      <div class="bb-panel-hd">
+        <span class="bb-panel-title">AGENTIC BRAIN</span>
+        <span class="bb-tag badge-g" style="font-size:10px">● LIVE</span>
       </div>
-      <div class="card">
-        <div class="card-hd">Activity Feed</div>
-        <div class="act-item">
-          <div class="act-icon" style="background:rgba(99,102,241,.15);color:#6366F1">⬡</div>
-          <div><div class="act-title">Graph rebuilt — 127 nodes, 183 edges</div><div class="act-time">2 min ago</div></div>
-        </div>
-        <div class="act-item">
-          <div class="act-icon" style="background:rgba(34,197,94,.15);color:#22C55E">✓</div>
-          <div><div class="act-title">Market scan — 5 buy signals</div><div class="act-time">14 min ago</div></div>
-        </div>
-        <div class="act-item">
-          <div class="act-icon" style="background:rgba(6,182,212,.15);color:#06B6D4">⚡</div>
-          <div><div class="act-title">MCP servers synced (8 connected)</div><div class="act-time">1 hr ago</div></div>
-        </div>
-        <div class="act-item">
-          <div class="act-icon" style="background:rgba(234,179,8,.15);color:#EAB308">▲</div>
-          <div><div class="act-title">Alert: AAPL crossed $195</div><div class="act-time">3 hr ago</div></div>
-        </div>
-        <div class="act-item">
-          <div class="act-icon" style="background:rgba(139,92,246,.15);color:#8B5CF6">♦</div>
-          <div><div class="act-title">Backtest: RSI strategy +12.4%</div><div class="act-time">6 hr ago</div></div>
-        </div>
+      <div class="brain-row"><span>Reasoning Engine</span><span class="badge badge-g">● ACTIVE</span></div>
+      <div class="brain-row"><span>Memory Layer</span><span class="badge badge-b">● SYNCED</span></div>
+      <div class="brain-row"><span>Agent Coordinator</span><span class="badge badge-m">◌ IDLE</span></div>
+      <div class="brain-row" style="border-bottom:none"><span>Tool Router</span><span class="badge badge-i">● READY</span></div>
+      <div style="border-top:1px solid var(--border);margin-top:10px;padding-top:10px">
+        <div class="bb-panel-title" style="margin-bottom:8px;font-size:10px;color:var(--muted);letter-spacing:.06em">SCHEDULED JOBS</div>
+        <div id="dash-jobs"><div style="color:var(--muted);font-size:12px">Loading jobs…</div></div>
+      </div>
+    </div>
+    <!-- Panel C: Inbox preview -->
+    <div class="bb-panel" id="bb-c">
+      <div class="bb-panel-hd">
+        <span class="bb-panel-title">AGENTIC INBOX</span>
+        <button class="bb-expand" onclick="activateTab('inbox')" title="Open inbox">⤢</button>
+      </div>
+      <div id="dash-inbox-preview"><div style="color:var(--muted);font-size:12px">Loading…</div></div>
+    </div>
+    <!-- Panel D: Activity feed -->
+    <div class="bb-panel" id="bb-d">
+      <div class="bb-panel-hd">
+        <span class="bb-panel-title">ACTIVITY FEED</span>
+        <span class="bb-tag">LIVE</span>
+      </div>
+      <div class="act-item">
+        <div class="act-icon" style="background:rgba(99,102,241,.15);color:#6366F1">⬡</div>
+        <div><div class="act-title">Graph rebuilt — <span id="a-nodes">127</span> nodes</div><div class="act-time">2 min ago</div></div>
+      </div>
+      <div class="act-item">
+        <div class="act-icon" style="background:rgba(34,197,94,.15);color:#22C55E">✓</div>
+        <div><div class="act-title">Market scan — 5 buy signals</div><div class="act-time">14 min ago</div></div>
+      </div>
+      <div class="act-item">
+        <div class="act-icon" style="background:rgba(6,182,212,.15);color:#06B6D4">⚡</div>
+        <div><div class="act-title">MCP servers synced</div><div class="act-time">1 hr ago</div></div>
+      </div>
+      <div class="act-item">
+        <div class="act-icon" style="background:rgba(234,179,8,.15);color:#EAB308">▲</div>
+        <div><div class="act-title">Alert: AAPL crossed $195</div><div class="act-time">3 hr ago</div></div>
+      </div>
+      <div class="act-item">
+        <div class="act-icon" style="background:rgba(139,92,246,.15);color:#8B5CF6">♦</div>
+        <div><div class="act-title">Backtest RSI strategy +12.4%</div><div class="act-time">6 hr ago</div></div>
       </div>
     </div>
   </div>
 
   <!-- Quick actions -->
-  <div class="qa-row">
-    <button class="qa-btn" onclick="activateTab('terminal')">⚡ Run Market Scan</button>
-    <button class="qa-btn" onclick="activateTab('graphify')">⬡ Build Graph</button>
-    <button class="qa-btn" onclick="activateTab('mcp')">⚙ Sync MCPs</button>
+  <div class="qa-row" style="margin-top:12px">
+    <button class="qa-btn" onclick="activateTab('inbox')">📥 Agentic Inbox</button>
+    <button class="qa-btn" onclick="activateTab('graphify')">⬡ Knowledge Graph</button>
+    <button class="qa-btn" onclick="activateTab('mcp')">⚙ MCP Servers</button>
     <button class="qa-btn" onclick="activateTab('terminal')">⌨ Terminal</button>
   </div>
 </div>
@@ -390,6 +451,50 @@ input,select,textarea{font-family:inherit;font-size:inherit}
     </div>
     <div class="ni-meta" id="ni-meta"></div>
     <div id="ni-nb"></div>
+  </div>
+</div>
+
+<!-- ── TAB: Inbox ── -->
+<div class="panel" id="tab-inbox">
+  <div class="page-hd">
+    <div>
+      <div class="page-title">Agentic Inbox</div>
+      <div class="page-sub" id="inbox-summary">Human-in-the-loop actions awaiting review</div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <button class="hbtn" onclick="loadInboxData()">↺ Refresh</button>
+      <button class="hbtn" style="border-color:var(--red);color:var(--red)" onclick="rejectAllPending()">✕ Reject All</button>
+      <button class="hbtn accent" onclick="approveAllPending()">✓ Approve All</button>
+    </div>
+  </div>
+
+  <div class="inbox-filters">
+    <button class="inbox-filter-btn active" data-ifilter="pending" onclick="setInboxFilter('pending',this)">Pending <span id="inbox-pending-count" style="background:var(--red);color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:8px;margin-left:3px">0</span></button>
+    <button class="inbox-filter-btn" data-ifilter="approved" onclick="setInboxFilter('approved',this)">Approved</button>
+    <button class="inbox-filter-btn" data-ifilter="rejected" onclick="setInboxFilter('rejected',this)">Rejected</button>
+    <button class="inbox-filter-btn" data-ifilter="all" onclick="setInboxFilter('all',this)">All History</button>
+  </div>
+
+  <div style="display:grid;grid-template-columns:60fr 40fr;gap:16px">
+    <!-- Pending actions list -->
+    <div>
+      <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;margin-bottom:10px">PENDING ACTIONS</div>
+      <div id="inbox-pending-list"><div class="inbox-empty">Loading actions…</div></div>
+    </div>
+    <!-- History + Context -->
+    <div>
+      <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;margin-bottom:10px">ACTION HISTORY</div>
+      <div class="card" style="margin-bottom:12px">
+        <div id="inbox-history-list"><div style="color:var(--muted);font-size:12px;padding:8px 0">No history yet</div></div>
+      </div>
+      <div class="card">
+        <div class="card-hd">Inbox Stats</div>
+        <div class="brain-row"><span>Total Actions Today</span><span id="inbox-stat-total" style="font-weight:600">0</span></div>
+        <div class="brain-row"><span>Approved</span><span id="inbox-stat-approved" style="font-weight:600;color:var(--green)">0</span></div>
+        <div class="brain-row"><span>Rejected</span><span id="inbox-stat-rejected" style="font-weight:600;color:var(--red)">0</span></div>
+        <div class="brain-row" style="border-bottom:none"><span>Auto-approved</span><span id="inbox-stat-auto" style="font-weight:600;color:var(--cyan)">0</span></div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -692,6 +797,10 @@ function activateTab(id) {
     G.tabInited.graphify = true;
     // Cytoscape measures container size — give panel 60ms to lay out
     setTimeout(drawGraphify, 60);
+  }
+  if (id === 'inbox') {
+    renderInboxPending();
+    renderInboxHistory();
   }
   if (id === 'plugins' && !G.tabInited.plugins) {
     G.tabInited.plugins = true;
@@ -1003,17 +1112,24 @@ function updateStatCards(stats) {
 }
 
 function updateGraphSub(graph) {
-  var n = graph.nodes ? graph.nodes.length : 0;
   var e = graph.edges ? graph.edges.length : 0;
-  // count by type
   var byType = {};
   (graph.nodes || []).forEach(function(nd){ byType[nd.type] = (byType[nd.type]||0)+1; });
-  document.getElementById('graph-sub').textContent =
+  var txt =
     (byType.route||0) + ' routes · ' +
     (byType.lib||0) + ' libs · ' +
     (byType.component||0) + ' components · ' +
-    (byType.jsx||0) + ' JSX files · ' +
-    e + ' edges';
+    (byType.jsx||0) + ' JSX';
+  var mini = document.getElementById('graph-sub-mini');
+  if (mini) mini.textContent = txt;
+  var full = document.getElementById('graph-sub');
+  if (full) full.textContent = txt + ' · ' + e + ' edges';
+  // update activity feed node count
+  var an = document.getElementById('a-nodes');
+  if (an) an.textContent = graph.nodes ? graph.nodes.length : '—';
+  // update stat card
+  var sn = document.getElementById('s-nodes');
+  if (sn && graph.nodes) sn.textContent = graph.nodes.length;
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1215,6 +1331,259 @@ function buildMockGraph() {
 }
 
 // ═══════════════════════════════════════════════════════
+//  AGENTIC INBOX
+// ═══════════════════════════════════════════════════════
+var _inboxActions = [];
+var _inboxHistory = [];
+var _inboxFilter = 'pending';
+var _inboxStats = { total:0, approved:0, rejected:0, auto:0 };
+
+var INBOX_MOCK = [
+  {
+    id:'act-001', priority:'urgent', status:'pending',
+    title:'Execute AI Brain market scan — 3 buy signals detected',
+    meta:'AI Brain identified NVDA, MSFT, AMD as buy signals based on RSI+MACD convergence. Confidence: 87%. Universe: stocks_tech.',
+    agent:'AI Brain', type:'market_scan', ts: Date.now() - 180000,
+    payload:{symbols:['NVDA','MSFT','AMD'], action:'notify'}
+  },
+  {
+    id:'act-002', priority:'medium', status:'pending',
+    title:'Portfolio rebalance — reduce crypto allocation by 8%',
+    meta:'Macro indicators (DXY strength, VIX spike) suggest defensive positioning. Current crypto: 22%. Target: 14%.',
+    agent:'Macro Advisor', type:'portfolio_rebalance', ts: Date.now() - 420000,
+    payload:{fromAsset:'crypto', delta:-0.08}
+  },
+  {
+    id:'act-003', priority:'low', status:'pending',
+    title:'Send weekly performance report via email',
+    meta:'Scheduled weekly digest ready. Portfolio up +3.2% this week. 12 alerts triggered. 2 new buy signals.',
+    agent:'Scheduler', type:'email_report', ts: Date.now() - 900000,
+    payload:{recipients:['suhasgm@gmail.com'], template:'weekly_digest'}
+  },
+  {
+    id:'act-004', priority:'medium', status:'pending',
+    title:'Add AAPL price alert at $230 (AI recommendation)',
+    meta:'Trading analysis suggests AAPL resistance at $230. AI recommends setting alert for breakout confirmation.',
+    agent:'Trading Analyst', type:'create_alert', ts: Date.now() - 1200000,
+    payload:{symbol:'AAPL', price:230, direction:'above'}
+  }
+];
+
+var INBOX_HIST_MOCK = [
+  {id:'h-001', title:'Watchlist updated — added TSLA, SMCI', status:'approved', agent:'AI Brain', ts: Date.now() - 3600000},
+  {id:'h-002', title:'Market scan aborted — low signal quality', status:'rejected', agent:'AI Brain', ts: Date.now() - 7200000},
+  {id:'h-003', title:'Portfolio snapshot exported to CSV', status:'approved', agent:'Scheduler', ts: Date.now() - 10800000},
+  {id:'h-004', title:'AAPL alert triggered — price hit $195', status:'auto', agent:'Alert Engine', ts: Date.now() - 14400000}
+];
+
+function timeAgo(ts) {
+  var diff = Math.floor((Date.now() - ts) / 1000);
+  if (diff < 60) return diff + 's ago';
+  if (diff < 3600) return Math.floor(diff/60) + 'm ago';
+  if (diff < 86400) return Math.floor(diff/3600) + 'h ago';
+  return Math.floor(diff/86400) + 'd ago';
+}
+
+async function loadInboxData() {
+  // Try to get real data from scheduler/alerts APIs
+  var jobs   = await apiFetch('/api/scheduler/jobs');
+  var alerts = await apiFetch('/api/alerts');
+
+  // Build pending actions from real data or fall back to mock
+  if (jobs && jobs.jobs && jobs.jobs.length) {
+    _inboxActions = jobs.jobs
+      .filter(function(j){ return j.status === 'pending' || j.requiresApproval; })
+      .map(function(j){
+        return {
+          id: j.id || ('job-'+Math.random().toString(36).slice(2,7)),
+          priority: j.priority || 'medium',
+          status: 'pending',
+          title: j.name || j.description || 'Scheduled job',
+          meta: 'Next run: '+(j.nextRun||'—')+' · Last: '+(j.lastRun||'never'),
+          agent: 'Scheduler', type: 'scheduled_job', ts: Date.now()
+        };
+      });
+    if (!_inboxActions.length) _inboxActions = INBOX_MOCK;
+  } else {
+    _inboxActions = INBOX_MOCK.slice();
+  }
+
+  _inboxHistory = INBOX_HIST_MOCK.slice();
+  _inboxStats = { total: _inboxActions.length + _inboxHistory.length, approved:2, rejected:1, auto:1 };
+
+  renderInboxPending();
+  renderInboxHistory();
+  updateInboxBadge();
+  updateInboxStats();
+  renderDashInboxPreview();
+}
+
+function renderInboxPending() {
+  var list = document.getElementById('inbox-pending-list');
+  if (!list) return;
+  var items = _inboxFilter === 'pending' ? _inboxActions.filter(function(a){ return a.status==='pending'; })
+            : _inboxFilter === 'approved' ? _inboxHistory.filter(function(a){ return a.status==='approved'; })
+            : _inboxFilter === 'rejected' ? _inboxHistory.filter(function(a){ return a.status==='rejected'; })
+            : _inboxActions.concat(_inboxHistory);
+
+  if (!items.length) {
+    list.innerHTML = '<div class="inbox-empty">✓ All clear — no pending actions</div>';
+    return;
+  }
+
+  list.innerHTML = items.map(function(a){
+    var pcls = a.priority === 'urgent' ? 'pc-urgent' : a.priority === 'medium' ? 'pc-medium' : 'pc-low';
+    var cardcls = 'inbox-action-card ' + (a.priority || 'low');
+    var btns = (a.status === 'pending')
+      ? '<button class="ibtn-approve" onclick="approveAction(\''+a.id+'\')">✓ Approve</button>' +
+        '<button class="ibtn-reject" onclick="rejectAction(\''+a.id+'\')">✕ Reject</button>' +
+        '<button class="ibtn-modify" onclick="modifyAction(\''+a.id+'\')">✎ Modify</button>'
+      : '<span style="font-size:11px;font-weight:600;color:var(--muted)">'+
+          (a.status === 'approved' ? '✓ Approved' : a.status === 'auto' ? '⚡ Auto' : '✕ Rejected') +
+        '</span>';
+    return '<div class="'+cardcls+'" id="icard-'+a.id+'">' +
+      '<div class="inbox-action-hd">' +
+        '<div class="inbox-action-title">'+a.title+'</div>' +
+        '<span class="priority-chip '+pcls+'">'+a.priority+'</span>' +
+      '</div>' +
+      '<div class="inbox-action-meta">'+a.meta+'&nbsp;&nbsp;· <em>'+a.agent+'</em> · '+timeAgo(a.ts)+'</div>' +
+      '<div class="inbox-action-btns">'+btns+'</div>' +
+      '</div>';
+  }).join('');
+}
+
+function renderInboxHistory() {
+  var list = document.getElementById('inbox-history-list');
+  if (!list) return;
+  if (!_inboxHistory.length) { list.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:8px 0">No history yet</div>'; return; }
+  list.innerHTML = _inboxHistory.map(function(h){
+    var bg = h.status === 'approved' ? 'rgba(34,197,94,.15)' : h.status === 'auto' ? 'rgba(6,182,212,.15)' : 'rgba(239,68,68,.12)';
+    var clr = h.status === 'approved' ? '#22C55E' : h.status === 'auto' ? '#06B6D4' : '#EF4444';
+    var icon = h.status === 'approved' ? '✓' : h.status === 'auto' ? '⚡' : '✕';
+    return '<div class="inbox-history-item">' +
+      '<div class="ih-icon" style="background:'+bg+';color:'+clr+'">'+icon+'</div>' +
+      '<div><div class="ih-title">'+h.title+'</div><div class="ih-time">'+h.agent+' · '+timeAgo(h.ts)+'</div></div>' +
+      '</div>';
+  }).join('');
+}
+
+function updateInboxBadge() {
+  var pending = _inboxActions.filter(function(a){ return a.status==='pending'; }).length;
+  var badge = document.getElementById('inbox-badge');
+  var cnt   = document.getElementById('inbox-pending-count');
+  if (badge) { badge.style.display = pending > 0 ? 'inline' : 'none'; badge.textContent = pending; }
+  if (cnt)   { cnt.textContent = pending; }
+  var summary = document.getElementById('inbox-summary');
+  if (summary) summary.textContent = pending + ' pending · ' + _inboxHistory.length + ' completed today';
+}
+
+function updateInboxStats() {
+  var set = function(id, v){ var el = document.getElementById(id); if (el) el.textContent = v; };
+  set('inbox-stat-total',    _inboxStats.total);
+  set('inbox-stat-approved', _inboxStats.approved);
+  set('inbox-stat-rejected', _inboxStats.rejected);
+  set('inbox-stat-auto',     _inboxStats.auto);
+}
+
+function renderDashInboxPreview() {
+  var el = document.getElementById('dash-inbox-preview');
+  if (!el) return;
+  var pending = _inboxActions.filter(function(a){ return a.status==='pending'; });
+  if (!pending.length) {
+    el.innerHTML = '<div style="color:var(--muted);font-size:12px;text-align:center;padding:20px 0">✓ No pending actions</div>';
+    return;
+  }
+  el.innerHTML = pending.slice(0,3).map(function(a){
+    var pcls = a.priority === 'urgent' ? 'pc-urgent' : a.priority === 'medium' ? 'pc-medium' : 'pc-low';
+    return '<div style="padding:7px 0;border-bottom:1px solid var(--border)">' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:3px">' +
+        '<span style="font-size:12px;font-weight:500;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-right:6px">'+a.title+'</span>' +
+        '<span class="priority-chip '+pcls+'">'+a.priority+'</span>' +
+      '</div>' +
+      '<div style="font-size:11px;color:var(--muted)">'+a.agent+' · '+timeAgo(a.ts)+'</div>' +
+      '</div>';
+  }).join('') +
+  (pending.length > 3 ? '<div style="text-align:center;margin-top:8px"><button class="ibtn-modify" onclick="activateTab(\'inbox\')">View all '+pending.length+' →</button></div>' : '');
+}
+
+function renderDashJobs() {
+  var el = document.getElementById('dash-jobs');
+  if (!el) return;
+  var jobs = [
+    {name:'Market Scan', next:'Every 30m', status:'active'},
+    {name:'Portfolio Sync', next:'Every 1h', status:'active'},
+    {name:'Alert Checker', next:'Every 5m', status:'active'},
+    {name:'Weekly Report', next:'Sun 9am', status:'idle'}
+  ];
+  el.innerHTML = jobs.map(function(j){
+    var clr = j.status === 'active' ? 'var(--green)' : 'var(--muted)';
+    return '<div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border)">' +
+      '<span style="font-size:12px">'+j.name+'</span>' +
+      '<span style="font-size:11px;color:'+clr+'">'+j.next+'</span>' +
+      '</div>';
+  }).join('');
+}
+
+function approveAction(id) {
+  var a = _inboxActions.find(function(x){ return x.id === id; });
+  if (!a) return;
+  a.status = 'approved';
+  _inboxHistory.unshift(Object.assign({}, a));
+  _inboxActions = _inboxActions.filter(function(x){ return x.id !== id; });
+  _inboxStats.approved++;
+  _inboxStats.total++;
+  renderInboxPending();
+  renderInboxHistory();
+  updateInboxBadge();
+  updateInboxStats();
+  renderDashInboxPreview();
+  tLine('[inbox] Approved: ' + a.title, 'g');
+}
+
+function rejectAction(id) {
+  var a = _inboxActions.find(function(x){ return x.id === id; });
+  if (!a) return;
+  a.status = 'rejected';
+  _inboxHistory.unshift(Object.assign({}, a));
+  _inboxActions = _inboxActions.filter(function(x){ return x.id !== id; });
+  _inboxStats.rejected++;
+  _inboxStats.total++;
+  renderInboxPending();
+  renderInboxHistory();
+  updateInboxBadge();
+  updateInboxStats();
+  renderDashInboxPreview();
+  tLine('[inbox] Rejected: ' + a.title, 'r');
+}
+
+function modifyAction(id) {
+  var a = _inboxActions.find(function(x){ return x.id === id; });
+  if (!a) return;
+  var note = prompt('Modification note for: ' + a.title);
+  if (note === null) return;
+  a.meta += '\n[Modified] ' + note;
+  renderInboxPending();
+}
+
+function approveAllPending() {
+  var ids = _inboxActions.filter(function(a){ return a.status==='pending'; }).map(function(a){ return a.id; });
+  ids.forEach(function(id){ approveAction(id); });
+}
+
+function rejectAllPending() {
+  if (!confirm('Reject all pending actions?')) return;
+  var ids = _inboxActions.filter(function(a){ return a.status==='pending'; }).map(function(a){ return a.id; });
+  ids.forEach(function(id){ rejectAction(id); });
+}
+
+function setInboxFilter(f, btn) {
+  _inboxFilter = f;
+  document.querySelectorAll('.inbox-filter-btn').forEach(function(b){ b.classList.remove('active'); });
+  if (btn) btn.classList.add('active');
+  renderInboxPending();
+}
+
+// ═══════════════════════════════════════════════════════
 //  LOAD DATA
 // ═══════════════════════════════════════════════════════
 async function loadData() {
@@ -1228,6 +1597,10 @@ async function loadData() {
   else        { G.graph  = buildMockGraph(); updateGraphSub(G.graph); } // fallback
   if (mcps)   { G.mcps   = mcps;   renderMcpCards(mcps.servers); }
   if (skills) { G.skills = skills; renderSkillCards(skills.skills); }
+
+  // Populate dashboard panels
+  renderDashJobs();
+  loadInboxData();
 
   // Redraw dashboard canvas with real/fallback data
   requestAnimationFrame(drawDashCanvas);
