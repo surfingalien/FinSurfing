@@ -1484,14 +1484,15 @@ function timeAgo(ts) {
   return Math.floor(diff/86400) + 'd ago';
 }
 
-async function loadInboxData() {
-  // Try to get real data from scheduler/alerts APIs
-  var jobs   = await apiFetch('/api/scheduler/jobs');
-  var alerts = await apiFetch('/api/alerts');
+function deepCopyArr(arr) {
+  return arr.map(function(o){ return Object.assign({}, o); });
+}
 
-  // Build pending actions from real data or fall back to mock
+async function loadInboxData() {
+  var jobs = await apiFetch('/api/scheduler/jobs');
+
   if (jobs && jobs.jobs && jobs.jobs.length) {
-    _inboxActions = jobs.jobs
+    var mapped = jobs.jobs
       .filter(function(j){ return j.status === 'pending' || j.requiresApproval; })
       .map(function(j){
         return {
@@ -1503,12 +1504,12 @@ async function loadInboxData() {
           agent: 'Scheduler', type: 'scheduled_job', ts: Date.now()
         };
       });
-    if (!_inboxActions.length) _inboxActions = INBOX_MOCK;
+    _inboxActions = mapped.length ? mapped : deepCopyArr(INBOX_MOCK);
   } else {
-    _inboxActions = INBOX_MOCK.slice();
+    _inboxActions = deepCopyArr(INBOX_MOCK);
   }
 
-  _inboxHistory = INBOX_HIST_MOCK.slice();
+  _inboxHistory = deepCopyArr(INBOX_HIST_MOCK);
   _inboxStats = { total: _inboxActions.length + _inboxHistory.length, approved:2, rejected:1, auto:1 };
 
   renderInboxPending();
@@ -1534,14 +1535,15 @@ function renderInboxPending() {
   list.innerHTML = items.map(function(a){
     var pcls = a.priority === 'urgent' ? 'pc-urgent' : a.priority === 'medium' ? 'pc-medium' : 'pc-low';
     var cardcls = 'inbox-action-card ' + (a.priority || 'low');
+    var eid = a.id.replace(/[^a-zA-Z0-9_-]/g,'');
     var btns = (a.status === 'pending')
-      ? '<button class="ibtn-approve" onclick="approveAction(\''+a.id+'\')">✓ Approve</button>' +
-        '<button class="ibtn-reject" onclick="rejectAction(\''+a.id+'\')">✕ Reject</button>' +
-        '<button class="ibtn-modify" onclick="modifyAction(\''+a.id+'\')">✎ Modify</button>'
+      ? '<button class="ibtn-approve" data-iact="approve" data-iid="'+eid+'">✓ Approve</button>' +
+        '<button class="ibtn-reject"  data-iact="reject"  data-iid="'+eid+'">✕ Reject</button>' +
+        '<button class="ibtn-modify"  data-iact="modify"  data-iid="'+eid+'">✎ Modify</button>'
       : '<span style="font-size:11px;font-weight:600;color:var(--muted)">'+
           (a.status === 'approved' ? '✓ Approved' : a.status === 'auto' ? '⚡ Auto' : '✕ Rejected') +
         '</span>';
-    return '<div class="'+cardcls+'" id="icard-'+a.id+'">' +
+    return '<div class="'+cardcls+'" id="icard-'+eid+'">' +
       '<div class="inbox-action-hd">' +
         '<div class="inbox-action-title">'+a.title+'</div>' +
         '<span class="priority-chip '+pcls+'">'+a.priority+'</span>' +
@@ -1624,7 +1626,7 @@ function renderDashJobs() {
   }).join('');
 }
 
-function approveAction(id) {
+function _doApprove(id) {
   var a = _inboxActions.find(function(x){ return x.id === id; });
   if (!a) return;
   a.status = 'approved';
@@ -1632,15 +1634,11 @@ function approveAction(id) {
   _inboxActions = _inboxActions.filter(function(x){ return x.id !== id; });
   _inboxStats.approved++;
   _inboxStats.total++;
-  renderInboxPending();
-  renderInboxHistory();
-  updateInboxBadge();
-  updateInboxStats();
-  renderDashInboxPreview();
+  _refreshInbox();
   tLine('[inbox] Approved: ' + a.title, 'g');
 }
 
-function rejectAction(id) {
+function _doReject(id) {
   var a = _inboxActions.find(function(x){ return x.id === id; });
   if (!a) return;
   a.status = 'rejected';
@@ -1648,32 +1646,41 @@ function rejectAction(id) {
   _inboxActions = _inboxActions.filter(function(x){ return x.id !== id; });
   _inboxStats.rejected++;
   _inboxStats.total++;
+  _refreshInbox();
+  tLine('[inbox] Rejected: ' + a.title, 'r');
+}
+
+function _doModify(id) {
+  var a = _inboxActions.find(function(x){ return x.id === id; });
+  if (!a) return;
+  var note = prompt('Modification note for: ' + a.title);
+  if (note === null) return;
+  a.meta += ' [Modified: ' + note + ']';
+  renderInboxPending();
+}
+
+function _refreshInbox() {
   renderInboxPending();
   renderInboxHistory();
   updateInboxBadge();
   updateInboxStats();
   renderDashInboxPreview();
-  tLine('[inbox] Rejected: ' + a.title, 'r');
 }
 
-function modifyAction(id) {
-  var a = _inboxActions.find(function(x){ return x.id === id; });
-  if (!a) return;
-  var note = prompt('Modification note for: ' + a.title);
-  if (note === null) return;
-  a.meta += '\n[Modified] ' + note;
-  renderInboxPending();
-}
+// Keep old names as aliases so any remaining onclick="..." still works
+function approveAction(id){ _doApprove(id); }
+function rejectAction(id){ _doReject(id); }
+function modifyAction(id){ _doModify(id); }
 
 function approveAllPending() {
-  var ids = _inboxActions.filter(function(a){ return a.status==='pending'; }).map(function(a){ return a.id; });
-  ids.forEach(function(id){ approveAction(id); });
+  _inboxActions.filter(function(a){ return a.status==='pending'; })
+    .forEach(function(a){ _doApprove(a.id); });
 }
 
 function rejectAllPending() {
   if (!confirm('Reject all pending actions?')) return;
-  var ids = _inboxActions.filter(function(a){ return a.status==='pending'; }).map(function(a){ return a.id; });
-  ids.forEach(function(id){ rejectAction(id); });
+  _inboxActions.filter(function(a){ return a.status==='pending'; })
+    .forEach(function(a){ _doReject(a.id); });
 }
 
 function setInboxFilter(f, btn) {
@@ -1734,6 +1741,17 @@ document.addEventListener('DOMContentLoaded', function() {
   });
 
   loadData();
+
+  // Inbox event delegation — one listener for all approve/reject/modify clicks
+  document.addEventListener('click', function(e) {
+    var btn = e.target.closest('[data-iact]');
+    if (!btn) return;
+    var act = btn.getAttribute('data-iact');
+    var id  = btn.getAttribute('data-iid');
+    if (act === 'approve') _doApprove(id);
+    else if (act === 'reject')  _doReject(id);
+    else if (act === 'modify')  _doModify(id);
+  });
 
   window.addEventListener('resize', function() {
     if (G.activeTab === 'dashboard') requestAnimationFrame(drawDashCanvas);
