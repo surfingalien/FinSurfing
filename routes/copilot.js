@@ -31,6 +31,16 @@ const Anthropic = require('@anthropic-ai/sdk')
 const { getSocialSentiment } = require('../lib/social-sentiment')
 const { getAltDataSnippet }  = require('../lib/alt-data')
 
+// Use warm cache from scheduled-jobs if available, fall back to live fetch
+async function getAltData(symbol) {
+  try {
+    const jobs = require('../lib/scheduled-jobs')
+    const cached = jobs.getCachedAltData(symbol)
+    if (cached) return cached
+  } catch {}
+  return getAltDataSnippet(symbol).catch(() => null)
+}
+
 const router = express.Router()
 const anthropic = new Anthropic()
 
@@ -246,7 +256,7 @@ async function dispatchTool(name, input, req) {
           body: JSON.stringify({}),
           signal: AbortSignal.timeout(30_000),
         }),
-        getAltDataSnippet(input.symbol || '').catch(() => null),
+        getAltData(input.symbol || ''),
       ])
       const data = await r.json()
       if (!data.signal) return `Analysis failed for ${input.symbol}: ${data.error || 'unknown error'}`

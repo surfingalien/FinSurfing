@@ -13,6 +13,11 @@
 const express   = require('express')
 const router    = express.Router()
 const scheduler = require('../lib/scheduler')
+let scheduledJobs = null
+function getJobs() {
+  if (!scheduledJobs) scheduledJobs = require('../lib/scheduled-jobs')
+  return scheduledJobs
+}
 
 router.get('/jobs', (req, res) => {
   res.json(scheduler.getStatus())
@@ -33,6 +38,14 @@ router.patch('/jobs/:id', (req, res) => {
   if (typeof enabled !== 'boolean') return res.status(400).json({ error: 'enabled must be boolean' })
   scheduler.setEnabled(id, enabled)
   res.json({ ok: true })
+})
+
+// Cached result endpoints — read-only, no auth needed for internal UI use
+router.get('/cache/scan',    (req, res) => res.json(getJobs().getCachedScan()    || { data: null }))
+router.get('/cache/digest',  (req, res) => res.json(getJobs().getCachedDigest()  || { results: [] }))
+router.get('/cache/alt/:symbol', (req, res) => {
+  const snippet = getJobs().getCachedAltData(req.params.symbol?.toUpperCase())
+  res.json({ symbol: req.params.symbol, snippet: snippet || null })
 })
 
 module.exports = router
