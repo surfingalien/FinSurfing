@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>SurfingNeo-OS</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<script src="https://d3js.org/d3.v7.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.28.1/cytoscape.min.js"></script>
 <style>
 /* ── CSS Variables ─────────────────────────────────────────── */
 :root{
@@ -138,12 +138,12 @@ input,select,textarea{font-family:inherit;font-size:inherit}
 .leg-dot{width:9px;height:9px;border-radius:50%}
 #graph-wrap{
   background:var(--card);border:1px solid var(--border);border-radius:12px;
-  overflow:hidden;position:relative;min-height:580px
+  overflow:hidden;position:relative;height:580px
 }
-#graph-wrap svg{display:block}
+#cy{position:absolute;inset:0;background:transparent}
 #graph-placeholder{
   position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
-  color:var(--muted);font-size:13px
+  color:var(--muted);font-size:13px;pointer-events:none;z-index:2
 }
 #node-insp{display:none;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;margin-top:12px}
 .ni-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
@@ -380,6 +380,7 @@ input,select,textarea{font-family:inherit;font-size:inherit}
     <div class="leg-item"><div class="leg-dot" style="background:var(--c-jsx)"></div>JSX Files</div>
   </div>
   <div id="graph-wrap">
+    <div id="cy"></div>
     <div id="graph-placeholder">Loading FinSurfing knowledge graph…</div>
   </div>
   <div id="node-insp">
@@ -688,10 +689,9 @@ function activateTab(id) {
   G.activeTab = id;
 
   if (id === 'graphify') {
-    // Always redraw graphify when tab becomes active so data races are fixed
     G.tabInited.graphify = true;
-    // Use setTimeout to ensure panel is laid out before measuring
-    setTimeout(function(){ requestAnimationFrame(drawGraphify); }, 50);
+    // Cytoscape measures container size — give panel 60ms to lay out
+    setTimeout(drawGraphify, 60);
   }
   if (id === 'plugins' && !G.tabInited.plugins) {
     G.tabInited.plugins = true;
@@ -781,144 +781,193 @@ function drawDashCanvas() {
 }
 
 // ═══════════════════════════════════════════════════════
-//  GRAPHIFY — D3 v7 force graph
+//  GRAPHIFY — Cytoscape.js
 // ═══════════════════════════════════════════════════════
-var _gZoom = null, _gSvgSel = null, _gSim = null;
+var _cy = null;
 
-function drawGraphify() {
-  try { _drawGraphifyInner(); } catch(err) {
-    var ph = document.getElementById('graph-placeholder');
-    if (ph) { ph.style.display='flex'; ph.textContent = 'Graph error: ' + err.message; }
-    console.error('[NeoOS] drawGraphify error:', err);
-  }
+var CY_COLORS = { route:'#6366F1', lib:'#06B6D4', component:'#8B5CF6', jsx:'#A78BFA' };
+var CY_SIZES  = { route:28, lib:24, component:20, jsx:14 };
+
+function getCyStyle() {
+  var isDark = document.documentElement.getAttribute('data-theme') !== 'tan';
+  var labelColor = isDark ? '#94A3B8' : '#64748B';
+  var edgeColor  = isDark ? 'rgba(99,102,241,0.25)' : 'rgba(99,102,241,0.35)';
+  var bgColor    = isDark ? '#13151F' : '#FFFFFF';
+  return [
+    {
+      selector: 'node',
+      style: {
+        'background-color': function(ele){ return CY_COLORS[ele.data('type')] || '#64748B'; },
+        'width':  function(ele){ return CY_SIZES[ele.data('type')] || 16; },
+        'height': function(ele){ return CY_SIZES[ele.data('type')] || 16; },
+        'label': 'data(label)',
+        'font-size': '10px',
+        'color': labelColor,
+        'text-valign': 'bottom',
+        'text-halign': 'center',
+        'text-margin-y': '4px',
+        'text-max-width': '80px',
+        'text-wrap': 'ellipsis',
+        'border-width': '1.5px',
+        'border-color': 'rgba(255,255,255,0.15)',
+        'border-opacity': isDark ? 1 : 0
+      }
+    },
+    {
+      selector: 'node:selected',
+      style: {
+        'border-width': '3px',
+        'border-color': '#00FFCC',
+        'border-opacity': 1
+      }
+    },
+    {
+      selector: 'node:active',
+      style: { 'overlay-opacity': 0 }
+    },
+    {
+      selector: 'edge',
+      style: {
+        'line-color': edgeColor,
+        'width': 1,
+        'curve-style': 'bezier',
+        'target-arrow-shape': 'triangle',
+        'target-arrow-color': edgeColor,
+        'arrow-scale': 0.7,
+        'opacity': 0.7
+      }
+    },
+    {
+      selector: 'edge:selected',
+      style: { 'line-color': '#00FFCC', 'target-arrow-color': '#00FFCC', 'opacity': 1 }
+    },
+    // highlight neighbours on hover
+    {
+      selector: '.faded',
+      style: { 'opacity': 0.15 }
+    },
+    {
+      selector: '.highlighted',
+      style: { 'opacity': 1 }
+    }
+  ];
 }
 
-function _drawGraphifyInner() {
-  var wrap = document.getElementById('graph-wrap');
+function drawGraphify() {
   var placeholder = document.getElementById('graph-placeholder');
-  if (!wrap) return;
-
-  // Check D3 loaded
-  if (typeof d3 === 'undefined') {
-    if (placeholder) { placeholder.style.display='flex'; placeholder.textContent = 'D3.js not loaded — check network connection'; }
+  if (typeof cytoscape === 'undefined') {
+    if (placeholder) { placeholder.style.display='flex'; placeholder.textContent='Cytoscape.js not loaded — check network'; }
     return;
   }
-
   if (!G.graph || !G.graph.nodes || !G.graph.nodes.length) {
-    if (placeholder) { placeholder.style.display = 'flex'; placeholder.textContent = 'Loading graph data… (click Rebuild if this persists)'; }
+    if (placeholder) { placeholder.style.display='flex'; placeholder.textContent='Loading graph data…'; }
     return;
   }
-  if (placeholder) placeholder.style.display = 'none';
 
-  // offsetWidth is reliable even right after display:block change
-  var W = wrap.offsetWidth || wrap.getBoundingClientRect().width || window.innerWidth - 60;
-  var H = 580;
-  if (W < 100) W = window.innerWidth - 60;
-
-  d3.select('#graph-wrap svg').remove();
-  var svg = d3.select('#graph-wrap').append('svg').attr('width', W).attr('height', H);
-  _gSvgSel = svg;
-
-  svg.append('defs').append('marker')
-    .attr('id','garr').attr('viewBox','0 -5 10 10').attr('refX',22)
-    .attr('markerWidth',5).attr('markerHeight',5).attr('orient','auto')
-    .append('path').attr('d','M0,-5L10,0L0,5').attr('fill','rgba(99,102,241,.4)');
-
-  var g = svg.append('g');
-  _gZoom = d3.zoom().scaleExtent([0.15,5]).on('zoom', function(e){ g.attr('transform', e.transform); });
-  svg.call(_gZoom);
-
-  var TC = { route:'#6366F1', lib:'#06B6D4', component:'#8B5CF6', jsx:'#A78BFA' };
   var filt = G.gFilter;
-  var q = (document.getElementById('g-search').value || '').toLowerCase().trim();
+  var q = (document.getElementById('g-search') ? document.getElementById('g-search').value : '').toLowerCase().trim();
 
-  var allNodes = G.graph.nodes.map(function(n){ return Object.assign({},n); });
-  var filtNodes = allNodes.filter(function(n){
+  var filtNodes = G.graph.nodes.filter(function(n){
     if (filt !== 'all' && n.type !== filt) return false;
-    if (q && !n.label.toLowerCase().includes(q) && !n.id.toLowerCase().includes(q)) return false;
+    if (q && !(n.label||'').toLowerCase().includes(q) && !(n.id||'').toLowerCase().includes(q)) return false;
     return true;
   });
   var filtIds = new Set(filtNodes.map(function(n){ return n.id; }));
-  var filtEdges = (G.graph.edges || [])
-    .filter(function(e){ return filtIds.has(e.source) && filtIds.has(e.target); })
-    .map(function(e){ return Object.assign({},e); });
+  var filtEdges = (G.graph.edges || []).filter(function(e){
+    return filtIds.has(e.source) && filtIds.has(e.target);
+  });
 
-  var sim = d3.forceSimulation(filtNodes)
-    .force('link', d3.forceLink(filtEdges).id(function(d){ return d.id; }).distance(75).strength(0.45))
-    .force('charge', d3.forceManyBody().strength(-160))
-    .force('center', d3.forceCenter(W/2, H/2))
-    .force('collide', d3.forceCollide(18));
-  _gSim = sim;
+  var elements = [];
+  filtNodes.forEach(function(n){
+    elements.push({ group:'nodes', data: Object.assign({ id: n.id, label: n.label || n.id }, n) });
+  });
+  filtEdges.forEach(function(e){
+    elements.push({ group:'edges', data: { id: e.source+'->'+e.target, source: e.source, target: e.target, label: e.label } });
+  });
 
-  var link = g.append('g').selectAll('line').data(filtEdges).join('line')
-    .attr('stroke','rgba(99,102,241,.22)').attr('stroke-width',1)
-    .attr('marker-end','url(#garr)');
+  // Destroy previous instance
+  if (_cy) { _cy.destroy(); _cy = null; }
+  if (placeholder) placeholder.style.display = 'none';
 
-  var nodeG = g.append('g').selectAll('g').data(filtNodes).join('g')
-    .attr('cursor','pointer')
-    .call(d3.drag()
-      .on('start', function(e,d){ if(!e.active) sim.alphaTarget(.3).restart(); d.fx=d.x; d.fy=d.y; })
-      .on('drag',  function(e,d){ d.fx=e.x; d.fy=e.y; })
-      .on('end',   function(e,d){ if(!e.active) sim.alphaTarget(0); d.fx=null; d.fy=null; }))
-    .on('click', function(e,d){ showNodeInspector(d, filtEdges); });
+  _cy = cytoscape({
+    container: document.getElementById('cy'),
+    elements: elements,
+    style: getCyStyle(),
+    layout: {
+      name: 'cose',
+      animate: true,
+      animationDuration: 800,
+      randomize: false,
+      nodeRepulsion: function(){ return 8000; },
+      idealEdgeLength: function(){ return 80; },
+      edgeElasticity: function(){ return 0.4; },
+      gravity: 0.3,
+      numIter: 1000,
+      initialTemp: 200,
+      coolingFactor: 0.95,
+      minTemp: 1.0
+    },
+    minZoom: 0.1,
+    maxZoom: 5,
+    wheelSensitivity: 0.3
+  });
 
-  var rMap = { route:9, lib:8, component:7, jsx:5.5 };
-  nodeG.append('circle')
-    .attr('r', function(d){ return rMap[d.type] || 6; })
-    .attr('fill', function(d){ return TC[d.type] || '#64748B'; })
-    .attr('stroke','rgba(255,255,255,.12)').attr('stroke-width',1.5);
+  // Node click → inspector
+  _cy.on('tap', 'node', function(evt){
+    var node = evt.target;
+    var d = node.data();
+    showNodeInspector(d);
+    // Fade/highlight neighbours
+    _cy.elements().addClass('faded');
+    node.removeClass('faded').addClass('highlighted');
+    node.neighborhood().removeClass('faded').addClass('highlighted');
+  });
 
-  nodeG.append('text')
-    .attr('dx', function(d){ return (rMap[d.type] || 6) + 4; })
-    .attr('dy','.35em')
-    .style('font-size','10px').style('fill','var(--muted)').style('pointer-events','none')
-    .text(function(d){ return (d.label || d.id).slice(0,22); });
-
-  sim.on('tick', function() {
-    link.attr('x1',function(d){ return d.source.x; }).attr('y1',function(d){ return d.source.y; })
-        .attr('x2',function(d){ return d.target.x; }).attr('y2',function(d){ return d.target.y; });
-    nodeG.attr('transform', function(d){ return 'translate('+d.x+','+d.y+')'; });
+  // Tap background → clear
+  _cy.on('tap', function(evt){
+    if (evt.target === _cy) {
+      _cy.elements().removeClass('faded highlighted');
+      document.getElementById('node-insp').style.display = 'none';
+    }
   });
 }
 
-function showNodeInspector(d, edges) {
+function showNodeInspector(d) {
   var insp = document.getElementById('node-insp');
   insp.style.display = 'block';
-  document.getElementById('ni-name').textContent = (d.label || d.id);
+  document.getElementById('ni-name').textContent = d.label || d.id;
   var tcls = ['route','lib','component','jsx'].includes(d.type) ? 'type-chip tc-'+d.type : '';
   document.getElementById('ni-meta').innerHTML =
     '<span class="'+tcls+'" style="margin-right:8px">'+d.type+'</span>' +
     (d.file ? '📄 '+d.file+'&nbsp;&nbsp;' : '') +
     (d.lineCount ? d.lineCount+' lines&nbsp;&nbsp;' : '') +
-    (d.description ? d.description : '');
+    (d.description || '');
+
+  // Show neighbours from graph data
   var nb = document.getElementById('ni-nb');
   nb.innerHTML = '';
   var shown = 0;
-  edges.forEach(function(e) {
-    var sid = typeof e.source === 'object' ? e.source.id : e.source;
-    var tid = typeof e.target === 'object' ? e.target.id : e.target;
-    if (sid === d.id) {
-      nb.innerHTML += '<span class="nb-chip">↗ '+tid+'</span>';
-      shown++;
-    } else if (tid === d.id) {
-      nb.innerHTML += '<span class="nb-chip" style="border-color:rgba(6,182,212,.3)">↙ '+sid+'</span>';
-      shown++;
+  (G.graph ? G.graph.edges || [] : []).forEach(function(e){
+    if (e.source === d.id) {
+      nb.innerHTML += '<span class="nb-chip">↗ '+e.target+'</span>'; shown++;
+    } else if (e.target === d.id) {
+      nb.innerHTML += '<span class="nb-chip" style="border-color:rgba(6,182,212,.3)">↙ '+e.source+'</span>'; shown++;
     }
   });
   if (!shown) nb.innerHTML = '<span style="font-size:12px;color:var(--muted)">No direct edges</span>';
 }
 
-function filterGraph() { setTimeout(function(){ requestAnimationFrame(drawGraphify); }, 0); }
+function filterGraph() { setTimeout(drawGraphify, 0); }
 
 function setGFilter(f, btn) {
   G.gFilter = f;
   document.querySelectorAll('[data-gfilter]').forEach(function(b){ b.classList.remove('active'); });
   if (btn) btn.classList.add('active');
-  setTimeout(function(){ requestAnimationFrame(drawGraphify); }, 0);
+  setTimeout(drawGraphify, 0);
 }
 
-function gZoom(s) { if (_gZoom && _gSvgSel) _gSvgSel.transition().duration(300).call(_gZoom.scaleBy, s); }
-function gReset() { if (_gZoom && _gSvgSel) _gSvgSel.transition().duration(400).call(_gZoom.transform, d3.zoomIdentity); }
+function gZoom(s) { if (_cy) _cy.zoom({ level: _cy.zoom() * s, renderedPosition: { x: _cy.width()/2, y: _cy.height()/2 } }); }
+function gReset() { if (_cy) _cy.fit(_cy.elements(), 40); }
 
 function gExport() {
   if (!G.graph) { alert('No graph data loaded'); return; }
@@ -929,18 +978,17 @@ function gExport() {
 async function gRebuild() {
   var btn = document.getElementById('g-rebuild');
   btn.textContent = '↺ Rebuilding…';
-  tLine('Loading FinSurfing knowledge graph rebuild…', 'c');
+  tLine('Rebuilding FinSurfing knowledge graph…', 'c');
   var data = await apiFetch('/api/agentic-os/refresh');
   if (data && data.graph) {
     G.graph = data.graph;
     updateGraphSub(data.graph);
     requestAnimationFrame(drawDashCanvas);
-    G.tabInited.graphify = false;
-    requestAnimationFrame(drawGraphify);
-    G.tabInited.graphify = true;
-    tLine('Graph rebuilt: ' + data.graph.nodes.length + ' nodes, ' + data.graph.edges.length + ' edges', 'g');
+    setTimeout(drawGraphify, 0);
+    tLine('Graph rebuilt: ' + data.graph.nodes.length + ' nodes, ' + (data.graph.edges||[]).length + ' edges', 'g');
   } else {
-    tLine('Rebuild returned no data', 'y');
+    tLine('Rebuild returned no data — using cached graph', 'y');
+    setTimeout(drawGraphify, 0);
   }
   btn.textContent = '↺ Rebuild';
 }
@@ -1184,9 +1232,9 @@ async function loadData() {
   // Redraw dashboard canvas with real/fallback data
   requestAnimationFrame(drawDashCanvas);
 
-  // Redraw Graphify if it's the active tab or was already opened (showing blank/loading)
+  // Redraw Graphify if it's active or was opened while loading
   if (G.tabInited.graphify || G.activeTab === 'graphify') {
-    setTimeout(function(){ requestAnimationFrame(drawGraphify); }, 50);
+    setTimeout(drawGraphify, 100);
   }
 
   if (stats) {
