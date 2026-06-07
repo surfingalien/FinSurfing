@@ -43,6 +43,8 @@ import GoalsView from './components/Goals/GoalsView'
 import { usePortfolio } from './hooks/usePortfolio'
 import { useWatchlist } from './hooks/useWatchlist'
 import { useAlerts } from './hooks/useAlerts'
+import { useAlertStream, formatAnalysisToast } from './hooks/useAlertStream'
+import { useToast } from './components/shared/ToastNotifications'
 import FinSurfCopilot from './components/Copilot/FinSurfCopilot'
 
 // ── Inner app (renders once auth state is known) ──────────────────────────────
@@ -141,6 +143,11 @@ function MainApp({ onSignIn }) {
   }, [portfolio.quotes, watchlist.quotes])
 
   const alertsHook = useAlerts(quotesMap)
+  const { fire: fireToast } = useToast() || {}
+  useAlertStream((event) => {
+    const toast = formatAnalysisToast(event)
+    fireToast?.(toast.type, toast.content)
+  })
 
   const navigateTo = (tab, symbol) => {
     if (symbol) setAnalyzeSymbol(symbol)
