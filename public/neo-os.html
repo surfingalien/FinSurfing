@@ -1,0 +1,1113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>SurfingNeo-OS</title>
+<style>
+  :root {
+    --bg:      #060810;
+    --bg2:     #0a0e1a;
+    --bg3:     #0d1220;
+    --border:  rgba(0,255,204,0.12);
+    --accent:  #00ffcc;
+    --accent2: #0066ff;
+    --accent3: #ff00aa;
+    --text:    #e2e8f0;
+    --muted:   #64748b;
+    --glow:    0 0 20px rgba(0,255,204,0.25);
+    --glow2:   0 0 40px rgba(0,255,204,0.1);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Courier New', monospace;
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── scanline overlay ── */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,0,0,0.08) 2px,
+      rgba(0,0,0,0.08) 4px
+    );
+    pointer-events: none;
+    z-index: 9999;
+  }
+
+  /* ── grid background ── */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,255,204,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,255,204,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ── HEADER ── */
+  header {
+    position: relative;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 24px;
+    height: 56px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(6,8,16,0.95);
+    backdrop-filter: blur(12px);
+    flex-shrink: 0;
+  }
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .logo-icon {
+    width: 32px;
+    height: 32px;
+    position: relative;
+  }
+  .logo-icon svg {
+    width: 32px;
+    height: 32px;
+    filter: drop-shadow(0 0 6px var(--accent));
+  }
+  .logo-text {
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    color: var(--accent);
+    text-shadow: 0 0 20px rgba(0,255,204,0.5);
+    text-transform: uppercase;
+  }
+  .logo-sub {
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+  }
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .status-pill {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    font-size: 11px;
+    color: var(--muted);
+    background: rgba(0,255,204,0.03);
+  }
+  .status-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 8px var(--accent);
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%,100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+  .nav-link {
+    font-size: 12px;
+    color: var(--muted);
+    text-decoration: none;
+    letter-spacing: 0.05em;
+    transition: color 0.2s;
+    padding: 6px 12px;
+    border: 1px solid transparent;
+    border-radius: 6px;
+  }
+  .nav-link:hover {
+    color: var(--accent);
+    border-color: var(--border);
+    text-shadow: 0 0 10px rgba(0,255,204,0.3);
+  }
+  #clock {
+    font-size: 12px;
+    color: var(--muted);
+    letter-spacing: 0.05em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ── MAIN LAYOUT ── */
+  .layout {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* ── SIDEBAR NAV ── */
+  .sidenav {
+    width: 200px;
+    border-right: 1px solid var(--border);
+    background: rgba(10,14,26,0.8);
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    padding: 16px 0;
+    gap: 2px;
+  }
+  .sidenav-label {
+    font-size: 9px;
+    letter-spacing: 0.2em;
+    color: var(--muted);
+    text-transform: uppercase;
+    padding: 8px 16px 4px;
+  }
+  .nav-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px;
+    font-size: 12px;
+    color: var(--muted);
+    cursor: pointer;
+    letter-spacing: 0.05em;
+    border-left: 2px solid transparent;
+    transition: all 0.15s;
+    user-select: none;
+  }
+  .nav-item:hover { color: var(--text); background: rgba(0,255,204,0.04); }
+  .nav-item.active {
+    color: var(--accent);
+    border-left-color: var(--accent);
+    background: rgba(0,255,204,0.06);
+    text-shadow: 0 0 10px rgba(0,255,204,0.3);
+  }
+  .nav-item .icon { width: 16px; text-align: center; font-size: 14px; }
+
+  .sidenav-footer {
+    margin-top: auto;
+    padding: 12px 16px;
+    border-top: 1px solid var(--border);
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 0.05em;
+  }
+
+  /* ── CONTENT ── */
+  .content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(0,255,204,0.2) transparent;
+  }
+  .content::-webkit-scrollbar { width: 4px; }
+  .content::-webkit-scrollbar-thumb { background: rgba(0,255,204,0.2); border-radius: 2px; }
+
+  .tab-panel { display: none; animation: fadein 0.3s ease; }
+  .tab-panel.active { display: block; }
+  @keyframes fadein { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+  /* ── SHARED COMPONENTS ── */
+  .section-title {
+    font-size: 11px;
+    letter-spacing: 0.2em;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .section-title::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  .glass {
+    background: rgba(13,18,32,0.8);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    backdrop-filter: blur(8px);
+  }
+
+  .card {
+    background: rgba(13,18,32,0.8);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    transition: border-color 0.2s;
+  }
+  .card:hover { border-color: rgba(0,255,204,0.25); }
+
+  .stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+  .stat-card {
+    background: rgba(13,18,32,0.8);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    position: relative;
+    overflow: hidden;
+  }
+  .stat-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    opacity: 0.5;
+  }
+  .stat-value {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--accent);
+    text-shadow: var(--glow);
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+  .stat-label {
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+  }
+  .stat-icon {
+    position: absolute;
+    top: 12px; right: 12px;
+    font-size: 20px;
+    opacity: 0.2;
+  }
+
+  /* ── GRAPH CANVAS ── */
+  #graph-canvas {
+    width: 100%;
+    height: 520px;
+    background: rgba(6,8,16,0.95);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    display: block;
+    cursor: grab;
+  }
+  #graph-canvas:active { cursor: grabbing; }
+
+  .graph-controls {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+  }
+  .ctrl-btn {
+    padding: 5px 12px;
+    font-size: 11px;
+    font-family: inherit;
+    background: rgba(13,18,32,0.8);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    border-radius: 4px;
+    cursor: pointer;
+    letter-spacing: 0.05em;
+    transition: all 0.15s;
+  }
+  .ctrl-btn:hover, .ctrl-btn.active { color: var(--accent); border-color: rgba(0,255,204,0.4); }
+  .ctrl-btn.active { background: rgba(0,255,204,0.08); }
+
+  .legend {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-top: 12px;
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .legend-item { display: flex; align-items: center; gap: 6px; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+
+  /* ── NODE INSPECTOR ── */
+  #node-inspector {
+    margin-top: 16px;
+    padding: 16px;
+    background: rgba(13,18,32,0.9);
+    border: 1px solid rgba(0,255,204,0.2);
+    border-radius: 8px;
+    display: none;
+    animation: fadein 0.2s;
+  }
+  #node-inspector.visible { display: block; }
+  .inspector-title { color: var(--accent); font-size: 14px; margin-bottom: 8px; }
+  .inspector-meta { font-size: 11px; color: var(--muted); margin-bottom: 12px; }
+  .inspector-neighbours { display: flex; flex-wrap: wrap; gap: 6px; }
+  .neighbour-chip {
+    padding: 3px 10px;
+    font-size: 10px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    background: rgba(13,18,32,0.5);
+    letter-spacing: 0.05em;
+  }
+  .neighbour-chip.out { border-color: rgba(0,255,204,0.3); color: var(--accent); }
+  .neighbour-chip.in  { border-color: rgba(0,102,255,0.3); color: #60a5fa; }
+
+  /* ── TABLE ── */
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th {
+    text-align: left;
+    padding: 8px 12px;
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--muted);
+    border-bottom: 1px solid var(--border);
+  }
+  td {
+    padding: 10px 12px;
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+    vertical-align: middle;
+  }
+  tr:hover td { background: rgba(0,255,204,0.02); }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 10px;
+    letter-spacing: 0.05em;
+    font-weight: 600;
+  }
+  .badge-green  { background: rgba(0,255,204,0.12); color: var(--accent); border: 1px solid rgba(0,255,204,0.2); }
+  .badge-blue   { background: rgba(0,102,255,0.12); color: #60a5fa;      border: 1px solid rgba(0,102,255,0.2); }
+  .badge-purple { background: rgba(139,92,246,0.12);color: #a78bfa;      border: 1px solid rgba(139,92,246,0.2); }
+  .badge-yellow { background: rgba(251,191,36,0.12); color: #fbbf24;     border: 1px solid rgba(251,191,36,0.2); }
+  .badge-red    { background: rgba(239,68,68,0.12);  color: #f87171;     border: 1px solid rgba(239,68,68,0.2); }
+  .badge-gray   { background: rgba(100,116,139,0.12);color: var(--muted); border: 1px solid rgba(100,116,139,0.2); }
+
+  .conn-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .conn-online  { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
+  .conn-offline { background: #374151; }
+  .conn-idle    { background: #fbbf24; box-shadow: 0 0 6px #fbbf24; }
+
+  /* ── MCP GRID ── */
+  .mcp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+  .mcp-card {
+    background: rgba(13,18,32,0.8);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    transition: border-color 0.2s;
+  }
+  .mcp-card:hover { border-color: rgba(0,255,204,0.2); }
+  .mcp-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .mcp-name { font-size: 13px; color: var(--text); }
+  .mcp-id   { font-size: 10px; color: var(--muted); font-family: monospace; margin-bottom: 6px; }
+  .mcp-purpose { font-size: 11px; color: var(--muted); }
+  .mcp-tool { font-size: 10px; color: rgba(0,255,204,0.6); font-family: monospace; margin-top: 6px; }
+
+  /* ── SKILLS GRID ── */
+  .skills-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+  .skill-card {
+    background: rgba(13,18,32,0.8);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .skill-card:hover {
+    border-color: rgba(0,255,204,0.25);
+    box-shadow: 0 0 20px rgba(0,255,204,0.05);
+  }
+  .skill-id { font-size: 9px; color: rgba(0,255,204,0.4); letter-spacing: 0.2em; font-family: monospace; margin-bottom: 6px; text-transform: uppercase; }
+  .skill-name { font-size: 14px; color: var(--accent); margin-bottom: 6px; }
+  .skill-desc { font-size: 11px; color: var(--muted); line-height: 1.5; }
+  .skill-endpoint { font-size: 10px; color: rgba(0,102,255,0.7); font-family: monospace; margin-top: 8px; }
+
+  /* ── BRAIN TAB ── */
+  .brain-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-bottom: 24px; }
+  .brain-metric {
+    background: rgba(13,18,32,0.8);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px;
+  }
+  .brain-metric-val { font-size: 22px; font-weight: 700; color: var(--accent2); text-shadow: 0 0 12px rgba(0,102,255,0.4); }
+  .brain-metric-lbl { font-size: 10px; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; margin-top: 2px; }
+
+  /* ── TERMINAL BLOCK ── */
+  .terminal {
+    background: rgba(6,8,16,0.95);
+    border: 1px solid rgba(0,255,204,0.15);
+    border-radius: 8px;
+    padding: 16px;
+    font-size: 11px;
+    color: var(--muted);
+    line-height: 1.8;
+    font-family: 'Courier New', monospace;
+    max-height: 200px;
+    overflow-y: auto;
+  }
+  .term-line { display: flex; gap: 8px; }
+  .term-prompt { color: var(--accent); flex-shrink: 0; }
+  .term-ok   { color: #4ade80; }
+  .term-warn { color: #fbbf24; }
+  .term-info { color: #60a5fa; }
+
+  /* ── LOADING ── */
+  .loader {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 60px;
+    color: var(--muted);
+    font-size: 12px;
+    letter-spacing: 0.1em;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .spin {
+    width: 20px; height: 20px;
+    border: 2px solid rgba(0,255,204,0.2);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── SCROLLBAR ── */
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-thumb { background: rgba(0,255,204,0.15); border-radius: 2px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+
+  /* ── SEARCH ── */
+  .search-bar {
+    width: 100%;
+    background: rgba(13,18,32,0.8);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 14px;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 12px;
+    outline: none;
+    margin-bottom: 16px;
+    transition: border-color 0.2s;
+  }
+  .search-bar:focus { border-color: rgba(0,255,204,0.35); }
+  .search-bar::placeholder { color: var(--muted); }
+
+  /* ── TOOLTIP ── */
+  #tooltip {
+    position: fixed;
+    background: rgba(13,18,32,0.95);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 11px;
+    color: var(--text);
+    pointer-events: none;
+    z-index: 1000;
+    display: none;
+    max-width: 220px;
+  }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header>
+  <div class="logo">
+    <div class="logo-icon">
+      <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="16" cy="16" r="14" stroke="#00ffcc" stroke-width="1.5" stroke-dasharray="4 2"/>
+        <circle cx="16" cy="16" r="6" fill="none" stroke="#00ffcc" stroke-width="1.5"/>
+        <line x1="16" y1="2" x2="16" y2="10" stroke="#00ffcc" stroke-width="1.5"/>
+        <line x1="16" y1="22" x2="16" y2="30" stroke="#00ffcc" stroke-width="1.5"/>
+        <line x1="2"  y1="16" x2="10" y2="16" stroke="#00ffcc" stroke-width="1.5"/>
+        <line x1="22" y1="16" x2="30" y2="16" stroke="#00ffcc" stroke-width="1.5"/>
+        <circle cx="16" cy="16" r="2.5" fill="#00ffcc"/>
+      </svg>
+    </div>
+    <div>
+      <div class="logo-text">SurfingNeo-OS</div>
+      <div class="logo-sub">Agentic Intelligence Platform</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="status-pill"><div class="status-dot"></div><span id="sys-status">ONLINE</span></div>
+    <span id="clock"></span>
+    <a class="nav-link" href="/">↗ FinSurfing App</a>
+  </div>
+</header>
+
+<!-- MAIN LAYOUT -->
+<div class="layout">
+
+  <!-- SIDEBAR -->
+  <nav class="sidenav">
+    <div class="sidenav-label">Navigation</div>
+    <div class="nav-item active" data-tab="dashboard"><span class="icon">◈</span> Dashboard</div>
+    <div class="nav-item" data-tab="graphify"><span class="icon">⬡</span> Graphify</div>
+    <div class="nav-item" data-tab="mcps"><span class="icon">⬡</span> MCP Servers</div>
+    <div class="nav-item" data-tab="skills"><span class="icon">◇</span> Skills</div>
+    <div class="nav-item" data-tab="brain"><span class="icon">◈</span> Agentic Brain</div>
+    <div class="sidenav-footer">
+      v2.0 · <span id="build-ts"></span>
+    </div>
+  </nav>
+
+  <!-- CONTENT -->
+  <div class="content">
+
+    <!-- ── DASHBOARD ── -->
+    <div class="tab-panel active" id="tab-dashboard">
+      <div class="section-title">⬡ System Overview</div>
+      <div class="stat-grid" id="stat-grid">
+        <div class="loader"><div class="spin"></div>Loading…</div>
+      </div>
+
+      <div class="section-title">⬡ Knowledge Graph Snapshot</div>
+      <canvas id="mini-canvas" width="900" height="280" style="width:100%;height:280px;background:rgba(6,8,16,0.95);border:1px solid var(--border);border-radius:8px;display:block;margin-bottom:24px;"></canvas>
+
+      <div class="section-title">⬡ Scheduled Jobs</div>
+      <div class="card" id="jobs-table"><div class="loader"><div class="spin"></div></div></div>
+
+      <div class="section-title" style="margin-top:24px;">⬡ Boot Log</div>
+      <div class="terminal" id="boot-log"></div>
+    </div>
+
+    <!-- ── GRAPHIFY ── -->
+    <div class="tab-panel" id="tab-graphify">
+      <div class="section-title">⬡ Codebase Knowledge Graph</div>
+      <div class="graph-controls" id="graph-filters"></div>
+      <canvas id="graph-canvas"></canvas>
+      <div class="legend" id="graph-legend"></div>
+      <div id="node-inspector"></div>
+    </div>
+
+    <!-- ── MCPs ── -->
+    <div class="tab-panel" id="tab-mcps">
+      <div class="section-title">⬡ MCP Servers &amp; External Providers</div>
+      <div class="mcp-grid" id="mcp-grid"><div class="loader"><div class="spin"></div></div></div>
+    </div>
+
+    <!-- ── SKILLS ── -->
+    <div class="tab-panel" id="tab-skills">
+      <div class="section-title">⬡ AI Skills Registry</div>
+      <input class="search-bar" id="skills-search" placeholder="Search skills…" />
+      <div class="skills-grid" id="skills-grid"><div class="loader"><div class="spin"></div></div></div>
+    </div>
+
+    <!-- ── BRAIN ── -->
+    <div class="tab-panel" id="tab-brain">
+      <div class="section-title">⬡ Agentic Brain</div>
+      <div class="brain-grid" id="brain-metrics"><div class="loader"><div class="spin"></div></div></div>
+      <div class="section-title">⬡ Tool Registry</div>
+      <div class="card" id="tool-registry"><div class="loader"><div class="spin"></div></div></div>
+    </div>
+
+  </div>
+</div>
+
+<div id="tooltip"></div>
+
+<script>
+// ── Utilities ─────────────────────────────────────────────────────────────────
+const $ = id => document.getElementById(id)
+const h = (tag, attrs={}, ...ch) => {
+  const el = document.createElement(tag)
+  Object.entries(attrs).forEach(([k,v]) => {
+    if (k === 'class') el.className = v
+    else if (k === 'html') el.innerHTML = v
+    else el.setAttribute(k, v)
+  })
+  ch.forEach(c => c && el.appendChild(typeof c === 'string' ? document.createTextNode(c) : c))
+  return el
+}
+
+// ── Clock ─────────────────────────────────────────────────────────────────────
+function tick() {
+  $('clock').textContent = new Date().toLocaleTimeString('en-US', { hour12: false })
+}
+tick(); setInterval(tick, 1000)
+
+// ── Tab routing ───────────────────────────────────────────────────────────────
+const tabLoaded = {}
+document.querySelectorAll('.nav-item[data-tab]').forEach(el => {
+  el.addEventListener('click', () => {
+    document.querySelectorAll('.nav-item').forEach(x => x.classList.remove('active'))
+    document.querySelectorAll('.tab-panel').forEach(x => x.classList.remove('active'))
+    el.classList.add('active')
+    const id = el.dataset.tab
+    $('tab-' + id).classList.add('active')
+    if (!tabLoaded[id]) { tabLoaded[id] = true; loadTab(id) }
+  })
+})
+
+// ── API helpers ───────────────────────────────────────────────────────────────
+async function api(path) {
+  const r = await fetch('/api/agentic-os' + path)
+  if (!r.ok) throw new Error(r.status)
+  return r.json()
+}
+async function apiScheduler() {
+  const r = await fetch('/api/scheduler/jobs')
+  return r.ok ? r.json() : { jobs: [] }
+}
+
+// ── Boot log ─────────────────────────────────────────────────────────────────
+const bootLines = [
+  ['info', 'SurfingNeo-OS kernel loading…'],
+  ['ok',   'Express API server — ONLINE'],
+  ['ok',   'PostgreSQL pool — CONNECTED'],
+  ['ok',   'Binance WebSocket — STREAMING'],
+  ['ok',   'Claude claude-sonnet-4-6 — READY'],
+  ['ok',   'Agentic OS route — MOUNTED'],
+  ['info', 'Knowledge graph building…'],
+]
+function renderBoot() {
+  const el = $('boot-log')
+  el.innerHTML = ''
+  bootLines.forEach((line, i) => {
+    setTimeout(() => {
+      const div = document.createElement('div')
+      div.className = 'term-line'
+      div.innerHTML = `<span class="term-prompt">neo@os:~$</span><span class="term-${line[0]}">${line[1]}</span>`
+      el.appendChild(div)
+      el.scrollTop = el.scrollHeight
+    }, i * 120)
+  })
+}
+
+// ── Dashboard tab ─────────────────────────────────────────────────────────────
+async function loadDashboard() {
+  const [stats, jobs] = await Promise.all([api('/stats'), apiScheduler()])
+
+  // Stat cards
+  const cards = [
+    { val: stats.nodes,         label: 'Graph Nodes',       icon: '⬡' },
+    { val: stats.edges,         label: 'Graph Edges',       icon: '↔' },
+    { val: stats.skills || 12,  label: 'AI Skills',         icon: '◇' },
+    { val: stats.libs,          label: 'Core Libraries',    icon: '◈' },
+    { val: stats.routes,        label: 'API Routes',        icon: '/' },
+    { val: stats.components,    label: 'UI Components',     icon: '▣' },
+    { val: stats.jsxFiles,      label: 'JSX Views',         icon: '⬢' },
+    { val: stats.scheduledJobs, label: 'Scheduled Jobs',    icon: '⏱' },
+  ]
+  $('stat-grid').innerHTML = cards.map(c => `
+    <div class="stat-card">
+      <div class="stat-value">${c.val ?? '—'}</div>
+      <div class="stat-label">${c.label}</div>
+      <div class="stat-icon">${c.icon}</div>
+    </div>`).join('')
+
+  if (stats.generatedAt) {
+    $('build-ts').textContent = new Date(stats.generatedAt).toLocaleTimeString()
+  }
+
+  // Jobs table
+  const jobsList = (jobs.jobs || [])
+  $('jobs-table').innerHTML = jobsList.length ? `
+    <table>
+      <thead><tr><th>Job</th><th>Schedule</th><th>Last Run</th><th>Status</th></tr></thead>
+      <tbody>${jobsList.map(j => `
+        <tr>
+          <td style="color:var(--text);font-size:12px">${j.id}</td>
+          <td style="color:var(--muted);font-family:monospace;font-size:11px">${j.schedule || '—'}</td>
+          <td style="color:var(--muted);font-size:11px">${j.lastRun ? new Date(j.lastRun).toLocaleTimeString() : 'Never'}</td>
+          <td><span class="badge ${j.result?.status === 'ok' ? 'badge-green' : j.result?.status === 'running' ? 'badge-blue' : 'badge-gray'}">${j.result?.status || 'idle'}</span></td>
+        </tr>`).join('')}
+      </tbody>
+    </table>` : '<p style="color:var(--muted);font-size:12px;padding:12px">No jobs registered.</p>'
+
+  renderMiniGraph()
+  renderBoot()
+}
+
+// ── Mini graph (canvas) ────────────────────────────────────────────────────────
+const TYPE_COLORS = {
+  route:     '#6366f1',
+  lib:       '#06b6d4',
+  component: '#8b5cf6',
+  jsx:       '#a78bfa',
+}
+async function renderMiniGraph() {
+  const { nodes, edges } = await api('/graph')
+  const canvas = $('mini-canvas')
+  const ctx = canvas.getContext('2d')
+  const W = canvas.width, H = canvas.height
+
+  // pick up to 60 nodes, favour route+lib+component
+  const priority = ['route','lib','component','jsx']
+  const sample = [...nodes].sort((a,b) => priority.indexOf(a.type) - priority.indexOf(b.type)).slice(0, 60)
+  const idxMap = {}
+  sample.forEach((n,i) => idxMap[n.id] = i)
+
+  // ring layout
+  const cx = W/2, cy = H/2
+  const pos = sample.map((_, i) => {
+    const angle = (i / sample.length) * Math.PI * 2 - Math.PI/2
+    const r = Math.min(W, H) * 0.38
+    return { x: cx + Math.cos(angle) * r, y: cy + Math.sin(angle) * r }
+  })
+
+  ctx.clearRect(0, 0, W, H)
+
+  // edges
+  edges.forEach(e => {
+    const si = idxMap[e.source], ti = idxMap[e.target]
+    if (si == null || ti == null) return
+    ctx.beginPath()
+    ctx.moveTo(pos[si].x, pos[si].y)
+    ctx.lineTo(pos[ti].x, pos[ti].y)
+    ctx.strokeStyle = 'rgba(0,255,204,0.07)'
+    ctx.lineWidth = 1
+    ctx.stroke()
+  })
+
+  // nodes
+  sample.forEach((n, i) => {
+    const {x, y} = pos[i]
+    const col = TYPE_COLORS[n.type] || '#64748b'
+    ctx.beginPath()
+    ctx.arc(x, y, n.type === 'jsx' ? 3 : 5, 0, Math.PI*2)
+    ctx.fillStyle = col
+    ctx.shadowColor = col
+    ctx.shadowBlur = 8
+    ctx.fill()
+    ctx.shadowBlur = 0
+  })
+
+  // center label
+  ctx.font = '12px Courier New'
+  ctx.fillStyle = 'rgba(0,255,204,0.3)'
+  ctx.textAlign = 'center'
+  ctx.fillText('FinSurfing · ' + nodes.length + ' nodes · ' + edges.length + ' edges', cx, cy - 6)
+  ctx.font = '10px Courier New'
+  ctx.fillStyle = 'rgba(100,116,139,0.6)'
+  ctx.fillText('Knowledge Graph', cx, cy + 10)
+}
+
+// ── Graphify tab ───────────────────────────────────────────────────────────────
+let graphData = null
+let graphTransform = { x: 0, y: 0, scale: 1 }
+let dragging = false, dragStart = null
+let nodePositions = []
+let filterType = null
+
+const COLORS = { ...TYPE_COLORS }
+const RADIUS = { route: 9, lib: 8, component: 10, jsx: 5 }
+const LEGENDS = [
+  { type: 'route',     label: 'Routes',     col: COLORS.route },
+  { type: 'lib',       label: 'Libraries',  col: COLORS.lib },
+  { type: 'component', label: 'Components', col: COLORS.component },
+  { type: 'jsx',       label: 'JSX Views',  col: COLORS.jsx },
+]
+
+async function loadGraphify() {
+  graphData = await api('/graph')
+
+  // filter controls
+  const fc = $('graph-filters')
+  fc.innerHTML = '<button class="ctrl-btn active" data-type="">All</button>' +
+    LEGENDS.map(l => `<button class="ctrl-btn" data-type="${l.type}">${l.label}</button>`).join('') +
+    '<button class="ctrl-btn" id="btn-reset">Reset view</button>'
+
+  fc.querySelectorAll('.ctrl-btn[data-type]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      fc.querySelectorAll('.ctrl-btn[data-type]').forEach(b => b.classList.remove('active'))
+      btn.classList.add('active')
+      filterType = btn.dataset.type || null
+      drawGraph()
+    })
+  })
+  fc.querySelector('#btn-reset')?.addEventListener('click', () => {
+    graphTransform = { x: 0, y: 0, scale: 1 }
+    drawGraph()
+  })
+
+  // legend
+  $('graph-legend').innerHTML = LEGENDS.map(l => `
+    <div class="legend-item">
+      <div class="legend-dot" style="background:${l.col};box-shadow:0 0 6px ${l.col}"></div>
+      ${l.label}
+    </div>`).join('')
+
+  layoutGraph()
+  drawGraph()
+  setupGraphInteraction()
+}
+
+function layoutGraph() {
+  const nodes = filterType ? graphData.nodes.filter(n => n.type === filterType) : graphData.nodes
+  const types = ['route','lib','component','jsx']
+  nodePositions = []
+  const canvas = $('graph-canvas')
+  const W = canvas.width || 900, H = canvas.height || 520
+
+  types.forEach(type => {
+    const group = nodes.filter(n => n.type === type)
+    const rings = { route: 0.25, lib: 0.35, component: 0.42, jsx: 0.46 }
+    const r = Math.min(W,H) * (rings[type] || 0.4)
+    group.forEach((n, i) => {
+      const angle = (i / group.length) * Math.PI * 2 - Math.PI/2
+      nodePositions.push({ id: n.id, label: n.label, type: n.type,
+        x: W/2 + Math.cos(angle) * r,
+        y: H/2 + Math.sin(angle) * r })
+    })
+  })
+}
+
+function drawGraph() {
+  const canvas = $('graph-canvas')
+  const ctx = canvas.getContext('2d')
+  canvas.width = canvas.offsetWidth; canvas.height = canvas.offsetHeight
+  const W = canvas.width, H = canvas.height
+  if (!graphData) return
+
+  ctx.clearRect(0, 0, W, H)
+  ctx.save()
+  ctx.translate(graphTransform.x, graphTransform.y)
+  ctx.scale(graphTransform.scale, graphTransform.scale)
+
+  const idxMap = {}
+  nodePositions.forEach((n, i) => idxMap[n.id] = i)
+
+  // edges
+  graphData.edges.forEach(e => {
+    const si = idxMap[e.source], ti = idxMap[e.target]
+    if (si == null || ti == null) return
+    const s = nodePositions[si], t = nodePositions[ti]
+    if (filterType && (s.type !== filterType && t.type !== filterType)) return
+    ctx.beginPath()
+    ctx.moveTo(s.x, s.y)
+    ctx.lineTo(t.x, t.y)
+    ctx.strokeStyle = 'rgba(0,255,204,0.06)'
+    ctx.lineWidth = 0.8
+    ctx.stroke()
+  })
+
+  // nodes
+  nodePositions.forEach(n => {
+    if (filterType && n.type !== filterType) return
+    const col = COLORS[n.type] || '#64748b'
+    const r = RADIUS[n.type] || 6
+    ctx.beginPath()
+    ctx.arc(n.x, n.y, r, 0, Math.PI*2)
+    ctx.fillStyle = col
+    ctx.shadowColor = col
+    ctx.shadowBlur = 12
+    ctx.fill()
+    ctx.shadowBlur = 0
+
+    if (graphTransform.scale > 0.8) {
+      ctx.font = `${Math.max(8, 10 / graphTransform.scale)}px Courier New`
+      ctx.fillStyle = 'rgba(226,232,240,0.6)'
+      ctx.textAlign = 'center'
+      ctx.fillText(n.label, n.x, n.y + r + 10)
+    }
+  })
+
+  ctx.restore()
+}
+
+function setupGraphInteraction() {
+  const canvas = $('graph-canvas')
+  const tip = $('tooltip')
+
+  canvas.addEventListener('wheel', e => {
+    e.preventDefault()
+    const delta = e.deltaY > 0 ? 0.9 : 1.1
+    graphTransform.scale = Math.max(0.3, Math.min(4, graphTransform.scale * delta))
+    drawGraph()
+  }, { passive: false })
+
+  canvas.addEventListener('mousedown', e => {
+    dragging = true; dragStart = { x: e.clientX - graphTransform.x, y: e.clientY - graphTransform.y }
+  })
+  window.addEventListener('mouseup', () => { dragging = false })
+  canvas.addEventListener('mousemove', e => {
+    if (dragging) {
+      graphTransform.x = e.clientX - dragStart.x
+      graphTransform.y = e.clientY - dragStart.y
+      drawGraph(); return
+    }
+    // tooltip
+    const rect = canvas.getBoundingClientRect()
+    const mx = (e.clientX - rect.left - graphTransform.x) / graphTransform.scale
+    const my = (e.clientY - rect.top  - graphTransform.y) / graphTransform.scale
+    let found = null
+    nodePositions.forEach(n => {
+      const dx = n.x - mx, dy = n.y - my
+      if (Math.sqrt(dx*dx+dy*dy) < 12) found = n
+    })
+    if (found) {
+      tip.style.display = 'block'
+      tip.style.left = (e.clientX + 12) + 'px'
+      tip.style.top  = (e.clientY - 8) + 'px'
+      tip.textContent = found.label + ' (' + found.type + ')'
+      canvas.style.cursor = 'pointer'
+    } else {
+      tip.style.display = 'none'
+      canvas.style.cursor = dragging ? 'grabbing' : 'grab'
+    }
+  })
+  canvas.addEventListener('click', async e => {
+    const rect = canvas.getBoundingClientRect()
+    const mx = (e.clientX - rect.left - graphTransform.x) / graphTransform.scale
+    const my = (e.clientY - rect.top  - graphTransform.y) / graphTransform.scale
+    let found = null
+    nodePositions.forEach(n => {
+      const dx = n.x - mx, dy = n.y - my
+      if (Math.sqrt(dx*dx+dy*dy) < 12) found = n
+    })
+    if (!found) return
+    const ins = $('node-inspector')
+    ins.innerHTML = '<div class="loader"><div class="spin"></div>Loading node…</div>'
+    ins.classList.add('visible')
+    try {
+      const data = await api('/node/' + encodeURIComponent(found.id))
+      const n = data.node
+      ins.innerHTML = `
+        <div class="inspector-title">${n.label} <span style="color:var(--muted);font-size:11px">[${n.type}]</span></div>
+        <div class="inspector-meta">${n.file ? '📄 ' + n.file : ''} ${n.description ? '— ' + n.description : ''}</div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:8px">Neighbours (${data.neighbours.length})</div>
+        <div class="inspector-neighbours">
+          ${data.neighbours.map(nb => `<span class="neighbour-chip ${nb.direction}">${nb.direction === 'out' ? '↗' : '↙'} ${nb.label} <em style="opacity:0.6;font-style:normal">${nb.relation}</em></span>`).join('')}
+        </div>`
+    } catch { ins.innerHTML = '<p style="color:var(--muted);font-size:12px">Failed to load node.</p>' }
+  })
+
+  window.addEventListener('resize', () => { layoutGraph(); drawGraph() })
+}
+
+// ── MCPs tab ──────────────────────────────────────────────────────────────────
+async function loadMcps() {
+  const { servers } = await api('/mcps')
+  $('mcp-grid').innerHTML = servers.map(s => {
+    const dotClass = s.status === 'connected' ? 'conn-online' : s.status === 'idle' ? 'conn-idle' : 'conn-offline'
+    return `
+    <div class="mcp-card">
+      <div class="mcp-header">
+        <span class="mcp-name">${s.name}</span>
+        <span class="conn-dot ${dotClass}"></span>
+      </div>
+      <div class="mcp-id">${s.id}</div>
+      <div class="mcp-purpose">${s.purpose}</div>
+      <div class="mcp-tool">${s.tool}</div>
+    </div>`
+  }).join('')
+}
+
+// ── Skills tab ────────────────────────────────────────────────────────────────
+let allSkills = []
+async function loadSkills() {
+  const { skills } = await api('/skills')
+  allSkills = skills
+  renderSkills('')
+  $('skills-search').addEventListener('input', e => renderSkills(e.target.value.toLowerCase()))
+}
+function renderSkills(q) {
+  const filtered = allSkills.filter(s => !q || s.name.toLowerCase().includes(q) || s.description.toLowerCase().includes(q))
+  $('skills-grid').innerHTML = filtered.map(s => `
+    <div class="skill-card">
+      <div class="skill-id">${s.id}</div>
+      <div class="skill-name">${s.name}</div>
+      <div class="skill-desc">${s.description}</div>
+      <div class="skill-endpoint">${s.endpoint}</div>
+    </div>`).join('') || '<p style="color:var(--muted);font-size:12px">No results.</p>'
+}
+
+// ── Brain tab ─────────────────────────────────────────────────────────────────
+async function loadBrain() {
+  const [stats, { skills }, { servers }] = await Promise.all([api('/stats'), api('/skills'), api('/mcps')])
+
+  const connected = servers.filter(s => s.status === 'connected').length
+  const metrics = [
+    { val: skills.length,    label: 'Registered Skills' },
+    { val: connected,        label: 'Connected MCP Servers' },
+    { val: servers.length,   label: 'Total Providers' },
+    { val: stats.routes,     label: 'API Surface (routes)' },
+    { val: stats.libs,       label: 'Shared Libraries' },
+    { val: stats.nodes,      label: 'Knowledge Graph Nodes' },
+    { val: stats.edges,      label: 'Knowledge Graph Edges' },
+    { val: stats.jsxFiles,   label: 'Frontend Views' },
+  ]
+  $('brain-metrics').innerHTML = metrics.map(m => `
+    <div class="brain-metric">
+      <div class="brain-metric-val">${m.val}</div>
+      <div class="brain-metric-lbl">${m.label}</div>
+    </div>`).join('')
+
+  // Tool registry table
+  const tools = [
+    { name: 'analyze_symbol',   type: 'AI',         source: 'claude-sonnet-4-6',   latency: '~3s',  status: 'active' },
+    { name: 'market_scan',      type: 'AI',         source: 'ai-brain route',    latency: '~8s',  status: 'active' },
+    { name: 'recommendations',  type: 'AI',         source: 'advisory engine',   latency: '~5s',  status: 'active' },
+    { name: 'get_quote',        type: 'Market',     source: 'Finnhub/FMP',       latency: '<1s',  status: 'active' },
+    { name: 'get_chart',        type: 'Market',     source: 'Finnhub',           latency: '<1s',  status: 'active' },
+    { name: 'get_macro',        type: 'Macro',      source: 'FRED API',          latency: '~2s',  status: 'active' },
+    { name: 'insider_activity', type: 'Alt Data',   source: 'SEC EDGAR',         latency: '~2s',  status: 'active' },
+    { name: 'short_interest',   type: 'Alt Data',   source: 'FINRA API',         latency: '~2s',  status: 'active' },
+    { name: 'social_sentiment', type: 'Alt Data',   source: 'Reddit JSON',       latency: '~1s',  status: 'active' },
+    { name: 'run_backtest',     type: 'Backtest',   source: 'backtest engine',   latency: '~30s', status: 'active' },
+    { name: 'alert_trigger',    type: 'Event',      source: 'SSE broadcaster',   latency: '<10ms',status: 'active' },
+    { name: 'agent_research',   type: 'Agent',      source: '5-agent orchestr.', latency: '~10s', status: 'active' },
+  ]
+  const badgeMap = { AI: 'badge-blue', Market: 'badge-green', Macro: 'badge-purple', 'Alt Data': 'badge-yellow', Backtest: 'badge-gray', Event: 'badge-red', Agent: 'badge-purple' }
+  $('tool-registry').innerHTML = `
+    <table>
+      <thead><tr><th>Tool</th><th>Type</th><th>Source</th><th>Latency</th><th>Status</th></tr></thead>
+      <tbody>${tools.map(t => `
+        <tr>
+          <td style="font-family:monospace;color:var(--accent);font-size:11px">${t.name}</td>
+          <td><span class="badge ${badgeMap[t.type] || 'badge-gray'}">${t.type}</span></td>
+          <td style="color:var(--muted);font-size:11px">${t.source}</td>
+          <td style="color:var(--muted);font-family:monospace;font-size:11px">${t.latency}</td>
+          <td><span class="badge badge-green">●&nbsp;${t.status}</span></td>
+        </tr>`).join('')}
+      </tbody>
+    </table>`
+}
+
+// ── Tab dispatcher ────────────────────────────────────────────────────────────
+async function loadTab(id) {
+  try {
+    if      (id === 'graphify') await loadGraphify()
+    else if (id === 'mcps')     await loadMcps()
+    else if (id === 'skills')   await loadSkills()
+    else if (id === 'brain')    await loadBrain()
+  } catch (err) {
+    console.error('loadTab', id, err)
+  }
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+loadDashboard()
+</script>
+</body>
+</html>

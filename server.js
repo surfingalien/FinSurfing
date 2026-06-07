@@ -2021,6 +2021,11 @@ app.get('/api/news', async (req, res) => {
   }
 })
 
+/* ── SurfingNeo-OS standalone dashboard ─────────── */
+app.get('/neo-os', (_req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'neo-os.html'))
+})
+
 /* ── SPA fallback ──────────────────────────────── */
 app.get('*', (_req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'))
