@@ -50,6 +50,16 @@ export function useWatchlist() {
     return () => { clearInterval(fullRefresh); unsub() }
   }, [refresh]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Sync watchlist to server so the hourly AI scan uses it
+  useEffect(() => {
+    if (!symbols.length) return
+    fetch('/api/alerts/watchlist', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ symbols }),
+    }).catch(() => {})
+  }, [symbols])
+
   const addSymbol = useCallback((sym) => {
     setSymbols(prev => prev.includes(sym) ? prev : [...prev, sym.toUpperCase()])
   }, [])

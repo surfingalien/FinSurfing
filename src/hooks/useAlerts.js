@@ -6,6 +6,22 @@ function load() {
   try { return JSON.parse(localStorage.getItem(LS_KEY) || '[]') } catch { return [] }
 }
 
+// Fire-and-forget: POST alert trigger to server so analyze_symbol runs in background
+async function triggerServerAnalysis(alert) {
+  try {
+    await fetch('/api/alerts/trigger', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({
+        symbol:    alert.symbol,
+        alertType: alert.type,
+        threshold: alert.threshold,
+        price:     alert.price,
+      }),
+    })
+  } catch {}
+}
+
 export function useAlerts(quotesMap = {}) {
   const [alerts, setAlerts]     = useState(load)
   const [triggered, setTriggered] = useState([])
@@ -28,6 +44,8 @@ export function useAlerts(quotesMap = {}) {
       if (hit && !prevTriggered.current.has(a.id)) {
         fired.push({ ...a, price })
         prevTriggered.current.add(a.id)
+        // Kick off server-side AI analysis in background
+        triggerServerAnalysis({ ...a, price })
       }
     })
     if (fired.length) setTriggered(prev => [...prev, ...fired])
