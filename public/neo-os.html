@@ -398,7 +398,7 @@ html, body { height: 100%; font-family: 'Inter', sans-serif; background: var(--b
         </div>
         <div id="dash-graph-container">
           <div class="graph-tooltip" id="dash-tooltip"></div>
-          <svg id="dashboard-graph" style="width:100%;display:block;"></svg>
+          <svg id="dashboard-graph"></svg>
         </div>
       </div>
 
@@ -489,7 +489,7 @@ html, body { height: 100%; font-family: 'Inter', sans-serif; background: var(--b
 
     <div id="graph-container" style="margin-bottom:20px;height:600px;">
       <div class="graph-tooltip" id="graph-tooltip"></div>
-      <svg id="graphify-svg" style="width:100%;height:600px;display:block;"></svg>
+      <svg id="graphify-svg" style="display:block;"></svg>
     </div>
     <div id="node-inspector" style="display:none;margin-bottom:20px;padding:16px;background:var(--card);border:1px solid rgba(var(--accent-rgb),0.3);border-radius:var(--radius);animation:fadeIn 0.2s ease;"></div>
 
@@ -1128,11 +1128,16 @@ function toggleCli() {
 // ===========================
 let dashSim;
 function initDashGraph() {
+  // Defer one animation frame so the browser has finished layout
+  requestAnimationFrame(_drawDashGraph);
+}
+function _drawDashGraph() {
   const container = document.getElementById('dash-graph-container');
   const svgEl = document.getElementById('dashboard-graph');
-  const W = container.clientWidth || 600;
-  const H = 400;
-  const svg = d3.select(svgEl).attr('width', W).attr('height', H);
+  const rect = container.getBoundingClientRect();
+  const W = Math.max(rect.width, 400);
+  const H = Math.max(rect.height, 360);
+  const svg = d3.select(svgEl).attr('width', W).attr('height', H).style('display','block');
   svg.selectAll('*').remove();
 
   // Use up to 60 nodes from real graph data (prioritise routes+libs+components)
@@ -1194,12 +1199,16 @@ function initDashGraph() {
 // ===========================
 let graphSim, graphZoom, graphG, graphSvgSel;
 function initGraphify() {
+  requestAnimationFrame(_drawGraphify);
+}
+function _drawGraphify() {
   const container = document.getElementById('graph-container');
   graphSvgSel = d3.select('#graphify-svg');
   graphSvgSel.selectAll('*').remove();
-  const W = container.clientWidth || 800;
-  const H = 600;
-  graphSvgSel.attr('width', W).attr('height', H);
+  const rect = container.getBoundingClientRect();
+  const W = Math.max(rect.width, 600);
+  const H = Math.max(rect.height, 560);
+  graphSvgSel.attr('width', W).attr('height', H).style('display','block');
   // Use real graph from API, convert to D3 format
   const raw = _graphData || { nodes: [], edges: [] };
   const typeColors = { route:'#6366F1', lib:'#06B6D4', component:'#8B5CF6', jsx:'#A78BFA' };
@@ -1569,6 +1578,16 @@ async function initPage() {
 window.addEventListener('DOMContentLoaded', function() {
   renderTerminal();
   initPage();
+});
+
+// Redraw graphs on resize
+let _resizeTimer;
+window.addEventListener('resize', () => {
+  clearTimeout(_resizeTimer);
+  _resizeTimer = setTimeout(() => {
+    initDashGraph();
+    if (document.getElementById('tab-graphify')?.classList.contains('active')) initGraphify();
+  }, 150);
 });
 </script>
 </body>
