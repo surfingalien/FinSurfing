@@ -392,7 +392,7 @@ html, body { height: 100%; font-family: 'Inter', sans-serif; background: var(--b
         <div class="card-header">
           <div>
             <div class="card-title">Knowledge Graph Preview</div>
-            <div class="card-subtitle">Live dependency map &middot; 127 nodes, 89 edges</div>
+            <div class="card-subtitle" id="graph-subtitle">Live dependency map &middot; loading…</div>
           </div>
           <button class="btn btn-ghost btn-sm" onclick="showTab('graphify')">Open Full &rarr;</button>
         </div>
@@ -491,12 +491,13 @@ html, body { height: 100%; font-family: 'Inter', sans-serif; background: var(--b
       <div class="graph-tooltip" id="graph-tooltip"></div>
       <svg id="graphify-svg" style="width:100%;height:600px;display:block;"></svg>
     </div>
+    <div id="node-inspector" style="display:none;margin-bottom:20px;padding:16px;background:var(--card);border:1px solid rgba(var(--accent-rgb),0.3);border-radius:var(--radius);animation:fadeIn 0.2s ease;"></div>
 
     <div class="grid-3" style="margin-bottom:20px;">
       <div class="card output-card">
         <div class="output-filename">graph.json</div>
-        <div class="output-meta">2.4 KB &middot; 127 nodes, 89 edges &middot; Last built 2m ago</div>
-        <button class="btn btn-ghost btn-sm">&#8595; Download JSON</button>
+        <div class="output-meta" id="graph-json-meta">Loading…</div>
+        <button class="btn btn-ghost btn-sm" onclick="exportGraph()">&#8595; Download JSON</button>
       </div>
       <div class="card output-card">
         <div class="output-filename">GRAPH_REPORT.md</div>
@@ -619,6 +620,7 @@ html, body { height: 100%; font-family: 'Inter', sans-serif; background: var(--b
         </div>
       </div>
 
+      <div id="mcp-dynamic-cards"></div>
       <div class="ghost-card" onclick="alert('Add MCP Server dialog — connect stdio, HTTP, or SSE transports')">
         <div class="ghost-card-icon">+</div>
         <div class="ghost-card-label">Add New Server</div>
@@ -640,37 +642,8 @@ html, body { height: 100%; font-family: 'Inter', sans-serif; background: var(--b
       </div>
     </div>
 
-    <div class="grid-3">
-      <div class="card skill-card">
-        <div class="skill-name">frontend-design</div>
-        <div class="skill-desc">Generates production-ready React + Tailwind UI components following design system conventions with accessibility best practices.</div>
-        <div class="skill-tags"><span class="skill-tag">react</span><span class="skill-tag">tailwind</span><span class="skill-tag">ui</span><span class="skill-tag">a11y</span></div>
-        <div class="skill-footer"><span class="skill-stats">&#9889; 847 runs &middot; 3.2 KB</span><button class="btn btn-secondary btn-xs">&#9654; Run</button></div>
-      </div>
-      <div class="card skill-card">
-        <div class="skill-name">testing-suite</div>
-        <div class="skill-desc">Writes comprehensive unit, integration, and e2e tests using Vitest and Playwright with coverage targets and edge case coverage.</div>
-        <div class="skill-tags"><span class="skill-tag">vitest</span><span class="skill-tag">playwright</span><span class="skill-tag">coverage</span></div>
-        <div class="skill-footer"><span class="skill-stats">&#9889; 412 runs &middot; 2.8 KB</span><button class="btn btn-secondary btn-xs">&#9654; Run</button></div>
-      </div>
-      <div class="card skill-card">
-        <div class="skill-name">commit-commands</div>
-        <div class="skill-desc">Generates semantic commit messages, changelogs, and PR descriptions from diffs using conventional commits specification.</div>
-        <div class="skill-tags"><span class="skill-tag">git</span><span class="skill-tag">conventional</span><span class="skill-tag">changelog</span></div>
-        <div class="skill-footer"><span class="skill-stats">&#9889; 1,204 runs &middot; 1.9 KB</span><button class="btn btn-secondary btn-xs">&#9654; Run</button></div>
-      </div>
-      <div class="card skill-card">
-        <div class="skill-name">feature-dev</div>
-        <div class="skill-desc">End-to-end feature development: spec &rarr; implementation &rarr; tests &rarr; docs. Maintains code style consistency and backwards compatibility.</div>
-        <div class="skill-tags"><span class="skill-tag">fullstack</span><span class="skill-tag">tdd</span><span class="skill-tag">docs</span><span class="skill-tag">api</span></div>
-        <div class="skill-footer"><span class="skill-stats">&#9889; 298 runs &middot; 4.1 KB</span><button class="btn btn-secondary btn-xs">&#9654; Run</button></div>
-      </div>
-      <div class="card skill-card">
-        <div class="skill-name">security-audit</div>
-        <div class="skill-desc">Performs static analysis for OWASP Top 10 vulnerabilities, dependency auditing, secret scanning, and secure coding recommendations.</div>
-        <div class="skill-tags"><span class="skill-tag">owasp</span><span class="skill-tag">sast</span><span class="skill-tag">secrets</span></div>
-        <div class="skill-footer"><span class="skill-stats">&#9889; 156 runs &middot; 3.7 KB</span><button class="btn btn-secondary btn-xs">&#9654; Run</button></div>
-      </div>
+    <div class="grid-3" id="skills-dynamic-grid">
+      <!-- populated by renderSkills() -->
       <div class="ghost-card" onclick="alert('Create Skill: define prompts, constraints, and triggers')">
         <div class="ghost-card-icon">+</div>
         <div class="ghost-card-label">Create New Skill</div>
@@ -1065,6 +1038,31 @@ setInterval(updateClock, 1000);
 updateClock();
 
 // ===========================
+// GLOBAL GRAPH DATA CACHE
+// ===========================
+let _graphData = null;   // { nodes, edges } from /api/agentic-os/graph
+let _statsData = null;
+let _mcpData   = null;
+let _skillData = null;
+
+// Convert API graph → D3 format
+function apiGraphToD3(graph) {
+  const typeColors = { route:'#6366F1', lib:'#06B6D4', component:'#8B5CF6', jsx:'#A78BFA' };
+  const typeR      = { route:9, lib:8, component:10, jsx:5 };
+  // D3 forceLink needs objects in links, not string ids
+  const nodeMap = {};
+  const nodes = graph.nodes.map((n, i) => {
+    const d = { id: n.id, label: n.label, type: n.type, color: typeColors[n.type] || '#64748B', r: typeR[n.type] || 6, file: n.file, description: n.description, lineCount: n.lineCount };
+    nodeMap[n.id] = d;
+    return d;
+  });
+  const links = graph.edges
+    .filter(e => nodeMap[e.source] && nodeMap[e.target])
+    .map(e => ({ source: e.source, target: e.target, label: e.label }));
+  return { nodes, links };
+}
+
+// ===========================
 // TAB SWITCHING
 // ===========================
 function showTab(id) {
@@ -1126,44 +1124,7 @@ function toggleCli() {
 }
 
 // ===========================
-// GRAPH DATA GENERATOR
-// ===========================
-function generateGraphData(nodeCount) {
-  const typeColors = { route:'#6366F1', lib:'#06B6D4', component:'#8B5CF6', jsx:'#A78BFA' };
-  const typeR = { route:9, lib:8, component:10, jsx:5 };
-  const names = {
-    route: ['auth','market','portfolio','ai-brain','trading-analysis','recommendations','macro','users','admin','watchlist'],
-    lib:   ['db','cache','breaker','personas','fred','groq','claude','crypto','etf','utils','logger','schema'],
-    component: ['Dashboard','Portfolio','TradingView','MarketScanner','Brain','Watchlist','Alerts','Settings','Header','Sidebar'],
-    jsx:   ['Button','Card','Modal','Input','Table','Chart','Badge','Tooltip','Dropdown','Layout','Nav','Spinner','Toast','Icon']
-  };
-  const types = ['route','lib','component','jsx'];
-  const counts = { route: Math.floor(nodeCount*0.18), lib: Math.floor(nodeCount*0.22), component: Math.floor(nodeCount*0.22), jsx: 0 };
-  counts.jsx = nodeCount - counts.route - counts.lib - counts.component;
-
-  const nodes = [];
-  let id = 0;
-  for (const type of types) {
-    for (let i = 0; i < counts[type]; i++) {
-      const arr = names[type];
-      nodes.push({ id: id++, label: arr[i % arr.length] + (i >= arr.length ? '_'+ Math.floor(i/arr.length+1) : ''), type, color: typeColors[type], r: typeR[type] });
-    }
-  }
-
-  const links = [];
-  const seen = new Set();
-  const n = nodes.length;
-  for (let i = 0; i < Math.floor(n * 1.6); i++) {
-    const s = Math.floor(Math.random() * n);
-    const t = Math.floor(Math.random() * n);
-    const key = Math.min(s,t) + '|' + Math.max(s,t);
-    if (s !== t && !seen.has(key)) { seen.add(key); links.push({ source: s, target: t }); }
-  }
-  return { nodes, links };
-}
-
-// ===========================
-// DASHBOARD GRAPH
+// DASHBOARD GRAPH (real data)
 // ===========================
 let dashSim;
 function initDashGraph() {
@@ -1173,7 +1134,22 @@ function initDashGraph() {
   const H = 400;
   const svg = d3.select(svgEl).attr('width', W).attr('height', H);
   svg.selectAll('*').remove();
-  const data = generateGraphData(50);
+
+  // Use up to 60 nodes from real graph data (prioritise routes+libs+components)
+  const raw = _graphData || { nodes: [], edges: [] };
+  const priority = ['route','lib','component','jsx'];
+  const sample = [...raw.nodes]
+    .sort((a,b) => priority.indexOf(a.type) - priority.indexOf(b.type))
+    .slice(0, 60);
+  const sampleIds = new Set(sample.map(n => n.id));
+  const sampleLinks = raw.edges
+    .filter(e => sampleIds.has(e.source) && sampleIds.has(e.target))
+    .map(e => ({ source: e.source, target: e.target }));
+
+  const typeColors = { route:'#6366F1', lib:'#06B6D4', component:'#8B5CF6', jsx:'#A78BFA' };
+  const typeR      = { route:9, lib:8, component:10, jsx:5 };
+  const d3Nodes = sample.map(n => ({ ...n, color: typeColors[n.type]||'#64748B', r: typeR[n.type]||6 }));
+  const data = { nodes: d3Nodes, links: sampleLinks };
   const tooltip = document.getElementById('dash-tooltip');
 
   const zoom = d3.zoom().scaleExtent([0.3,3]).on('zoom', e => g.attr('transform', e.transform));
@@ -1224,7 +1200,13 @@ function initGraphify() {
   const W = container.clientWidth || 800;
   const H = 600;
   graphSvgSel.attr('width', W).attr('height', H);
-  const data = generateGraphData(90);
+  // Use real graph from API, convert to D3 format
+  const raw = _graphData || { nodes: [], edges: [] };
+  const typeColors = { route:'#6366F1', lib:'#06B6D4', component:'#8B5CF6', jsx:'#A78BFA' };
+  const typeR      = { route:9, lib:8, component:10, jsx:5 };
+  const d3Nodes = raw.nodes.map(n => ({ ...n, color: typeColors[n.type]||'#64748B', r: typeR[n.type]||6 }));
+  const d3Links = raw.edges.map(e => ({ source: e.source, target: e.target, label: e.label }));
+  const data = { nodes: d3Nodes, links: d3Links };
   const tooltip = document.getElementById('graph-tooltip');
 
   graphZoom = d3.zoom().scaleExtent([0.2,5]).on('zoom', e => graphG.attr('transform', e.transform));
@@ -1259,7 +1241,8 @@ function initGraphify() {
       tooltip.style.left=(e.clientX-rect.left+12)+'px';
       tooltip.style.top=(e.clientY-rect.top-10)+'px';
     })
-    .on('mouseout', () => { tooltip.style.display='none'; });
+    .on('mouseout', () => { tooltip.style.display='none'; })
+    .on('click', (_e,d) => { inspectNode(d.id); });
 
   nodeGroup.append('circle').attr('r',d=>d.r).attr('fill',d=>d.color).attr('fill-opacity',0.8)
     .attr('stroke',d=>d.color).attr('stroke-width',1.5).attr('stroke-opacity',0.45);
@@ -1284,12 +1267,62 @@ function filterGraphType(type) {
   if(!graphG) return;
   graphG.selectAll('g').style('opacity', d => type==='all' ? 1 : (d.type===type ? 1 : 0.12));
 }
-function exportGraph() { alert('Exported graph.json to ./graphify-output/'); }
-function rebuildGraph() {
-  appendTerminalLine('cmd','neo@os:~$ graphify rebuild');
-  appendTerminalLine('info','[INFO] Scanning source tree...');
-  setTimeout(()=>appendTerminalLine('ok','[OK]   Graph rebuilt: 127 nodes, 89 edges (321ms)'), 700);
-  if(document.getElementById('tab-graphify').classList.contains('active')) setTimeout(initGraphify, 350);
+function exportGraph() {
+  if (!_graphData) return alert('No graph data loaded yet.');
+  const blob = new Blob([JSON.stringify(_graphData, null, 2)], {type:'application/json'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'finsurf-graph.json'; a.click();
+}
+async function rebuildGraph() {
+  appendTerminalLine('cmd','neo@os:~$ surfing-neo graph --refresh');
+  appendTerminalLine('info','[INFO] Busting graph cache and rescanning source tree…');
+  try {
+    const r = await fetch('/api/agentic-os/refresh');
+    const d = await r.json();
+    if (d.graph) {
+      _graphData = d.graph;
+      const n = d.graph.nodes.length, e = d.graph.edges.length;
+      appendTerminalLine('ok',`[OK]   Graph rebuilt: ${n} nodes, ${e} edges`);
+      document.getElementById('graph-subtitle').textContent = `Live dependency map · ${n} nodes, ${e} edges`;
+    }
+  } catch(err) { appendTerminalLine('warn','[WARN] Rebuild failed: ' + err.message); }
+  if(document.getElementById('tab-graphify').classList.contains('active')) setTimeout(initGraphify, 150);
+}
+
+// Node inspector panel (Graphify tab)
+async function inspectNode(nodeId) {
+  const panel = document.getElementById('node-inspector');
+  if (!panel) return;
+  panel.style.display = 'block';
+  panel.innerHTML = '<div style="color:var(--muted);font-size:12px;">Loading node…</div>';
+  try {
+    const r = await fetch('/api/agentic-os/node/' + encodeURIComponent(nodeId));
+    if (!r.ok) throw new Error(r.status);
+    const { node, neighbours } = await r.json();
+    const typeColors = { route:'#6366F1', lib:'#06B6D4', component:'#8B5CF6', jsx:'#A78BFA' };
+    const col = typeColors[node.type] || '#64748B';
+    panel.innerHTML = `
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+        <span style="width:10px;height:10px;border-radius:50%;background:${col};display:inline-block;flex-shrink:0;box-shadow:0 0 8px ${col};"></span>
+        <strong style="font-size:14px;">${node.label}</strong>
+        <span style="font-size:11px;color:${col};background:rgba(0,0,0,0.15);padding:2px 8px;border-radius:10px;border:1px solid ${col}40;">${node.type}</span>
+        ${node.lineCount ? `<span style="font-size:11px;color:var(--muted);">${node.lineCount} lines</span>` : ''}
+      </div>
+      ${node.file ? `<div style="font-size:11px;color:var(--muted);font-family:monospace;margin-bottom:8px;">📄 ${node.file}</div>` : ''}
+      ${node.description ? `<div style="font-size:12px;color:var(--text);margin-bottom:12px;line-height:1.5;">${node.description}</div>` : ''}
+      <div style="font-size:11px;color:var(--muted);margin-bottom:8px;">Connections (${neighbours.length})</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;">
+        ${neighbours.map(nb => {
+          const c = typeColors[nb.type] || '#64748B';
+          const arrow = nb.direction === 'out' ? '↗' : '↙';
+          return `<span style="font-size:11px;padding:3px 10px;border-radius:12px;border:1px solid ${c}35;color:${c};background:${c}12;cursor:pointer;" onclick="inspectNode('${nb.id.replace(/'/g,"&#39;")}')">
+            ${arrow} ${nb.label} <em style="opacity:0.5;font-style:normal;">${nb.relation}</em>
+          </span>`;
+        }).join('')}
+      </div>
+      <button onclick="document.getElementById('node-inspector').style.display='none'" style="margin-top:12px;font-size:11px;background:none;border:1px solid var(--border);color:var(--muted);padding:4px 12px;border-radius:6px;cursor:pointer;">✕ Close</button>`;
+  } catch(e) {
+    panel.innerHTML = `<div style="color:var(--muted);font-size:12px;">Failed to load node: ${e.message}</div>`;
+  }
 }
 
 // ===========================
@@ -1380,16 +1413,21 @@ function processCommand(cmd) {
     setTimeout(()=>appendTerminalLine('ok','[OK]   Claude analysis complete: 34 signals'), 800);
     setTimeout(()=>appendTerminalLine('ok','[OK]   Top: NVDA BUY 87%, ETH BUY 79%, AAPL HOLD 62%'), 1100);
   } else if (c === 'graph' || c === 'graphify build' || c === 'graphify') {
-    appendTerminalLine('info', '[INFO] Scanning source tree...');
-    setTimeout(()=>appendTerminalLine('ok','[OK]   Graph rebuilt: 127 nodes, 89 edges (312ms)'), 600);
+    appendTerminalLine('info', '[INFO] Fetching live graph from /api/agentic-os/graph…');
+    fetch('/api/agentic-os/stats').then(r=>r.json()).then(d=>{
+      appendTerminalLine('ok',`[OK]   Graph: ${d.nodes} nodes, ${d.edges} edges (routes:${d.routes} libs:${d.libs} components:${d.components} jsx:${d.jsxFiles})`);
+    }).catch(()=>appendTerminalLine('warn','[WARN] Could not reach /api/agentic-os/stats'));
   } else if (c === 'mcps' || c === 'list mcps') {
-    appendTerminalLine('ok',   '[OK]   Tavily      HTTP  3 tools  ping:0.4s');
-    appendTerminalLine('ok',   '[OK]   Supabase    stdio 8 tools  ping:0.9s');
-    appendTerminalLine('ok',   '[OK]   Context7    HTTP  5 tools  ping:0.6s');
-    appendTerminalLine('ok',   '[OK]   Graphify    stdio 6 tools  ping:0.2s');
-    appendTerminalLine('warn', '[WARN] Playwright   stdio 12 tools ping:8.1s (idle)');
+    fetch('/api/agentic-os/mcps').then(r=>r.json()).then(d=>{
+      (d.servers||[]).forEach(s=>{
+        const line = `[${s.status==='connected'?'OK  ':'IDLE'}]  ${s.name.padEnd(24)} ${(s.transport||'').padEnd(8)} ${s.toolCount||'?'} tools`;
+        appendTerminalLine(s.status==='connected'?'ok':'warn', line);
+      });
+    }).catch(()=>appendTerminalLine('warn','[WARN] Could not reach /api/agentic-os/mcps'));
   } else if (c === 'skills') {
-    appendTerminalLine('info', 'Loaded skills: frontend-design, testing-suite, commit-commands, feature-dev, security-audit');
+    fetch('/api/agentic-os/skills').then(r=>r.json()).then(d=>{
+      (d.skills||[]).forEach(s=>appendTerminalLine('ok',`[OK]   ${s.name.padEnd(25)} ${s.endpoint}`));
+    }).catch(()=>appendTerminalLine('warn','[WARN] Could not reach /api/agentic-os/skills'));
   } else if (c === 'version') {
     appendTerminalLine('ok', 'SurfingNeo-OS v2.0.0 | Node.js v20.x | Express 4.x | claude-sonnet-4-6');
   } else if (c === 'clear') {
@@ -1409,18 +1447,113 @@ function runMarketScan() {
 }
 
 // ===========================
-// API FETCH
+// API FETCHERS
 // ===========================
-async function fetchStats() {
+async function apiGet(path) {
+  const r = await fetch(path);
+  if (!r.ok) throw new Error(path + ' → ' + r.status);
+  return r.json();
+}
+
+function renderMcps(servers) {
+  const typeColors = { route:'#6366F1', lib:'#06B6D4', component:'#8B5CF6', jsx:'#A78BFA' };
+  const statusBadge = s => {
+    if (s === 'connected') return '<span class="badge badge-connected">● Connected</span>';
+    if (s === 'idle')      return '<span class="badge badge-idle">◌ Idle</span>';
+    return '<span class="badge badge-offline">✕ Offline</span>';
+  };
+  const icons = { 'anthropic-claude':'🤖','groq-llama':'⚡','finnhub':'📈','fmp':'📊','fred':'🏛','sec-edgar':'📋','finra':'🔍','reddit':'💬','binance':'₿','postgres':'🗄' };
+  const container = document.getElementById('mcp-dynamic-cards');
+  if (!container) return;
+  container.innerHTML = servers.map(s => `
+    <div class="card mcp-card">
+      <div class="mcp-card-header">
+        <div class="mcp-icon-dot">${icons[s.id] || '🔌'}</div>
+        <div>
+          <div class="mcp-name">${s.name}</div>
+          ${statusBadge(s.status)}
+        </div>
+      </div>
+      <div class="mcp-meta">
+        <div>⚙ ${s.transport || 'HTTP'}</div>
+        <div>🔧 ${s.toolCount || '—'} tools</div>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.5;">${s.purpose}</div>
+      <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:5px;">Tool surface:</div>
+        <div class="skill-tags">${(s.tool||'').split('/').map(t=>`<span class="skill-tag">${t.trim()}</span>`).join('')}</div>
+      </div>
+    </div>`).join('');
+}
+
+function renderSkills(skills) {
+  const tagColors = ['react','tailwind','ai','scan','macro','fred','git','sec','finra','sse','agents','cron'];
+  const ghost = document.querySelector('#skills-dynamic-grid .ghost-card');
+  const grid = document.getElementById('skills-dynamic-grid');
+  if (!grid) return;
+  const cards = skills.map(s => {
+    const tags = (s.tags || []).map(t => `<span class="skill-tag">${t}</span>`).join('');
+    return `
+    <div class="card skill-card">
+      <div class="skill-name">${s.name}</div>
+      <div class="skill-desc">${s.description}</div>
+      <div class="skill-tags">${tags}</div>
+      <div class="skill-footer">
+        <span class="skill-stats">⚡ ${s.triggerCount || 'active'}</span>
+        <a href="${s.endpoint}" target="_blank" class="btn btn-secondary btn-xs" style="text-decoration:none;">▶ Open</a>
+      </div>
+    </div>`;
+  }).join('');
+  grid.innerHTML = cards + (ghost ? ghost.outerHTML : '');
+}
+
+async function initPage() {
+  // Fetch everything in parallel
   try {
-    const r = await fetch('/api/agentic-os/stats');
-    if (!r.ok) throw new Error('no api');
-    const d = await r.json();
-    if (d.nodes) document.getElementById('stat-nodes').textContent = d.nodes;
-    if (d.skills) document.getElementById('stat-skills').textContent = d.skills;
-    if (d.mcps) document.getElementById('stat-mcps').textContent = d.mcps;
-    if (d.tokens) document.getElementById('stat-tokens').textContent = d.tokens;
-  } catch(e) { /* use defaults */ }
+    const [stats, graph, mcps, skills] = await Promise.all([
+      apiGet('/api/agentic-os/stats'),
+      apiGet('/api/agentic-os/graph'),
+      apiGet('/api/agentic-os/mcps'),
+      apiGet('/api/agentic-os/skills'),
+    ]);
+
+    // ── Store in globals ──
+    _statsData = stats;
+    _graphData = graph;
+    _mcpData   = mcps;
+    _skillData = skills;
+
+    // ── Update stat cards ──
+    const el = id => document.getElementById(id);
+    if (el('stat-nodes'))  el('stat-nodes').textContent  = stats.nodes  || 0;
+    if (el('stat-skills')) el('stat-skills').textContent = skills.skills ? skills.skills.length : 12;
+    if (el('stat-mcps'))   el('stat-mcps').textContent   = mcps.servers ? mcps.servers.length  : 10;
+    if (el('stat-tokens')) el('stat-tokens').textContent = '~' + (Math.round((stats.totalLines || 0) / 1000)) + 'K LOC';
+
+    // ── Update graph subtitle ──
+    const sub = el('graph-subtitle');
+    if (sub) sub.textContent = `Live dependency map · ${graph.nodes.length} nodes, ${graph.edges.length} edges`;
+
+    // ── Update graph.json meta ──
+    const gjm = el('graph-json-meta');
+    if (gjm) gjm.textContent = `${graph.nodes.length} nodes · ${graph.edges.length} edges · Built ${new Date(graph.generatedAt).toLocaleTimeString()}`;
+
+    // ── Update terminal boot log line ──
+
+    // ── Render dynamic MCPs ──
+    if (mcps.servers) renderMcps(mcps.servers);
+
+    // ── Render dynamic Skills ──
+    if (skills.skills) renderSkills(skills.skills);
+
+    // ── Draw dashboard graph now that we have data ──
+    initDashGraph();
+
+  } catch(err) {
+    console.warn('[SurfingNeo-OS] API load failed:', err.message);
+    // Still init graph (will show empty)
+    initDashGraph();
+  }
 }
 
 // ===========================
@@ -1428,8 +1561,7 @@ async function fetchStats() {
 // ===========================
 window.addEventListener('DOMContentLoaded', function() {
   renderTerminal();
-  fetchStats();
-  setTimeout(initDashGraph, 250);
+  initPage();
 });
 </script>
 </body>
