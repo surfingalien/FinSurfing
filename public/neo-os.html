@@ -5,7 +5,25 @@
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>SurfingNeo-OS</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.28.1/cytoscape.min.js"></script>
+<!-- Cytoscape: primary → jsDelivr, fallback → unpkg, fallback → cdnjs -->
+<script>
+(function(){
+  var cdns = [
+    'https://cdn.jsdelivr.net/npm/cytoscape@3.28.1/dist/cytoscape.min.js',
+    'https://unpkg.com/cytoscape@3.28.1/dist/cytoscape.min.js',
+    'https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.28.1/cytoscape.min.js'
+  ];
+  var idx = 0;
+  function tryLoad() {
+    if (idx >= cdns.length) return;
+    var s = document.createElement('script');
+    s.src = cdns[idx++];
+    s.onerror = function(){ tryLoad(); };
+    document.head.appendChild(s);
+  }
+  tryLoad();
+})();
+</script>
 <style>
 /* ── CSS Variables ─────────────────────────────────────────── */
 :root{
@@ -424,6 +442,7 @@ input,select,textarea{font-family:inherit;font-size:inherit}
   <div class="graph-ctrl">
     <input type="text" class="graph-search" id="g-search" placeholder="Search nodes…" oninput="filterGraph()">
     <button class="ctrl-btn active" data-gfilter="all" onclick="setGFilter('all',this)">All</button>
+    <button class="ctrl-btn" data-gfilter="brain" onclick="setGFilter('brain',this)" style="border-color:rgba(234,179,8,.5);color:#EAB308">🧠 Brain</button>
     <button class="ctrl-btn" data-gfilter="route" onclick="setGFilter('route',this)">Routes</button>
     <button class="ctrl-btn" data-gfilter="lib" onclick="setGFilter('lib',this)">Libs</button>
     <button class="ctrl-btn" data-gfilter="component" onclick="setGFilter('component',this)">Components</button>
@@ -439,6 +458,8 @@ input,select,textarea{font-family:inherit;font-size:inherit}
     <div class="leg-item"><div class="leg-dot" style="background:var(--c-lib)"></div>Libs</div>
     <div class="leg-item"><div class="leg-dot" style="background:var(--c-comp)"></div>Components</div>
     <div class="leg-item"><div class="leg-dot" style="background:var(--c-jsx)"></div>JSX Files</div>
+    <div class="leg-item"><div class="leg-dot" style="background:#EAB308;box-shadow:0 0 6px #EAB308"></div>AI Brain nodes</div>
+    <div id="graph-sub" style="margin-left:auto;font-size:11px;color:var(--muted)"></div>
   </div>
   <div id="graph-wrap">
     <div id="cy"></div>
@@ -897,6 +918,36 @@ var _cy = null;
 var CY_COLORS = { route:'#6366F1', lib:'#06B6D4', component:'#8B5CF6', jsx:'#A78BFA' };
 var CY_SIZES  = { route:28, lib:24, component:20, jsx:14 };
 
+// AI Brain node IDs — primary intelligence layer + their direct libs
+var BRAIN_NODES = new Set([
+  'route:ai-brain','route:copilot','route:recommendations','route:trading-analysis',
+  'route:agents','route:macro',
+  'lib:ai-router','lib:circuit-breaker','lib:investor-personas','lib:ai-audit',
+  'lib:scheduled-jobs','lib:social-sentiment',
+  'component:Copilot','component:AIBrain','component:Recommendations',
+  'component:Analysis','component:AgentHub'
+]);
+
+var BRAIN_DESCRIPTIONS = {
+  'route:ai-brain':          'Market scanner — Claude primary + Groq llama-3.3-70b fallback. Circuit breaker guards rate limits. Scans 35+ universes.',
+  'route:copilot':           'AI Copilot chat endpoint. Streams responses via SSE. Injects macro data + portfolio context into system prompt.',
+  'route:recommendations':   'AI Advisory engine. Accepts investor persona + macro flag. Supports 10 personas (Buffett, Dalio, Soros…).',
+  'route:trading-analysis':  'Per-symbol deep analysis. Returns entry/target/stopLoss/signal/confidence JSON. Model: claude-sonnet-4-6.',
+  'route:agents':            'Agent coordinator — spawns and tracks sub-agents for parallel market research tasks.',
+  'route:macro':             'FRED macro indicators (14 series). Injects regime assessment into AI prompts. 1h cache.',
+  'lib:ai-router':           'Primary/fallback AI router. Claude → Groq failover with exponential backoff.',
+  'lib:circuit-breaker':     'Opossum circuit breaker wrapping all AI calls. Prevents cascade failures.',
+  'lib:investor-personas':   '10 investor personas: Buffett, Munger, Lynch, Dalio, Burry, Wood, Marks, Soros, Greenblatt, Default.',
+  'lib:ai-audit':            'Logs all AI requests/responses for audit trail and performance tracking.',
+  'lib:scheduled-jobs':      'Cron-driven background tasks: market scans, portfolio sync, alert checks, weekly reports.',
+  'lib:social-sentiment':    'Alt-data social sentiment scraper feeding AI context.',
+  'component:Copilot':       'AI Copilot React UI — streaming chat, persona selector, macro toggle.',
+  'component:AIBrain':       'AI Brain dashboard — live scan results, universe selector, signal feed.',
+  'component:Recommendations':'Advisory UI — AI recommendations with persona cards.',
+  'component:Analysis':      'Per-symbol AI analysis panel with entry/target/stop visualisation.',
+  'component:AgentHub':      'Agent team dashboard — active agents, task queue, scheduler jobs.'
+};
+
 function getCyStyle() {
   var isDark = document.documentElement.getAttribute('data-theme') !== 'tan';
   var labelColor = isDark ? '#94A3B8' : '#64748B';
@@ -953,11 +1004,36 @@ function getCyStyle() {
     // highlight neighbours on hover
     {
       selector: '.faded',
-      style: { 'opacity': 0.15 }
+      style: { 'opacity': 0.12 }
     },
     {
       selector: '.highlighted',
       style: { 'opacity': 1 }
+    },
+    {
+      selector: '.brain-node',
+      style: {
+        'background-color': '#EAB308',
+        'border-width': '2.5px',
+        'border-color': '#FDE68A',
+        'border-opacity': 1,
+        'width': function(ele){ return (CY_SIZES[ele.data('type')] || 16) + 8; },
+        'height': function(ele){ return (CY_SIZES[ele.data('type')] || 16) + 8; },
+        'shadow-blur': 18,
+        'shadow-color': '#EAB308',
+        'shadow-opacity': 0.7,
+        'shadow-offset-x': 0,
+        'shadow-offset-y': 0
+      }
+    },
+    {
+      selector: '.brain-edge',
+      style: {
+        'line-color': 'rgba(234,179,8,0.6)',
+        'target-arrow-color': 'rgba(234,179,8,0.6)',
+        'width': 2,
+        'opacity': 1
+      }
     }
   ];
 }
@@ -976,7 +1052,18 @@ function drawGraphify() {
   var filt = G.gFilter;
   var q = (document.getElementById('g-search') ? document.getElementById('g-search').value : '').toLowerCase().trim();
 
+  // Brain filter: show brain nodes + their immediate neighbours
+  var brainNeighbourIds = new Set();
+  if (filt === 'brain') {
+    BRAIN_NODES.forEach(function(bid){ brainNeighbourIds.add(bid); });
+    (G.graph.edges || []).forEach(function(e){
+      if (BRAIN_NODES.has(e.source)) brainNeighbourIds.add(e.target);
+      if (BRAIN_NODES.has(e.target)) brainNeighbourIds.add(e.source);
+    });
+  }
+
   var filtNodes = G.graph.nodes.filter(function(n){
+    if (filt === 'brain') return brainNeighbourIds.has(n.id);
     if (filt !== 'all' && n.type !== filt) return false;
     if (q && !(n.label||'').toLowerCase().includes(q) && !(n.id||'').toLowerCase().includes(q)) return false;
     return true;
@@ -1021,6 +1108,15 @@ function drawGraphify() {
     wheelSensitivity: 0.3
   });
 
+  // Apply brain styling classes
+  _cy.nodes().forEach(function(node){
+    if (BRAIN_NODES.has(node.id())) node.addClass('brain-node');
+  });
+  _cy.edges().forEach(function(edge){
+    if (BRAIN_NODES.has(edge.data('source')) && BRAIN_NODES.has(edge.data('target')))
+      edge.addClass('brain-edge');
+  });
+
   // Node click → inspector
   _cy.on('tap', 'node', function(evt){
     var node = evt.target;
@@ -1046,11 +1142,15 @@ function showNodeInspector(d) {
   insp.style.display = 'block';
   document.getElementById('ni-name').textContent = d.label || d.id;
   var tcls = ['route','lib','component','jsx'].includes(d.type) ? 'type-chip tc-'+d.type : '';
+  var isBrain = BRAIN_NODES.has(d.id);
+  var brainBadge = isBrain ? '<span style="background:rgba(234,179,8,.15);color:#EAB308;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;margin-right:8px">🧠 AI BRAIN</span>' : '';
+  var desc = BRAIN_DESCRIPTIONS[d.id] || d.description || '';
   document.getElementById('ni-meta').innerHTML =
+    brainBadge +
     '<span class="'+tcls+'" style="margin-right:8px">'+d.type+'</span>' +
     (d.file ? '📄 '+d.file+'&nbsp;&nbsp;' : '') +
     (d.lineCount ? d.lineCount+' lines&nbsp;&nbsp;' : '') +
-    (d.description || '');
+    (desc ? '<div style="margin-top:6px;font-size:12px;color:var(--text);line-height:1.6">'+desc+'</div>' : '');
 
   // Show neighbours from graph data
   var nb = document.getElementById('ni-nb');
