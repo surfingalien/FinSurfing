@@ -54,6 +54,7 @@ function buildGroups(user, triggeredCount) {
         { id: 'ai-watchlist',    label: 'AI Watchlist',   icon: Bookmark },
         { id: 'agent-hub',       label: 'Agent Hub',      icon: Network },
         { id: 'agentic-os',      label: 'Agentic OS',     icon: BrainCircuit },
+        { id: 'neo-os',          label: 'SurfingNeo-OS',  icon: Monitor, href: '/neo-os' },
         { id: 'trade-timeline',  label: 'Trade Timeline', icon: Clock },
         { id: 'research',        label: 'AI Agent',       icon: Bot },
         { id: 'second-brain',    label: 'Second Brain',   icon: BookOpen },
@@ -99,6 +100,24 @@ function NavItem({ tab, active, collapsed, onClick }) {
   const idleStyle = tab.admin
     ? 'text-amber-500/60 hover:text-amber-400'
     : 'text-slate-400 hover:text-white'
+
+  if (tab.href) {
+    const linkInner = (
+      <a
+        href={tab.href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={`relative flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm font-medium
+                    border border-transparent transition-colors duration-150 group
+                    text-slate-400 hover:text-white hover:bg-white/[0.05] no-underline`}
+      >
+        <Icon className="w-4 h-4 shrink-0 opacity-70 group-hover:opacity-100 transition-opacity" />
+        {!collapsed && <span className="truncate">{tab.label}</span>}
+        {!collapsed && <span className="ml-auto text-[9px] opacity-40">↗</span>}
+      </a>
+    )
+    return collapsed ? <Tooltip content={tab.label} side="right">{linkInner}</Tooltip> : linkInner
+  }
 
   const inner = (
     <motion.button
