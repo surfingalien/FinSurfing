@@ -46,6 +46,7 @@ import { useAlerts } from './hooks/useAlerts'
 import { useAlertStream, formatAnalysisToast } from './hooks/useAlertStream'
 import { useToast } from './components/shared/ToastNotifications'
 import FinSurfCopilot from './components/Copilot/FinSurfCopilot'
+import AgenticOSView from './components/AgenticOS/AgenticOSView'
 
 // ── Inner app (renders once auth state is known) ──────────────────────────────
 function AppInner() {
@@ -280,6 +281,10 @@ function MainApp({ onSignIn }) {
             )}
             {activeTab === 'trade-timeline' && (
               <TradeTimelineView portfolio={portfolio} />
+            )}
+
+            {activeTab === 'agentic-os' && (
+              <AgenticOSView />
             )}
 
             {activeTab === 'admin' && (
