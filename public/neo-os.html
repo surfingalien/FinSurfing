@@ -1508,52 +1508,59 @@ function renderSkills(skills) {
 }
 
 async function initPage() {
-  // Fetch everything in parallel
-  try {
-    const [stats, graph, mcps, skills] = await Promise.all([
-      apiGet('/api/agentic-os/stats'),
-      apiGet('/api/agentic-os/graph'),
-      apiGet('/api/agentic-os/mcps'),
-      apiGet('/api/agentic-os/skills'),
-    ]);
+  const el = id => document.getElementById(id);
 
-    // ── Store in globals ──
+  // Fetch each endpoint independently — one failure never blocks the others
+  const safe = async (url) => {
+    try {
+      const r = await fetch(url);
+      if (!r.ok) throw new Error(`${url} → HTTP ${r.status}`);
+      return await r.json();
+    } catch(e) {
+      console.warn('[SurfingNeo-OS]', e.message);
+      return null;
+    }
+  };
+
+  const [stats, graph, mcps, skills] = await Promise.all([
+    safe('/api/agentic-os/stats'),
+    safe('/api/agentic-os/graph'),
+    safe('/api/agentic-os/mcps'),
+    safe('/api/agentic-os/skills'),
+  ]);
+
+  // ── Stats ──
+  if (stats) {
     _statsData = stats;
+    if (el('stat-nodes'))  el('stat-nodes').textContent  = stats.nodes || 0;
+    if (el('stat-tokens')) el('stat-tokens').textContent = '~' + Math.round((stats.totalLines || 0) / 1000) + 'K LOC';
+  }
+
+  // ── Graph ──
+  if (graph && graph.nodes) {
     _graphData = graph;
-    _mcpData   = mcps;
-    _skillData = skills;
-
-    // ── Update stat cards ──
-    const el = id => document.getElementById(id);
-    if (el('stat-nodes'))  el('stat-nodes').textContent  = stats.nodes  || 0;
-    if (el('stat-skills')) el('stat-skills').textContent = skills.skills ? skills.skills.length : 12;
-    if (el('stat-mcps'))   el('stat-mcps').textContent   = mcps.servers ? mcps.servers.length  : 10;
-    if (el('stat-tokens')) el('stat-tokens').textContent = '~' + (Math.round((stats.totalLines || 0) / 1000)) + 'K LOC';
-
-    // ── Update graph subtitle ──
     const sub = el('graph-subtitle');
     if (sub) sub.textContent = `Live dependency map · ${graph.nodes.length} nodes, ${graph.edges.length} edges`;
-
-    // ── Update graph.json meta ──
     const gjm = el('graph-json-meta');
     if (gjm) gjm.textContent = `${graph.nodes.length} nodes · ${graph.edges.length} edges · Built ${new Date(graph.generatedAt).toLocaleTimeString()}`;
-
-    // ── Update terminal boot log line ──
-
-    // ── Render dynamic MCPs ──
-    if (mcps.servers) renderMcps(mcps.servers);
-
-    // ── Render dynamic Skills ──
-    if (skills.skills) renderSkills(skills.skills);
-
-    // ── Draw dashboard graph now that we have data ──
-    initDashGraph();
-
-  } catch(err) {
-    console.warn('[SurfingNeo-OS] API load failed:', err.message);
-    // Still init graph (will show empty)
-    initDashGraph();
   }
+
+  // ── MCPs ──
+  if (mcps && mcps.servers) {
+    _mcpData = mcps;
+    if (el('stat-mcps')) el('stat-mcps').textContent = mcps.servers.length;
+    renderMcps(mcps.servers);
+  }
+
+  // ── Skills ──
+  if (skills && skills.skills) {
+    _skillData = skills;
+    if (el('stat-skills')) el('stat-skills').textContent = skills.skills.length;
+    renderSkills(skills.skills);
+  }
+
+  // ── D3 graph (uses _graphData, safe to call even if null) ──
+  initDashGraph();
 }
 
 // ===========================
