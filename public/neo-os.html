@@ -1,1113 +1,1436 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>SurfingNeo-OS</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SurfingNeo-OS v2.0</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://d3js.org/d3.v7.min.js"></script>
 <style>
-  :root {
-    --bg:      #060810;
-    --bg2:     #0a0e1a;
-    --bg3:     #0d1220;
-    --border:  rgba(0,255,204,0.12);
-    --accent:  #00ffcc;
-    --accent2: #0066ff;
-    --accent3: #ff00aa;
-    --text:    #e2e8f0;
-    --muted:   #64748b;
-    --glow:    0 0 20px rgba(0,255,204,0.25);
-    --glow2:   0 0 40px rgba(0,255,204,0.1);
-  }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: 'Courier New', monospace;
-    height: 100vh;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-  }
+:root {
+  --bg: #0A0B0F;
+  --card: #12141C;
+  --border: rgba(255,255,255,0.07);
+  --text: #E8ECF4;
+  --muted: #6B7280;
+  --accent: #00FFCC;
+  --accent2: #6366F1;
+  --accent-rgb: 0,255,204;
+  --accent2-rgb: 99,102,241;
+  --shadow: 0 4px 24px rgba(0,0,0,0.4);
+  --shadow-sm: 0 2px 8px rgba(0,0,0,0.25);
+  --radius: 12px;
+  --radius-sm: 8px;
+  --transition: 0.3s ease;
+  --terminal-bg: #0D0F14;
+}
+[data-theme="tan"] {
+  --bg: #FAF7F2;
+  --card: #FFFFFF;
+  --border: #E5DDD0;
+  --text: #1C1812;
+  --muted: #8B7355;
+  --accent: #B45309;
+  --accent2: #7C3AED;
+  --accent-rgb: 180,83,9;
+  --accent2-rgb: 124,58,237;
+  --shadow: 0 4px 24px rgba(0,0,0,0.08);
+  --shadow-sm: 0 2px 8px rgba(0,0,0,0.05);
+  --terminal-bg: #1A1A2E;
+}
+*,*::before,*::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); transition: background var(--transition), color var(--transition); }
 
-  /* ── scanline overlay ── */
-  body::before {
-    content: '';
-    position: fixed;
-    inset: 0;
-    background: repeating-linear-gradient(
-      0deg,
-      transparent,
-      transparent 2px,
-      rgba(0,0,0,0.08) 2px,
-      rgba(0,0,0,0.08) 4px
-    );
-    pointer-events: none;
-    z-index: 9999;
-  }
+/* HEADER */
+#header {
+  position: fixed; top: 0; left: 0; right: 0; height: 56px; z-index: 100;
+  background: var(--card); border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; padding: 0 20px; gap: 16px;
+  box-shadow: var(--shadow-sm); transition: background var(--transition), border-color var(--transition);
+}
+.header-logo { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.header-logo .wordmark { font-size: 15px; font-weight: 700; color: var(--text); letter-spacing: -0.3px; }
+.header-logo .version { font-size: 10px; font-weight: 600; padding: 2px 7px; background: rgba(var(--accent-rgb),0.15); color: var(--accent); border-radius: 20px; border: 1px solid rgba(var(--accent-rgb),0.3); }
+.header-nav { flex: 1; display: flex; justify-content: center; gap: 4px; overflow-x: auto; }
+.tab-pill {
+  padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 500;
+  border: none; cursor: pointer; transition: all 0.2s; white-space: nowrap;
+  background: transparent; color: var(--muted);
+}
+.tab-pill:hover { color: var(--text); background: var(--border); }
+.tab-pill.active { background: rgba(var(--accent-rgb),0.15); color: var(--accent); }
+.header-right { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+#clock { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.theme-btn {
+  padding: 6px 12px; border-radius: 20px; font-size: 12px; font-weight: 500;
+  border: 1px solid var(--border); background: transparent; color: var(--muted);
+  cursor: pointer; transition: all 0.2s;
+}
+.theme-btn:hover { color: var(--text); border-color: var(--accent); }
+.finsurfing-link {
+  font-size: 12px; color: var(--accent2); text-decoration: none; font-weight: 500;
+  padding: 5px 10px; border-radius: 6px; border: 1px solid rgba(var(--accent2-rgb),0.3);
+  transition: all 0.2s;
+}
+.finsurfing-link:hover { background: rgba(var(--accent2-rgb),0.1); }
 
-  /* ── grid background ── */
-  body::after {
-    content: '';
-    position: fixed;
-    inset: 0;
-    background-image:
-      linear-gradient(rgba(0,255,204,0.03) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(0,255,204,0.03) 1px, transparent 1px);
-    background-size: 40px 40px;
-    pointer-events: none;
-    z-index: 0;
-  }
+/* CONTENT */
+#content { margin-top: 56px; height: calc(100vh - 56px); overflow-y: auto; }
+.tab-panel { display: none; padding: 28px; animation: fadeIn 0.25s ease; }
+.tab-panel.active { display: block; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
 
-  /* ── HEADER ── */
-  header {
-    position: relative;
-    z-index: 10;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0 24px;
-    height: 56px;
-    border-bottom: 1px solid var(--border);
-    background: rgba(6,8,16,0.95);
-    backdrop-filter: blur(12px);
-    flex-shrink: 0;
-  }
-  .logo {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-  .logo-icon {
-    width: 32px;
-    height: 32px;
-    position: relative;
-  }
-  .logo-icon svg {
-    width: 32px;
-    height: 32px;
-    filter: drop-shadow(0 0 6px var(--accent));
-  }
-  .logo-text {
-    font-size: 18px;
-    font-weight: 700;
-    letter-spacing: 0.1em;
-    color: var(--accent);
-    text-shadow: 0 0 20px rgba(0,255,204,0.5);
-    text-transform: uppercase;
-  }
-  .logo-sub {
-    font-size: 10px;
-    color: var(--muted);
-    letter-spacing: 0.2em;
-    text-transform: uppercase;
-  }
-  .header-right {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-  }
-  .status-pill {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 4px 12px;
-    border: 1px solid var(--border);
-    border-radius: 20px;
-    font-size: 11px;
-    color: var(--muted);
-    background: rgba(0,255,204,0.03);
-  }
-  .status-dot {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: var(--accent);
-    box-shadow: 0 0 8px var(--accent);
-    animation: pulse 2s infinite;
-  }
-  @keyframes pulse {
-    0%,100% { opacity: 1; }
-    50% { opacity: 0.4; }
-  }
-  .nav-link {
-    font-size: 12px;
-    color: var(--muted);
-    text-decoration: none;
-    letter-spacing: 0.05em;
-    transition: color 0.2s;
-    padding: 6px 12px;
-    border: 1px solid transparent;
-    border-radius: 6px;
-  }
-  .nav-link:hover {
-    color: var(--accent);
-    border-color: var(--border);
-    text-shadow: 0 0 10px rgba(0,255,204,0.3);
-  }
-  #clock {
-    font-size: 12px;
-    color: var(--muted);
-    letter-spacing: 0.05em;
-    font-variant-numeric: tabular-nums;
-  }
+/* CARDS */
+.card {
+  background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+  box-shadow: var(--shadow-sm); transition: background var(--transition), border-color var(--transition);
+}
+.card-header { padding: 20px 20px 0; display: flex; align-items: center; justify-content: space-between; }
+.card-body { padding: 20px; }
+.card-title { font-size: 14px; font-weight: 600; color: var(--text); }
+.card-subtitle { font-size: 12px; color: var(--muted); margin-top: 2px; }
 
-  /* ── MAIN LAYOUT ── */
-  .layout {
-    display: flex;
-    flex: 1;
-    overflow: hidden;
-    position: relative;
-    z-index: 1;
-  }
+/* GRID */
+.grid-4 { display: grid; grid-template-columns: repeat(4,1fr); gap: 16px; }
+.grid-3 { display: grid; grid-template-columns: repeat(3,1fr); gap: 16px; }
+.grid-2 { display: grid; grid-template-columns: 3fr 2fr; gap: 20px; }
+.flex { display: flex; }
+.flex-col { flex-direction: column; }
 
-  /* ── SIDEBAR NAV ── */
-  .sidenav {
-    width: 200px;
-    border-right: 1px solid var(--border);
-    background: rgba(10,14,26,0.8);
-    flex-shrink: 0;
-    display: flex;
-    flex-direction: column;
-    padding: 16px 0;
-    gap: 2px;
-  }
-  .sidenav-label {
-    font-size: 9px;
-    letter-spacing: 0.2em;
-    color: var(--muted);
-    text-transform: uppercase;
-    padding: 8px 16px 4px;
-  }
-  .nav-item {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 10px 16px;
-    font-size: 12px;
-    color: var(--muted);
-    cursor: pointer;
-    letter-spacing: 0.05em;
-    border-left: 2px solid transparent;
-    transition: all 0.15s;
-    user-select: none;
-  }
-  .nav-item:hover { color: var(--text); background: rgba(0,255,204,0.04); }
-  .nav-item.active {
-    color: var(--accent);
-    border-left-color: var(--accent);
-    background: rgba(0,255,204,0.06);
-    text-shadow: 0 0 10px rgba(0,255,204,0.3);
-  }
-  .nav-item .icon { width: 16px; text-align: center; font-size: 14px; }
+/* STAT CARDS */
+.stat-card { padding: 20px; }
+.stat-label { font-size: 12px; color: var(--muted); font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; }
+.stat-value { font-size: 32px; font-weight: 700; color: var(--text); margin: 8px 0 4px; letter-spacing: -1px; }
+.stat-badge { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 20px; }
+.badge-up { background: rgba(34,197,94,0.12); color: #22C55E; }
+.badge-down { background: rgba(239,68,68,0.12); color: #EF4444; }
+.badge-neutral { background: rgba(var(--accent2-rgb),0.12); color: var(--accent2); }
+.sparkline { margin-top: 12px; }
 
-  .sidenav-footer {
-    margin-top: auto;
-    padding: 12px 16px;
-    border-top: 1px solid var(--border);
-    font-size: 10px;
-    color: var(--muted);
-    letter-spacing: 0.05em;
-  }
+/* BUTTONS */
+.btn {
+  display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px;
+  border-radius: var(--radius-sm); font-size: 13px; font-weight: 500;
+  border: none; cursor: pointer; transition: all 0.2s; font-family: inherit;
+}
+.btn-primary { background: var(--accent); color: #000; }
+.btn-primary:hover { opacity: 0.85; }
+.btn-secondary { background: rgba(var(--accent-rgb),0.1); color: var(--accent); border: 1px solid rgba(var(--accent-rgb),0.3); }
+.btn-secondary:hover { background: rgba(var(--accent-rgb),0.18); }
+.btn-ghost { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+.btn-ghost:hover { color: var(--text); border-color: rgba(255,255,255,0.2); }
+.btn-danger { background: rgba(239,68,68,0.1); color: #EF4444; border: 1px solid rgba(239,68,68,0.3); }
+.btn-danger:hover { background: rgba(239,68,68,0.2); }
+.btn-sm { padding: 5px 11px; font-size: 12px; }
+.btn-xs { padding: 3px 8px; font-size: 11px; }
 
-  /* ── CONTENT ── */
-  .content {
-    flex: 1;
-    overflow-y: auto;
-    padding: 24px;
-    scrollbar-width: thin;
-    scrollbar-color: rgba(0,255,204,0.2) transparent;
-  }
-  .content::-webkit-scrollbar { width: 4px; }
-  .content::-webkit-scrollbar-thumb { background: rgba(0,255,204,0.2); border-radius: 2px; }
+/* BADGES */
+.badge {
+  display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600;
+  padding: 2px 8px; border-radius: 20px;
+}
+.badge-connected { background: rgba(34,197,94,0.12); color: #22C55E; }
+.badge-idle { background: rgba(245,158,11,0.12); color: #F59E0B; }
+.badge-offline { background: rgba(239,68,68,0.12); color: #EF4444; }
+.badge-installed { background: rgba(var(--accent-rgb),0.12); color: var(--accent); }
+.badge-default { background: rgba(var(--accent2-rgb),0.12); color: var(--accent2); }
+.status-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
+.dot-green { background: #22C55E; box-shadow: 0 0 4px #22C55E; }
+.dot-yellow { background: #F59E0B; }
+.dot-red { background: #EF4444; }
+.dot-blue { background: #3B82F6; box-shadow: 0 0 4px #3B82F6; }
 
-  .tab-panel { display: none; animation: fadein 0.3s ease; }
-  .tab-panel.active { display: block; }
-  @keyframes fadein { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+/* ACTIVITY FEED */
+.activity-item { display: flex; align-items: flex-start; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+.activity-item:last-child { border-bottom: none; }
+.activity-icon { width: 28px; height: 28px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 13px; flex-shrink: 0; margin-top: 1px; }
+.activity-text { font-size: 13px; color: var(--text); line-height: 1.4; }
+.activity-time { font-size: 11px; color: var(--muted); margin-top: 2px; }
 
-  /* ── SHARED COMPONENTS ── */
-  .section-title {
-    font-size: 11px;
-    letter-spacing: 0.2em;
-    color: var(--muted);
-    text-transform: uppercase;
-    margin-bottom: 16px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  .section-title::after {
-    content: '';
-    flex: 1;
-    height: 1px;
-    background: var(--border);
-  }
+/* SECTION HEADING */
+.section-title { font-size: 18px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+.section-sub { font-size: 13px; color: var(--muted); margin-bottom: 20px; }
 
-  .glass {
-    background: rgba(13,18,32,0.8);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    backdrop-filter: blur(8px);
-  }
+/* BRAIN STATUS */
+.brain-row { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid var(--border); }
+.brain-row:last-child { border-bottom: none; }
+.brain-label { font-size: 13px; color: var(--muted); }
+.brain-val { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; }
 
-  .card {
-    background: rgba(13,18,32,0.8);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 16px;
-    transition: border-color 0.2s;
-  }
-  .card:hover { border-color: rgba(0,255,204,0.25); }
+/* GRAPH */
+#graph-container { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; position: relative; }
+#dash-graph-container { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; height: 400px; position: relative; }
+.graph-tooltip {
+  position: absolute; background: var(--card); border: 1px solid var(--border);
+  padding: 8px 12px; border-radius: 8px; font-size: 12px; pointer-events: none;
+  box-shadow: var(--shadow); z-index: 50; display: none; color: var(--text);
+}
 
-  .stat-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-    gap: 12px;
-    margin-bottom: 24px;
-  }
-  .stat-card {
-    background: rgba(13,18,32,0.8);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 16px;
-    position: relative;
-    overflow: hidden;
-  }
-  .stat-card::before {
-    content: '';
-    position: absolute;
-    top: 0; left: 0; right: 0;
-    height: 1px;
-    background: linear-gradient(90deg, transparent, var(--accent), transparent);
-    opacity: 0.5;
-  }
-  .stat-value {
-    font-size: 28px;
-    font-weight: 700;
-    color: var(--accent);
-    text-shadow: var(--glow);
-    line-height: 1;
-    margin-bottom: 4px;
-  }
-  .stat-label {
-    font-size: 10px;
-    color: var(--muted);
-    letter-spacing: 0.15em;
-    text-transform: uppercase;
-  }
-  .stat-icon {
-    position: absolute;
-    top: 12px; right: 12px;
-    font-size: 20px;
-    opacity: 0.2;
-  }
+/* TERMINAL */
+#terminal-output {
+  background: var(--terminal-bg); color: #E8ECF4; font-family: 'Courier New', monospace;
+  font-size: 13px; padding: 20px; height: 420px; overflow-y: auto;
+  border-radius: var(--radius) var(--radius) 0 0;
+  border: 1px solid rgba(255,255,255,0.08);
+  line-height: 1.7;
+}
+.t-info { color: #22D3EE; }
+.t-ok { color: #22C55E; }
+.t-warn { color: #F59E0B; }
+.t-err { color: #EF4444; }
+.t-cmd { color: #A78BFA; }
+.t-dim { color: #6B7280; }
+.cursor-blink { display: inline-block; width: 7px; height: 13px; background: #00FFCC; vertical-align: -2px; animation: blink 1s step-end infinite; }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+#terminal-input-row { display: flex; align-items: center; background: var(--terminal-bg); border: 1px solid rgba(255,255,255,0.08); border-top: none; border-radius: 0 0 var(--radius) var(--radius); padding: 10px 20px; }
+#terminal-prompt-label { color: #00FFCC; font-family: 'Courier New', monospace; font-size: 13px; flex-shrink: 0; }
+#terminal-input { background: transparent; border: none; outline: none; color: #E8ECF4; font-family: 'Courier New', monospace; font-size: 13px; flex: 1; margin-left: 8px; }
 
-  /* ── GRAPH CANVAS ── */
-  #graph-canvas {
-    width: 100%;
-    height: 520px;
-    background: rgba(6,8,16,0.95);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    display: block;
-    cursor: grab;
-  }
-  #graph-canvas:active { cursor: grabbing; }
+/* SETTINGS */
+.settings-section-title { font-size: 13px; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 16px; }
+.form-row { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+.form-label { font-size: 12px; font-weight: 500; color: var(--muted); }
+.form-input {
+  background: var(--bg); border: 1px solid var(--border); color: var(--text);
+  border-radius: var(--radius-sm); padding: 8px 12px; font-size: 13px; font-family: inherit;
+  transition: border-color 0.2s; outline: none;
+}
+.form-input:focus { border-color: var(--accent); }
+.form-select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236B7280' d='M6 8L1 3h10z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; padding-right: 32px; cursor: pointer; }
+.form-range { -webkit-appearance: none; width: 100%; height: 4px; background: var(--border); border-radius: 2px; outline: none; }
+.form-range::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: var(--accent); cursor: pointer; }
+.toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.toggle-row:last-child { border-bottom: none; }
+.toggle-label { font-size: 13px; color: var(--text); }
+.toggle-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.toggle-switch { position: relative; width: 38px; height: 22px; flex-shrink: 0; }
+.toggle-switch input { opacity: 0; width: 0; height: 0; }
+.toggle-thumb {
+  position: absolute; cursor: pointer; inset: 0;
+  background: rgba(255,255,255,0.1); border-radius: 22px; transition: 0.2s;
+}
+.toggle-thumb:before {
+  content: ''; position: absolute; height: 16px; width: 16px; left: 3px; bottom: 3px;
+  background: #fff; border-radius: 50%; transition: 0.2s;
+}
+.toggle-switch input:checked + .toggle-thumb { background: var(--accent); }
+.toggle-switch input:checked + .toggle-thumb:before { transform: translateX(16px); background: #000; }
 
-  .graph-controls {
-    display: flex;
-    gap: 8px;
-    margin-bottom: 12px;
-    flex-wrap: wrap;
-  }
-  .ctrl-btn {
-    padding: 5px 12px;
-    font-size: 11px;
-    font-family: inherit;
-    background: rgba(13,18,32,0.8);
-    border: 1px solid var(--border);
-    color: var(--muted);
-    border-radius: 4px;
-    cursor: pointer;
-    letter-spacing: 0.05em;
-    transition: all 0.15s;
-  }
-  .ctrl-btn:hover, .ctrl-btn.active { color: var(--accent); border-color: rgba(0,255,204,0.4); }
-  .ctrl-btn.active { background: rgba(0,255,204,0.08); }
+/* MCP CARDS */
+.mcp-card { padding: 18px; cursor: pointer; transition: box-shadow 0.2s; }
+.mcp-card:hover { box-shadow: 0 0 0 1px rgba(var(--accent-rgb),0.3), var(--shadow); }
+.mcp-card-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.mcp-icon-dot { width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; }
+.mcp-name { font-size: 14px; font-weight: 600; color: var(--text); }
+.mcp-meta { font-size: 11px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
 
-  .legend {
-    display: flex;
-    gap: 16px;
-    flex-wrap: wrap;
-    margin-top: 12px;
-    font-size: 11px;
-    color: var(--muted);
-  }
-  .legend-item { display: flex; align-items: center; gap: 6px; }
-  .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+/* SKILL CARDS */
+.skill-card { padding: 18px; cursor: default; transition: box-shadow 0.2s; }
+.skill-card:hover { box-shadow: 0 0 0 1px rgba(var(--accent-rgb),0.3), var(--shadow); }
+.skill-name { font-size: 14px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+.skill-desc { font-size: 12px; color: var(--muted); margin-bottom: 12px; line-height: 1.5; }
+.skill-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.skill-tag { font-size: 11px; padding: 2px 8px; border-radius: 20px; border: 1px solid var(--border); color: var(--muted); }
+.skill-footer { display: flex; align-items: center; justify-content: space-between; }
+.skill-stats { font-size: 11px; color: var(--muted); }
 
-  /* ── NODE INSPECTOR ── */
-  #node-inspector {
-    margin-top: 16px;
-    padding: 16px;
-    background: rgba(13,18,32,0.9);
-    border: 1px solid rgba(0,255,204,0.2);
-    border-radius: 8px;
-    display: none;
-    animation: fadein 0.2s;
-  }
-  #node-inspector.visible { display: block; }
-  .inspector-title { color: var(--accent); font-size: 14px; margin-bottom: 8px; }
-  .inspector-meta { font-size: 11px; color: var(--muted); margin-bottom: 12px; }
-  .inspector-neighbours { display: flex; flex-wrap: wrap; gap: 6px; }
-  .neighbour-chip {
-    padding: 3px 10px;
-    font-size: 10px;
-    border-radius: 12px;
-    border: 1px solid var(--border);
-    color: var(--muted);
-    background: rgba(13,18,32,0.5);
-    letter-spacing: 0.05em;
-  }
-  .neighbour-chip.out { border-color: rgba(0,255,204,0.3); color: var(--accent); }
-  .neighbour-chip.in  { border-color: rgba(0,102,255,0.3); color: #60a5fa; }
+/* PLUGIN CARDS */
+.plugin-card { padding: 18px; }
+.plugin-icon { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px; margin-bottom: 12px; }
+.plugin-name { font-size: 14px; font-weight: 700; color: var(--text); }
+.plugin-desc { font-size: 12px; color: var(--muted); margin: 6px 0 10px; line-height: 1.5; }
+.plugin-author { font-size: 11px; color: var(--muted); }
+.plugin-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 12px; }
 
-  /* ── TABLE ── */
-  table { width: 100%; border-collapse: collapse; font-size: 12px; }
-  th {
-    text-align: left;
-    padding: 8px 12px;
-    font-size: 10px;
-    letter-spacing: 0.15em;
-    text-transform: uppercase;
-    color: var(--muted);
-    border-bottom: 1px solid var(--border);
-  }
-  td {
-    padding: 10px 12px;
-    border-bottom: 1px solid rgba(255,255,255,0.03);
-    vertical-align: middle;
-  }
-  tr:hover td { background: rgba(0,255,204,0.02); }
+/* GHOST CARD */
+.ghost-card {
+  background: transparent; border: 2px dashed var(--border); border-radius: var(--radius);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 32px; cursor: pointer; transition: all 0.2s; color: var(--muted); min-height: 160px;
+}
+.ghost-card:hover { border-color: var(--accent); color: var(--accent); background: rgba(var(--accent-rgb),0.04); }
+.ghost-card-icon { font-size: 28px; margin-bottom: 10px; }
+.ghost-card-label { font-size: 13px; font-weight: 500; }
 
-  .badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    padding: 2px 8px;
-    border-radius: 10px;
-    font-size: 10px;
-    letter-spacing: 0.05em;
-    font-weight: 600;
-  }
-  .badge-green  { background: rgba(0,255,204,0.12); color: var(--accent); border: 1px solid rgba(0,255,204,0.2); }
-  .badge-blue   { background: rgba(0,102,255,0.12); color: #60a5fa;      border: 1px solid rgba(0,102,255,0.2); }
-  .badge-purple { background: rgba(139,92,246,0.12);color: #a78bfa;      border: 1px solid rgba(139,92,246,0.2); }
-  .badge-yellow { background: rgba(251,191,36,0.12); color: #fbbf24;     border: 1px solid rgba(251,191,36,0.2); }
-  .badge-red    { background: rgba(239,68,68,0.12);  color: #f87171;     border: 1px solid rgba(239,68,68,0.2); }
-  .badge-gray   { background: rgba(100,116,139,0.12);color: var(--muted); border: 1px solid rgba(100,116,139,0.2); }
+/* CODE BLOCK */
+.code-block {
+  background: var(--terminal-bg); border: 1px solid rgba(255,255,255,0.08);
+  border-radius: var(--radius-sm); padding: 16px; font-family: 'Courier New', monospace;
+  font-size: 12px; color: #A78BFA; line-height: 1.8; overflow-x: auto;
+}
+.code-block .cmd { color: #22D3EE; }
+.code-block .comment { color: #4B5563; }
 
-  .conn-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
-  .conn-online  { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
-  .conn-offline { background: #374151; }
-  .conn-idle    { background: #fbbf24; box-shadow: 0 0 6px #fbbf24; }
+/* COLLAPSIBLE */
+.collapsible-toggle { cursor: pointer; display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; }
+.collapsible-body { display: none; }
+.collapsible-body.open { display: block; }
 
-  /* ── MCP GRID ── */
-  .mcp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
-  .mcp-card {
-    background: rgba(13,18,32,0.8);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 16px;
-    transition: border-color 0.2s;
-  }
-  .mcp-card:hover { border-color: rgba(0,255,204,0.2); }
-  .mcp-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
-  .mcp-name { font-size: 13px; color: var(--text); }
-  .mcp-id   { font-size: 10px; color: var(--muted); font-family: monospace; margin-bottom: 6px; }
-  .mcp-purpose { font-size: 11px; color: var(--muted); }
-  .mcp-tool { font-size: 10px; color: rgba(0,255,204,0.6); font-family: monospace; margin-top: 6px; }
+/* AGENT ITEMS */
+.agent-item { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.agent-item:last-child { border-bottom: none; }
+.agent-name { font-size: 13px; font-weight: 600; color: var(--text); }
+.agent-role { font-size: 11px; color: var(--muted); margin-top: 2px; }
 
-  /* ── SKILLS GRID ── */
-  .skills-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
-  .skill-card {
-    background: rgba(13,18,32,0.8);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 16px;
-    position: relative;
-    overflow: hidden;
-    transition: border-color 0.2s, box-shadow 0.2s;
-  }
-  .skill-card:hover {
-    border-color: rgba(0,255,204,0.25);
-    box-shadow: 0 0 20px rgba(0,255,204,0.05);
-  }
-  .skill-id { font-size: 9px; color: rgba(0,255,204,0.4); letter-spacing: 0.2em; font-family: monospace; margin-bottom: 6px; text-transform: uppercase; }
-  .skill-name { font-size: 14px; color: var(--accent); margin-bottom: 6px; }
-  .skill-desc { font-size: 11px; color: var(--muted); line-height: 1.5; }
-  .skill-endpoint { font-size: 10px; color: rgba(0,102,255,0.7); font-family: monospace; margin-top: 8px; }
+/* OUTPUT CARDS */
+.output-card { padding: 16px; }
+.output-filename { font-family: 'Courier New', monospace; font-size: 13px; font-weight: 700; color: var(--accent); margin-bottom: 4px; }
+.output-meta { font-size: 11px; color: var(--muted); margin-bottom: 12px; }
 
-  /* ── BRAIN TAB ── */
-  .brain-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-bottom: 24px; }
-  .brain-metric {
-    background: rgba(13,18,32,0.8);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 14px;
-  }
-  .brain-metric-val { font-size: 22px; font-weight: 700; color: var(--accent2); text-shadow: 0 0 12px rgba(0,102,255,0.4); }
-  .brain-metric-lbl { font-size: 10px; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; margin-top: 2px; }
+/* RANGE ROW */
+.range-row { display: flex; align-items: center; gap: 12px; }
 
-  /* ── TERMINAL BLOCK ── */
-  .terminal {
-    background: rgba(6,8,16,0.95);
-    border: 1px solid rgba(0,255,204,0.15);
-    border-radius: 8px;
-    padding: 16px;
-    font-size: 11px;
-    color: var(--muted);
-    line-height: 1.8;
-    font-family: 'Courier New', monospace;
-    max-height: 200px;
-    overflow-y: auto;
-  }
-  .term-line { display: flex; gap: 8px; }
-  .term-prompt { color: var(--accent); flex-shrink: 0; }
-  .term-ok   { color: #4ade80; }
-  .term-warn { color: #fbbf24; }
-  .term-info { color: #60a5fa; }
+/* ACCENT SWATCHES */
+.swatch { width: 28px; height: 28px; border-radius: 50%; cursor: pointer; border: 2px solid transparent; transition: transform 0.15s, border-color 0.15s; }
+.swatch:hover { transform: scale(1.15); }
+.swatch.active { border-color: var(--text); }
 
-  /* ── LOADING ── */
-  .loader {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 60px;
-    color: var(--muted);
-    font-size: 12px;
-    letter-spacing: 0.1em;
-    flex-direction: column;
-    gap: 12px;
-  }
-  .spin {
-    width: 20px; height: 20px;
-    border: 2px solid rgba(0,255,204,0.2);
-    border-top-color: var(--accent);
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-  }
-  @keyframes spin { to { transform: rotate(360deg); } }
-
-  /* ── SCROLLBAR ── */
-  ::-webkit-scrollbar { width: 4px; height: 4px; }
-  ::-webkit-scrollbar-thumb { background: rgba(0,255,204,0.15); border-radius: 2px; }
-  ::-webkit-scrollbar-track { background: transparent; }
-
-  /* ── SEARCH ── */
-  .search-bar {
-    width: 100%;
-    background: rgba(13,18,32,0.8);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 8px 14px;
-    color: var(--text);
-    font-family: inherit;
-    font-size: 12px;
-    outline: none;
-    margin-bottom: 16px;
-    transition: border-color 0.2s;
-  }
-  .search-bar:focus { border-color: rgba(0,255,204,0.35); }
-  .search-bar::placeholder { color: var(--muted); }
-
-  /* ── TOOLTIP ── */
-  #tooltip {
-    position: fixed;
-    background: rgba(13,18,32,0.95);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 6px 10px;
-    font-size: 11px;
-    color: var(--text);
-    pointer-events: none;
-    z-index: 1000;
-    display: none;
-    max-width: 220px;
-  }
+/* RESPONSIVE */
+@media (max-width: 960px) {
+  .grid-4 { grid-template-columns: repeat(2,1fr); }
+  .grid-3 { grid-template-columns: repeat(2,1fr); }
+  .grid-2 { grid-template-columns: 1fr; }
+}
+@media (max-width: 600px) {
+  .grid-4, .grid-3 { grid-template-columns: 1fr; }
+  .tab-panel { padding: 14px; }
+  .header-logo .wordmark { display: none; }
+}
 </style>
 </head>
 <body>
 
 <!-- HEADER -->
-<header>
-  <div class="logo">
-    <div class="logo-icon">
-      <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <circle cx="16" cy="16" r="14" stroke="#00ffcc" stroke-width="1.5" stroke-dasharray="4 2"/>
-        <circle cx="16" cy="16" r="6" fill="none" stroke="#00ffcc" stroke-width="1.5"/>
-        <line x1="16" y1="2" x2="16" y2="10" stroke="#00ffcc" stroke-width="1.5"/>
-        <line x1="16" y1="22" x2="16" y2="30" stroke="#00ffcc" stroke-width="1.5"/>
-        <line x1="2"  y1="16" x2="10" y2="16" stroke="#00ffcc" stroke-width="1.5"/>
-        <line x1="22" y1="16" x2="30" y2="16" stroke="#00ffcc" stroke-width="1.5"/>
-        <circle cx="16" cy="16" r="2.5" fill="#00ffcc"/>
-      </svg>
-    </div>
-    <div>
-      <div class="logo-text">SurfingNeo-OS</div>
-      <div class="logo-sub">Agentic Intelligence Platform</div>
-    </div>
+<header id="header">
+  <div class="header-logo">
+    <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+      <rect width="28" height="28" rx="7" fill="rgba(0,255,204,0.12)"/>
+      <circle cx="14" cy="14" r="3" fill="#00FFCC"/>
+      <line x1="14" y1="5" x2="14" y2="11" stroke="#00FFCC" stroke-width="1.5" stroke-linecap="round"/>
+      <line x1="14" y1="17" x2="14" y2="23" stroke="#00FFCC" stroke-width="1.5" stroke-linecap="round"/>
+      <line x1="5" y1="14" x2="11" y2="14" stroke="#00FFCC" stroke-width="1.5" stroke-linecap="round"/>
+      <line x1="17" y1="14" x2="23" y2="14" stroke="#00FFCC" stroke-width="1.5" stroke-linecap="round"/>
+      <line x1="7.8" y1="7.8" x2="11.5" y2="11.5" stroke="#6366F1" stroke-width="1.2" stroke-linecap="round"/>
+      <line x1="16.5" y1="16.5" x2="20.2" y2="20.2" stroke="#6366F1" stroke-width="1.2" stroke-linecap="round"/>
+      <line x1="20.2" y1="7.8" x2="16.5" y2="11.5" stroke="#6366F1" stroke-width="1.2" stroke-linecap="round"/>
+      <line x1="11.5" y1="16.5" x2="7.8" y2="20.2" stroke="#6366F1" stroke-width="1.2" stroke-linecap="round"/>
+    </svg>
+    <span class="wordmark">SurfingNeo-OS</span>
+    <span class="version">v2.0</span>
   </div>
+
+  <nav class="header-nav" id="tabNav">
+    <button class="tab-pill active" data-tab="dashboard">Dashboard</button>
+    <button class="tab-pill" data-tab="graphify">Graphify</button>
+    <button class="tab-pill" data-tab="mcp">MCP Servers</button>
+    <button class="tab-pill" data-tab="skills">Skills</button>
+    <button class="tab-pill" data-tab="plugins">Plugins</button>
+    <button class="tab-pill" data-tab="brain">Brain</button>
+    <button class="tab-pill" data-tab="terminal">Terminal</button>
+    <button class="tab-pill" data-tab="settings">Settings</button>
+  </nav>
+
   <div class="header-right">
-    <div class="status-pill"><div class="status-dot"></div><span id="sys-status">ONLINE</span></div>
-    <span id="clock"></span>
-    <a class="nav-link" href="/">↗ FinSurfing App</a>
+    <span id="clock">00:00:00</span>
+    <button class="theme-btn" id="themeToggle">&#9728; Tan</button>
+    <a href="/app" class="finsurfing-link">&#8599; FinSurfing</a>
   </div>
 </header>
 
-<!-- MAIN LAYOUT -->
-<div class="layout">
+<!-- CONTENT -->
+<main id="content">
 
-  <!-- SIDEBAR -->
-  <nav class="sidenav">
-    <div class="sidenav-label">Navigation</div>
-    <div class="nav-item active" data-tab="dashboard"><span class="icon">◈</span> Dashboard</div>
-    <div class="nav-item" data-tab="graphify"><span class="icon">⬡</span> Graphify</div>
-    <div class="nav-item" data-tab="mcps"><span class="icon">⬡</span> MCP Servers</div>
-    <div class="nav-item" data-tab="skills"><span class="icon">◇</span> Skills</div>
-    <div class="nav-item" data-tab="brain"><span class="icon">◈</span> Agentic Brain</div>
-    <div class="sidenav-footer">
-      v2.0 · <span id="build-ts"></span>
+  <!-- ===== TAB 1: DASHBOARD ===== -->
+  <div class="tab-panel active" id="tab-dashboard">
+    <div class="grid-4" style="margin-bottom:20px;">
+      <div class="card stat-card">
+        <div class="stat-label">Graph Nodes</div>
+        <div class="stat-value" id="stat-nodes">127</div>
+        <span class="stat-badge badge-up">&#9650; +18%</span>
+        <div class="sparkline">
+          <svg width="100%" height="36" viewBox="0 0 120 36" preserveAspectRatio="none">
+            <polyline points="0,30 20,24 40,28 60,16 80,20 100,8 120,12" fill="none" stroke="#22C55E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+      </div>
+      <div class="card stat-card">
+        <div class="stat-label">AI Skills</div>
+        <div class="stat-value" id="stat-skills">12</div>
+        <span class="stat-badge badge-up">&#9650; +3 new</span>
+        <div class="sparkline">
+          <svg width="100%" height="36" viewBox="0 0 120 36" preserveAspectRatio="none">
+            <polyline points="0,30 20,26 40,20 60,22 80,14 100,16 120,10" fill="none" stroke="#6366F1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+      </div>
+      <div class="card stat-card">
+        <div class="stat-label">MCP Servers</div>
+        <div class="stat-value" id="stat-mcps">10</div>
+        <span class="stat-badge badge-neutral">&#9679; 6 active</span>
+        <div class="sparkline">
+          <svg width="100%" height="36" viewBox="0 0 120 36" preserveAspectRatio="none">
+            <polyline points="0,20 20,20 40,18 60,18 80,14 100,14 120,14" fill="none" stroke="#00FFCC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+      </div>
+      <div class="card stat-card">
+        <div class="stat-label">Token Savings</div>
+        <div class="stat-value" id="stat-tokens">~2.4M</div>
+        <span class="stat-badge badge-up">&#9650; +12% MTD</span>
+        <div class="sparkline">
+          <svg width="100%" height="36" viewBox="0 0 120 36" preserveAspectRatio="none">
+            <polyline points="0,32 20,26 40,24 60,18 80,14 100,10 120,6" fill="none" stroke="#F59E0B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+      </div>
     </div>
-  </nav>
 
-  <!-- CONTENT -->
-  <div class="content">
-
-    <!-- ── DASHBOARD ── -->
-    <div class="tab-panel active" id="tab-dashboard">
-      <div class="section-title">⬡ System Overview</div>
-      <div class="stat-grid" id="stat-grid">
-        <div class="loader"><div class="spin"></div>Loading…</div>
+    <div class="grid-2" style="margin-bottom:20px;">
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Knowledge Graph Preview</div>
+            <div class="card-subtitle">Live dependency map &middot; 127 nodes, 89 edges</div>
+          </div>
+          <button class="btn btn-ghost btn-sm" onclick="showTab('graphify')">Open Full &rarr;</button>
+        </div>
+        <div id="dash-graph-container">
+          <div class="graph-tooltip" id="dash-tooltip"></div>
+          <svg id="dashboard-graph" style="width:100%;display:block;"></svg>
+        </div>
       </div>
 
-      <div class="section-title">⬡ Knowledge Graph Snapshot</div>
-      <canvas id="mini-canvas" width="900" height="280" style="width:100%;height:280px;background:rgba(6,8,16,0.95);border:1px solid var(--border);border-radius:8px;display:block;margin-bottom:24px;"></canvas>
-
-      <div class="section-title">⬡ Scheduled Jobs</div>
-      <div class="card" id="jobs-table"><div class="loader"><div class="spin"></div></div></div>
-
-      <div class="section-title" style="margin-top:24px;">⬡ Boot Log</div>
-      <div class="terminal" id="boot-log"></div>
+      <div style="display:flex;flex-direction:column;gap:16px;">
+        <div class="card">
+          <div class="card-header"><div class="card-title">Agentic Brain Status</div></div>
+          <div class="card-body">
+            <div class="brain-row"><span class="brain-label">Reasoning Engine</span><span class="brain-val"><span class="status-dot dot-green"></span> ACTIVE</span></div>
+            <div class="brain-row"><span class="brain-label">Memory Layer</span><span class="brain-val"><span class="status-dot dot-blue"></span> SYNCED</span></div>
+            <div class="brain-row"><span class="brain-label">Agent Coordinator</span><span class="brain-val"><span class="status-dot dot-yellow"></span> IDLE</span></div>
+            <div class="brain-row"><span class="brain-label">Tool Router</span><span class="brain-val"><span class="status-dot dot-green"></span> READY</span></div>
+          </div>
+        </div>
+        <div class="card" style="flex:1;">
+          <div class="card-header"><div class="card-title">Activity Feed</div></div>
+          <div class="card-body" style="padding-top:12px;">
+            <div class="activity-item">
+              <div class="activity-icon" style="background:rgba(99,102,241,0.15);">&#9889;</div>
+              <div><div class="activity-text">AI Brain Scan completed &mdash; 34 signals generated</div><div class="activity-time">2 minutes ago</div></div>
+            </div>
+            <div class="activity-item">
+              <div class="activity-icon" style="background:rgba(0,255,204,0.12);">&#128279;</div>
+              <div><div class="activity-text">Graphify rebuilt: 127 nodes, 89 edges (340ms)</div><div class="activity-time">14 minutes ago</div></div>
+            </div>
+            <div class="activity-item">
+              <div class="activity-icon" style="background:rgba(245,158,11,0.15);">&#128225;</div>
+              <div><div class="activity-text">MCP Supabase reconnected after timeout</div><div class="activity-time">32 minutes ago</div></div>
+            </div>
+            <div class="activity-item">
+              <div class="activity-icon" style="background:rgba(34,197,94,0.12);">&#10003;</div>
+              <div><div class="activity-text">Portfolio sync: 8 holdings updated from DB</div><div class="activity-time">1 hour ago</div></div>
+            </div>
+            <div class="activity-item">
+              <div class="activity-icon" style="background:rgba(99,102,241,0.15);">&#129504;</div>
+              <div><div class="activity-text">Claude claude-sonnet-4-6: NVDA BUY signal (87%)</div><div class="activity-time">1.5 hours ago</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
-    <!-- ── GRAPHIFY ── -->
-    <div class="tab-panel" id="tab-graphify">
-      <div class="section-title">⬡ Codebase Knowledge Graph</div>
-      <div class="graph-controls" id="graph-filters"></div>
-      <canvas id="graph-canvas"></canvas>
-      <div class="legend" id="graph-legend"></div>
-      <div id="node-inspector"></div>
+    <div class="card">
+      <div class="card-body" style="display:flex;gap:12px;flex-wrap:wrap;">
+        <button class="btn btn-primary" onclick="runMarketScan()">&#9889; Run Market Scan</button>
+        <button class="btn btn-secondary" onclick="showTab('graphify')">&#128279; Build Graph</button>
+        <button class="btn btn-secondary" onclick="showTab('mcp')">&#128225; Sync MCPs</button>
+        <button class="btn btn-ghost" onclick="showTab('terminal')">&#9000; View Terminal</button>
+      </div>
     </div>
-
-    <!-- ── MCPs ── -->
-    <div class="tab-panel" id="tab-mcps">
-      <div class="section-title">⬡ MCP Servers &amp; External Providers</div>
-      <div class="mcp-grid" id="mcp-grid"><div class="loader"><div class="spin"></div></div></div>
-    </div>
-
-    <!-- ── SKILLS ── -->
-    <div class="tab-panel" id="tab-skills">
-      <div class="section-title">⬡ AI Skills Registry</div>
-      <input class="search-bar" id="skills-search" placeholder="Search skills…" />
-      <div class="skills-grid" id="skills-grid"><div class="loader"><div class="spin"></div></div></div>
-    </div>
-
-    <!-- ── BRAIN ── -->
-    <div class="tab-panel" id="tab-brain">
-      <div class="section-title">⬡ Agentic Brain</div>
-      <div class="brain-grid" id="brain-metrics"><div class="loader"><div class="spin"></div></div></div>
-      <div class="section-title">⬡ Tool Registry</div>
-      <div class="card" id="tool-registry"><div class="loader"><div class="spin"></div></div></div>
-    </div>
-
   </div>
-</div>
 
-<div id="tooltip"></div>
+  <!-- ===== TAB 2: GRAPHIFY ===== -->
+  <div class="tab-panel" id="tab-graphify">
+    <div style="margin-bottom:20px;">
+      <div class="section-title">Graphify</div>
+      <div class="section-sub">Interactive codebase knowledge graph &mdash; drag, zoom, and explore dependencies</div>
+    </div>
+
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-body" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:14px 20px;">
+        <input type="text" class="form-input" id="graph-search" placeholder="Search nodes..." style="width:200px;" oninput="filterGraph(this.value)">
+        <select class="form-input form-select" id="graph-filter" style="width:150px;" onchange="filterGraphType(this.value)">
+          <option value="all">All Types</option>
+          <option value="route">Routes</option>
+          <option value="lib">Libraries</option>
+          <option value="component">Components</option>
+          <option value="jsx">JSX</option>
+        </select>
+        <div style="display:flex;gap:4px;margin-left:auto;">
+          <button class="btn btn-ghost btn-sm" onclick="zoomGraph(1.3)">+ Zoom</button>
+          <button class="btn btn-ghost btn-sm" onclick="zoomGraph(0.77)">&minus; Zoom</button>
+          <button class="btn btn-ghost btn-sm" onclick="resetGraph()">&#8635; Reset</button>
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="exportGraph()">&#8595; Export</button>
+        <button class="btn btn-primary btn-sm" onclick="rebuildGraph()">&#9889; Rebuild</button>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-body" style="padding:10px 20px;display:flex;gap:20px;flex-wrap:wrap;align-items:center;">
+        <span style="font-size:12px;color:var(--muted);">Node Types:</span>
+        <span style="font-size:12px;display:flex;align-items:center;gap:5px;"><span style="width:10px;height:10px;border-radius:50%;background:#6366F1;display:inline-block;"></span>Route</span>
+        <span style="font-size:12px;display:flex;align-items:center;gap:5px;"><span style="width:10px;height:10px;border-radius:50%;background:#06B6D4;display:inline-block;"></span>Library</span>
+        <span style="font-size:12px;display:flex;align-items:center;gap:5px;"><span style="width:10px;height:10px;border-radius:50%;background:#8B5CF6;display:inline-block;"></span>Component</span>
+        <span style="font-size:12px;display:flex;align-items:center;gap:5px;"><span style="width:10px;height:10px;border-radius:50%;background:#A78BFA;display:inline-block;"></span>JSX</span>
+      </div>
+    </div>
+
+    <div id="graph-container" style="margin-bottom:20px;height:600px;">
+      <div class="graph-tooltip" id="graph-tooltip"></div>
+      <svg id="graphify-svg" style="width:100%;height:600px;display:block;"></svg>
+    </div>
+
+    <div class="grid-3" style="margin-bottom:20px;">
+      <div class="card output-card">
+        <div class="output-filename">graph.json</div>
+        <div class="output-meta">2.4 KB &middot; 127 nodes, 89 edges &middot; Last built 2m ago</div>
+        <button class="btn btn-ghost btn-sm">&#8595; Download JSON</button>
+      </div>
+      <div class="card output-card">
+        <div class="output-filename">GRAPH_REPORT.md</div>
+        <div class="output-meta">14.2 KB &middot; Full analysis report with insights</div>
+        <div style="display:flex;gap:8px;"><button class="btn btn-ghost btn-sm">&#128065; View</button><button class="btn btn-ghost btn-sm">&#8595; Download</button></div>
+      </div>
+      <div class="card output-card">
+        <div class="output-filename">graph.html</div>
+        <div class="output-meta">Interactive visualization &middot; 340 KB &middot; Standalone</div>
+        <button class="btn btn-secondary btn-sm">&#8599; Open</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="collapsible-toggle" id="cli-toggle" onclick="toggleCli()">
+        <span style="font-size:13px;font-weight:600;color:var(--text);">&#9000; CLI Reference</span>
+        <span id="cli-arrow" style="color:var(--muted);font-size:12px;">&#9660;</span>
+      </div>
+      <div class="collapsible-body" id="cli-body">
+        <div class="code-block" style="margin:0 1px 1px;border-radius:0 0 var(--radius) var(--radius);">
+          <div><span class="comment"># Build the knowledge graph</span></div>
+          <div><span class="cmd">npx graphify build</span>                 <span class="comment"># build from current dir</span></div>
+          <div><span class="cmd">npx graphify build --root ./src</span>    <span class="comment"># specify root directory</span></div>
+          <div><span class="cmd">npx graphify build --max-nodes 500</span> <span class="comment"># limit node count</span></div>
+          <div>&nbsp;</div>
+          <div><span class="comment"># Serve interactive visualization</span></div>
+          <div><span class="cmd">npx graphify serve</span>                 <span class="comment"># serve on :4000</span></div>
+          <div><span class="cmd">npx graphify serve --port 8080</span>     <span class="comment"># custom port</span></div>
+          <div>&nbsp;</div>
+          <div><span class="comment"># Export formats</span></div>
+          <div><span class="cmd">npx graphify export --format json</span></div>
+          <div><span class="cmd">npx graphify export --format html</span></div>
+          <div><span class="cmd">npx graphify export --format svg</span></div>
+          <div>&nbsp;</div>
+          <div><span class="comment"># Watch mode (auto-rebuild on file changes)</span></div>
+          <div><span class="cmd">npx graphify watch</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== TAB 3: MCP SERVERS ===== -->
+  <div class="tab-panel" id="tab-mcp">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px;">
+      <div>
+        <div class="section-title">MCP Servers <span class="badge badge-connected" style="font-size:12px;vertical-align:middle;margin-left:8px;">6 Active</span></div>
+        <div class="section-sub" style="margin-bottom:0;">Model Context Protocol server connections</div>
+      </div>
+      <button class="btn btn-primary">+ Add Server</button>
+    </div>
+
+    <div class="grid-3">
+      <div class="card mcp-card">
+        <div class="mcp-card-header">
+          <div class="mcp-icon-dot" style="background:rgba(34,197,94,0.12);">&#128269;</div>
+          <div><div class="mcp-name">Tavily Search</div><span class="badge badge-connected">&#9679; Connected</span></div>
+        </div>
+        <div class="mcp-meta">
+          <div>&#128640; HTTP Transport</div><div>&#128295; 3 tools</div><div>&#9201; Last ping: 0.4s</div>
+        </div>
+        <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);">
+          <div style="font-size:12px;color:var(--muted);margin-bottom:6px;">Tools:</div>
+          <div class="skill-tags"><span class="skill-tag">search</span><span class="skill-tag">extract</span><span class="skill-tag">crawl</span></div>
+        </div>
+      </div>
+
+      <div class="card mcp-card">
+        <div class="mcp-card-header">
+          <div class="mcp-icon-dot" style="background:rgba(34,197,94,0.12);">&#128451;</div>
+          <div><div class="mcp-name">Supabase</div><span class="badge badge-connected">&#9679; Connected</span></div>
+        </div>
+        <div class="mcp-meta">
+          <div>&#9881; stdio Transport</div><div>&#128295; 8 tools</div><div>&#9201; Last ping: 0.9s</div>
+        </div>
+        <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);">
+          <div style="font-size:12px;color:var(--muted);margin-bottom:6px;">Tools:</div>
+          <div class="skill-tags"><span class="skill-tag">query</span><span class="skill-tag">insert</span><span class="skill-tag">update</span><span class="skill-tag">delete</span><span class="skill-tag">rpc</span><span class="skill-tag">storage</span><span class="skill-tag">auth</span><span class="skill-tag">edge</span></div>
+        </div>
+      </div>
+
+      <div class="card mcp-card">
+        <div class="mcp-card-header">
+          <div class="mcp-icon-dot" style="background:rgba(99,102,241,0.15);">&#128218;</div>
+          <div><div class="mcp-name">Context7</div><span class="badge badge-connected">&#9679; Connected</span></div>
+        </div>
+        <div class="mcp-meta">
+          <div>&#128640; HTTP Transport</div><div>&#128295; 5 tools</div><div>&#9201; Last ping: 0.6s</div>
+        </div>
+        <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);">
+          <div style="font-size:12px;color:var(--muted);margin-bottom:6px;">Tools:</div>
+          <div class="skill-tags"><span class="skill-tag">resolve-library-id</span><span class="skill-tag">get-library-docs</span><span class="skill-tag">search-docs</span><span class="skill-tag">list-libraries</span><span class="skill-tag">version-info</span></div>
+        </div>
+      </div>
+
+      <div class="card mcp-card">
+        <div class="mcp-card-header">
+          <div class="mcp-icon-dot" style="background:rgba(0,255,204,0.12);">&#128375;</div>
+          <div><div class="mcp-name">Graphify MCP</div><span class="badge badge-connected">&#9679; Connected</span></div>
+        </div>
+        <div class="mcp-meta">
+          <div>&#9881; stdio Transport</div><div>&#128295; 6 tools</div><div>&#9201; Last ping: 0.2s</div>
+        </div>
+        <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);">
+          <div style="font-size:12px;color:var(--muted);margin-bottom:6px;">Tools:</div>
+          <div class="skill-tags"><span class="skill-tag">build-graph</span><span class="skill-tag">query-nodes</span><span class="skill-tag">find-deps</span><span class="skill-tag">export</span><span class="skill-tag">serve</span><span class="skill-tag">watch</span></div>
+        </div>
+      </div>
+
+      <div class="card mcp-card">
+        <div class="mcp-card-header">
+          <div class="mcp-icon-dot" style="background:rgba(245,158,11,0.15);">&#127917;</div>
+          <div><div class="mcp-name">Playwright</div><span class="badge badge-idle">&#8856; Idle</span></div>
+        </div>
+        <div class="mcp-meta">
+          <div>&#9881; stdio Transport</div><div>&#128295; 12 tools</div><div>&#9201; Last ping: 8.1s</div>
+        </div>
+        <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);">
+          <div style="font-size:12px;color:var(--muted);margin-bottom:6px;">Tools:</div>
+          <div class="skill-tags"><span class="skill-tag">navigate</span><span class="skill-tag">click</span><span class="skill-tag">screenshot</span><span class="skill-tag">fill</span><span class="skill-tag">scroll</span><span class="skill-tag">evaluate</span><span class="skill-tag">+6 more</span></div>
+        </div>
+      </div>
+
+      <div class="ghost-card" onclick="alert('Add MCP Server dialog — connect stdio, HTTP, or SSE transports')">
+        <div class="ghost-card-icon">+</div>
+        <div class="ghost-card-label">Add New Server</div>
+        <div style="font-size:11px;margin-top:6px;color:inherit;">Connect stdio, SSE, or HTTP</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== TAB 4: SKILLS ===== -->
+  <div class="tab-panel" id="tab-skills">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px;">
+      <div>
+        <div class="section-title">AI Skills</div>
+        <div class="section-sub" style="margin-bottom:0;">Reusable agent skill definitions with prompts and constraints</div>
+      </div>
+      <div style="display:flex;gap:10px;">
+        <input type="text" class="form-input" placeholder="Search skills..." style="width:200px;">
+        <button class="btn btn-primary">+ Create Skill</button>
+      </div>
+    </div>
+
+    <div class="grid-3">
+      <div class="card skill-card">
+        <div class="skill-name">frontend-design</div>
+        <div class="skill-desc">Generates production-ready React + Tailwind UI components following design system conventions with accessibility best practices.</div>
+        <div class="skill-tags"><span class="skill-tag">react</span><span class="skill-tag">tailwind</span><span class="skill-tag">ui</span><span class="skill-tag">a11y</span></div>
+        <div class="skill-footer"><span class="skill-stats">&#9889; 847 runs &middot; 3.2 KB</span><button class="btn btn-secondary btn-xs">&#9654; Run</button></div>
+      </div>
+      <div class="card skill-card">
+        <div class="skill-name">testing-suite</div>
+        <div class="skill-desc">Writes comprehensive unit, integration, and e2e tests using Vitest and Playwright with coverage targets and edge case coverage.</div>
+        <div class="skill-tags"><span class="skill-tag">vitest</span><span class="skill-tag">playwright</span><span class="skill-tag">coverage</span></div>
+        <div class="skill-footer"><span class="skill-stats">&#9889; 412 runs &middot; 2.8 KB</span><button class="btn btn-secondary btn-xs">&#9654; Run</button></div>
+      </div>
+      <div class="card skill-card">
+        <div class="skill-name">commit-commands</div>
+        <div class="skill-desc">Generates semantic commit messages, changelogs, and PR descriptions from diffs using conventional commits specification.</div>
+        <div class="skill-tags"><span class="skill-tag">git</span><span class="skill-tag">conventional</span><span class="skill-tag">changelog</span></div>
+        <div class="skill-footer"><span class="skill-stats">&#9889; 1,204 runs &middot; 1.9 KB</span><button class="btn btn-secondary btn-xs">&#9654; Run</button></div>
+      </div>
+      <div class="card skill-card">
+        <div class="skill-name">feature-dev</div>
+        <div class="skill-desc">End-to-end feature development: spec &rarr; implementation &rarr; tests &rarr; docs. Maintains code style consistency and backwards compatibility.</div>
+        <div class="skill-tags"><span class="skill-tag">fullstack</span><span class="skill-tag">tdd</span><span class="skill-tag">docs</span><span class="skill-tag">api</span></div>
+        <div class="skill-footer"><span class="skill-stats">&#9889; 298 runs &middot; 4.1 KB</span><button class="btn btn-secondary btn-xs">&#9654; Run</button></div>
+      </div>
+      <div class="card skill-card">
+        <div class="skill-name">security-audit</div>
+        <div class="skill-desc">Performs static analysis for OWASP Top 10 vulnerabilities, dependency auditing, secret scanning, and secure coding recommendations.</div>
+        <div class="skill-tags"><span class="skill-tag">owasp</span><span class="skill-tag">sast</span><span class="skill-tag">secrets</span></div>
+        <div class="skill-footer"><span class="skill-stats">&#9889; 156 runs &middot; 3.7 KB</span><button class="btn btn-secondary btn-xs">&#9654; Run</button></div>
+      </div>
+      <div class="ghost-card" onclick="alert('Create Skill: define prompts, constraints, and triggers')">
+        <div class="ghost-card-icon">+</div>
+        <div class="ghost-card-label">Create New Skill</div>
+        <div style="font-size:11px;margin-top:6px;color:inherit;">Define prompts, constraints, triggers</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== TAB 5: PLUGINS ===== -->
+  <div class="tab-panel" id="tab-plugins">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px;">
+      <div>
+        <div class="section-title">Plugins</div>
+        <div class="section-sub" style="margin-bottom:0;">Extend platform capabilities with verified plugins</div>
+      </div>
+      <button class="btn btn-secondary">&#128722; Browse Store</button>
+    </div>
+
+    <div class="grid-3">
+      <div class="card" style="padding:18px;">
+        <div class="plugin-icon" style="background:rgba(99,102,241,0.15);">&#9889;</div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap;">
+          <div class="plugin-name">Superpowers</div>
+          <span class="badge badge-default">v2.1.0</span>
+          <span class="badge badge-installed">Installed</span>
+        </div>
+        <div class="plugin-desc">Supercharges Claude Code with extra slash commands, workflow automations, and codebase intelligence tools.</div>
+        <div class="plugin-author">by <span style="color:var(--accent2);">@anthropic-labs</span></div>
+        <div class="plugin-footer"><span style="font-size:11px;color:var(--muted);">12 commands</span><button class="btn btn-danger btn-xs">Uninstall</button></div>
+      </div>
+
+      <div class="card" style="padding:18px;">
+        <div class="plugin-icon" style="background:rgba(6,182,212,0.12);">&#128218;</div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap;">
+          <div class="plugin-name">Context7</div>
+          <span class="badge badge-default">v1.3.2</span>
+          <span class="badge badge-installed">Installed</span>
+        </div>
+        <div class="plugin-desc">Injects up-to-date library documentation into context. Supports 2,000+ packages. Auto-detects imports.</div>
+        <div class="plugin-author">by <span style="color:var(--accent2);">@upstash</span></div>
+        <div class="plugin-footer"><span style="font-size:11px;color:var(--muted);">2,000+ libraries</span><button class="btn btn-danger btn-xs">Uninstall</button></div>
+      </div>
+
+      <div class="card" style="padding:18px;">
+        <div class="plugin-icon" style="background:rgba(245,158,11,0.12);">&#127760;</div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap;">
+          <div class="plugin-name">Browser Agent</div>
+          <span class="badge badge-default">v0.9.4</span>
+          <span class="badge badge-installed">Installed</span>
+        </div>
+        <div class="plugin-desc">Autonomous web browsing, form filling, screenshot capture, and data extraction via Playwright integration.</div>
+        <div class="plugin-author">by <span style="color:var(--accent2);">@browserbase</span></div>
+        <div class="plugin-footer"><span style="font-size:11px;color:var(--muted);">18 actions</span><button class="btn btn-danger btn-xs">Uninstall</button></div>
+      </div>
+
+      <div class="card" style="padding:18px;">
+        <div class="plugin-icon" style="background:rgba(34,197,94,0.12);">&#128269;</div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap;">
+          <div class="plugin-name">PR Reviewer</div>
+          <span class="badge badge-default">v1.0.1</span>
+          <span class="badge badge-installed">Installed</span>
+        </div>
+        <div class="plugin-desc">Automated pull request review with security scanning, style checks, test coverage analysis, and inline suggestions.</div>
+        <div class="plugin-author">by <span style="color:var(--accent2);">@coderabbit</span></div>
+        <div class="plugin-footer"><span style="font-size:11px;color:var(--muted);">GitHub + GitLab</span><button class="btn btn-danger btn-xs">Uninstall</button></div>
+      </div>
+
+      <div class="card" style="padding:18px;">
+        <div class="plugin-icon" style="background:rgba(139,92,246,0.15);">&#128065;</div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap;">
+          <div class="plugin-name">Vision Extractor</div>
+          <span class="badge badge-default">v0.7.2</span>
+          <span class="badge badge-installed">Installed</span>
+        </div>
+        <div class="plugin-desc">Extract structured data from images, screenshots, PDFs, and diagrams using multimodal analysis and OCR.</div>
+        <div class="plugin-author">by <span style="color:var(--accent2);">@anthropic</span></div>
+        <div class="plugin-footer"><span style="font-size:11px;color:var(--muted);">OCR + Schema</span><button class="btn btn-danger btn-xs">Uninstall</button></div>
+      </div>
+
+      <div class="ghost-card" onclick="alert('Browse Plugin Store — 200+ verified plugins available')">
+        <div class="ghost-card-icon">&#128722;</div>
+        <div class="ghost-card-label">Browse Plugin Store</div>
+        <div style="font-size:11px;margin-top:6px;color:inherit;">Discover 200+ verified plugins</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== TAB 6: AGENTIC BRAIN ===== -->
+  <div class="tab-panel" id="tab-brain">
+    <div style="margin-bottom:20px;">
+      <div class="section-title">Agentic Brain</div>
+      <div class="section-sub">Configure reasoning, memory, and agent coordination layers</div>
+    </div>
+
+    <div class="grid-3" style="margin-bottom:20px;">
+      <!-- Reasoning Engine -->
+      <div class="card">
+        <div class="card-header"><div class="card-title">&#9889; Reasoning Engine</div><span class="badge badge-connected">&#9679; Active</span></div>
+        <div class="card-body">
+          <div class="brain-row"><span class="brain-label">Model</span><span class="brain-val" style="font-size:12px;color:var(--accent);">claude-sonnet-4-6</span></div>
+          <div class="brain-row"><span class="brain-label">Temperature</span><span class="brain-val">0.72</span></div>
+          <div class="brain-row"><span class="brain-label">Context Window</span><span class="brain-val">200K tokens</span></div>
+          <div class="brain-row"><span class="brain-label">Token Budget</span><span class="brain-val">8,192</span></div>
+          <div style="margin-top:14px;border-top:1px solid var(--border);padding-top:14px;">
+            <div class="toggle-row">
+              <div><div class="toggle-label">Chain of Thought</div><div class="toggle-sub">Extended thinking mode</div></div>
+              <label class="toggle-switch"><input type="checkbox" checked><span class="toggle-thumb"></span></label>
+            </div>
+            <div class="toggle-row">
+              <div><div class="toggle-label">Tool Use</div><div class="toggle-sub">Enable function calling</div></div>
+              <label class="toggle-switch"><input type="checkbox" checked><span class="toggle-thumb"></span></label>
+            </div>
+            <div class="toggle-row">
+              <div><div class="toggle-label">Self-Reflection</div><div class="toggle-sub">Review &amp; refine outputs</div></div>
+              <label class="toggle-switch"><input type="checkbox"><span class="toggle-thumb"></span></label>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Memory Layer -->
+      <div class="card">
+        <div class="card-header"><div class="card-title">&#129504; Memory Layer</div><span class="badge badge-connected">&#9679; Synced</span></div>
+        <div class="card-body">
+          <div class="brain-row"><span class="brain-label">Vector Store</span><span class="brain-val" style="font-size:12px;color:var(--accent);">Supabase pgvector</span></div>
+          <div class="brain-row"><span class="brain-label">Embeddings</span><span class="brain-val">14,829</span></div>
+          <div class="brain-row"><span class="brain-label">Dimensions</span><span class="brain-val">1,536</span></div>
+          <div class="brain-row"><span class="brain-label">Last Sync</span><span class="brain-val" style="font-size:12px;">8 min ago</span></div>
+          <div class="brain-row"><span class="brain-label">Cache Hit Rate</span><span class="brain-val" style="color:#22C55E;">87.4%</span></div>
+          <div style="margin-top:14px;display:flex;gap:8px;">
+            <button class="btn btn-ghost btn-sm" style="flex:1;">&#8635; Rebuild</button>
+            <button class="btn btn-danger btn-sm" style="flex:1;">&#10005; Clear</button>
+          </div>
+          <div style="margin-top:10px;">
+            <div class="toggle-row">
+              <div><div class="toggle-label">Auto-Embed</div><div class="toggle-sub">Embed new files on save</div></div>
+              <label class="toggle-switch"><input type="checkbox" checked><span class="toggle-thumb"></span></label>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Agent Team -->
+      <div class="card">
+        <div class="card-header"><div class="card-title">&#128101; Agent Team</div><span class="badge badge-default">3 agents</span></div>
+        <div class="card-body">
+          <div class="agent-item">
+            <div><div class="agent-name">Researcher</div><div class="agent-role">Web search, document retrieval, data gathering</div></div>
+            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;"><span class="status-dot dot-green"></span><span class="badge badge-connected" style="font-size:10px;">Active</span></div>
+          </div>
+          <div class="agent-item">
+            <div><div class="agent-name">Analyst</div><div class="agent-role">Data analysis, pattern recognition, insights</div></div>
+            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;"><span class="status-dot dot-green"></span><span class="badge badge-connected" style="font-size:10px;">Active</span></div>
+          </div>
+          <div class="agent-item">
+            <div><div class="agent-name">Writer</div><div class="agent-role">Report generation, summaries, documentation</div></div>
+            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;"><span class="status-dot dot-yellow"></span><span class="badge badge-idle" style="font-size:10px;">Idle</span></div>
+          </div>
+          <button class="btn btn-ghost btn-sm" style="width:100%;margin-top:12px;">+ Add Agent</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Architecture Diagram -->
+    <div class="card">
+      <div class="card-header"><div class="card-title">Architecture Overview</div><div class="card-subtitle">Request flow from user to response</div></div>
+      <div class="card-body">
+        <svg viewBox="0 0 900 200" style="width:100%;height:200px;" preserveAspectRatio="xMidYMid meet">
+          <defs>
+            <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+              <polygon points="0 0, 8 3, 0 6" fill="rgba(255,255,255,0.25)"/>
+            </marker>
+          </defs>
+          <!-- User -->
+          <rect x="8" y="75" width="76" height="50" rx="8" fill="rgba(99,102,241,0.12)" stroke="#6366F1" stroke-width="1.5"/>
+          <text x="46" y="97" text-anchor="middle" fill="#A78BFA" font-size="11" font-weight="600" font-family="Inter,sans-serif">User</text>
+          <text x="46" y="113" text-anchor="middle" fill="#6B7280" font-size="9" font-family="Inter,sans-serif">Input</text>
+          <line x1="84" y1="100" x2="112" y2="100" stroke="rgba(255,255,255,0.2)" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+          <!-- Copilot -->
+          <rect x="112" y="63" width="104" height="74" rx="8" fill="rgba(0,255,204,0.08)" stroke="#00FFCC" stroke-width="1.5"/>
+          <text x="164" y="90" text-anchor="middle" fill="#00FFCC" font-size="11" font-weight="600" font-family="Inter,sans-serif">Copilot</text>
+          <text x="164" y="106" text-anchor="middle" fill="#6B7280" font-size="9" font-family="Inter,sans-serif">Orchestrator</text>
+          <text x="164" y="122" text-anchor="middle" fill="#6B7280" font-size="8" font-family="Inter,sans-serif">claude-sonnet-4-6</text>
+          <line x1="216" y1="100" x2="244" y2="100" stroke="rgba(255,255,255,0.2)" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+          <!-- Tool Router -->
+          <rect x="244" y="75" width="96" height="50" rx="8" fill="rgba(139,92,246,0.1)" stroke="#8B5CF6" stroke-width="1.5"/>
+          <text x="292" y="97" text-anchor="middle" fill="#A78BFA" font-size="11" font-weight="600" font-family="Inter,sans-serif">Tool Router</text>
+          <text x="292" y="113" text-anchor="middle" fill="#6B7280" font-size="9" font-family="Inter,sans-serif">Skill Dispatch</text>
+          <!-- Branches -->
+          <line x1="340" y1="88" x2="440" y2="53" stroke="rgba(255,255,255,0.12)" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+          <line x1="340" y1="100" x2="440" y2="100" stroke="rgba(255,255,255,0.12)" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+          <line x1="340" y1="112" x2="440" y2="147" stroke="rgba(255,255,255,0.12)" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+          <!-- Claude API -->
+          <rect x="440" y="28" width="110" height="50" rx="8" fill="rgba(0,255,204,0.07)" stroke="rgba(0,255,204,0.4)" stroke-width="1.5"/>
+          <text x="495" y="50" text-anchor="middle" fill="#00FFCC" font-size="10" font-weight="600" font-family="Inter,sans-serif">Claude API</text>
+          <text x="495" y="66" text-anchor="middle" fill="#6B7280" font-size="9" font-family="Inter,sans-serif">Primary LLM</text>
+          <!-- Groq -->
+          <rect x="440" y="75" width="110" height="50" rx="8" fill="rgba(245,158,11,0.07)" stroke="rgba(245,158,11,0.4)" stroke-width="1.5"/>
+          <text x="495" y="97" text-anchor="middle" fill="#F59E0B" font-size="10" font-weight="600" font-family="Inter,sans-serif">Groq Fallback</text>
+          <text x="495" y="113" text-anchor="middle" fill="#6B7280" font-size="9" font-family="Inter,sans-serif">LLaMA-3.3-70B</text>
+          <!-- MCP Tools -->
+          <rect x="440" y="122" width="110" height="50" rx="8" fill="rgba(99,102,241,0.08)" stroke="rgba(99,102,241,0.35)" stroke-width="1.5"/>
+          <text x="495" y="144" text-anchor="middle" fill="#818CF8" font-size="10" font-weight="600" font-family="Inter,sans-serif">MCP Tools</text>
+          <text x="495" y="160" text-anchor="middle" fill="#6B7280" font-size="9" font-family="Inter,sans-serif">10 Servers</text>
+          <!-- Merge -->
+          <line x1="550" y1="53" x2="668" y2="82" stroke="rgba(255,255,255,0.12)" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+          <line x1="550" y1="100" x2="668" y2="100" stroke="rgba(255,255,255,0.12)" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+          <line x1="550" y1="147" x2="668" y2="118" stroke="rgba(255,255,255,0.12)" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+          <!-- Data Layer -->
+          <rect x="668" y="55" width="108" height="90" rx="8" fill="rgba(34,197,94,0.07)" stroke="rgba(34,197,94,0.3)" stroke-width="1.5"/>
+          <text x="722" y="78" text-anchor="middle" fill="#22C55E" font-size="10" font-weight="600" font-family="Inter,sans-serif">Data Layer</text>
+          <text x="722" y="95" text-anchor="middle" fill="#6B7280" font-size="9" font-family="Inter,sans-serif">Market Data</text>
+          <text x="722" y="110" text-anchor="middle" fill="#6B7280" font-size="9" font-family="Inter,sans-serif">Alt Data</text>
+          <text x="722" y="125" text-anchor="middle" fill="#6B7280" font-size="9" font-family="Inter,sans-serif">Backtest</text>
+          <line x1="776" y1="100" x2="804" y2="100" stroke="rgba(255,255,255,0.2)" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+          <!-- Response -->
+          <rect x="804" y="75" width="88" height="50" rx="8" fill="rgba(99,102,241,0.12)" stroke="#6366F1" stroke-width="1.5"/>
+          <text x="848" y="97" text-anchor="middle" fill="#A78BFA" font-size="10" font-weight="600" font-family="Inter,sans-serif">Response</text>
+          <text x="848" y="113" text-anchor="middle" fill="#6B7280" font-size="9" font-family="Inter,sans-serif">Streamed</text>
+        </svg>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== TAB 7: TERMINAL ===== -->
+  <div class="tab-panel" id="tab-terminal">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px;">
+      <div>
+        <div class="section-title">Neo-OS Terminal</div>
+        <div class="section-sub">System console &mdash; execute commands and view real-time logs</div>
+      </div>
+      <div style="display:flex;gap:10px;">
+        <button class="btn btn-ghost btn-sm" onclick="clearTerminal()">&#10005; Clear</button>
+        <button class="btn btn-ghost btn-sm" onclick="downloadLog()">&#8595; Download Log</button>
+      </div>
+    </div>
+    <div id="terminal-output"></div>
+    <div id="terminal-input-row">
+      <span id="terminal-prompt-label">neo@os:~$</span>
+      <input type="text" id="terminal-input" placeholder="Type a command... (try: help, status, scan, graph)" autocomplete="off" spellcheck="false">
+    </div>
+  </div>
+
+  <!-- ===== TAB 8: SETTINGS ===== -->
+  <div class="tab-panel" id="tab-settings">
+    <div style="margin-bottom:20px;">
+      <div class="section-title">Settings</div>
+      <div class="section-sub">Configure platform behavior, models, and appearance</div>
+    </div>
+
+    <div class="grid-2" style="align-items:start;">
+      <div style="display:flex;flex-direction:column;gap:20px;">
+        <!-- Model Configuration -->
+        <div class="card">
+          <div class="card-body">
+            <div class="settings-section-title">Model Configuration</div>
+            <div class="form-row">
+              <label class="form-label">Primary Model</label>
+              <select class="form-input form-select"><option selected>claude-sonnet-4-6</option><option>claude-opus-4</option><option>claude-haiku-4</option></select>
+            </div>
+            <div class="form-row">
+              <label class="form-label">Temperature &mdash; <span id="temp-val" style="color:var(--accent);">0.72</span></label>
+              <div class="range-row">
+                <span style="font-size:11px;color:var(--muted);">0.0</span>
+                <input type="range" class="form-range" min="0" max="100" value="72" style="flex:1;" oninput="document.getElementById('temp-val').textContent=(this.value/100).toFixed(2)">
+                <span style="font-size:11px;color:var(--muted);">1.0</span>
+              </div>
+            </div>
+            <div class="form-row">
+              <label class="form-label">Max Output Tokens</label>
+              <input type="number" class="form-input" value="8192" min="256" max="100000">
+            </div>
+            <div class="toggle-row">
+              <div><div class="toggle-label">Groq Fallback</div><div class="toggle-sub">Use LLaMA-3.3-70B when Claude unavailable</div></div>
+              <label class="toggle-switch"><input type="checkbox" checked><span class="toggle-thumb"></span></label>
+            </div>
+            <div class="toggle-row">
+              <div><div class="toggle-label">Streaming Responses</div><div class="toggle-sub">Stream token-by-token responses</div></div>
+              <label class="toggle-switch"><input type="checkbox" checked><span class="toggle-thumb"></span></label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Graphify Settings -->
+        <div class="card">
+          <div class="card-body">
+            <div class="settings-section-title">Graphify Settings</div>
+            <div class="form-row">
+              <label class="form-label">Output Directory</label>
+              <input type="text" class="form-input" value="./graphify-output">
+            </div>
+            <div class="form-row">
+              <label class="form-label">Max Nodes &mdash; <span id="nodes-val" style="color:var(--accent);">500</span></label>
+              <div class="range-row">
+                <span style="font-size:11px;color:var(--muted);">100</span>
+                <input type="range" class="form-range" min="100" max="2000" value="500" style="flex:1;" oninput="document.getElementById('nodes-val').textContent=this.value">
+                <span style="font-size:11px;color:var(--muted);">2000</span>
+              </div>
+            </div>
+            <div class="form-row">
+              <label class="form-label">Cache TTL (seconds)</label>
+              <input type="number" class="form-input" value="3600">
+            </div>
+            <div class="toggle-row">
+              <div><div class="toggle-label">Auto-Rebuild</div><div class="toggle-sub">Rebuild graph on file save</div></div>
+              <label class="toggle-switch"><input type="checkbox" checked><span class="toggle-thumb"></span></label>
+            </div>
+            <div class="toggle-row">
+              <div><div class="toggle-label">Include node_modules</div><div class="toggle-sub">Include dependency graph nodes</div></div>
+              <label class="toggle-switch"><input type="checkbox"><span class="toggle-thumb"></span></label>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:20px;">
+        <!-- MCP Configuration -->
+        <div class="card">
+          <div class="card-body">
+            <div class="settings-section-title">MCP Configuration</div>
+            <div class="form-row">
+              <label class="form-label">Connection Timeout (ms)</label>
+              <input type="number" class="form-input" value="5000">
+            </div>
+            <div class="form-row">
+              <label class="form-label">Retry Count</label>
+              <input type="number" class="form-input" value="3" min="0" max="10">
+            </div>
+            <div class="form-row">
+              <label class="form-label">Transport Preference</label>
+              <div style="display:flex;flex-direction:column;gap:8px;padding:4px 0;">
+                <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;"><input type="radio" name="transport" value="stdio" checked style="accent-color:var(--accent);"><span>stdio (local process)</span></label>
+                <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;"><input type="radio" name="transport" value="http" style="accent-color:var(--accent);"><span>HTTP (remote server)</span></label>
+                <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;"><input type="radio" name="transport" value="sse" style="accent-color:var(--accent);"><span>SSE (streaming events)</span></label>
+              </div>
+            </div>
+            <div class="toggle-row">
+              <div><div class="toggle-label">Auto-Reconnect</div><div class="toggle-sub">Reconnect on disconnect with backoff</div></div>
+              <label class="toggle-switch"><input type="checkbox" checked><span class="toggle-thumb"></span></label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Appearance -->
+        <div class="card">
+          <div class="card-body">
+            <div class="settings-section-title">Appearance</div>
+            <div class="toggle-row">
+              <div><div class="toggle-label">Dark Mode</div><div class="toggle-sub">Toggle between dark and tan themes</div></div>
+              <label class="toggle-switch">
+                <input type="checkbox" id="settings-theme-toggle" checked onchange="toggleThemeFromSettings(this)">
+                <span class="toggle-thumb"></span>
+              </label>
+            </div>
+            <div class="form-row" style="margin-top:16px;">
+              <label class="form-label">Accent Color</label>
+              <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:4px;">
+                <div class="swatch active" style="background:#00FFCC;" onclick="setAccent('#00FFCC','0,255,204',this)" title="Cyan"></div>
+                <div class="swatch" style="background:#6366F1;" onclick="setAccent('#6366F1','99,102,241',this)" title="Indigo"></div>
+                <div class="swatch" style="background:#F59E0B;" onclick="setAccent('#F59E0B','245,158,11',this)" title="Amber"></div>
+                <div class="swatch" style="background:#22C55E;" onclick="setAccent('#22C55E','34,197,94',this)" title="Green"></div>
+                <div class="swatch" style="background:#EC4899;" onclick="setAccent('#EC4899','236,72,153',this)" title="Pink"></div>
+                <div class="swatch" style="background:#06B6D4;" onclick="setAccent('#06B6D4','6,182,212',this)" title="Sky"></div>
+              </div>
+            </div>
+            <div class="toggle-row">
+              <div><div class="toggle-label">Reduced Motion</div><div class="toggle-sub">Disable transitions and animations</div></div>
+              <label class="toggle-switch"><input type="checkbox" onchange="toggleMotion(this)"><span class="toggle-thumb"></span></label>
+            </div>
+            <div class="toggle-row">
+              <div><div class="toggle-label">Compact Mode</div><div class="toggle-sub">Reduce card padding and spacing</div></div>
+              <label class="toggle-switch"><input type="checkbox"><span class="toggle-thumb"></span></label>
+            </div>
+          </div>
+        </div>
+        <button class="btn btn-primary" style="align-self:flex-start;">&#128190; Save Settings</button>
+      </div>
+    </div>
+  </div>
+
+</main>
 
 <script>
-// ── Utilities ─────────────────────────────────────────────────────────────────
-const $ = id => document.getElementById(id)
-const h = (tag, attrs={}, ...ch) => {
-  const el = document.createElement(tag)
-  Object.entries(attrs).forEach(([k,v]) => {
-    if (k === 'class') el.className = v
-    else if (k === 'html') el.innerHTML = v
-    else el.setAttribute(k, v)
-  })
-  ch.forEach(c => c && el.appendChild(typeof c === 'string' ? document.createTextNode(c) : c))
-  return el
+// ===========================
+// CLOCK
+// ===========================
+function updateClock() {
+  document.getElementById('clock').textContent =
+    new Date().toLocaleTimeString('en-US', {hour12: false});
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ===========================
+// TAB SWITCHING
+// ===========================
+function showTab(id) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-pill').forEach(b => b.classList.remove('active'));
+  const panel = document.getElementById('tab-' + id);
+  if (panel) panel.classList.add('active');
+  const btn = document.querySelector('.tab-pill[data-tab="' + id + '"]');
+  if (btn) btn.classList.add('active');
+  if (id === 'graphify') setTimeout(initGraphify, 80);
+  if (id === 'terminal') setTimeout(() => document.getElementById('terminal-input').focus(), 100);
+}
+document.getElementById('tabNav').addEventListener('click', function(e) {
+  const btn = e.target.closest('.tab-pill');
+  if (btn && btn.dataset.tab) showTab(btn.dataset.tab);
+});
+
+// ===========================
+// THEME
+// ===========================
+let isDark = true;
+document.getElementById('themeToggle').addEventListener('click', toggleTheme);
+function toggleTheme() {
+  isDark = !isDark;
+  applyTheme();
+}
+function applyTheme() {
+  document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'tan');
+  document.getElementById('themeToggle').textContent = isDark ? '☀ Tan' : '◑ Dark';
+  const st = document.getElementById('settings-theme-toggle');
+  if (st) st.checked = isDark;
+  setTimeout(() => {
+    initDashGraph();
+    if (document.getElementById('tab-graphify').classList.contains('active')) initGraphify();
+  }, 60);
+}
+function toggleThemeFromSettings(cb) {
+  isDark = cb.checked;
+  applyTheme();
+}
+function setAccent(color, rgb, el) {
+  document.documentElement.style.setProperty('--accent', color);
+  document.documentElement.style.setProperty('--accent-rgb', rgb);
+  document.querySelectorAll('.swatch').forEach(s => s.classList.remove('active'));
+  el.classList.add('active');
+}
+function toggleMotion(cb) {
+  document.documentElement.style.setProperty('--transition', cb.checked ? '0s' : '0.3s');
 }
 
-// ── Clock ─────────────────────────────────────────────────────────────────────
-function tick() {
-  $('clock').textContent = new Date().toLocaleTimeString('en-US', { hour12: false })
-}
-tick(); setInterval(tick, 1000)
-
-// ── Tab routing ───────────────────────────────────────────────────────────────
-const tabLoaded = {}
-document.querySelectorAll('.nav-item[data-tab]').forEach(el => {
-  el.addEventListener('click', () => {
-    document.querySelectorAll('.nav-item').forEach(x => x.classList.remove('active'))
-    document.querySelectorAll('.tab-panel').forEach(x => x.classList.remove('active'))
-    el.classList.add('active')
-    const id = el.dataset.tab
-    $('tab-' + id).classList.add('active')
-    if (!tabLoaded[id]) { tabLoaded[id] = true; loadTab(id) }
-  })
-})
-
-// ── API helpers ───────────────────────────────────────────────────────────────
-async function api(path) {
-  const r = await fetch('/api/agentic-os' + path)
-  if (!r.ok) throw new Error(r.status)
-  return r.json()
-}
-async function apiScheduler() {
-  const r = await fetch('/api/scheduler/jobs')
-  return r.ok ? r.json() : { jobs: [] }
+// ===========================
+// COLLAPSIBLE CLI
+// ===========================
+function toggleCli() {
+  const body = document.getElementById('cli-body');
+  const arrow = document.getElementById('cli-arrow');
+  const open = body.classList.toggle('open');
+  arrow.innerHTML = open ? '&#9650;' : '&#9660;';
 }
 
-// ── Boot log ─────────────────────────────────────────────────────────────────
+// ===========================
+// GRAPH DATA GENERATOR
+// ===========================
+function generateGraphData(nodeCount) {
+  const typeColors = { route:'#6366F1', lib:'#06B6D4', component:'#8B5CF6', jsx:'#A78BFA' };
+  const typeR = { route:9, lib:8, component:10, jsx:5 };
+  const names = {
+    route: ['auth','market','portfolio','ai-brain','trading-analysis','recommendations','macro','users','admin','watchlist'],
+    lib:   ['db','cache','breaker','personas','fred','groq','claude','crypto','etf','utils','logger','schema'],
+    component: ['Dashboard','Portfolio','TradingView','MarketScanner','Brain','Watchlist','Alerts','Settings','Header','Sidebar'],
+    jsx:   ['Button','Card','Modal','Input','Table','Chart','Badge','Tooltip','Dropdown','Layout','Nav','Spinner','Toast','Icon']
+  };
+  const types = ['route','lib','component','jsx'];
+  const counts = { route: Math.floor(nodeCount*0.18), lib: Math.floor(nodeCount*0.22), component: Math.floor(nodeCount*0.22), jsx: 0 };
+  counts.jsx = nodeCount - counts.route - counts.lib - counts.component;
+
+  const nodes = [];
+  let id = 0;
+  for (const type of types) {
+    for (let i = 0; i < counts[type]; i++) {
+      const arr = names[type];
+      nodes.push({ id: id++, label: arr[i % arr.length] + (i >= arr.length ? '_'+ Math.floor(i/arr.length+1) : ''), type, color: typeColors[type], r: typeR[type] });
+    }
+  }
+
+  const links = [];
+  const seen = new Set();
+  const n = nodes.length;
+  for (let i = 0; i < Math.floor(n * 1.6); i++) {
+    const s = Math.floor(Math.random() * n);
+    const t = Math.floor(Math.random() * n);
+    const key = Math.min(s,t) + '|' + Math.max(s,t);
+    if (s !== t && !seen.has(key)) { seen.add(key); links.push({ source: s, target: t }); }
+  }
+  return { nodes, links };
+}
+
+// ===========================
+// DASHBOARD GRAPH
+// ===========================
+let dashSim;
+function initDashGraph() {
+  const container = document.getElementById('dash-graph-container');
+  const svgEl = document.getElementById('dashboard-graph');
+  const W = container.clientWidth || 600;
+  const H = 400;
+  const svg = d3.select(svgEl).attr('width', W).attr('height', H);
+  svg.selectAll('*').remove();
+  const data = generateGraphData(50);
+  const tooltip = document.getElementById('dash-tooltip');
+
+  const zoom = d3.zoom().scaleExtent([0.3,3]).on('zoom', e => g.attr('transform', e.transform));
+  svg.call(zoom);
+  const g = svg.append('g');
+
+  if (dashSim) dashSim.stop();
+  dashSim = d3.forceSimulation(data.nodes)
+    .force('link', d3.forceLink(data.links).id(d => d.id).distance(55))
+    .force('charge', d3.forceManyBody().strength(-110))
+    .force('center', d3.forceCenter(W/2, H/2))
+    .force('collision', d3.forceCollide(13));
+
+  const link = g.append('g').selectAll('line').data(data.links).join('line')
+    .attr('stroke', 'rgba(255,255,255,0.09)').attr('stroke-width', 1);
+
+  const node = g.append('g').selectAll('circle').data(data.nodes).join('circle')
+    .attr('r', d => d.r).attr('fill', d => d.color).attr('fill-opacity', 0.82)
+    .attr('stroke', d => d.color).attr('stroke-width', 1.2).attr('stroke-opacity', 0.4)
+    .style('cursor', 'pointer')
+    .call(d3.drag()
+      .on('start', (e,d) => { if(!e.active) dashSim.alphaTarget(0.3).restart(); d.fx=d.x; d.fy=d.y; })
+      .on('drag', (e,d) => { d.fx=e.x; d.fy=e.y; })
+      .on('end', (e,d) => { if(!e.active) dashSim.alphaTarget(0); d.fx=null; d.fy=null; }))
+    .on('mouseover', (e,d) => {
+      tooltip.style.display='block';
+      tooltip.style.left=(e.offsetX+12)+'px';
+      tooltip.style.top=(e.offsetY-10)+'px';
+      tooltip.innerHTML='<strong>'+d.label+'</strong><br><span style="color:'+d.color+';font-size:10px;">'+d.type+'</span>';
+    })
+    .on('mousemove', e => { tooltip.style.left=(e.offsetX+12)+'px'; tooltip.style.top=(e.offsetY-10)+'px'; })
+    .on('mouseout', () => { tooltip.style.display='none'; });
+
+  dashSim.on('tick', () => {
+    link.attr('x1',d=>d.source.x).attr('y1',d=>d.source.y).attr('x2',d=>d.target.x).attr('y2',d=>d.target.y);
+    node.attr('cx',d=>d.x).attr('cy',d=>d.y);
+  });
+}
+
+// ===========================
+// GRAPHIFY GRAPH
+// ===========================
+let graphSim, graphZoom, graphG, graphSvgSel;
+function initGraphify() {
+  const container = document.getElementById('graph-container');
+  graphSvgSel = d3.select('#graphify-svg');
+  graphSvgSel.selectAll('*').remove();
+  const W = container.clientWidth || 800;
+  const H = 600;
+  graphSvgSel.attr('width', W).attr('height', H);
+  const data = generateGraphData(90);
+  const tooltip = document.getElementById('graph-tooltip');
+
+  graphZoom = d3.zoom().scaleExtent([0.2,5]).on('zoom', e => graphG.attr('transform', e.transform));
+  graphSvgSel.call(graphZoom);
+  graphG = graphSvgSel.append('g');
+
+  if (graphSim) graphSim.stop();
+  graphSim = d3.forceSimulation(data.nodes)
+    .force('link', d3.forceLink(data.links).id(d=>d.id).distance(80))
+    .force('charge', d3.forceManyBody().strength(-150))
+    .force('center', d3.forceCenter(W/2, H/2))
+    .force('collision', d3.forceCollide(16));
+
+  const link = graphG.append('g').selectAll('line').data(data.links).join('line')
+    .attr('stroke','rgba(255,255,255,0.07)').attr('stroke-width',1);
+
+  const nodeGroup = graphG.append('g').selectAll('g').data(data.nodes).join('g')
+    .style('cursor','pointer')
+    .call(d3.drag()
+      .on('start', (e,d) => { if(!e.active) graphSim.alphaTarget(0.3).restart(); d.fx=d.x; d.fy=d.y; })
+      .on('drag', (e,d) => { d.fx=e.x; d.fy=e.y; })
+      .on('end', (e,d) => { if(!e.active) graphSim.alphaTarget(0); d.fx=null; d.fy=null; }))
+    .on('mouseover', (e,d) => {
+      const rect = container.getBoundingClientRect();
+      tooltip.style.display='block';
+      tooltip.style.left=(e.clientX-rect.left+12)+'px';
+      tooltip.style.top=(e.clientY-rect.top-10)+'px';
+      tooltip.innerHTML='<strong>'+d.label+'</strong><br><span style="color:'+d.color+';font-size:10px;">'+d.type+'</span>';
+    })
+    .on('mousemove', e => {
+      const rect = container.getBoundingClientRect();
+      tooltip.style.left=(e.clientX-rect.left+12)+'px';
+      tooltip.style.top=(e.clientY-rect.top-10)+'px';
+    })
+    .on('mouseout', () => { tooltip.style.display='none'; });
+
+  nodeGroup.append('circle').attr('r',d=>d.r).attr('fill',d=>d.color).attr('fill-opacity',0.8)
+    .attr('stroke',d=>d.color).attr('stroke-width',1.5).attr('stroke-opacity',0.45);
+
+  nodeGroup.append('text').attr('dy',d=>d.r+10).attr('text-anchor','middle')
+    .attr('font-size',8).attr('fill','rgba(255,255,255,0.4)').attr('font-family','Inter,sans-serif')
+    .text(d=>d.label.length>11?d.label.slice(0,10)+'…':d.label);
+
+  graphSim.on('tick', () => {
+    link.attr('x1',d=>d.source.x).attr('y1',d=>d.source.y).attr('x2',d=>d.target.x).attr('y2',d=>d.target.y);
+    nodeGroup.attr('transform',d=>'translate('+d.x+','+d.y+')');
+  });
+}
+
+function zoomGraph(f) { if(graphZoom&&graphSvgSel) graphSvgSel.transition().duration(280).call(graphZoom.scaleBy, f); }
+function resetGraph() { if(graphZoom&&graphSvgSel) graphSvgSel.transition().duration(480).call(graphZoom.transform, d3.zoomIdentity); }
+function filterGraph(q) {
+  if(!graphG) return;
+  graphG.selectAll('g').style('opacity', d => !q ? 1 : (d.label.toLowerCase().includes(q.toLowerCase()) ? 1 : 0.12));
+}
+function filterGraphType(type) {
+  if(!graphG) return;
+  graphG.selectAll('g').style('opacity', d => type==='all' ? 1 : (d.type===type ? 1 : 0.12));
+}
+function exportGraph() { alert('Exported graph.json to ./graphify-output/'); }
+function rebuildGraph() {
+  appendTerminalLine('cmd','neo@os:~$ graphify rebuild');
+  appendTerminalLine('info','[INFO] Scanning source tree...');
+  setTimeout(()=>appendTerminalLine('ok','[OK]   Graph rebuilt: 127 nodes, 89 edges (321ms)'), 700);
+  if(document.getElementById('tab-graphify').classList.contains('active')) setTimeout(initGraphify, 350);
+}
+
+// ===========================
+// TERMINAL
+// ===========================
 const bootLines = [
-  ['info', 'SurfingNeo-OS kernel loading…'],
-  ['ok',   'Express API server — ONLINE'],
-  ['ok',   'PostgreSQL pool — CONNECTED'],
-  ['ok',   'Binance WebSocket — STREAMING'],
-  ['ok',   'Claude claude-sonnet-4-6 — READY'],
-  ['ok',   'Agentic OS route — MOUNTED'],
-  ['info', 'Knowledge graph building…'],
-]
-function renderBoot() {
-  const el = $('boot-log')
-  el.innerHTML = ''
-  bootLines.forEach((line, i) => {
-    setTimeout(() => {
-      const div = document.createElement('div')
-      div.className = 'term-line'
-      div.innerHTML = `<span class="term-prompt">neo@os:~$</span><span class="term-${line[0]}">${line[1]}</span>`
-      el.appendChild(div)
-      el.scrollTop = el.scrollHeight
-    }, i * 120)
-  })
+  {cls:'cmd',  txt:'neo@os:~$ surfing-neo boot'},
+  {cls:'info', txt:'[INFO] Loading SurfingNeo-OS kernel v2.0...'},
+  {cls:'ok',   txt:'[OK]   Express API server started on :3001'},
+  {cls:'ok',   txt:'[OK]   PostgreSQL pool initialized (5 connections)'},
+  {cls:'ok',   txt:'[OK]   Binance WebSocket stream active'},
+  {cls:'info', txt:'[INFO] Building knowledge graph...'},
+  {cls:'ok',   txt:'[OK]   Graph built: 127 nodes, 89 edges (340ms)'},
+  {cls:'ok',   txt:'[OK]   Claude claude-sonnet-4-6 connected'},
+  {cls:'ok',   txt:'[OK]   Groq LLaMA-3.3-70B fallback ready'},
+  {cls:'info', txt:'[INFO] Starting scheduled jobs...'},
+  {cls:'ok',   txt:'[OK]   7 jobs registered (next: hourly-ai-scan in 43m)'},
+  {cls:'ok',   txt:'[OK]   SurfingNeo-OS ready ✓'},
+];
+
+function renderTerminal() {
+  const out = document.getElementById('terminal-output');
+  out.innerHTML = '';
+  bootLines.forEach(line => {
+    const div = document.createElement('div');
+    div.className = 't-' + line.cls;
+    div.textContent = line.txt;
+    out.appendChild(div);
+  });
+  const prompt = document.createElement('div');
+  prompt.id = 'term-cursor-line';
+  prompt.innerHTML = '<span class="t-cmd">neo@os:~$ </span><span class="cursor-blink"></span>';
+  out.appendChild(prompt);
 }
 
-// ── Dashboard tab ─────────────────────────────────────────────────────────────
-async function loadDashboard() {
-  const [stats, jobs] = await Promise.all([api('/stats'), apiScheduler()])
+function appendTerminalLine(cls, txt) {
+  const out = document.getElementById('terminal-output');
+  const cursorLine = document.getElementById('term-cursor-line');
+  const div = document.createElement('div');
+  div.className = 't-' + cls;
+  div.textContent = txt;
+  if (cursorLine) out.insertBefore(div, cursorLine);
+  else out.appendChild(div);
+  out.scrollTop = out.scrollHeight;
+}
 
-  // Stat cards
-  const cards = [
-    { val: stats.nodes,         label: 'Graph Nodes',       icon: '⬡' },
-    { val: stats.edges,         label: 'Graph Edges',       icon: '↔' },
-    { val: stats.skills || 12,  label: 'AI Skills',         icon: '◇' },
-    { val: stats.libs,          label: 'Core Libraries',    icon: '◈' },
-    { val: stats.routes,        label: 'API Routes',        icon: '/' },
-    { val: stats.components,    label: 'UI Components',     icon: '▣' },
-    { val: stats.jsxFiles,      label: 'JSX Views',         icon: '⬢' },
-    { val: stats.scheduledJobs, label: 'Scheduled Jobs',    icon: '⏱' },
-  ]
-  $('stat-grid').innerHTML = cards.map(c => `
-    <div class="stat-card">
-      <div class="stat-value">${c.val ?? '—'}</div>
-      <div class="stat-label">${c.label}</div>
-      <div class="stat-icon">${c.icon}</div>
-    </div>`).join('')
+function clearTerminal() {
+  const out = document.getElementById('terminal-output');
+  out.innerHTML = '';
+  const prompt = document.createElement('div');
+  prompt.id = 'term-cursor-line';
+  prompt.innerHTML = '<span class="t-cmd">neo@os:~$ </span><span class="cursor-blink"></span>';
+  out.appendChild(prompt);
+}
 
-  if (stats.generatedAt) {
-    $('build-ts').textContent = new Date(stats.generatedAt).toLocaleTimeString()
+function downloadLog() {
+  const text = Array.from(document.getElementById('terminal-output').children).map(d=>d.textContent).join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text],{type:'text/plain'}));
+  a.download = 'neo-os-' + Date.now() + '.log';
+  a.click();
+}
+
+document.getElementById('terminal-input').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') {
+    const val = this.value.trim();
+    if (!val) return;
+    appendTerminalLine('cmd', 'neo@os:~$ ' + val);
+    processCommand(val);
+    this.value = '';
   }
+});
 
-  // Jobs table
-  const jobsList = (jobs.jobs || [])
-  $('jobs-table').innerHTML = jobsList.length ? `
-    <table>
-      <thead><tr><th>Job</th><th>Schedule</th><th>Last Run</th><th>Status</th></tr></thead>
-      <tbody>${jobsList.map(j => `
-        <tr>
-          <td style="color:var(--text);font-size:12px">${j.id}</td>
-          <td style="color:var(--muted);font-family:monospace;font-size:11px">${j.schedule || '—'}</td>
-          <td style="color:var(--muted);font-size:11px">${j.lastRun ? new Date(j.lastRun).toLocaleTimeString() : 'Never'}</td>
-          <td><span class="badge ${j.result?.status === 'ok' ? 'badge-green' : j.result?.status === 'running' ? 'badge-blue' : 'badge-gray'}">${j.result?.status || 'idle'}</span></td>
-        </tr>`).join('')}
-      </tbody>
-    </table>` : '<p style="color:var(--muted);font-size:12px;padding:12px">No jobs registered.</p>'
-
-  renderMiniGraph()
-  renderBoot()
+function processCommand(cmd) {
+  const c = cmd.toLowerCase().trim();
+  if (c === 'help') {
+    appendTerminalLine('info', 'Commands: help, status, scan, graph, mcps, skills, version, clear');
+  } else if (c === 'status') {
+    appendTerminalLine('ok',   '[OK]   API Server       :3001 running');
+    appendTerminalLine('ok',   '[OK]   PostgreSQL       connected (5 pool)');
+    appendTerminalLine('ok',   '[OK]   Claude API       healthy (320ms)');
+    appendTerminalLine('ok',   '[OK]   Groq API         healthy (180ms)');
+    appendTerminalLine('ok',   '[OK]   Binance WS       streaming');
+    appendTerminalLine('info', '[INFO] Uptime: 2h 43m 12s | Memory: 142MB');
+  } else if (c === 'scan' || c.includes('scan')) {
+    appendTerminalLine('info', '[INFO] Starting AI market scan (broad universe)...');
+    setTimeout(()=>appendTerminalLine('info','[INFO] Scanning 847 instruments...'), 250);
+    setTimeout(()=>appendTerminalLine('ok','[OK]   Claude analysis complete: 34 signals'), 800);
+    setTimeout(()=>appendTerminalLine('ok','[OK]   Top: NVDA BUY 87%, ETH BUY 79%, AAPL HOLD 62%'), 1100);
+  } else if (c === 'graph' || c === 'graphify build' || c === 'graphify') {
+    appendTerminalLine('info', '[INFO] Scanning source tree...');
+    setTimeout(()=>appendTerminalLine('ok','[OK]   Graph rebuilt: 127 nodes, 89 edges (312ms)'), 600);
+  } else if (c === 'mcps' || c === 'list mcps') {
+    appendTerminalLine('ok',   '[OK]   Tavily      HTTP  3 tools  ping:0.4s');
+    appendTerminalLine('ok',   '[OK]   Supabase    stdio 8 tools  ping:0.9s');
+    appendTerminalLine('ok',   '[OK]   Context7    HTTP  5 tools  ping:0.6s');
+    appendTerminalLine('ok',   '[OK]   Graphify    stdio 6 tools  ping:0.2s');
+    appendTerminalLine('warn', '[WARN] Playwright   stdio 12 tools ping:8.1s (idle)');
+  } else if (c === 'skills') {
+    appendTerminalLine('info', 'Loaded skills: frontend-design, testing-suite, commit-commands, feature-dev, security-audit');
+  } else if (c === 'version') {
+    appendTerminalLine('ok', 'SurfingNeo-OS v2.0.0 | Node.js v20.x | Express 4.x | claude-sonnet-4-6');
+  } else if (c === 'clear') {
+    clearTerminal(); return;
+  } else {
+    appendTerminalLine('warn', '[WARN] Unknown command: ' + cmd + '. Type "help" for available commands.');
+  }
+  setTimeout(()=>{ document.getElementById('terminal-output').scrollTop=99999; }, 100);
 }
 
-// ── Mini graph (canvas) ────────────────────────────────────────────────────────
-const TYPE_COLORS = {
-  route:     '#6366f1',
-  lib:       '#06b6d4',
-  component: '#8b5cf6',
-  jsx:       '#a78bfa',
-}
-async function renderMiniGraph() {
-  const { nodes, edges } = await api('/graph')
-  const canvas = $('mini-canvas')
-  const ctx = canvas.getContext('2d')
-  const W = canvas.width, H = canvas.height
-
-  // pick up to 60 nodes, favour route+lib+component
-  const priority = ['route','lib','component','jsx']
-  const sample = [...nodes].sort((a,b) => priority.indexOf(a.type) - priority.indexOf(b.type)).slice(0, 60)
-  const idxMap = {}
-  sample.forEach((n,i) => idxMap[n.id] = i)
-
-  // ring layout
-  const cx = W/2, cy = H/2
-  const pos = sample.map((_, i) => {
-    const angle = (i / sample.length) * Math.PI * 2 - Math.PI/2
-    const r = Math.min(W, H) * 0.38
-    return { x: cx + Math.cos(angle) * r, y: cy + Math.sin(angle) * r }
-  })
-
-  ctx.clearRect(0, 0, W, H)
-
-  // edges
-  edges.forEach(e => {
-    const si = idxMap[e.source], ti = idxMap[e.target]
-    if (si == null || ti == null) return
-    ctx.beginPath()
-    ctx.moveTo(pos[si].x, pos[si].y)
-    ctx.lineTo(pos[ti].x, pos[ti].y)
-    ctx.strokeStyle = 'rgba(0,255,204,0.07)'
-    ctx.lineWidth = 1
-    ctx.stroke()
-  })
-
-  // nodes
-  sample.forEach((n, i) => {
-    const {x, y} = pos[i]
-    const col = TYPE_COLORS[n.type] || '#64748b'
-    ctx.beginPath()
-    ctx.arc(x, y, n.type === 'jsx' ? 3 : 5, 0, Math.PI*2)
-    ctx.fillStyle = col
-    ctx.shadowColor = col
-    ctx.shadowBlur = 8
-    ctx.fill()
-    ctx.shadowBlur = 0
-  })
-
-  // center label
-  ctx.font = '12px Courier New'
-  ctx.fillStyle = 'rgba(0,255,204,0.3)'
-  ctx.textAlign = 'center'
-  ctx.fillText('FinSurfing · ' + nodes.length + ' nodes · ' + edges.length + ' edges', cx, cy - 6)
-  ctx.font = '10px Courier New'
-  ctx.fillStyle = 'rgba(100,116,139,0.6)'
-  ctx.fillText('Knowledge Graph', cx, cy + 10)
+// ===========================
+// QUICK ACTIONS
+// ===========================
+function runMarketScan() {
+  showTab('terminal');
+  setTimeout(()=>{ appendTerminalLine('cmd','neo@os:~$ surfing-neo scan --universe broad'); processCommand('scan'); }, 200);
 }
 
-// ── Graphify tab ───────────────────────────────────────────────────────────────
-let graphData = null
-let graphTransform = { x: 0, y: 0, scale: 1 }
-let dragging = false, dragStart = null
-let nodePositions = []
-let filterType = null
-
-const COLORS = { ...TYPE_COLORS }
-const RADIUS = { route: 9, lib: 8, component: 10, jsx: 5 }
-const LEGENDS = [
-  { type: 'route',     label: 'Routes',     col: COLORS.route },
-  { type: 'lib',       label: 'Libraries',  col: COLORS.lib },
-  { type: 'component', label: 'Components', col: COLORS.component },
-  { type: 'jsx',       label: 'JSX Views',  col: COLORS.jsx },
-]
-
-async function loadGraphify() {
-  graphData = await api('/graph')
-
-  // filter controls
-  const fc = $('graph-filters')
-  fc.innerHTML = '<button class="ctrl-btn active" data-type="">All</button>' +
-    LEGENDS.map(l => `<button class="ctrl-btn" data-type="${l.type}">${l.label}</button>`).join('') +
-    '<button class="ctrl-btn" id="btn-reset">Reset view</button>'
-
-  fc.querySelectorAll('.ctrl-btn[data-type]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      fc.querySelectorAll('.ctrl-btn[data-type]').forEach(b => b.classList.remove('active'))
-      btn.classList.add('active')
-      filterType = btn.dataset.type || null
-      drawGraph()
-    })
-  })
-  fc.querySelector('#btn-reset')?.addEventListener('click', () => {
-    graphTransform = { x: 0, y: 0, scale: 1 }
-    drawGraph()
-  })
-
-  // legend
-  $('graph-legend').innerHTML = LEGENDS.map(l => `
-    <div class="legend-item">
-      <div class="legend-dot" style="background:${l.col};box-shadow:0 0 6px ${l.col}"></div>
-      ${l.label}
-    </div>`).join('')
-
-  layoutGraph()
-  drawGraph()
-  setupGraphInteraction()
-}
-
-function layoutGraph() {
-  const nodes = filterType ? graphData.nodes.filter(n => n.type === filterType) : graphData.nodes
-  const types = ['route','lib','component','jsx']
-  nodePositions = []
-  const canvas = $('graph-canvas')
-  const W = canvas.width || 900, H = canvas.height || 520
-
-  types.forEach(type => {
-    const group = nodes.filter(n => n.type === type)
-    const rings = { route: 0.25, lib: 0.35, component: 0.42, jsx: 0.46 }
-    const r = Math.min(W,H) * (rings[type] || 0.4)
-    group.forEach((n, i) => {
-      const angle = (i / group.length) * Math.PI * 2 - Math.PI/2
-      nodePositions.push({ id: n.id, label: n.label, type: n.type,
-        x: W/2 + Math.cos(angle) * r,
-        y: H/2 + Math.sin(angle) * r })
-    })
-  })
-}
-
-function drawGraph() {
-  const canvas = $('graph-canvas')
-  const ctx = canvas.getContext('2d')
-  canvas.width = canvas.offsetWidth; canvas.height = canvas.offsetHeight
-  const W = canvas.width, H = canvas.height
-  if (!graphData) return
-
-  ctx.clearRect(0, 0, W, H)
-  ctx.save()
-  ctx.translate(graphTransform.x, graphTransform.y)
-  ctx.scale(graphTransform.scale, graphTransform.scale)
-
-  const idxMap = {}
-  nodePositions.forEach((n, i) => idxMap[n.id] = i)
-
-  // edges
-  graphData.edges.forEach(e => {
-    const si = idxMap[e.source], ti = idxMap[e.target]
-    if (si == null || ti == null) return
-    const s = nodePositions[si], t = nodePositions[ti]
-    if (filterType && (s.type !== filterType && t.type !== filterType)) return
-    ctx.beginPath()
-    ctx.moveTo(s.x, s.y)
-    ctx.lineTo(t.x, t.y)
-    ctx.strokeStyle = 'rgba(0,255,204,0.06)'
-    ctx.lineWidth = 0.8
-    ctx.stroke()
-  })
-
-  // nodes
-  nodePositions.forEach(n => {
-    if (filterType && n.type !== filterType) return
-    const col = COLORS[n.type] || '#64748b'
-    const r = RADIUS[n.type] || 6
-    ctx.beginPath()
-    ctx.arc(n.x, n.y, r, 0, Math.PI*2)
-    ctx.fillStyle = col
-    ctx.shadowColor = col
-    ctx.shadowBlur = 12
-    ctx.fill()
-    ctx.shadowBlur = 0
-
-    if (graphTransform.scale > 0.8) {
-      ctx.font = `${Math.max(8, 10 / graphTransform.scale)}px Courier New`
-      ctx.fillStyle = 'rgba(226,232,240,0.6)'
-      ctx.textAlign = 'center'
-      ctx.fillText(n.label, n.x, n.y + r + 10)
-    }
-  })
-
-  ctx.restore()
-}
-
-function setupGraphInteraction() {
-  const canvas = $('graph-canvas')
-  const tip = $('tooltip')
-
-  canvas.addEventListener('wheel', e => {
-    e.preventDefault()
-    const delta = e.deltaY > 0 ? 0.9 : 1.1
-    graphTransform.scale = Math.max(0.3, Math.min(4, graphTransform.scale * delta))
-    drawGraph()
-  }, { passive: false })
-
-  canvas.addEventListener('mousedown', e => {
-    dragging = true; dragStart = { x: e.clientX - graphTransform.x, y: e.clientY - graphTransform.y }
-  })
-  window.addEventListener('mouseup', () => { dragging = false })
-  canvas.addEventListener('mousemove', e => {
-    if (dragging) {
-      graphTransform.x = e.clientX - dragStart.x
-      graphTransform.y = e.clientY - dragStart.y
-      drawGraph(); return
-    }
-    // tooltip
-    const rect = canvas.getBoundingClientRect()
-    const mx = (e.clientX - rect.left - graphTransform.x) / graphTransform.scale
-    const my = (e.clientY - rect.top  - graphTransform.y) / graphTransform.scale
-    let found = null
-    nodePositions.forEach(n => {
-      const dx = n.x - mx, dy = n.y - my
-      if (Math.sqrt(dx*dx+dy*dy) < 12) found = n
-    })
-    if (found) {
-      tip.style.display = 'block'
-      tip.style.left = (e.clientX + 12) + 'px'
-      tip.style.top  = (e.clientY - 8) + 'px'
-      tip.textContent = found.label + ' (' + found.type + ')'
-      canvas.style.cursor = 'pointer'
-    } else {
-      tip.style.display = 'none'
-      canvas.style.cursor = dragging ? 'grabbing' : 'grab'
-    }
-  })
-  canvas.addEventListener('click', async e => {
-    const rect = canvas.getBoundingClientRect()
-    const mx = (e.clientX - rect.left - graphTransform.x) / graphTransform.scale
-    const my = (e.clientY - rect.top  - graphTransform.y) / graphTransform.scale
-    let found = null
-    nodePositions.forEach(n => {
-      const dx = n.x - mx, dy = n.y - my
-      if (Math.sqrt(dx*dx+dy*dy) < 12) found = n
-    })
-    if (!found) return
-    const ins = $('node-inspector')
-    ins.innerHTML = '<div class="loader"><div class="spin"></div>Loading node…</div>'
-    ins.classList.add('visible')
-    try {
-      const data = await api('/node/' + encodeURIComponent(found.id))
-      const n = data.node
-      ins.innerHTML = `
-        <div class="inspector-title">${n.label} <span style="color:var(--muted);font-size:11px">[${n.type}]</span></div>
-        <div class="inspector-meta">${n.file ? '📄 ' + n.file : ''} ${n.description ? '— ' + n.description : ''}</div>
-        <div style="font-size:11px;color:var(--muted);margin-bottom:8px">Neighbours (${data.neighbours.length})</div>
-        <div class="inspector-neighbours">
-          ${data.neighbours.map(nb => `<span class="neighbour-chip ${nb.direction}">${nb.direction === 'out' ? '↗' : '↙'} ${nb.label} <em style="opacity:0.6;font-style:normal">${nb.relation}</em></span>`).join('')}
-        </div>`
-    } catch { ins.innerHTML = '<p style="color:var(--muted);font-size:12px">Failed to load node.</p>' }
-  })
-
-  window.addEventListener('resize', () => { layoutGraph(); drawGraph() })
-}
-
-// ── MCPs tab ──────────────────────────────────────────────────────────────────
-async function loadMcps() {
-  const { servers } = await api('/mcps')
-  $('mcp-grid').innerHTML = servers.map(s => {
-    const dotClass = s.status === 'connected' ? 'conn-online' : s.status === 'idle' ? 'conn-idle' : 'conn-offline'
-    return `
-    <div class="mcp-card">
-      <div class="mcp-header">
-        <span class="mcp-name">${s.name}</span>
-        <span class="conn-dot ${dotClass}"></span>
-      </div>
-      <div class="mcp-id">${s.id}</div>
-      <div class="mcp-purpose">${s.purpose}</div>
-      <div class="mcp-tool">${s.tool}</div>
-    </div>`
-  }).join('')
-}
-
-// ── Skills tab ────────────────────────────────────────────────────────────────
-let allSkills = []
-async function loadSkills() {
-  const { skills } = await api('/skills')
-  allSkills = skills
-  renderSkills('')
-  $('skills-search').addEventListener('input', e => renderSkills(e.target.value.toLowerCase()))
-}
-function renderSkills(q) {
-  const filtered = allSkills.filter(s => !q || s.name.toLowerCase().includes(q) || s.description.toLowerCase().includes(q))
-  $('skills-grid').innerHTML = filtered.map(s => `
-    <div class="skill-card">
-      <div class="skill-id">${s.id}</div>
-      <div class="skill-name">${s.name}</div>
-      <div class="skill-desc">${s.description}</div>
-      <div class="skill-endpoint">${s.endpoint}</div>
-    </div>`).join('') || '<p style="color:var(--muted);font-size:12px">No results.</p>'
-}
-
-// ── Brain tab ─────────────────────────────────────────────────────────────────
-async function loadBrain() {
-  const [stats, { skills }, { servers }] = await Promise.all([api('/stats'), api('/skills'), api('/mcps')])
-
-  const connected = servers.filter(s => s.status === 'connected').length
-  const metrics = [
-    { val: skills.length,    label: 'Registered Skills' },
-    { val: connected,        label: 'Connected MCP Servers' },
-    { val: servers.length,   label: 'Total Providers' },
-    { val: stats.routes,     label: 'API Surface (routes)' },
-    { val: stats.libs,       label: 'Shared Libraries' },
-    { val: stats.nodes,      label: 'Knowledge Graph Nodes' },
-    { val: stats.edges,      label: 'Knowledge Graph Edges' },
-    { val: stats.jsxFiles,   label: 'Frontend Views' },
-  ]
-  $('brain-metrics').innerHTML = metrics.map(m => `
-    <div class="brain-metric">
-      <div class="brain-metric-val">${m.val}</div>
-      <div class="brain-metric-lbl">${m.label}</div>
-    </div>`).join('')
-
-  // Tool registry table
-  const tools = [
-    { name: 'analyze_symbol',   type: 'AI',         source: 'claude-sonnet-4-6',   latency: '~3s',  status: 'active' },
-    { name: 'market_scan',      type: 'AI',         source: 'ai-brain route',    latency: '~8s',  status: 'active' },
-    { name: 'recommendations',  type: 'AI',         source: 'advisory engine',   latency: '~5s',  status: 'active' },
-    { name: 'get_quote',        type: 'Market',     source: 'Finnhub/FMP',       latency: '<1s',  status: 'active' },
-    { name: 'get_chart',        type: 'Market',     source: 'Finnhub',           latency: '<1s',  status: 'active' },
-    { name: 'get_macro',        type: 'Macro',      source: 'FRED API',          latency: '~2s',  status: 'active' },
-    { name: 'insider_activity', type: 'Alt Data',   source: 'SEC EDGAR',         latency: '~2s',  status: 'active' },
-    { name: 'short_interest',   type: 'Alt Data',   source: 'FINRA API',         latency: '~2s',  status: 'active' },
-    { name: 'social_sentiment', type: 'Alt Data',   source: 'Reddit JSON',       latency: '~1s',  status: 'active' },
-    { name: 'run_backtest',     type: 'Backtest',   source: 'backtest engine',   latency: '~30s', status: 'active' },
-    { name: 'alert_trigger',    type: 'Event',      source: 'SSE broadcaster',   latency: '<10ms',status: 'active' },
-    { name: 'agent_research',   type: 'Agent',      source: '5-agent orchestr.', latency: '~10s', status: 'active' },
-  ]
-  const badgeMap = { AI: 'badge-blue', Market: 'badge-green', Macro: 'badge-purple', 'Alt Data': 'badge-yellow', Backtest: 'badge-gray', Event: 'badge-red', Agent: 'badge-purple' }
-  $('tool-registry').innerHTML = `
-    <table>
-      <thead><tr><th>Tool</th><th>Type</th><th>Source</th><th>Latency</th><th>Status</th></tr></thead>
-      <tbody>${tools.map(t => `
-        <tr>
-          <td style="font-family:monospace;color:var(--accent);font-size:11px">${t.name}</td>
-          <td><span class="badge ${badgeMap[t.type] || 'badge-gray'}">${t.type}</span></td>
-          <td style="color:var(--muted);font-size:11px">${t.source}</td>
-          <td style="color:var(--muted);font-family:monospace;font-size:11px">${t.latency}</td>
-          <td><span class="badge badge-green">●&nbsp;${t.status}</span></td>
-        </tr>`).join('')}
-      </tbody>
-    </table>`
-}
-
-// ── Tab dispatcher ────────────────────────────────────────────────────────────
-async function loadTab(id) {
+// ===========================
+// API FETCH
+// ===========================
+async function fetchStats() {
   try {
-    if      (id === 'graphify') await loadGraphify()
-    else if (id === 'mcps')     await loadMcps()
-    else if (id === 'skills')   await loadSkills()
-    else if (id === 'brain')    await loadBrain()
-  } catch (err) {
-    console.error('loadTab', id, err)
-  }
+    const r = await fetch('/api/agentic-os/stats');
+    if (!r.ok) throw new Error('no api');
+    const d = await r.json();
+    if (d.nodes) document.getElementById('stat-nodes').textContent = d.nodes;
+    if (d.skills) document.getElementById('stat-skills').textContent = d.skills;
+    if (d.mcps) document.getElementById('stat-mcps').textContent = d.mcps;
+    if (d.tokens) document.getElementById('stat-tokens').textContent = d.tokens;
+  } catch(e) { /* use defaults */ }
 }
 
-// ── Init ──────────────────────────────────────────────────────────────────────
-loadDashboard()
+// ===========================
+// INIT
+// ===========================
+window.addEventListener('DOMContentLoaded', function() {
+  renderTerminal();
+  fetchStats();
+  setTimeout(initDashGraph, 250);
+});
 </script>
 </body>
 </html>
