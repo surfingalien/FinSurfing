@@ -679,21 +679,19 @@ function setAccent(a, a2, el) {
 //  TAB SWITCHING  (data-tab attribute pattern)
 // ═══════════════════════════════════════════════════════
 function activateTab(id) {
-  // Hide all panels
   document.querySelectorAll('.panel').forEach(function(p){ p.classList.remove('on'); });
-  // Deactivate all buttons
   document.querySelectorAll('.tab-btn').forEach(function(b){ b.classList.remove('active'); });
-  // Show target panel
   var panel = document.getElementById('tab-' + id);
   if (panel) panel.classList.add('on');
-  // Activate matching button
   var btn = document.querySelector('.tab-btn[data-tab="' + id + '"]');
   if (btn) btn.classList.add('active');
   G.activeTab = id;
-  // Lazy init per tab
-  if (id === 'graphify' && !G.tabInited.graphify) {
+
+  if (id === 'graphify') {
+    // Always redraw graphify when tab becomes active so data races are fixed
     G.tabInited.graphify = true;
-    requestAnimationFrame(drawGraphify);
+    // Use setTimeout to ensure panel is laid out before measuring
+    setTimeout(function(){ requestAnimationFrame(drawGraphify); }, 50);
   }
   if (id === 'plugins' && !G.tabInited.plugins) {
     G.tabInited.plugins = true;
@@ -701,7 +699,7 @@ function activateTab(id) {
   }
 }
 
-// Wire tab buttons
+// Wire tab buttons (also wired in DOMContentLoaded as backup)
 document.querySelectorAll('.tab-btn').forEach(function(b) {
   b.addEventListener('click', function(){ activateTab(b.getAttribute('data-tab')); });
 });
@@ -788,20 +786,34 @@ function drawDashCanvas() {
 var _gZoom = null, _gSvgSel = null, _gSim = null;
 
 function drawGraphify() {
+  try { _drawGraphifyInner(); } catch(err) {
+    var ph = document.getElementById('graph-placeholder');
+    if (ph) { ph.style.display='flex'; ph.textContent = 'Graph error: ' + err.message; }
+    console.error('[NeoOS] drawGraphify error:', err);
+  }
+}
+
+function _drawGraphifyInner() {
   var wrap = document.getElementById('graph-wrap');
   var placeholder = document.getElementById('graph-placeholder');
   if (!wrap) return;
 
+  // Check D3 loaded
+  if (typeof d3 === 'undefined') {
+    if (placeholder) { placeholder.style.display='flex'; placeholder.textContent = 'D3.js not loaded — check network connection'; }
+    return;
+  }
+
   if (!G.graph || !G.graph.nodes || !G.graph.nodes.length) {
-    if (placeholder) { placeholder.style.display = 'flex'; placeholder.textContent = 'Loading graph data…'; }
-    // retry in 600ms in case data is still loading
-    setTimeout(function(){ if (G.graph && G.graph.nodes && G.graph.nodes.length) requestAnimationFrame(drawGraphify); }, 600);
+    if (placeholder) { placeholder.style.display = 'flex'; placeholder.textContent = 'Loading graph data… (click Rebuild if this persists)'; }
     return;
   }
   if (placeholder) placeholder.style.display = 'none';
 
-  var rect = wrap.getBoundingClientRect();
-  var W = rect.width || 900, H = 580;
+  // offsetWidth is reliable even right after display:block change
+  var W = wrap.offsetWidth || wrap.getBoundingClientRect().width || window.innerWidth - 60;
+  var H = 580;
+  if (W < 100) W = window.innerWidth - 60;
 
   d3.select('#graph-wrap svg').remove();
   var svg = d3.select('#graph-wrap').append('svg').attr('width', W).attr('height', H);
@@ -896,13 +908,13 @@ function showNodeInspector(d, edges) {
   if (!shown) nb.innerHTML = '<span style="font-size:12px;color:var(--muted)">No direct edges</span>';
 }
 
-function filterGraph() { if (G.tabInited.graphify) requestAnimationFrame(drawGraphify); }
+function filterGraph() { setTimeout(function(){ requestAnimationFrame(drawGraphify); }, 0); }
 
 function setGFilter(f, btn) {
   G.gFilter = f;
   document.querySelectorAll('[data-gfilter]').forEach(function(b){ b.classList.remove('active'); });
   if (btn) btn.classList.add('active');
-  if (G.tabInited.graphify) requestAnimationFrame(drawGraphify);
+  setTimeout(function(){ requestAnimationFrame(drawGraphify); }, 0);
 }
 
 function gZoom(s) { if (_gZoom && _gSvgSel) _gSvgSel.transition().duration(300).call(_gZoom.scaleBy, s); }
@@ -1125,6 +1137,36 @@ function termDownload() {
 }
 
 // ═══════════════════════════════════════════════════════
+//  MOCK FALLBACK GRAPH (shown when API unavailable)
+// ═══════════════════════════════════════════════════════
+function buildMockGraph() {
+  var nodes = [], edges = [];
+  var routes = ['market','ai-brain','copilot','recommendations','portfolio','alerts','backtest','scheduler','macro','timeline','trading-analysis','agentic-os','agents','auth'];
+  var libs   = ['scheduler','circuit-breaker','investor-personas','alt-data','backtest-queue','social-sentiment','ai-router','scheduled-jobs','ai-audit','alert-broadcaster','email'];
+  var comps  = ['Dashboard','Copilot','AIBrain','Portfolio','Alerts','Backtest','Timeline','Recommendations','AgentHub','Analysis','Watchlist','AgenticOS','Macro','Settings'];
+  routes.forEach(function(r){ nodes.push({id:'route:'+r,label:r,type:'route',group:'routes'}); });
+  libs.forEach(function(l){ nodes.push({id:'lib:'+l,label:l,type:'lib',group:'lib'}); });
+  comps.forEach(function(c){ nodes.push({id:'component:'+c,label:c,type:'component',group:'frontend'}); });
+  // add some JSX
+  comps.forEach(function(c){ nodes.push({id:'jsx:'+c+'/'+c+'View',label:c+'View',type:'jsx',group:'frontend'}); });
+  // add edges
+  edges.push({source:'route:ai-brain',target:'lib:circuit-breaker',label:'imports'});
+  edges.push({source:'route:copilot',target:'lib:ai-router',label:'imports'});
+  edges.push({source:'route:recommendations',target:'lib:investor-personas',label:'imports'});
+  edges.push({source:'route:backtest',target:'lib:backtest-queue',label:'imports'});
+  edges.push({source:'route:scheduler',target:'lib:scheduled-jobs',label:'imports'});
+  edges.push({source:'component:Copilot',target:'route:copilot',label:'calls'});
+  edges.push({source:'component:AIBrain',target:'route:ai-brain',label:'calls'});
+  edges.push({source:'component:Portfolio',target:'route:portfolio',label:'calls'});
+  edges.push({source:'component:Alerts',target:'route:alerts',label:'calls'});
+  edges.push({source:'component:AgenticOS',target:'route:agentic-os',label:'calls'});
+  comps.forEach(function(c){
+    edges.push({source:'component:'+c,target:'jsx:'+c+'/'+c+'View',label:'contains'});
+  });
+  return {nodes:nodes, edges:edges, generatedAt:new Date().toISOString(), isMock:true};
+}
+
+// ═══════════════════════════════════════════════════════
 //  LOAD DATA
 // ═══════════════════════════════════════════════════════
 async function loadData() {
@@ -1135,24 +1177,22 @@ async function loadData() {
 
   if (stats)  { G.stats  = stats;  updateStatCards(stats); }
   if (graph)  { G.graph  = graph;  updateGraphSub(graph); }
+  else        { G.graph  = buildMockGraph(); updateGraphSub(G.graph); } // fallback
   if (mcps)   { G.mcps   = mcps;   renderMcpCards(mcps.servers); }
   if (skills) { G.skills = skills; renderSkillCards(skills.skills); }
 
-  // Always redraw dashboard canvas after data loads
+  // Redraw dashboard canvas with real/fallback data
   requestAnimationFrame(drawDashCanvas);
 
-  // If Graphify tab is active or was already initialized (blank), redraw now that data is here
-  if (G.graph) {
-    if (G.activeTab === 'graphify') {
-      requestAnimationFrame(drawGraphify);
-    } else if (G.tabInited.graphify) {
-      // tab was opened before data arrived — redraw it
-      requestAnimationFrame(drawGraphify);
-    }
+  // Redraw Graphify if it's the active tab or was already opened (showing blank/loading)
+  if (G.tabInited.graphify || G.activeTab === 'graphify') {
+    setTimeout(function(){ requestAnimationFrame(drawGraphify); }, 50);
   }
 
   if (stats) {
-    tLine('[data] Graph loaded: '+stats.nodes+' nodes · '+stats.edges+' edges · '+stats.totalLines+' lines', 'g');
+    tLine('[data] Graph loaded: '+stats.nodes+' nodes · '+(stats.edges||0)+' edges · '+stats.totalLines+' lines', 'g');
+  } else {
+    tLine('[data] API unavailable — showing mock graph data', 'y');
   }
 }
 
