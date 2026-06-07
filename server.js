@@ -34,6 +34,7 @@ const rcRoutes              = require('./routes/rc')
 const marketIntelRoutes     = require('./routes/market-intel')
 const alertsRoutes          = require('./routes/alerts')
 const backtestQueueRoutes   = require('./routes/backtest-queue')
+const agenticOsRoutes       = require('./routes/agentic-os')
 
 const { seedAdminDB } = require('./db/adminSeed')
 
@@ -195,6 +196,7 @@ app.use('/api/rc',              rcRoutes)
 app.use('/api/market-intel',   marketIntelRoutes)
 app.use('/api/alerts',         alertsRoutes)
 app.use('/api/backtest/queue', backtestQueueRoutes)
+app.use('/api/agentic-os',     agenticOsRoutes)
 
 /* ── Market data helpers (AISA primary → Finnhub → FMP fallback) ─────────────
    Yahoo Finance is completely removed — its IPs are blocked on Railway.

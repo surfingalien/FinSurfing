@@ -16,7 +16,7 @@ import {
   ShieldCheck, ChevronLeft, ChevronRight, LogIn, LogOut,
   User, KeyRound, Activity, X, Menu, FolderOpen, Calendar,
   FlaskConical, BarChart3, Settings, Sparkles, Brain, Bookmark, Monitor, BookOpen, Globe, Target,
-  Network, Clock, Radio,
+  Network, Clock, Radio, BrainCircuit,
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useApiKeys } from '../../contexts/ApiKeysContext'
@@ -53,6 +53,7 @@ function buildGroups(user, triggeredCount) {
         { id: 'buy-signals',     label: 'AI Buy Signals', icon: Sparkles },
         { id: 'ai-watchlist',    label: 'AI Watchlist',   icon: Bookmark },
         { id: 'agent-hub',       label: 'Agent Hub',      icon: Network },
+        { id: 'agentic-os',      label: 'Agentic OS',     icon: BrainCircuit },
         { id: 'trade-timeline',  label: 'Trade Timeline', icon: Clock },
         { id: 'research',        label: 'AI Agent',       icon: Bot },
         { id: 'second-brain',    label: 'Second Brain',   icon: BookOpen },
