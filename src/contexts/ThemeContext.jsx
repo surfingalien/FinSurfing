@@ -34,3 +34,4 @@ export function ThemeProvider({ children }) {
 export function useTheme() {
   return useContext(ThemeCtx)
 }
+# Theme system: Dark, Tan, Ocean, Forest, Slate
