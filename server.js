@@ -397,6 +397,7 @@ async function getAISAQuotes(symbols, keys = {}) {
           regularMarketDayLow:        d.day_low             ?? null,
           regularMarketOpen:          d.open                ?? null,
           regularMarketPreviousClose: d.previous_close      ?? null,
+          regularMarketTime:          Math.floor(Date.now() / 1000),
           fiftyTwoWeekHigh:           d.week_52_high        ?? null,
           fiftyTwoWeekLow:            d.week_52_low         ?? null,
           marketCap:                  d.market_cap          ?? null,
@@ -1185,6 +1186,7 @@ async function getNasdaqQuotes(symbols) {
         const hi52 = parseFloat((keyStats.FiftyTwoWeekHighLow?.value || '').split('/')[0]?.replace(/[^0-9.]/g, ''))
         const lo52 = parseFloat((keyStats.FiftyTwoWeekHighLow?.value || '').split('/')[1]?.replace(/[^0-9.]/g, ''))
 
+        const prevCloseNasdaq = rawChange != null ? +(rawPrice - rawChange).toFixed(4) : null
         console.log(`[Nasdaq quote] ${sym}: $${rawPrice}`)
         return {
           symbol:                     sym,
@@ -1192,6 +1194,8 @@ async function getNasdaqQuotes(symbols) {
           regularMarketPrice:         rawPrice,
           regularMarketChange:        rawChange || null,
           regularMarketChangePercent: rawPct    || null,
+          regularMarketPreviousClose: prevCloseNasdaq,
+          regularMarketTime:          Math.floor(Date.now() / 1000),
           regularMarketVolume:        parseInt((primary.volume || '0').replace(/,/g, '')) || null,
           fiftyTwoWeekHigh:           isNaN(hi52) ? null : hi52,
           fiftyTwoWeekLow:            isNaN(lo52) ? null : lo52,
