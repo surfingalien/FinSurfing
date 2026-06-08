@@ -420,9 +420,17 @@ function MiniGraph({ graph }) {
 function GraphifyTab({ graph, search, selectedNode, onSelectNode }) {
   const [nodeDetail,    setNodeDetail]    = useState(null)
   const [detailLoading, setDetailLoading] = useState(false)
-  const [view,          setView]          = useState('graph') // 'graph' | 'list'
-  const svgRef  = useRef(null)
-  const simRef  = useRef(null)
+  const [view,          setView]          = useState('graph')
+  const [positions,     setPositions]     = useState([])
+  const [links,         setLinks]         = useState([])
+  const [zoom,          setZoom]          = useState(1)
+  const [pan,           setPan]           = useState({ x: 0, y: 0 })
+  const simRef    = useRef(null)
+  const rafRef    = useRef(null)
+  const svgRef    = useRef(null)
+  const dragging  = useRef(null)
+  const panStart  = useRef(null)
+  const W = 860, H = 520
 
   const loadDetail = async (id) => {
     onSelectNode(id)
@@ -434,104 +442,171 @@ function GraphifyTab({ graph, search, selectedNode, onSelectNode }) {
     finally { setDetailLoading(false) }
   }
 
-  // D3 force graph
+  // ── Pure-JS force simulation (no D3/CDN) ──────────────────────────────────
   useEffect(() => {
-    if (view !== 'graph' || !graph?.nodes?.length || !svgRef.current) return
-    if (typeof window.d3 === 'undefined') {
-      const script = document.createElement('script')
-      script.src = 'https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js'
-      script.onload = () => renderD3Graph()
-      document.head.appendChild(script)
-    } else {
-      renderD3Graph()
+    if (view !== 'graph' || !graph?.nodes?.length) return
+
+    const sample = graph.nodes
+      .filter(n => !search || n.label.toLowerCase().includes(search.toLowerCase()))
+      .slice(0, 100)
+    const idSet = new Set(sample.map(n => n.id))
+    const edgeList = graph.edges.filter(e => idSet.has(e.source) && idSet.has(e.target))
+
+    // Initialise node positions in a circle
+    const nodes = sample.map((n, i) => {
+      const angle = (i / sample.length) * 2 * Math.PI
+      const r = Math.min(W, H) * 0.35
+      return { ...n, x: W / 2 + r * Math.cos(angle), y: H / 2 + r * Math.sin(angle), vx: 0, vy: 0, fx: null, fy: null }
+    })
+    const idxMap = {}
+    nodes.forEach((n, i) => { idxMap[n.id] = i })
+
+    const edgesIdx = edgeList.map(e => ({ si: idxMap[e.source], ti: idxMap[e.target], label: e.label }))
+      .filter(e => e.si !== undefined && e.ti !== undefined)
+
+    simRef.current = { nodes, edgesIdx }
+
+    const LINK_DIST   = 80
+    const REPEL       = -180
+    const CENTER_STR  = 0.04
+    const DAMP        = 0.85
+    const ITER_LIMIT  = 300
+    let iter = 0
+
+    function tick() {
+      const { nodes, edgesIdx } = simRef.current
+      const n = nodes.length
+
+      // Repulsion between all pairs (Barnes-Hut approximation: just cap at 50 pairs per node)
+      for (let i = 0; i < n; i++) {
+        for (let j = i + 1; j < n; j++) {
+          const dx = nodes[j].x - nodes[i].x
+          const dy = nodes[j].y - nodes[i].y
+          const dist2 = dx * dx + dy * dy + 1
+          const dist  = Math.sqrt(dist2)
+          const force = REPEL / dist2
+          const fx = (dx / dist) * force
+          const fy = (dy / dist) * force
+          nodes[i].vx -= fx; nodes[i].vy -= fy
+          nodes[j].vx += fx; nodes[j].vy += fy
+        }
+      }
+
+      // Link attraction
+      for (const e of edgesIdx) {
+        const a = nodes[e.si], b = nodes[e.ti]
+        const dx = b.x - a.x, dy = b.y - a.y
+        const dist = Math.sqrt(dx * dx + dy * dy) || 1
+        const force = (dist - LINK_DIST) * 0.05
+        const fx = (dx / dist) * force, fy = (dy / dist) * force
+        if (!a.fx) { a.vx += fx; a.vy += fy }
+        if (!b.fx) { b.vx -= fx; b.vy -= fy }
+      }
+
+      // Center pull + damping + integrate
+      for (const node of nodes) {
+        if (node.fx !== null) { node.x = node.fx; node.y = node.fy; node.vx = 0; node.vy = 0; continue }
+        node.vx = (node.vx + (W / 2 - node.x) * CENTER_STR) * DAMP
+        node.vy = (node.vy + (H / 2 - node.y) * CENTER_STR) * DAMP
+        node.x = Math.max(12, Math.min(W - 12, node.x + node.vx))
+        node.y = Math.max(12, Math.min(H - 12, node.y + node.vy))
+      }
+
+      iter++
+      // Snapshot positions for React state
+      setPositions(nodes.map(n => ({ id: n.id, x: n.x, y: n.y, type: n.type, label: n.label, file: n.file })))
+      setLinks(edgesIdx.map(e => ({ x1: nodes[e.si].x, y1: nodes[e.si].y, x2: nodes[e.ti].x, y2: nodes[e.ti].y })))
+
+      if (iter < ITER_LIMIT) rafRef.current = requestAnimationFrame(tick)
     }
 
-    function renderD3Graph() {
-      const d3 = window.d3
-      if (!d3 || !svgRef.current) return
-      const container = svgRef.current
-      const W = container.clientWidth || 700
-      const H = container.clientHeight || 500
-
-      d3.select(container).selectAll('*').remove()
-
-      // Filter to manageable sample
-      const filtered = graph.nodes.filter(n =>
-        !search || n.label.toLowerCase().includes(search.toLowerCase())
-      ).slice(0, 80)
-      const ids = new Set(filtered.map(n => n.id))
-      const edges = graph.edges.filter(e => ids.has(e.source) && ids.has(e.target))
-
-      const nodes = filtered.map(n => ({ ...n }))
-      const links = edges.map(e => ({ source: e.source, target: e.target, label: e.label }))
-
-      const svg = d3.select(container)
-        .attr('viewBox', `0 0 ${W} ${H}`)
-
-      const g = svg.append('g')
-
-      svg.call(d3.zoom().scaleExtent([0.3, 3]).on('zoom', ({ transform }) => g.attr('transform', transform)))
-
-      // Arrow marker
-      svg.append('defs').append('marker')
-        .attr('id', 'arrow').attr('viewBox', '0 -5 10 10')
-        .attr('refX', 18).attr('refY', 0)
-        .attr('markerWidth', 6).attr('markerHeight', 6)
-        .attr('orient', 'auto')
-        .append('path').attr('d', 'M0,-5L10,0L0,5').attr('fill', 'rgba(99,102,241,0.4)')
-
-      const link = g.append('g').selectAll('line')
-        .data(links).join('line')
-        .attr('stroke', 'rgba(99,102,241,0.2)')
-        .attr('stroke-width', 1)
-        .attr('marker-end', 'url(#arrow)')
-
-      const nodeG = g.append('g').selectAll('g')
-        .data(nodes).join('g')
-        .attr('cursor', 'pointer')
-        .call(d3.drag()
-          .on('start', (event, d) => { if (!event.active) sim.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y })
-          .on('drag',  (event, d) => { d.fx = event.x; d.fy = event.y })
-          .on('end',   (event, d) => { if (!event.active) sim.alphaTarget(0); d.fx = null; d.fy = null })
-        )
-        .on('click', (_, d) => loadDetail(d.id))
-
-      const rMap = { route: 8, lib: 6, component: 7, jsx: 4 }
-
-      nodeG.append('circle')
-        .attr('r',    d => rMap[d.type] || 5)
-        .attr('fill', d => NODE_COLOR[d.type] || '#6366f1')
-        .attr('opacity', 0.85)
-        .attr('stroke', d => NODE_COLOR[d.type] || '#6366f1')
-        .attr('stroke-width', 1.5)
-        .attr('stroke-opacity', 0.4)
-
-      nodeG.append('text')
-        .text(d => d.type !== 'jsx' ? d.label : '')
-        .attr('x', d => (rMap[d.type] || 5) + 3)
-        .attr('y', 4)
-        .attr('font-size', 8)
-        .attr('fill', 'rgba(148,163,184,0.8)')
-        .attr('font-family', 'monospace')
-
-      const sim = d3.forceSimulation(nodes)
-        .force('link',   d3.forceLink(links).id(d => d.id).distance(60))
-        .force('charge', d3.forceManyBody().strength(-120))
-        .force('center', d3.forceCenter(W / 2, H / 2))
-        .force('collide',d3.forceCollide(12))
-
-      simRef.current = sim
-
-      sim.on('tick', () => {
-        link
-          .attr('x1', d => d.source.x).attr('y1', d => d.source.y)
-          .attr('x2', d => d.target.x).attr('y2', d => d.target.y)
-        nodeG.attr('transform', d => `translate(${d.x},${d.y})`)
-      })
-    }
-
-    return () => { simRef.current?.stop() }
+    rafRef.current = requestAnimationFrame(tick)
+    return () => { cancelAnimationFrame(rafRef.current) }
   }, [graph, view, search])
+
+  // Drag handlers
+  const onNodeMouseDown = (e, id) => {
+    e.stopPropagation()
+    dragging.current = id
+    if (!simRef.current) return
+    const node = simRef.current.nodes.find(n => n.id === id)
+    if (node) { node.fx = node.x; node.fy = node.y }
+    // Restart sim
+    const { nodes, edgesIdx } = simRef.current
+    cancelAnimationFrame(rafRef.current)
+    let iter = 0
+    function tick() {
+      const n = nodes.length
+      for (let i = 0; i < n; i++) {
+        for (let j = i + 1; j < n; j++) {
+          const dx = nodes[j].x - nodes[i].x, dy = nodes[j].y - nodes[i].y
+          const dist2 = dx * dx + dy * dy + 1, dist = Math.sqrt(dist2)
+          const force = -180 / dist2
+          const fx = (dx / dist) * force, fy = (dy / dist) * force
+          nodes[i].vx -= fx; nodes[i].vy -= fy
+          nodes[j].vx += fx; nodes[j].vy += fy
+        }
+      }
+      for (const e of edgesIdx) {
+        const a = nodes[e.si], b = nodes[e.ti]
+        const dx = b.x - a.x, dy = b.y - a.y
+        const dist = Math.sqrt(dx * dx + dy * dy) || 1
+        const force = (dist - 80) * 0.05
+        const fx = (dx / dist) * force, fy = (dy / dist) * force
+        if (!a.fx) { a.vx += fx; a.vy += fy }
+        if (!b.fx) { b.vx -= fx; b.vy -= fy }
+      }
+      for (const node of nodes) {
+        if (node.fx !== null) { node.x = node.fx; node.y = node.fy; node.vx = 0; node.vy = 0; continue }
+        node.vx = (node.vx + (W / 2 - node.x) * 0.04) * 0.85
+        node.vy = (node.vy + (H / 2 - node.y) * 0.04) * 0.85
+        node.x = Math.max(12, Math.min(W - 12, node.x + node.vx))
+        node.y = Math.max(12, Math.min(H - 12, node.y + node.vy))
+      }
+      iter++
+      setPositions(nodes.map(n => ({ id: n.id, x: n.x, y: n.y, type: n.type, label: n.label, file: n.file })))
+      setLinks(edgesIdx.map(e => ({ x1: nodes[e.si].x, y1: nodes[e.si].y, x2: nodes[e.ti].x, y2: nodes[e.ti].y })))
+      if (iter < 200) rafRef.current = requestAnimationFrame(tick)
+    }
+    rafRef.current = requestAnimationFrame(tick)
+  }
+
+  const onSvgMouseMove = (e) => {
+    if (dragging.current && simRef.current) {
+      const svg = svgRef.current
+      const rect = svg.getBoundingClientRect()
+      const x = (e.clientX - rect.left - pan.x) / zoom
+      const y = (e.clientY - rect.top  - pan.y) / zoom
+      const node = simRef.current.nodes.find(n => n.id === dragging.current)
+      if (node) { node.fx = x; node.fy = y; node.x = x; node.y = y }
+    } else if (panStart.current) {
+      const dx = e.clientX - panStart.current.x
+      const dy = e.clientY - panStart.current.y
+      setPan({ x: panStart.current.panX + dx, y: panStart.current.panY + dy })
+    }
+  }
+
+  const onSvgMouseUp = (e) => {
+    if (dragging.current && simRef.current) {
+      const node = simRef.current.nodes.find(n => n.id === dragging.current)
+      if (node) { node.fx = null; node.fy = null }
+    }
+    dragging.current = null
+    panStart.current = null
+  }
+
+  const onSvgMouseDown = (e) => {
+    if (!dragging.current) {
+      panStart.current = { x: e.clientX, y: e.clientY, panX: pan.x, panY: pan.y }
+    }
+  }
+
+  const onWheel = (e) => {
+    e.preventDefault()
+    setZoom(z => Math.max(0.3, Math.min(3, z * (e.deltaY < 0 ? 1.1 : 0.9))))
+  }
+
+  const rMap = { route: 8, lib: 6, component: 7, jsx: 4 }
 
   const filtered = graph?.nodes?.filter(n =>
     !search || n.label.toLowerCase().includes(search.toLowerCase()) || n.type.includes(search.toLowerCase())
@@ -542,13 +617,13 @@ function GraphifyTab({ graph, search, selectedNode, onSelectNode }) {
       {/* Stats bar */}
       <div className="flex items-center gap-6 p-4 rounded-xl border border-white/[0.06] bg-[#12121a]">
         {[
-          { label: 'Nodes',          value: graph?.nodes?.length ?? '—', color: 'text-indigo-400'  },
-          { label: 'Edges',          value: graph?.edges?.length ?? '—', color: 'text-purple-400'  },
-          { label: 'Routes',         value: stats => stats,               color: 'text-cyan-400'    },
-          { label: 'Token Savings',  value: '71.5×',                      color: 'text-emerald-400' },
+          { label: 'Nodes',         value: graph?.nodes?.length ?? '—', color: 'text-indigo-400'  },
+          { label: 'Edges',         value: graph?.edges?.length ?? '—', color: 'text-purple-400'  },
+          { label: 'Showing',       value: positions.length || '—',     color: 'text-cyan-400'    },
+          { label: 'Token Savings', value: '71.5×',                     color: 'text-emerald-400' },
         ].map((s, i) => (
           <div key={i} className="text-center">
-            <div className={`text-xl font-bold font-mono ${s.color}`}>{typeof s.value === 'function' ? '—' : s.value}</div>
+            <div className={`text-xl font-bold font-mono ${s.color}`}>{s.value}</div>
             <div className="text-[10px] text-slate-500 mt-0.5">{s.label}</div>
           </div>
         ))}
@@ -563,19 +638,68 @@ function GraphifyTab({ graph, search, selectedNode, onSelectNode }) {
       </div>
 
       <div className="grid grid-cols-4 gap-4">
-        {/* Graph or list */}
         <div className="col-span-3">
           {view === 'graph' ? (
             <div className="rounded-xl border border-white/[0.06] bg-[#12121a] overflow-hidden">
               <div className="px-4 py-2.5 border-b border-white/[0.06] flex items-center gap-2 text-xs text-slate-500">
                 <Network size={12} className="text-indigo-400" />
-                <span>Drag to reposition · Scroll to zoom · Click node for details</span>
-                <span className="ml-auto">{filtered.length} nodes</span>
+                <span>Drag nodes · Scroll to zoom · Click for details</span>
+                <span className="ml-auto">{positions.length} nodes</span>
               </div>
-              {graph?.nodes?.length
-                ? <svg ref={svgRef} className="w-full" style={{ height: '520px', background: 'transparent' }} />
-                : <div className="h-64 flex items-center justify-center text-slate-600 text-xs">Loading graph data…</div>
-              }
+              {graph?.nodes?.length ? (
+                <svg
+                  ref={svgRef}
+                  width="100%" viewBox={`0 0 ${W} ${H}`}
+                  style={{ height: 520, cursor: dragging.current ? 'grabbing' : 'grab', userSelect: 'none' }}
+                  onMouseMove={onSvgMouseMove}
+                  onMouseUp={onSvgMouseUp}
+                  onMouseLeave={onSvgMouseUp}
+                  onMouseDown={onSvgMouseDown}
+                  onWheel={onWheel}
+                >
+                  <g transform={`translate(${pan.x},${pan.y}) scale(${zoom})`}>
+                    {/* Edges */}
+                    <g>
+                      {links.map((l, i) => (
+                        <line key={i} x1={l.x1} y1={l.y1} x2={l.x2} y2={l.y2}
+                          stroke="rgba(99,102,241,0.18)" strokeWidth={1} />
+                      ))}
+                    </g>
+                    {/* Nodes */}
+                    <g>
+                      {positions.map(n => {
+                        const col = NODE_COLOR[n.type] || '#6366f1'
+                        const r   = rMap[n.type] || 5
+                        const isSelected = selectedNode === n.id
+                        return (
+                          <g key={n.id} transform={`translate(${n.x},${n.y})`}
+                            style={{ cursor: 'pointer' }}
+                            onMouseDown={e => onNodeMouseDown(e, n.id)}
+                            onClick={() => loadDetail(n.id)}>
+                            {isSelected && <circle r={r + 4} fill="none" stroke={col} strokeWidth={1.5} opacity={0.5} />}
+                            <circle r={r} fill={col} opacity={0.85} />
+                            {n.type !== 'jsx' && (
+                              <text x={r + 3} y={4} fontSize={7} fill="rgba(148,163,184,0.85)"
+                                fontFamily="monospace" style={{ pointerEvents: 'none' }}>
+                                {n.label}
+                              </text>
+                            )}
+                          </g>
+                        )
+                      })}
+                    </g>
+                    {/* Legend */}
+                    {[['route','#6366f1'],['lib','#06b6d4'],['component','#8b5cf6'],['jsx','#a78bfa']].map(([t,c],i) => (
+                      <g key={t} transform={`translate(12,${H - 52 + i * 13})`}>
+                        <circle r={4} fill={c} />
+                        <text x={9} y={4} fontSize={8} fill="rgba(148,163,184,0.6)" fontFamily="monospace">{t}</text>
+                      </g>
+                    ))}
+                  </g>
+                </svg>
+              ) : (
+                <div className="h-64 flex items-center justify-center text-slate-600 text-xs">Loading graph data…</div>
+              )}
             </div>
           ) : (
             <div className="space-y-4">
