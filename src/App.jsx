@@ -4,7 +4,6 @@ import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { PortfolioProvider, usePortfolioContext } from './contexts/PortfolioContext'
 import { ApiKeysProvider } from './contexts/ApiKeysContext'
 import { ProModeProvider } from './contexts/ProModeContext'
-import { ThemeProvider } from './contexts/ThemeContext'
 import { ToastProvider } from './components/shared/ToastNotifications'
 import { TooltipProvider } from './components/shared/Tooltip'
 import LandingPage from './components/Landing/LandingPage'
@@ -315,7 +314,6 @@ function MainApp({ onSignIn }) {
 // ── Root export ───────────────────────────────────────────────────────────────
 export default function App() {
   return (
-    <ThemeProvider>
     <ProModeProvider>
       <ApiKeysProvider>
         <TooltipProvider>
@@ -327,6 +325,5 @@ export default function App() {
         </TooltipProvider>
       </ApiKeysProvider>
     </ProModeProvider>
-    </ThemeProvider>
   )
 }

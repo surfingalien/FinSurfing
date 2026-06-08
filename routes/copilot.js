@@ -112,7 +112,14 @@ Tools provide live data from: internal AI Brain (5 agents), Reddit APIs, FRED ma
 - Always end high-conviction outputs with: "Not financial advice — consult a qualified professional. Past performance does not guarantee future results."
 - Present both bull and bear cases; surface contradictions and risks
 - Format numbers: prices in $, percentages with %, scores /100
-- Respect the user's portfolio — avoid suggesting stocks they already hold`
+- Respect the user's portfolio — avoid suggesting stocks they already hold
+
+## CRITICAL — Real-Time Data Rules
+- NEVER quote a stock price, support level, resistance level, or price target from your training data
+- ALL price references MUST come from the analyze_symbol tool result — the tool fetches live market data
+- If a user asks about a specific ticker, you MUST call analyze_symbol FIRST before saying anything about price levels
+- The tool result includes "Current Price" — always use that exact figure, never a memorized price
+- Your training data prices are months or years out of date — using them will mislead users`
 
 const TOOLS = [
   {
@@ -250,18 +257,33 @@ async function dispatchTool(name, input, req) {
     case 'analyze_symbol': {
       const sym = encodeURIComponent(input.symbol || '')
       const interval = input.interval || '1d'
+
+      // Pre-fetch live quote so trading-analysis uses current price, not stale bar close
+      let clientLivePrice = null
+      try {
+        const qr = await fetch(
+          `http://127.0.0.1:${port}/api/quote?symbols=${sym}`,
+          { headers: fwdHeaders, signal: AbortSignal.timeout(5000) }
+        )
+        const qd = await qr.json()
+        const lp = qd?.quoteResponse?.result?.[0]?.regularMarketPrice
+        if (lp && lp > 0) clientLivePrice = lp
+      } catch { /* proceed without live price */ }
+
       const [r, altSnippet] = await Promise.all([
         fetch(`http://127.0.0.1:${port}/api/trading-analysis/analyze?symbol=${sym}&interval=${interval}`, {
           method: 'POST', headers: fwdHeaders,
-          body: JSON.stringify({}),
+          body: JSON.stringify({ clientLivePrice }),
           signal: AbortSignal.timeout(30_000),
         }),
         getAltData(input.symbol || ''),
       ])
       const data = await r.json()
       if (!data.signal) return `Analysis failed for ${input.symbol}: ${data.error || 'unknown error'}`
+      const livePrice = clientLivePrice || data.entry
       return (
-        `**${input.symbol}** — Signal: **${data.signal}** (${data.confidence}% confidence)\n` +
+        `**${input.symbol}** [LIVE PRICE: $${livePrice}] — Signal: **${data.signal}** (${data.confidence}% confidence)\n` +
+        `Current Price: $${livePrice} (use THIS price — do not use any other price)\n` +
         `Trend: ${data.trend} · Risk/Reward: ${data.riskReward?.toFixed(1)}:1\n` +
         `Entry $${data.entry} (zone $${data.entryZoneLow}–$${data.entryZoneHigh})\n` +
         `Stop $${data.stopLoss} · Target $${data.takeProfit?.[0]}–$${data.takeProfit?.[1]}\n\n` +
