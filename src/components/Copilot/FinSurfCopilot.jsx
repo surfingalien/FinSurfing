@@ -33,8 +33,8 @@ function MessageBubble({ msg }) {
       <div
         className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${
           isUser
-            ? 'bg-[#00ffcc]/15 border border-[#00ffcc]/20 text-white ml-auto'
-            : 'bg-white/[0.04] border border-white/[0.06] text-slate-200'
+            ? 'bg-[#003d33] border border-[#00ffcc]/30 text-white ml-auto'
+            : 'bg-[#111827] border border-white/[0.08] text-slate-200'
         }`}
       >
         <FormattedText text={msg.content} />
@@ -226,7 +226,7 @@ export default function FinSurfCopilot({ portfolio = [], watchlist = [] }) {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 24, scale: 0.96 }}
             transition={{ duration: 0.2, ease: 'easeOut' }}
-            className="fixed bottom-6 right-6 z-50 w-[420px] max-w-[calc(100vw-2rem)] h-[600px] max-h-[calc(100vh-5rem)] flex flex-col glass rounded-2xl border border-white/[0.08] shadow-2xl shadow-black/60 overflow-hidden"
+            className="fixed bottom-6 right-6 z-50 w-[420px] max-w-[calc(100vw-2rem)] h-[600px] max-h-[calc(100vh-5rem)] flex flex-col bg-[#0a0f1a] rounded-2xl border border-white/[0.08] shadow-2xl shadow-black/60 overflow-hidden"
           >
             {/* Header */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.06] flex-shrink-0">
@@ -288,7 +288,7 @@ export default function FinSurfCopilot({ portfolio = [], watchlist = [] }) {
                     key={label}
                     onClick={() => sendMessage(prompt)}
                     disabled={streaming}
-                    className="flex items-center gap-1.5 px-2.5 py-2 rounded-xl bg-white/[0.04] border border-white/[0.06] text-xs text-slate-400 hover:text-white hover:bg-white/[0.07] transition-all text-left disabled:opacity-40"
+                    className="flex items-center gap-1.5 px-2.5 py-2 rounded-xl bg-[#111827] border border-white/[0.08] text-xs text-slate-400 hover:text-white hover:bg-[#1e2a3a] transition-all text-left disabled:opacity-40"
                   >
                     <Icon size={12} className="text-[#00ffcc] flex-shrink-0" />
                     {label}
@@ -299,7 +299,7 @@ export default function FinSurfCopilot({ portfolio = [], watchlist = [] }) {
 
             {/* Input */}
             <div className="px-3 pb-3 flex-shrink-0">
-              <div className="flex items-end gap-2 bg-white/[0.04] border border-white/[0.08] rounded-xl px-3 py-2">
+              <div className="flex items-end gap-2 bg-[#111827] border border-white/[0.10] rounded-xl px-3 py-2">
                 <textarea
                   ref={inputRef}
                   value={input}
