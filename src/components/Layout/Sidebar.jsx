@@ -20,6 +20,7 @@ import {
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useApiKeys } from '../../contexts/ApiKeysContext'
+import { useTheme, THEMES } from '../../contexts/ThemeContext'
 import AccountSwitcher from '../Portfolio/AccountSwitcher'
 import CreatePortfolioModal from '../Portfolio/CreatePortfolioModal'
 import ChangePasswordModal from '../Auth/ChangePasswordModal'
@@ -239,12 +240,14 @@ export default function Sidebar({
 }) {
   const { user, isAuthenticated } = useAuth()
   const { hasAnyKey } = useApiKeys()
+  const { theme, setTheme } = useTheme()
 
   const [collapsed,      setCollapsed]      = useState(() => {
     try { return localStorage.getItem('finsurf_sidebar_collapsed') === '1' } catch { return false }
   })
   const [showCreate,     setShowCreate]     = useState(false)
   const [showApiKeys,    setShowApiKeys]    = useState(false)
+  const [showThemes,     setShowThemes]     = useState(false)
 
   const groups = buildGroups(user, triggeredCount)
 
@@ -369,6 +372,39 @@ export default function Sidebar({
         }
 
         <UserSection collapsed={collapsed} onNavigate={handleTabChange} onSignIn={onSignIn} />
+
+        {/* Theme picker */}
+        {collapsed ? (
+          <Tooltip content="Theme" side="right">
+            <button onClick={() => setShowThemes(v => !v)}
+              className="relative flex items-center justify-center w-full px-3 py-2.5 rounded-xl text-sm
+                         text-slate-400 hover:text-white hover:bg-white/[0.05] border border-transparent transition-all">
+              <span className="w-3 h-3 rounded-full ring-1 ring-white/20" style={{ background: THEMES.find(t => t.id === theme)?.color }} />
+            </button>
+          </Tooltip>
+        ) : (
+          <div className="relative">
+            <button onClick={() => setShowThemes(v => !v)}
+              className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm font-medium
+                         text-slate-400 hover:text-white hover:bg-white/[0.05] border border-transparent transition-all">
+              <span className="w-3 h-3 rounded-full ring-1 ring-white/20 shrink-0" style={{ background: THEMES.find(t => t.id === theme)?.color }} />
+              <span className="truncate">Theme: {THEMES.find(t => t.id === theme)?.label}</span>
+            </button>
+            {showThemes && (
+              <div className="absolute bottom-full left-0 mb-1 w-full rounded-xl border border-white/[0.1] bg-[#0d1424] shadow-xl overflow-hidden z-50">
+                {THEMES.map(t => (
+                  <button key={t.id} onClick={() => { setTheme(t.id); setShowThemes(false) }}
+                    className={`flex items-center gap-2.5 w-full px-3 py-2 text-sm transition-all
+                                ${theme === t.id ? 'bg-white/[0.08] text-white' : 'text-slate-400 hover:bg-white/[0.05] hover:text-white'}`}>
+                    <span className="w-3 h-3 rounded-full ring-1 ring-white/20 shrink-0" style={{ background: t.color }} />
+                    {t.label}
+                    {theme === t.id && <span className="ml-auto text-mint-400 text-[10px]">✓</span>}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Collapse toggle — desktop only */}
         <button onClick={toggleCollapse}
