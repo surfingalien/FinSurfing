@@ -16,6 +16,8 @@ React18+Vite SPA → Express API proxy. Dev: Vite proxies `/api/*` → :3001. Pr
 - `trading-analysis.js` — per-symbol AI; Claude `claude-sonnet-4-6`
 - `recommendations.js` — AI Advisory; Claude primary + Groq fallback; accepts `persona` (see `lib/investor-personas.js`) + `includeMacro` body params; GET `/personas` returns persona list
 - `macro.js` — FRED macro indicators (14 series); requires `FRED_API_KEY` env var; 1h cache; `getIndicators()` exported for prompt injection
+- `market-focus.js` — intraday session focus; GET returns cached AI analysis of top items to watch (holdings + watchlist + macro); POST `/refresh` triggers fresh run (`requireAuth`); refreshes every 30 min during market hours via `lib/scheduled-jobs.js:intradayFocusHandler`
+- `copilot.js` — streaming agentic chat (`requireAuth`); multi-provider (Claude native stream → Groq/OpenAI-compat fallback); SSRF-safe: `baseUrl` always from server-side `PROVIDER_DEFAULTS`, never from request body
 
 **DB**: `DATABASE_URL` → Postgres; missing → memstore. Schema: `db/schema.sql`.
 **Client state**: localStorage: watchlist, alerts, AI watchlist, `finsurf_api_keys`. Portfolio → DB when authed.
@@ -51,6 +53,9 @@ React18+Vite SPA → Express API proxy. Dev: Vite proxies `/api/*` → :3001. Pr
 
 ## Macro Data (`routes/macro.js`)
 14 FRED series (rates, inflation, labor, growth, VIX, credit). `GET /api/macro/indicators` returns full dataset + regime assessment + AI macro summary string. `GET /api/macro/summary` returns compact string for prompt injection. Requires `FRED_API_KEY` env var (free).
+
+## AI Brain Self-Improvement (`lib/brain-learnings.js`)
+Nightly loop: `resolveOutcomes()` fetches actual prices for predictions logged 7d/30d ago → writes back to `data/ai-brain-predictions.jsonl`. `runMetaAnalysis()` has Claude read resolved predictions and write structured learnings to `data/brain-learnings.json`. `getLearningsBlock()` returns a prompt-injection string injected into the AI Brain system prompt. Reads from disk JSONL only — no user input reaches the file path.
 
 ## Deploy
 Railway auto-deploy `main` (`railway.toml` + `Procfile`).
