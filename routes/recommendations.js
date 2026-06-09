@@ -20,6 +20,7 @@ const router              = express.Router()
 const rateLimit           = require('express-rate-limit')
 const { getRouter }       = require('../lib/ai-router')
 const { CircuitOpenError } = require('../lib/circuit-breaker')
+const { requireAuth }     = require('../middleware/auth')
 const { getUserPrefs, saveUserPref } = require('../db/ai_memory')
 const { PERSONAS }        = require('../lib/investor-personas')
 const { getIndicators }   = require('./macro')
@@ -109,7 +110,7 @@ async function fetchLiveQuotes(symbols, fwdHeaders) {
   }
 }
 
-router.post('/', recLimit, async (req, res) => {
+router.post('/', requireAuth, recLimit, async (req, res) => {
   if (process.env.AI_RECOMMENDATIONS_DISABLED === 'true')
     return res.status(503).json({ error: 'AI Buy Signals are temporarily disabled (kill switch active)', killSwitch: true })
 

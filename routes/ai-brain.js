@@ -20,6 +20,7 @@ const path                = require('path')
 const { getRouter }       = require('../lib/ai-router')
 const { CircuitOpenError } = require('../lib/circuit-breaker')
 const { getSocialSentiment } = require('../lib/social-sentiment')
+const { requireAuth }     = require('../middleware/auth')
 
 const router   = express.Router()
 const aiRouter = getRouter('ai-brain')
@@ -320,7 +321,7 @@ function logPrediction(symbol, agents, zones, generatedAt) {
   } catch { /* non-fatal */ }
 }
 
-router.post('/analyze', brainLimit, async (req, res) => {
+router.post('/analyze', requireAuth, brainLimit, async (req, res) => {
   if (process.env.AI_BRAIN_DISABLED === 'true')
     return res.status(503).json({ error: 'AI Brain is temporarily disabled (kill switch active)', killSwitch: true })
 

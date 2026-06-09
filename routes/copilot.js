@@ -30,6 +30,7 @@ const rateLimit = require('express-rate-limit')
 const Anthropic = require('@anthropic-ai/sdk')
 const { getSocialSentiment } = require('../lib/social-sentiment')
 const { getAltDataSnippet }  = require('../lib/alt-data')
+const { requireAuth }        = require('../middleware/auth')
 
 // Use warm cache from scheduled-jobs if available, fall back to live fetch
 async function getAltData(symbol) {
@@ -611,7 +612,7 @@ async function runOpenAITurn({ model, baseUrl, apiKey, system, messages, tools, 
 
 // ── SSE streaming chat handler ─────────────────────────────────────────────────
 
-router.post('/chat', chatLimit, async (req, res) => {
+router.post('/chat', requireAuth, chatLimit, async (req, res) => {
   const { messages = [], portfolio = [], watchlist = [], providerId = 'claude', providerState = {} } = req.body
 
   res.setHeader('Content-Type', 'text/event-stream')

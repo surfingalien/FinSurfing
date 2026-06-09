@@ -825,7 +825,7 @@ Respond with ONLY pure JSON (absolutely no markdown fences, no backticks, no cod
 
 // ── POST /analyze ─────────────────────────────────────────────────────────────
 
-router.post('/analyze', async (req, res) => {
+router.post('/analyze', requireAuth, async (req, res) => {
   // Accept symbol/interval from body (TradingAIPanel, copilot) or query params (scheduled jobs)
   const symbol = req.body.symbol || req.query.symbol
   const interval = req.body.interval || req.query.interval || 'D'
@@ -1038,7 +1038,7 @@ const CHAT_SYSTEM_PROMPT =
   'Answer concisely with specific references to the indicator values provided. ' +
   'Always include brief risk disclaimers. Never guarantee profits.'
 
-router.post('/chat', async (req, res) => {
+router.post('/chat', requireAuth, async (req, res) => {
   const {
     message,
     symbol,
