@@ -4,7 +4,7 @@
 
 | Name | Used by | Scope | Source | Rotation | Risk |
 |---|---|---|---|---|---|
-| `JWT_SECRET` | `middleware/auth.js` | Server only | Railway env var | On compromise | **Critical** — hardcoded fallback exists in source; must be set in production |
+| `JWT_SECRET` | `middleware/auth.js` | Server only | Railway env var | On compromise | **Critical** — server calls `process.exit(1)` on startup if unset in production |
 | `DATABASE_URL` | `db/db.js` | Server only | Railway env var | On compromise | High — full DB access |
 | `ANTHROPIC_API_KEY` | `routes/trading-analysis.js`, `routes/copilot.js`, `routes/ai-brain.js`, `lib/scheduled-jobs.js` | Server only | Railway env var | On compromise | High — paid API; unauthenticated routes can trigger usage |
 | `GROQ_API_KEY` | `routes/copilot.js`, `routes/ai-brain.js` | Server only | Railway env var | On compromise | Medium — paid fallback AI |
@@ -40,12 +40,22 @@ No API keys for external providers (Finnhub, FMP, etc.) are included in the SPA 
 
 ## Pre-Go-Live Checklist
 
-- [ ] `JWT_SECRET` is set to a random 64-byte hex string (not the hardcoded fallback)
-- [ ] `NODE_ENV=production` is set in Railway
-- [ ] `ALLOWED_ORIGINS` is set to the production domain (not left unset)
-- [ ] `DATABASE_URL` is set (otherwise all data lost on restart)
-- [ ] `ANTHROPIC_API_KEY` is set
-- [ ] `RESEND_API_KEY` or SMTP vars are configured (otherwise OTP codes appear in API responses)
-- [ ] `ADMIN_EMAIL` + `ADMIN_PASSWORD` are set
-- [ ] `MORNING_BRIEF_EMAIL` is set if morning briefing is desired
-- [ ] All third-party market data API keys are set (at minimum one of: AISA, Finnhub, FMP)
+**Code-level fixes shipped (no env var needed):**
+- [x] JWT fallback secret removed — `process.exit(1)` if `JWT_SECRET` unset in production
+- [x] Scheduler write routes require `requireAuth + requireAdmin`
+- [x] `x-internal` header replaced by loopback IP check in AI Brain rate limiter
+- [x] `providerState.baseUrl` from request body ignored (SSRF fix)
+- [x] `demoCode` OTP suppressed in production responses
+- [x] `avg_cost_basis` column name fixed in analytics query
+
+**Env vars to set in Railway:**
+- [ ] `JWT_SECRET` — random 64-byte hex (`openssl rand -hex 32`); server won't start without it in production
+- [ ] `NODE_ENV=production` — enables CORS restriction, HSTS, HTTPS cookies, OTP suppression
+- [ ] `ALLOWED_ORIGINS` — production domain (e.g. `https://finsurf.app`); startup warning logged if missing
+- [ ] `APP_URL` — production URL for password reset links; startup warning logged if missing
+- [ ] `DATABASE_URL` — Postgres connection string; without it all data is lost on restart
+- [ ] `ANTHROPIC_API_KEY` — required for all AI features
+- [ ] `RESEND_API_KEY` or SMTP vars — required for email delivery (OTP, password reset, morning brief)
+- [ ] `ADMIN_EMAIL` + `ADMIN_PASSWORD` — admin account credentials
+- [ ] `MORNING_BRIEF_EMAIL` — recipient for daily morning brief; startup warning logged if missing
+- [ ] At minimum one market data key: `AISA_API_KEY`, `FINNHUB_API_KEY`, or `FMP_API_KEY`
