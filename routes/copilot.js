@@ -234,6 +234,8 @@ const TOOLS = [
 async function dispatchTool(name, input, req) {
   const port = process.env.PORT || 3001
   const fwdHeaders = { 'Content-Type': 'application/json', 'x-internal': '1' }
+  // Forward auth token so internal loopback calls to protected routes pass requireAuth
+  if (req.headers.authorization) fwdHeaders['authorization'] = req.headers.authorization
   for (const k of ['x-aisa-key', 'x-finnhub-key', 'x-fmp-key', 'x-td-key', 'x-av-key']) {
     if (req.headers[k]) fwdHeaders[k] = req.headers[k]
   }

@@ -925,6 +925,75 @@ async function getTiingoQuote(symbol, keys = {}) {
   } catch { return null }
 }
 
+// ── Polygon.io helpers ────────────────────────────────────────────────────────
+// Used for quotes (as fallback) and news. Requires POLYGON_API_KEY / MASSIVE_API_KEY.
+const POLYGON_KEY = () => process.env.POLYGON_API_KEY || process.env.MASSIVE_API_KEY || null
+
+async function getPolygonQuote(symbol, keys = {}) {
+  const key = keys.polygon || POLYGON_KEY()
+  if (!key) return null
+  try {
+    const url = `https://api.polygon.io/v2/snapshot/locale/us/markets/stocks/tickers/${encodeURIComponent(symbol.toUpperCase())}?apiKey=${key}`
+    const d = await apiFetch(url, 8000)
+    const t = d?.ticker
+    if (!t?.day?.c) return null
+    const price = t.day.c
+    const prev  = t.prevDay?.c || null
+    return {
+      symbol,
+      shortName:                  t.name || symbol,
+      regularMarketPrice:         price,
+      regularMarketChange:        prev ? +(price - prev).toFixed(4) : null,
+      regularMarketChangePercent: prev ? +((price - prev) / prev * 100).toFixed(4) : null,
+      regularMarketVolume:        t.day?.v || null,
+      regularMarketDayHigh:       t.day?.h || null,
+      regularMarketDayLow:        t.day?.l || null,
+      regularMarketOpen:          t.day?.o || null,
+      regularMarketPreviousClose: prev,
+      regularMarketTime:          Math.floor(Date.now() / 1000),
+    }
+  } catch { return null }
+}
+
+async function getPolygonNews(symbol, keys = {}, limit = 10) {
+  const key = keys.polygon || POLYGON_KEY()
+  if (!key) return null
+  try {
+    const url = `https://api.polygon.io/v2/reference/news?ticker=${encodeURIComponent(symbol.toUpperCase())}&limit=${limit}&order=desc&sort=published_utc&apiKey=${key}`
+    const d = await apiFetch(url, 8000)
+    if (!Array.isArray(d?.results) || !d.results.length) return null
+    return {
+      news: d.results.map(a => ({
+        title:               a.title,
+        link:                a.article_url,
+        publisher:           a.publisher?.name,
+        providerPublishTime: a.published_utc ? Math.floor(new Date(a.published_utc).getTime() / 1000) : null,
+        thumbnail:           a.image_url ? { resolutions: [{ url: a.image_url }] } : null,
+        tickers:             a.tickers,
+      }))
+    }
+  } catch { return null }
+}
+
+async function getTiingoNews(symbol, keys = {}, limit = 10) {
+  const key = keys.tiingo || TIINGO_KEY()
+  if (!key) return null
+  try {
+    const url = `https://api.tiingo.com/tiingo/news?tickers=${encodeURIComponent(symbol.toUpperCase())}&limit=${limit}&token=${key}`
+    const d = await apiFetch(url, 8000)
+    if (!Array.isArray(d) || !d.length) return null
+    return {
+      news: d.map(a => ({
+        title:               a.title,
+        link:                a.url,
+        publisher:           a.source,
+        providerPublishTime: a.publishedDate ? Math.floor(new Date(a.publishedDate).getTime() / 1000) : null,
+        thumbnail:           null,
+      }))
+    }
+  } catch { return null }
+}
+
 // ── Alpha Vantage helpers ─────────────────────────────────────────────────────
 // Free tier: 25 req/day, 5 req/min. Used as final fallback for chart + summary.
 
@@ -1900,6 +1969,10 @@ app.get('/api/quote', async (req, res) => {
 
           // 7th: Tiingo — strong for ETFs/mutual funds missed by others
           merge(await Promise.all(noPrice().map(s => getTiingoQuote(s, keys).catch(() => null))))
+          if (!noPrice().length) return stockSyms.map(s => resultMap[s])
+
+          // 8th: Polygon — real-time snapshot, good breadth
+          merge(await Promise.all(noPrice().map(s => getPolygonQuote(s, keys).catch(() => null))))
 
           // Final: chart-price cache or null for anything still missing
           for (const sym of stockSyms) {
@@ -2172,11 +2245,23 @@ app.get('/api/news', async (req, res) => {
   const symbol = req.query.symbol || null
   const keys   = extractKeys(req)
   try {
-    // FMP first — better financial news coverage
+    // 1. Polygon — fast, good breadth, free tier generous
+    if (symbol) {
+      const poly = await getPolygonNews(symbol, keys, 10)
+      if (poly?.news?.length) return res.json(poly)
+    }
+
+    // 2. FMP — better financial news coverage for general feed
     const fmp = await getFMPStockNews(symbol, keys, symbol ? 10 : 15)
     if (fmp?.news?.length) return res.json(fmp)
 
-    // Finnhub fallback
+    // 3. Tiingo news
+    if (symbol) {
+      const tiingo = await getTiingoNews(symbol, keys, 10)
+      if (tiingo?.news?.length) return res.json(tiingo)
+    }
+
+    // 4. Finnhub fallback
     const fh = await getFinnhubNews(symbol, keys)
     if (fh) return res.json(fh)
 
