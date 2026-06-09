@@ -7,4 +7,4 @@ openbb-intrinio
 openbb-polygon
 openbb-sec
 openbb-benzinga
-uvicorn[standard]==0.29.0
+uvicorn[standard]
