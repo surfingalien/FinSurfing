@@ -1,6 +1,6 @@
 # Test Coverage Map — FinSurfing
 
-**Status: 44 automated tests passing.** Jest + Supertest. Run: `npm test`  
+**Status: 45 automated tests passing.** Jest + Supertest. Run: `npm test`  
 CI: GitHub Actions (`.github/workflows/ci.yml`) runs on every PR targeting `main`.
 
 ---
@@ -30,7 +30,7 @@ Tests live in `tests/`. Each file maps to the area it covers:
 | Login — account lockout | 5 failed attempts → locked 15 min | 429 on 6th attempt | auth.js:493 | **Covered** (`auth.test.js`) |
 | Token refresh — rotation | Old refresh token is revoked on use | Second use of same refresh token → 401 | auth.js:553 | **Covered** (`auth.test.js`) |
 | JWT fallback secret | `JWT_SECRET` unset → startup should fail | `process.exit(1)` in production mode | architecture.md (known risk) | **Fixed** (middleware/auth.js) + **Covered** (security.test.js wrong-secret test) |
-| OTP expiry | Code past 10 min → 400 | auth.js:383 | flows.md | **None** |
+| OTP expiry | Code past 10 min → 400 | auth.js:383 | flows.md | ✅ `auth.test.js` — time-travel via `Date.now` mock |
 
 ### Portfolio Authorization
 
