@@ -2,9 +2,4 @@ openbb==4.3.2
 openbb-platform-api==1.3.6
 openbb-yfinance
 openbb-fmp
-openbb-fred
-openbb-intrinio
-openbb-polygon
-openbb-sec
-openbb-benzinga
 uvicorn[standard]
