@@ -20,7 +20,11 @@ cat > ~/.openbb_platform/user_settings.json <<EOF
 }
 EOF
 
-exec python -m uvicorn openbb_core.api.rest_api:app \
-  --host "${OPENBB_HOST:-0.0.0.0}" \
-  --port "${OPENBB_PORT:-6900}" \
+HOST="${OPENBB_HOST:-0.0.0.0}"
+PORT="${OPENBB_PORT:-6900}"
+
+# openbb-platform-api 1.x entry point
+exec python -m uvicorn openbb_platform_api.main:app \
+  --host "$HOST" \
+  --port "$PORT" \
   --workers 1
