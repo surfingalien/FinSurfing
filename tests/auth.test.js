@@ -66,6 +66,28 @@ describe('POST /api/auth/verify-email + login flow', () => {
     expect(res.status).toBe(400)
   })
 
+  test('OTP expired after 10 minutes returns 400', async () => {
+    const expiredEmail = `expired_${Date.now()}@example.com`
+    const reg = await request(app)
+      .post('/api/auth/register')
+      .send({ email: expiredEmail, password })
+    const code = reg.body.demoCode
+    expect(code).toBeDefined()
+
+    // Advance Date.now() by 11 minutes so the OTP's expiresAt is in the past
+    const realNow = Date.now
+    Date.now = () => realNow() + 11 * 60 * 1000
+    try {
+      const res = await request(app)
+        .post('/api/auth/verify-email')
+        .send({ email: expiredEmail, code })
+      expect(res.status).toBe(400)
+      expect(res.body.error).toMatch(/expired/i)
+    } finally {
+      Date.now = realNow
+    }
+  })
+
   test('correct OTP verifies account and returns tokens', async () => {
     const res = await request(app)
       .post('/api/auth/verify-email')
