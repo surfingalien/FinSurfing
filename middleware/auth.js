@@ -1,9 +1,11 @@
 'use strict'
 const jwt = require('jsonwebtoken')
 
-// Fallback secret for demo/dev mode — replaced by env var in production
-const FALLBACK_SECRET = 'finsurf-demo-secret-DO-NOT-USE-IN-PRODUCTION-32ch'
-const SECRET = process.env.JWT_SECRET || FALLBACK_SECRET
+if (!process.env.JWT_SECRET && process.env.NODE_ENV === 'production') {
+  console.error('[auth] FATAL: JWT_SECRET env var is not set in production. Exiting.')
+  process.exit(1)
+}
+const SECRET = process.env.JWT_SECRET || 'finsurf-dev-only-secret-not-for-production'
 
 /**
  * Verify the Bearer access token and attach `req.user = { userId, email, role }`.

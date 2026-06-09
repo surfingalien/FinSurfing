@@ -826,7 +826,9 @@ Respond with ONLY pure JSON (absolutely no markdown fences, no backticks, no cod
 // ── POST /analyze ─────────────────────────────────────────────────────────────
 
 router.post('/analyze', requireAuth, async (req, res) => {
-  const { symbol, interval = 'D', livePrice: clientLivePrice } = req.body
+  const symbol = req.body.symbol || req.query.symbol
+  const interval = req.body.interval || req.query.interval || 'D'
+  const clientLivePrice = req.body.livePrice ?? req.body.clientLivePrice ?? null
 
   if (!symbol || typeof symbol !== 'string')
     return res.status(400).json({ error: 'symbol is required' })

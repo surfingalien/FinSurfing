@@ -13,6 +13,7 @@
 const express   = require('express')
 const router    = express.Router()
 const scheduler = require('../lib/scheduler')
+const { requireAuth, requireAdmin } = require('../middleware/auth')
 let scheduledJobs = null
 function getJobs() {
   if (!scheduledJobs) scheduledJobs = require('../lib/scheduled-jobs')
@@ -23,7 +24,7 @@ router.get('/jobs', (req, res) => {
   res.json(scheduler.getStatus())
 })
 
-router.post('/jobs/:id/trigger', (req, res) => {
+router.post('/jobs/:id/trigger', requireAuth, requireAdmin, (req, res) => {
   const { id } = req.params
   const jobs = scheduler.getStatus()
   if (!jobs.find(j => j.id === id)) return res.status(404).json({ error: `Unknown job: ${id}` })
@@ -32,7 +33,7 @@ router.post('/jobs/:id/trigger', (req, res) => {
   res.json({ ok: true, status: 'running', message: `Job "${id}" started. Poll GET /api/scheduler/jobs for result.` })
 })
 
-router.patch('/jobs/:id', (req, res) => {
+router.patch('/jobs/:id', requireAuth, requireAdmin, (req, res) => {
   const { id } = req.params
   const { enabled } = req.body
   if (typeof enabled !== 'boolean') return res.status(400).json({ error: 'enabled must be boolean' })

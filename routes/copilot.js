@@ -31,6 +31,7 @@ const Anthropic = require('@anthropic-ai/sdk')
 const { requireAuth } = require('../middleware/auth')
 const { getSocialSentiment } = require('../lib/social-sentiment')
 const { getAltDataSnippet }  = require('../lib/alt-data')
+const { requireAuth }        = require('../middleware/auth')
 
 // Use warm cache from scheduled-jobs if available, fall back to live fetch
 async function getAltData(symbol) {
@@ -56,6 +57,8 @@ Your mission: deliver timely, verified, and structured financial intelligence th
 
 ## Live Tools Available
 - scan_market: Run the 5-agent AI Brain to rank investment opportunities across stocks, ETFs, crypto (30+ scan universes, 3/6/12m horizons)
+- get_earnings_catalyst: Upcoming earnings date, EPS estimate, analyst consensus, and last 4 quarters of EPS surprise history
+- get_options_flow: Real-time options put/call ratio, implied volatility, and unusual activity (smart-money positioning signal)
 - get_recommendations: Get personalized buy signals using a named investor persona (Buffett, Dalio, Lynch, Burry, Wood, Marks, Soros, Greenblatt, Munger)
 - analyze_symbol: Deep technical + AI analysis — RSI, MACD, EMA9/21/50/200, Bollinger, VWAP, OBV, patterns, entry/stop/target zones
 - get_social_sentiment: Real-time Reddit sentiment (r/wallstreetbets, r/stocks, r/investing) for up to 5 tickers
@@ -64,7 +67,7 @@ Your mission: deliver timely, verified, and structured financial intelligence th
 - get_options_flow: Put/Call ratio, ATM implied volatility, and unusual options activity — use to confirm directional conviction
 
 ## Tool Routing Rules
-- User asks about a specific ticker → call analyze_symbol first; ALWAYS add get_earnings_catalyst to check for imminent catalysts; add get_options_flow for directional conviction
+- User asks about a specific ticker → call analyze_symbol first; ALWAYS add get_earnings_catalyst to check for imminent catalysts; add get_options_flow for directional conviction; add get_social_sentiment if sentiment is relevant
 - User asks "top picks", "what to buy", "scan the market" → call scan_market
 - User asks for strategy recommendations by persona → call get_recommendations
 - User asks about macro, rates, inflation, VIX, regime → call get_macro
@@ -207,20 +210,24 @@ const TOOLS = [
   },
   {
     name: 'get_earnings_catalyst',
-    description: 'Get upcoming earnings date, consensus EPS estimate, and recent earnings surprise history for a single ticker. Use to flag near-term catalyst risk/opportunity.',
+    description: 'Get upcoming earnings date, EPS estimate, analyst consensus, and last 4 quarters of EPS surprise history for a ticker. Use this before analyzing any stock to check if an earnings catalyst is imminent.',
     input_schema: {
       type: 'object',
       required: ['symbol'],
-      properties: { symbol: { type: 'string', description: 'Ticker symbol' } },
+      properties: {
+        symbol: { type: 'string', description: 'Ticker symbol (e.g. AAPL, NVDA)' },
+      },
     },
   },
   {
     name: 'get_options_flow',
-    description: 'Get put/call ratio, ATM implied volatility, and unusual options activity for a ticker. Use to confirm directional conviction from the options market.',
+    description: 'Get real-time options market data: put/call ratio, implied volatility, and unusual options activity (large bets vs open interest). Strong signal for smart-money positioning 1–3 weeks ahead.',
     input_schema: {
       type: 'object',
       required: ['symbol'],
-      properties: { symbol: { type: 'string', description: 'Ticker symbol' } },
+      properties: {
+        symbol: { type: 'string', description: 'Ticker symbol (e.g. AAPL, TSLA)' },
+      },
     },
   },
 ]
@@ -230,6 +237,8 @@ const TOOLS = [
 async function dispatchTool(name, input, req) {
   const port = process.env.PORT || 3001
   const fwdHeaders = { 'Content-Type': 'application/json', 'x-internal': '1' }
+  // Forward auth token so internal loopback calls to protected routes pass requireAuth
+  if (req.headers.authorization) fwdHeaders['authorization'] = req.headers.authorization
   for (const k of ['x-aisa-key', 'x-finnhub-key', 'x-fmp-key', 'x-td-key', 'x-av-key']) {
     if (req.headers[k]) fwdHeaders[k] = req.headers[k]
   }
@@ -276,35 +285,35 @@ async function dispatchTool(name, input, req) {
     }
 
     case 'analyze_symbol': {
-      const sym = encodeURIComponent(input.symbol || '')
+      const rawSym  = input.symbol || ''
       const interval = input.interval || '1d'
 
       // Pre-fetch live quote so trading-analysis uses current price, not stale bar close
-      let clientLivePrice = null
+      let livePrice = null
       try {
         const qr = await fetch(
-          `http://127.0.0.1:${port}/api/quote?symbols=${sym}`,
+          `http://127.0.0.1:${port}/api/quote?symbols=${encodeURIComponent(rawSym)}`,
           { headers: fwdHeaders, signal: AbortSignal.timeout(5000) }
         )
         const qd = await qr.json()
         const lp = qd?.quoteResponse?.result?.[0]?.regularMarketPrice
-        if (lp && lp > 0) clientLivePrice = lp
+        if (lp && lp > 0) livePrice = lp
       } catch { /* proceed without live price */ }
 
       const [r, altSnippet] = await Promise.all([
-        fetch(`http://127.0.0.1:${port}/api/trading-analysis/analyze?symbol=${sym}&interval=${interval}`, {
+        fetch(`http://127.0.0.1:${port}/api/trading-analysis/analyze`, {
           method: 'POST', headers: fwdHeaders,
-          body: JSON.stringify({ clientLivePrice }),
+          body: JSON.stringify({ symbol: rawSym, interval, livePrice }),
           signal: AbortSignal.timeout(30_000),
         }),
-        getAltData(input.symbol || ''),
+        getAltData(rawSym),
       ])
       const data = await r.json()
       if (!data.signal) return `Analysis failed for ${input.symbol}: ${data.error || 'unknown error'}`
-      const livePrice = clientLivePrice || data.entry
+      const displayPrice = livePrice || data.entry
       return (
-        `**${input.symbol}** [LIVE PRICE: $${livePrice}] — Signal: **${data.signal}** (${data.confidence}% confidence)\n` +
-        `Current Price: $${livePrice} (use THIS price — do not use any other price)\n` +
+        `**${input.symbol}** [LIVE PRICE: $${displayPrice}] — Signal: **${data.signal}** (${data.confidence}% confidence)\n` +
+        `Current Price: $${displayPrice} (use THIS price — do not use any other price)\n` +
         `Trend: ${data.trend} · Risk/Reward: ${data.riskReward?.toFixed(1)}:1\n` +
         `Entry $${data.entry} (zone $${data.entryZoneLow}–$${data.entryZoneHigh})\n` +
         `Stop $${data.stopLoss} · Target $${data.takeProfit?.[0]}–$${data.takeProfit?.[1]}\n\n` +
@@ -331,30 +340,161 @@ async function dispatchTool(name, input, req) {
     }
 
     case 'get_earnings_catalyst': {
-      const sym = input.symbol?.toUpperCase()
-      const [dateR, posR] = await Promise.allSettled([
-        fetch(`http://127.0.0.1:${port}/api/earnings/date?symbol=${sym}`, { headers: fwdHeaders, signal: AbortSignal.timeout(10_000) }),
-        fetch(`http://127.0.0.1:${port}/api/earnings/positioning?symbol=${sym}`, { headers: fwdHeaders, signal: AbortSignal.timeout(10_000) }),
+      const sym = (input.symbol || '').toUpperCase().replace(/[^A-Z0-9.-]/g, '')
+      if (!sym) return 'No symbol provided.'
+
+      const [dateRes, surpriseRes] = await Promise.allSettled([
+        fetch(`http://127.0.0.1:${port}/api/earnings/date?symbol=${sym}`, {
+          headers: fwdHeaders, signal: AbortSignal.timeout(10_000),
+        }).then(r => r.json()),
+        fetch(`http://127.0.0.1:${port}/api/earnings/positioning?symbols=${sym}`, {
+          headers: fwdHeaders, signal: AbortSignal.timeout(12_000),
+        }).then(r => r.json()),
       ])
-      const dateData = dateR.status === 'fulfilled' && dateR.value.ok ? await dateR.value.json() : {}
-      const posData = posR.status === 'fulfilled' && posR.value.ok ? await posR.value.json() : {}
-      return JSON.stringify({ symbol: sym, nextEarnings: dateData, positioning: posData })
+
+      const dateData     = dateRes.status === 'fulfilled'     ? dateRes.value     : null
+      const surpriseData = surpriseRes.status === 'fulfilled' ? surpriseRes.value : null
+      const surprise     = surpriseData?.results?.[0] || surpriseData?.[0] || null
+
+      const daysUntil = dateData?.nextEarningsDate
+        ? Math.round((new Date(dateData.nextEarningsDate) - Date.now()) / 86400000)
+        : null
+
+      let lines = [`**${sym} Earnings Catalyst**`]
+
+      if (dateData?.nextEarningsDate) {
+        lines.push(`📅 Next Earnings: ${dateData.nextEarningsDate} (in ${daysUntil} days)`)
+        if (daysUntil <= 14) lines.push(`⚠️ IMMINENT — earnings in ≤14 days; elevated volatility risk`)
+      } else {
+        lines.push('📅 Next Earnings: Date not yet confirmed')
+      }
+
+      if (dateData?.epsEstimate) lines.push(`EPS Estimate: $${dateData.epsEstimate}`)
+      if (dateData?.revenueEstimate) lines.push(`Revenue Estimate: ${dateData.revenueEstimate}`)
+
+      if (surprise) {
+        const beatRate = surprise.beat_rate != null
+          ? `${Math.round(surprise.beat_rate * 100)}% (${surprise.beat_count}/${surprise.total_quarters} quarters)`
+          : 'N/A'
+        const avgSurprise = surprise.avg_eps_surprise_pct != null
+          ? `${surprise.avg_eps_surprise_pct > 0 ? '+' : ''}${surprise.avg_eps_surprise_pct.toFixed(1)}%`
+          : 'N/A'
+        lines.push(`\nEPS Beat Rate (last ${surprise.total_quarters}q): ${beatRate}`)
+        lines.push(`Avg EPS Surprise: ${avgSurprise}`)
+        if (surprise.recent_quarters?.length) {
+          lines.push('\nRecent EPS History:')
+          surprise.recent_quarters.slice(0, 4).forEach(q => {
+            if (!q.period) return
+            const sp = q.surprise_pct != null ? ` (${q.surprise_pct > 0 ? '+' : ''}${q.surprise_pct.toFixed(1)}% surprise)` : ''
+            lines.push(`  ${q.period}: actual $${q.actual ?? '?'} vs est $${q.estimate ?? '?'}${sp}`)
+          })
+        }
+      }
+
+      if (daysUntil != null && daysUntil <= 21 && surprise?.avg_eps_surprise_pct > 5)
+        lines.push('\n📊 Signal: Strong historical beat rate + imminent earnings = high-probability catalyst.')
+      else if (daysUntil != null && daysUntil <= 7)
+        lines.push('\n📊 Signal: Earnings very close — options IV typically elevated. High binary risk event.')
+
+      return lines.join('\n') || `No earnings data available for ${sym}.`
     }
 
     case 'get_options_flow': {
-      const sym = input.symbol?.toUpperCase()
-      const r = await fetch(`http://127.0.0.1:${port}/api/options/flow?symbol=${sym}`, {
-        headers: fwdHeaders,
-        signal: AbortSignal.timeout(10_000),
-      })
-      const data = r.ok ? await r.json() : { snippet: 'Options flow unavailable' }
-      return data.snippet || JSON.stringify(data)
+      const sym = (input.symbol || '').toUpperCase().replace(/[^A-Z0-9.-]/g, '')
+      if (!sym) return 'No symbol provided.'
+      try {
+        const r = await fetch(`http://127.0.0.1:${port}/api/options/flow?symbol=${sym}`, {
+          headers: fwdHeaders, signal: AbortSignal.timeout(12_000),
+        })
+        if (!r.ok) return `Options data unavailable for ${sym} (HTTP ${r.status})`
+        const data = await r.json()
+        return data.snippet || JSON.stringify(data)
+      } catch (e) {
+        return `Options flow fetch failed for ${sym}: ${e.message}`
+      }
     }
 
     default:
       return `Unknown tool: ${name}`
   }
 }
+
+// ── Planner: detect ticker deep-analysis queries ──────────────────────────────
+// Returns the ticker symbol if the last user message is a deep-analysis request,
+// null otherwise. Used to trigger the parallel pre-fetch fast path.
+const DEEP_ANALYSIS_RE = /\b(analyz[ei]|analysis|check|look at|deep dive|research|breakdown|full report|what do you think of|should i buy|should i sell|tell me about|thesis on|outlook for|price target)\b/i
+const TICKER_RE = /\b([A-Z]{1,5}(?:-USD)?)\b/g
+
+function detectTickerQuery(messages) {
+  const lastUser = [...messages].reverse().find(m => m.role === 'user')
+  if (!lastUser) return null
+  const text = typeof lastUser.content === 'string' ? lastUser.content : ''
+  if (!DEEP_ANALYSIS_RE.test(text)) return null
+  const tickers = [...text.matchAll(TICKER_RE)].map(m => m[1])
+  // Filter out common English words that look like tickers
+  const SKIP = new Set(['A','I','AM','AN','AT','BE','BY','DO','GO','IF','IN','IS','IT','ME','MY','NO','OF','ON','OR','SO','TO','UP','US','WE','AND','ARE','FOR','HAS','NOT','THE','WAS'])
+  const valid = tickers.filter(t => !SKIP.has(t))
+  return valid.length === 1 ? valid[0] : null
+}
+
+// Run all analysis tools in parallel for a ticker — DeerFlow-style Planner step
+async function runPlannerPrefetch(ticker, req, send) {
+  send({ type: 'tool_start', tools: [
+    { name: 'analyze_symbol',       input: { symbol: ticker } },
+    { name: 'get_earnings_catalyst', input: { symbol: ticker } },
+    { name: 'get_options_flow',      input: { symbol: ticker } },
+    { name: 'get_social_sentiment',  input: { symbols: [ticker] } },
+  ]})
+
+  const [technical, earnings, options, social] = await Promise.allSettled([
+    dispatchTool('analyze_symbol',        { symbol: ticker },       req),
+    dispatchTool('get_earnings_catalyst', { symbol: ticker },       req),
+    dispatchTool('get_options_flow',      { symbol: ticker },       req),
+    dispatchTool('get_social_sentiment',  { symbols: [ticker] },    req),
+  ])
+
+  send({ type: 'tool_results', results: [
+    { tool: 'analyze_symbol',       preview: technical.value?.slice?.(0, 100) },
+    { tool: 'get_earnings_catalyst', preview: earnings.value?.slice?.(0, 100) },
+    { tool: 'get_options_flow',      preview: options.value?.slice?.(0, 100) },
+    { tool: 'get_social_sentiment',  preview: social.value?.slice?.(0, 100) },
+  ]})
+
+  return {
+    technical:  technical.status  === 'fulfilled' ? technical.value  : null,
+    earnings:   earnings.status   === 'fulfilled' ? earnings.value   : null,
+    options:    options.status    === 'fulfilled' ? options.value    : null,
+    social:     social.status     === 'fulfilled' ? social.value     : null,
+  }
+}
+
+const REPORTER_SYSTEM = `You are a senior equity analyst synthesising pre-fetched live data into a structured investment report.
+
+You have been given live tool results. Do NOT call any tools — all data is already provided in the user message.
+
+Produce a concise structured report using this format:
+
+## [TICKER] — [BUY/SELL/HOLD] Signal
+
+**Current Price:** $X · **Confidence:** X%
+
+### Technical Picture
+[3-4 sentences from the technical analysis data]
+
+### Earnings Catalyst
+[Next earnings date, EPS estimate, surprise history — flag if imminent]
+
+### Options Flow
+[P/C ratio interpretation, ATM IV, any unusual activity and what it implies]
+
+### Social Sentiment
+[Reddit upvote-weighted signal + Polymarket odds if available]
+
+### Verdict
+[2-3 sentences: bull case, bear case, risk/reward. Entry zone and stop.]
+
+---
+*Not financial advice. All data is live as of analysis time.*`
 
 // ── Provider registry (claudian-style providerId + providerState) ─────────────
 
@@ -494,7 +634,9 @@ router.post('/chat', requireAuth, chatLimit, async (req, res) => {
     const providerKey = (providerId || 'claude').toLowerCase()
     const defaults = PROVIDER_DEFAULTS[providerKey] || PROVIDER_DEFAULTS.claude
     const model = providerState.model || defaults.model
-    const baseUrl = providerState.baseUrl || defaults.baseUrl
+    // baseUrl is always taken from server-side PROVIDER_DEFAULTS — never from the
+    // client-supplied providerState, which would allow SSRF and API key theft.
+    const baseUrl = defaults.baseUrl
 
     if (providerKey === 'groq' || providerKey === 'codex') {
       const apiKey = providerKey === 'groq' ? process.env.GROQ_API_KEY : process.env.OPENAI_API_KEY
@@ -512,7 +654,39 @@ router.post('/chat', requireAuth, chatLimit, async (req, res) => {
     }
 
     // ── Claude provider (default) — native streaming tool_use ──────────────────
+
+    // Planner fast-path: for single-ticker deep analysis, pre-fetch all tools in
+    // parallel (DeerFlow-style), inject results as context so Claude synthesises
+    // in one shot rather than 3-4 sequential tool-use rounds.
     let loopMessages = messages.map(m => ({ role: m.role, content: m.content }))
+    const plannerTicker = detectTickerQuery(messages)
+    if (plannerTicker) {
+      const data = await runPlannerPrefetch(plannerTicker, req, send)
+      const contextMsg = [
+        `LIVE PRE-FETCHED DATA FOR ${plannerTicker} (all tools already executed in parallel):`,
+        data.technical  ? `\n=== TECHNICAL ANALYSIS ===\n${data.technical}`   : '',
+        data.earnings   ? `\n=== EARNINGS CATALYST ===\n${data.earnings}`     : '',
+        data.options    ? `\n=== OPTIONS FLOW ===\n${data.options}`           : '',
+        data.social     ? `\n=== SOCIAL SENTIMENT ===\n${data.social}`        : '',
+        `\n\nOriginal user question: ${messages.at(-1)?.content || ''}`,
+        '\nSynthesize ALL the above into a structured investment report. Do NOT call any tools.',
+      ].join('')
+
+      // Use Reporter system prompt for synthesis pass
+      const stream = await anthropic.messages.stream({
+        model, max_tokens: 4096,
+        system: REPORTER_SYSTEM + contextBlock,
+        messages: [{ role: 'user', content: contextMsg }],
+      })
+      for await (const event of stream) {
+        if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+          send({ type: 'text', delta: event.delta.text })
+        }
+      }
+      send({ type: 'done' })
+      res.end(); return
+    }
+
     let iterations = 0
     const MAX_ITER = 5
 

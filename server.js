@@ -202,28 +202,49 @@ app.use('/api/agentic-os',     agenticOsRoutes)
 app.use('/api/options',        optionsFlowRoutes)
 app.use('/api/market-focus',   marketFocusRoutes)
 
-// ── OpenBB sidecar proxy ──────────────────────────────────────────────────────
+// ── OpenBB sidecar proxy (optional — set OPENBB_URL env var to enable) ────────
 const OPENBB_URL = process.env.OPENBB_URL
+
 async function proxyOpenBB(req, res) {
-  const target = `${OPENBB_URL}${req.path}${req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : ''}`
+  const qs     = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : ''
+  const target = OPENBB_URL.replace(/\/$/, '') + req.path + qs
   try {
-    const r = await fetch(target, { signal: AbortSignal.timeout(15000) })
-    const ct = r.headers.get('content-type') || 'application/json'
-    res.status(r.status).set('content-type', ct).send(await r.text())
+    const opts = {
+      method:  req.method,
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      signal:  AbortSignal.timeout(45_000),
+    }
+    if (req.method !== 'GET' && req.method !== 'HEAD') opts.body = JSON.stringify(req.body)
+    const upstream = await fetch(target, opts)
+    const body     = await upstream.text()
+    res.status(upstream.status).set('Content-Type', 'application/json').send(body)
   } catch (e) {
-    res.status(502).json({ error: 'OpenBB sidecar unavailable', detail: e.message })
+    res.status(502).json({ error: 'OpenBB sidecar unreachable', detail: e.message, openbbUrl: OPENBB_URL })
   }
 }
+
 if (OPENBB_URL) {
   app.get('/api/openbb/status', async (req, res) => {
     try {
       const r = await fetch(`${OPENBB_URL}/api/v1/user`, { signal: AbortSignal.timeout(5000) })
-      res.json({ ok: r.ok, status: r.status })
-    } catch (e) { res.status(503).json({ ok: false, error: e.message }) }
+      res.json({ ok: r.ok, status: r.status, url: OPENBB_URL })
+    } catch (e) { res.status(502).json({ ok: false, error: e.message, url: OPENBB_URL }) }
+  })
+  app.get('/api/openbb/quote', async (req, res) => {
+    const { symbol, provider = 'fmp' } = req.query
+    if (!symbol) return res.status(400).json({ error: 'symbol required' })
+    try {
+      const r = await fetch(`${OPENBB_URL}/api/v1/equity/price/quote?symbol=${encodeURIComponent(symbol)}&provider=${provider}`, { signal: AbortSignal.timeout(10_000) })
+      const data = await r.json()
+      const q = Array.isArray(data?.results) ? data.results[0] : data?.results || data
+      if (!q) return res.json({ quoteResponse: { result: [] } })
+      res.json({ quoteResponse: { result: [{ symbol: q.symbol, shortName: q.name || symbol, regularMarketPrice: q.last_price ?? q.price ?? null, regularMarketChange: q.change ?? null, regularMarketChangePercent: q.change_percent ?? null, regularMarketVolume: q.volume ?? null, regularMarketDayHigh: q.high ?? null, regularMarketDayLow: q.low ?? null, regularMarketOpen: q.open ?? null, regularMarketPreviousClose: q.prev_close ?? null, regularMarketTime: Math.floor(Date.now() / 1000), fiftyTwoWeekHigh: q.year_high ?? null, fiftyTwoWeekLow: q.year_low ?? null, marketCap: q.market_cap ?? null }] } })
+    } catch (e) { res.status(502).json({ error: e.message }) }
   })
   app.use('/api/openbb', proxyOpenBB)
+  console.log(`[OpenBB] Proxy active → ${OPENBB_URL}`)
 } else {
-  app.use('/api/openbb', (req, res) => res.status(503).json({ error: 'OpenBB sidecar not configured', hint: 'Set OPENBB_URL env var to the sidecar service URL' }))
+  app.use('/api/openbb', (req, res) => res.status(503).json({ ok: false, error: 'OpenBB sidecar not configured.', setup: 'Set OPENBB_URL env var' }))
 }
 
 /* ── Market data helpers (AISA primary → Finnhub → FMP fallback) ─────────────
@@ -298,6 +319,8 @@ function extractKeys(req) {
     av:        (req.headers['x-av-key']        || '').trim() || process.env.ALPHA_VANTAGE_API_KEY || process.env.AV_API_KEY || null,
     td:        (req.headers['x-td-key']        || '').trim() || process.env.TWELVE_DATA_API_KEY  || null,
     marketaux: (req.headers['x-marketaux-key'] || '').trim() || process.env.MARKETAUX_API_KEY    || null,
+    tiingo:    (req.headers['x-tiingo-key']    || '').trim() || process.env.TIINGO_API_KEY        || null,
+    polygon:   (req.headers['x-polygon-key']   || '').trim() || process.env.POLYGON_API_KEY || process.env.MASSIVE_API_KEY || null,
   }
 }
 
@@ -792,6 +815,105 @@ async function getTwelveDataQuote(symbol, keys = {}) {
       regularMarketPreviousClose: parseFloat(d.previous_close)   || null,
       fiftyTwoWeekHigh:           parseFloat(d['52_week']['high'])  || null,
       fiftyTwoWeekLow:            parseFloat(d['52_week']['low'])   || null,
+    }
+  } catch { return null }
+}
+
+// ── Tiingo helpers ────────────────────────────────────────────────────────────
+// Good for ETFs, mutual funds, and EOD prices. Free tier: 500 req/hour.
+const TIINGO_KEY = () => process.env.TIINGO_API_KEY || null
+
+async function getTiingoQuote(symbol, keys = {}) {
+  const key = keys.tiingo || TIINGO_KEY()
+  if (!key) return null
+  try {
+    const url = `https://api.tiingo.com/iex/${encodeURIComponent(symbol.toUpperCase())}?token=${key}`
+    const d = await apiFetch(url, 8000)
+    const q = Array.isArray(d) ? d[0] : d
+    if (!q?.last) return null
+    const price = parseFloat(q.last)
+    if (!price) return null
+    return {
+      symbol,
+      shortName:                  symbol,
+      regularMarketPrice:         price,
+      regularMarketChange:        q.last != null && q.prevClose != null ? +(price - q.prevClose).toFixed(4) : null,
+      regularMarketChangePercent: q.last != null && q.prevClose != null ? +((price - q.prevClose) / q.prevClose * 100).toFixed(4) : null,
+      regularMarketVolume:        parseInt(q.volume) || null,
+      regularMarketDayHigh:       parseFloat(q.high) || null,
+      regularMarketDayLow:        parseFloat(q.low)  || null,
+      regularMarketOpen:          parseFloat(q.open) || null,
+      regularMarketPreviousClose: parseFloat(q.prevClose) || null,
+      regularMarketTime:          Math.floor(Date.now() / 1000),
+    }
+  } catch { return null }
+}
+
+// ── Polygon.io helpers ────────────────────────────────────────────────────────
+// Used for quotes (as fallback) and news. Requires POLYGON_API_KEY / MASSIVE_API_KEY.
+const POLYGON_KEY = () => process.env.POLYGON_API_KEY || process.env.MASSIVE_API_KEY || null
+
+async function getPolygonQuote(symbol, keys = {}) {
+  const key = keys.polygon || POLYGON_KEY()
+  if (!key) return null
+  try {
+    const url = `https://api.polygon.io/v2/snapshot/locale/us/markets/stocks/tickers/${encodeURIComponent(symbol.toUpperCase())}?apiKey=${key}`
+    const d = await apiFetch(url, 8000)
+    const t = d?.ticker
+    if (!t?.day?.c) return null
+    const price = t.day.c
+    const prev  = t.prevDay?.c || null
+    return {
+      symbol,
+      shortName:                  t.name || symbol,
+      regularMarketPrice:         price,
+      regularMarketChange:        prev ? +(price - prev).toFixed(4) : null,
+      regularMarketChangePercent: prev ? +((price - prev) / prev * 100).toFixed(4) : null,
+      regularMarketVolume:        t.day?.v || null,
+      regularMarketDayHigh:       t.day?.h || null,
+      regularMarketDayLow:        t.day?.l || null,
+      regularMarketOpen:          t.day?.o || null,
+      regularMarketPreviousClose: prev,
+      regularMarketTime:          Math.floor(Date.now() / 1000),
+    }
+  } catch { return null }
+}
+
+async function getPolygonNews(symbol, keys = {}, limit = 10) {
+  const key = keys.polygon || POLYGON_KEY()
+  if (!key) return null
+  try {
+    const url = `https://api.polygon.io/v2/reference/news?ticker=${encodeURIComponent(symbol.toUpperCase())}&limit=${limit}&order=desc&sort=published_utc&apiKey=${key}`
+    const d = await apiFetch(url, 8000)
+    if (!Array.isArray(d?.results) || !d.results.length) return null
+    return {
+      news: d.results.map(a => ({
+        title:               a.title,
+        link:                a.article_url,
+        publisher:           a.publisher?.name,
+        providerPublishTime: a.published_utc ? Math.floor(new Date(a.published_utc).getTime() / 1000) : null,
+        thumbnail:           a.image_url ? { resolutions: [{ url: a.image_url }] } : null,
+        tickers:             a.tickers,
+      }))
+    }
+  } catch { return null }
+}
+
+async function getTiingoNews(symbol, keys = {}, limit = 10) {
+  const key = keys.tiingo || TIINGO_KEY()
+  if (!key) return null
+  try {
+    const url = `https://api.tiingo.com/tiingo/news?tickers=${encodeURIComponent(symbol.toUpperCase())}&limit=${limit}&token=${key}`
+    const d = await apiFetch(url, 8000)
+    if (!Array.isArray(d) || !d.length) return null
+    return {
+      news: d.map(a => ({
+        title:               a.title,
+        link:                a.url,
+        publisher:           a.source,
+        providerPublishTime: a.publishedDate ? Math.floor(new Date(a.publishedDate).getTime() / 1000) : null,
+        thumbnail:           null,
+      }))
     }
   } catch { return null }
 }
@@ -1767,6 +1889,14 @@ app.get('/api/quote', async (req, res) => {
 
           // 6th: Twelve Data
           merge(await Promise.all(noPrice().map(s => getTwelveDataQuote(s, keys).catch(() => null))))
+          if (!noPrice().length) return stockSyms.map(s => resultMap[s])
+
+          // 7th: Tiingo — strong for ETFs/mutual funds missed by others
+          merge(await Promise.all(noPrice().map(s => getTiingoQuote(s, keys).catch(() => null))))
+          if (!noPrice().length) return stockSyms.map(s => resultMap[s])
+
+          // 8th: Polygon — real-time snapshot, good breadth
+          merge(await Promise.all(noPrice().map(s => getPolygonQuote(s, keys).catch(() => null))))
 
           // Final: chart-price cache or null for anything still missing
           for (const sym of stockSyms) {
@@ -2039,11 +2169,23 @@ app.get('/api/news', async (req, res) => {
   const symbol = req.query.symbol || null
   const keys   = extractKeys(req)
   try {
-    // FMP first — better financial news coverage
+    // 1. Polygon — fast, good breadth, free tier generous
+    if (symbol) {
+      const poly = await getPolygonNews(symbol, keys, 10)
+      if (poly?.news?.length) return res.json(poly)
+    }
+
+    // 2. FMP — better financial news coverage for general feed
     const fmp = await getFMPStockNews(symbol, keys, symbol ? 10 : 15)
     if (fmp?.news?.length) return res.json(fmp)
 
-    // Finnhub fallback
+    // 3. Tiingo news
+    if (symbol) {
+      const tiingo = await getTiingoNews(symbol, keys, 10)
+      if (tiingo?.news?.length) return res.json(tiingo)
+    }
+
+    // 4. Finnhub fallback
     const fh = await getFinnhubNews(symbol, keys)
     if (fh) return res.json(fh)
 
@@ -2058,6 +2200,13 @@ app.get('/api/news', async (req, res) => {
 app.get('*', (_req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'))
 })
+
+if (PROD) {
+  if (!process.env.APP_URL)
+    console.warn('[startup] WARNING: APP_URL not set — password reset links will point to http://localhost:5173')
+  if (!process.env.ALLOWED_ORIGINS)
+    console.warn('[startup] WARNING: ALLOWED_ORIGINS not set — CORS will only allow http://localhost:5173')
+}
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`FinSurf listening on 0.0.0.0:${PORT}`)
