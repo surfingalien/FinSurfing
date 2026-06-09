@@ -5,8 +5,8 @@
 In-process `setInterval` tick every 60 seconds (`lib/scheduler.js`). No external cron dependency. Jobs are registered at startup via `lib/scheduled-jobs.js:init()`, called from `server.js`.
 
 **Idempotency:** Each job checks `lastRun` timestamp — skips if already ran in the current clock-minute.  
-**Trigger route:** `POST /api/scheduler/jobs/:id/trigger` — fire-and-forget, **no authentication**.  
-**Status route:** `GET /api/scheduler/jobs` — returns last result + error for each job, **no authentication**.
+**Trigger route:** `POST /api/scheduler/jobs/:id/trigger` — fire-and-forget, requires `requireAuth + requireAdmin`.  
+**Status route:** `GET /api/scheduler/jobs` — returns last result + error for each job, no authentication (read-only metadata).
 
 ## Job Inventory
 
@@ -29,11 +29,11 @@ In-process `setInterval` tick every 60 seconds (`lib/scheduler.js`). No external
 
 ## Internal Call Authentication
 
-Jobs call the app's own API via loopback (`http://127.0.0.1:{PORT}/api/...`) with header `x-internal: '1'`. This header is how server.js identifies internal calls. **It is not cryptographically signed and is forgeable from outside the process.**
+Jobs call the app's own API via loopback (`http://127.0.0.1:{PORT}/api/...`) with header `x-internal: '1'`. The auth middleware and AI Brain rate limiter both verify that the calling socket originates from the loopback interface (127.0.0.1 / ::1) before trusting this header — external callers setting `x-internal: '1'` are not granted any bypass.
 
 ## Operational Notes
 
 - `GET /api/scheduler/jobs` shows each job's `lastRun`, `status` (`idle | running | done | failed`), and `result.error`.
-- To manually trigger: `POST /api/scheduler/jobs/{id}/trigger` (no auth required).
+- To manually trigger: `POST /api/scheduler/jobs/{id}/trigger` — requires admin Bearer token.
 - If the server restarts after 9:30 AM ET, `morning-brief-email` will not run until next business day (no catch-up logic).
 - `watchlist-digest` uses a static fallback watchlist (`['AAPL','NVDA','MSFT','TSLA','SPY','BTC-USD','ETH-USD']`) — not tied to any user's actual watchlist.

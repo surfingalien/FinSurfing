@@ -16,17 +16,17 @@ Role is embedded in JWT (`role` claim) and re-checked on each request where it m
 |---|---|---|---|---|---|
 | Market quotes / charts | Read | ✅ | ✅ | ✅ | Rate-limited; no auth required |
 | News, search | Read | ✅ | ✅ | ✅ | |
-| AI analysis (trading-analysis) | POST | ✅ | ✅ | ✅ | `optionalAuth` — guest allowed |
-| Copilot chat | POST | ✅ | ✅ | ✅ | Rate-limited at 30/min |
-| AI Brain scan | POST | ✅ | ✅ | ✅ | No auth required |
+| AI analysis (trading-analysis) | POST | ❌ | ✅ | ✅ | `requireAuth` — authenticated users only |
+| Copilot chat | POST | ❌ | ✅ | ✅ | `requireAuth` + rate-limited at 30/min |
+| AI Brain scan | POST | ✅ | ✅ | ✅ | No auth required; rate-limited (loopback bypasses) |
 | Recommendations | POST | ✅ | ✅ | ✅ | No auth required |
 | Macro indicators | GET | ✅ | ✅ | ✅ | |
 | Own portfolio | CRUD | ❌ | ✅ | ✅ | `requireAuth` |
 | Other user's portfolio (public) | Read | ✅ | ✅ | ✅ | Only `visibility='public'` |
 | Other user's portfolio (private) | Read | ❌ | ❌ | ✅ | Admin-only via admin routes |
 | Scheduler jobs — list | GET | ✅ | ✅ | ✅ | **No auth** — exposes job metadata |
-| Scheduler jobs — trigger | POST | ✅ | ✅ | ✅ | **No auth** — anyone can trigger |
-| Scheduler jobs — enable/disable | PATCH | ✅ | ✅ | ✅ | **No auth** — anyone can disable |
+| Scheduler jobs — trigger | POST | ❌ | ❌ | ✅ | `requireAuth + requireAdmin` |
+| Scheduler jobs — enable/disable | PATCH | ❌ | ❌ | ✅ | `requireAuth + requireAdmin` |
 | Admin routes (`/api/admin/*`) | All | ❌ | ❌ | ✅ | `requireAuth + requireAdmin` |
 | Auth (register, login, verify) | POST | ✅ | ✅ | ✅ | Rate-limited |
 | Own profile | GET/PATCH | ❌ | ✅ | ✅ | `requireAuth` |
