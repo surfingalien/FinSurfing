@@ -19,7 +19,4 @@ ENV OPENBB_PORT=6900
 
 EXPOSE 6900
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=240s --retries=5 \
-  CMD curl -f http://localhost:6900/api/v1/user || exit 1
-
 CMD ["./start.sh"]
