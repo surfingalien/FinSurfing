@@ -31,7 +31,6 @@ const Anthropic = require('@anthropic-ai/sdk')
 const { requireAuth } = require('../middleware/auth')
 const { getSocialSentiment } = require('../lib/social-sentiment')
 const { getAltDataSnippet }  = require('../lib/alt-data')
-const { requireAuth }        = require('../middleware/auth')
 
 // Use warm cache from scheduled-jobs if available, fall back to live fetch
 async function getAltData(symbol) {

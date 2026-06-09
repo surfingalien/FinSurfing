@@ -12,8 +12,11 @@ const SECRET = process.env.JWT_SECRET || 'finsurf-dev-only-secret-not-for-produc
  * Returns 401 on any failure — never leaks token details.
  */
 function requireAuth(req, res, next) {
-  // Internal server-to-server calls (scheduled jobs, loopback) bypass JWT check
-  if (req.headers['x-internal'] === '1') return next()
+  // Internal server-to-server calls from loopback bypass JWT check
+  if (req.headers['x-internal'] === '1') {
+    const addr = req.socket?.remoteAddress || ''
+    if (addr === '127.0.0.1' || addr === '::1' || addr === '::ffff:127.0.0.1') return next()
+  }
 
   const header = req.headers.authorization || ''
   if (!header.startsWith('Bearer ')) {
