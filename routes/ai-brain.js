@@ -20,6 +20,8 @@ const path                = require('path')
 const { getRouter }       = require('../lib/ai-router')
 const { CircuitOpenError } = require('../lib/circuit-breaker')
 const { getSocialSentiment } = require('../lib/social-sentiment')
+const { requireAuth }     = require('../middleware/auth')
+const { getLearningsBlock } = require('../lib/brain-learnings')
 
 const router   = express.Router()
 const aiRouter = getRouter('ai-brain')
@@ -382,7 +384,8 @@ router.post('/analyze', brainLimit, async (req, res) => {
   }
 
   // ── Step 2: prompt — contradiction engine + zones + assumptions ────────────
-  const prompt = `You are a 5-agent investment AI with a Supervisor whose job is to SURFACE CONTRADICTIONS, not average scores.
+  const learningsBlock = getLearningsBlock()
+  const prompt = `You are a 5-agent investment AI with a Supervisor whose job is to SURFACE CONTRADICTIONS, not average scores.${learningsBlock}
 ${socialSnippet}
 
 CRITICAL: When two agents disagree by 25+ points, that spread IS the primary signal. Do not smooth it. Surface it.
@@ -531,6 +534,18 @@ Rules:
     console.error('[ai-brain]', err.message)
     return res.status(500).json({ error: 'AI Brain analysis failed: ' + err.message })
   }
+})
+
+// GET /api/ai-brain/learnings — returns current self-improvement state for UI display
+router.get('/learnings', (req, res) => {
+  try {
+    const fs   = require('fs')
+    const path = require('path')
+    const file = path.join(__dirname, '../data/brain-learnings.json')
+    if (!fs.existsSync(file)) return res.json({ available: false })
+    const data = JSON.parse(fs.readFileSync(file, 'utf8'))
+    res.json({ available: true, ...data })
+  } catch { res.json({ available: false }) }
 })
 
 module.exports = router
