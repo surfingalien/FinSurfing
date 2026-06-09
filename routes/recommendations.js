@@ -24,6 +24,7 @@ const { getUserPrefs, saveUserPref } = require('../db/ai_memory')
 const { PERSONAS }        = require('../lib/investor-personas')
 const { getIndicators }   = require('./macro')
 const { getSocialSentiment } = require('../lib/social-sentiment')
+const { requireAuth }       = require('../middleware/auth')
 
 const recLimit = rateLimit({
   windowMs: 60 * 1000, max: 5,
@@ -109,7 +110,7 @@ async function fetchLiveQuotes(symbols, fwdHeaders) {
   }
 }
 
-router.post('/', recLimit, async (req, res) => {
+router.post('/', requireAuth, recLimit, async (req, res) => {
   if (process.env.AI_RECOMMENDATIONS_DISABLED === 'true')
     return res.status(503).json({ error: 'AI Buy Signals are temporarily disabled (kill switch active)', killSwitch: true })
 

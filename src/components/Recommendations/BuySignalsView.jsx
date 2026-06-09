@@ -4,6 +4,7 @@
  */
 
 import { useState, useCallback, useEffect } from 'react'
+import { useAuth } from '../../contexts/AuthContext'
 import {
   Sparkles, RefreshCw, TrendingUp, Clock,
   AlertTriangle, Target, Shield, Zap, BarChart2,
@@ -273,6 +274,7 @@ function RecCard({ rec, onAnalyze, liveQuote }) {
 
 /* ── Main view ───────────────────────────────────── */
 export default function BuySignalsView({ portfolio, onAnalyze }) {
+  const { accessToken } = useAuth()
   const [recs,          setRecs]          = useState(null)
   const [loading,       setLoading]       = useState(false)
   const [error,         setError]         = useState(null)
@@ -307,9 +309,10 @@ export default function BuySignalsView({ portfolio, onAnalyze }) {
       const body = { holdings, persona: personaId, includeMacro: true }
       if (customSymbols.trim()) body.focusSymbols = parseSymbols(customSymbols)
       if (includeFunds && !customSymbols.trim()) body.includeFunds = true
+      const authHeader = accessToken ? { Authorization: `Bearer ${accessToken}` } : {}
       const res = await fetch('/api/recommendations', {
         method:  'POST',
-        headers: { 'Content-Type': 'application/json', ...getApiKeyHeaders() },
+        headers: { 'Content-Type': 'application/json', ...getApiKeyHeaders(), ...authHeader },
         body:    JSON.stringify(body),
       })
       const data = await res.json()
@@ -337,7 +340,7 @@ export default function BuySignalsView({ portfolio, onAnalyze }) {
     } finally {
       setLoading(false)
     }
-  }, [holdings, customSymbols])
+  }, [holdings, customSymbols, accessToken])
 
   const displayed = (recs?.recommendations ?? []).filter(r => {
     if (filter !== 'all' && r.type !== filter) return false

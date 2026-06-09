@@ -319,7 +319,7 @@ function logPrediction(symbol, agents, zones, generatedAt) {
   } catch { /* non-fatal */ }
 }
 
-router.post('/analyze', brainLimit, async (req, res) => {
+router.post('/analyze', requireAuth, brainLimit, async (req, res) => {
   if (process.env.AI_BRAIN_DISABLED === 'true')
     return res.status(503).json({ error: 'AI Brain is temporarily disabled (kill switch active)', killSwitch: true })
 
