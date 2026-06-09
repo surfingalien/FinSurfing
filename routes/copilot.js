@@ -279,35 +279,35 @@ async function dispatchTool(name, input, req) {
     }
 
     case 'analyze_symbol': {
-      const sym = encodeURIComponent(input.symbol || '')
+      const rawSym  = input.symbol || ''
       const interval = input.interval || '1d'
 
       // Pre-fetch live quote so trading-analysis uses current price, not stale bar close
-      let clientLivePrice = null
+      let livePrice = null
       try {
         const qr = await fetch(
-          `http://127.0.0.1:${port}/api/quote?symbols=${sym}`,
+          `http://127.0.0.1:${port}/api/quote?symbols=${encodeURIComponent(rawSym)}`,
           { headers: fwdHeaders, signal: AbortSignal.timeout(5000) }
         )
         const qd = await qr.json()
         const lp = qd?.quoteResponse?.result?.[0]?.regularMarketPrice
-        if (lp && lp > 0) clientLivePrice = lp
+        if (lp && lp > 0) livePrice = lp
       } catch { /* proceed without live price */ }
 
       const [r, altSnippet] = await Promise.all([
-        fetch(`http://127.0.0.1:${port}/api/trading-analysis/analyze?symbol=${sym}&interval=${interval}`, {
+        fetch(`http://127.0.0.1:${port}/api/trading-analysis/analyze`, {
           method: 'POST', headers: fwdHeaders,
-          body: JSON.stringify({ clientLivePrice }),
+          body: JSON.stringify({ symbol: rawSym, interval, livePrice }),
           signal: AbortSignal.timeout(30_000),
         }),
-        getAltData(input.symbol || ''),
+        getAltData(rawSym),
       ])
       const data = await r.json()
       if (!data.signal) return `Analysis failed for ${input.symbol}: ${data.error || 'unknown error'}`
-      const livePrice = clientLivePrice || data.entry
+      const displayPrice = livePrice || data.entry
       return (
-        `**${input.symbol}** [LIVE PRICE: $${livePrice}] — Signal: **${data.signal}** (${data.confidence}% confidence)\n` +
-        `Current Price: $${livePrice} (use THIS price — do not use any other price)\n` +
+        `**${input.symbol}** [LIVE PRICE: $${displayPrice}] — Signal: **${data.signal}** (${data.confidence}% confidence)\n` +
+        `Current Price: $${displayPrice} (use THIS price — do not use any other price)\n` +
         `Trend: ${data.trend} · Risk/Reward: ${data.riskReward?.toFixed(1)}:1\n` +
         `Entry $${data.entry} (zone $${data.entryZoneLow}–$${data.entryZoneHigh})\n` +
         `Stop $${data.stopLoss} · Target $${data.takeProfit?.[0]}–$${data.takeProfit?.[1]}\n\n` +
