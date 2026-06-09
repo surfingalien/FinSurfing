@@ -28,6 +28,7 @@
 const express = require('express')
 const rateLimit = require('express-rate-limit')
 const Anthropic = require('@anthropic-ai/sdk')
+const { requireAuth } = require('../middleware/auth')
 const { getSocialSentiment } = require('../lib/social-sentiment')
 const { getAltDataSnippet }  = require('../lib/alt-data')
 const { requireAuth }        = require('../middleware/auth')
@@ -62,6 +63,8 @@ Your mission: deliver timely, verified, and structured financial intelligence th
 - analyze_symbol: Deep technical + AI analysis — RSI, MACD, EMA9/21/50/200, Bollinger, VWAP, OBV, patterns, entry/stop/target zones
 - get_social_sentiment: Real-time Reddit sentiment (r/wallstreetbets, r/stocks, r/investing) for up to 5 tickers
 - get_macro: Current macroeconomic indicators (14 FRED series), regime assessment, rates/inflation/VIX/credit spreads
+- get_earnings_catalyst: Upcoming earnings date, EPS estimate, and surprise history for a symbol — use to flag near-term catalysts
+- get_options_flow: Put/Call ratio, ATM implied volatility, and unusual options activity — use to confirm directional conviction
 
 ## Tool Routing Rules
 - User asks about a specific ticker → call analyze_symbol first; ALWAYS add get_earnings_catalyst to check for imminent catalysts; add get_options_flow for directional conviction; add get_social_sentiment if sentiment is relevant
@@ -340,7 +343,6 @@ async function dispatchTool(name, input, req) {
       const sym = (input.symbol || '').toUpperCase().replace(/[^A-Z0-9.-]/g, '')
       if (!sym) return 'No symbol provided.'
 
-      // Fetch upcoming date + EPS surprise history in parallel
       const [dateRes, surpriseRes] = await Promise.allSettled([
         fetch(`http://127.0.0.1:${port}/api/earnings/date?symbol=${sym}`, {
           headers: fwdHeaders, signal: AbortSignal.timeout(10_000),
@@ -377,28 +379,22 @@ async function dispatchTool(name, input, req) {
         const avgSurprise = surprise.avg_eps_surprise_pct != null
           ? `${surprise.avg_eps_surprise_pct > 0 ? '+' : ''}${surprise.avg_eps_surprise_pct.toFixed(1)}%`
           : 'N/A'
-
         lines.push(`\nEPS Beat Rate (last ${surprise.total_quarters}q): ${beatRate}`)
         lines.push(`Avg EPS Surprise: ${avgSurprise}`)
-
         if (surprise.recent_quarters?.length) {
           lines.push('\nRecent EPS History:')
           surprise.recent_quarters.slice(0, 4).forEach(q => {
             if (!q.period) return
-            const sp = q.surprise_pct != null
-              ? ` (${q.surprise_pct > 0 ? '+' : ''}${q.surprise_pct.toFixed(1)}% surprise)`
-              : ''
+            const sp = q.surprise_pct != null ? ` (${q.surprise_pct > 0 ? '+' : ''}${q.surprise_pct.toFixed(1)}% surprise)` : ''
             lines.push(`  ${q.period}: actual $${q.actual ?? '?'} vs est $${q.estimate ?? '?'}${sp}`)
           })
         }
       }
 
-      // Catalyst interpretation
-      if (daysUntil != null && daysUntil <= 21 && surprise?.avg_eps_surprise_pct > 5) {
-        lines.push('\n📊 Signal: Strong historical beat rate + imminent earnings = high-probability catalyst. Consider position sizing carefully.')
-      } else if (daysUntil != null && daysUntil <= 7) {
+      if (daysUntil != null && daysUntil <= 21 && surprise?.avg_eps_surprise_pct > 5)
+        lines.push('\n📊 Signal: Strong historical beat rate + imminent earnings = high-probability catalyst.')
+      else if (daysUntil != null && daysUntil <= 7)
         lines.push('\n📊 Signal: Earnings very close — options IV typically elevated. High binary risk event.')
-      }
 
       return lines.join('\n') || `No earnings data available for ${sym}.`
     }

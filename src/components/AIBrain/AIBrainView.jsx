@@ -11,6 +11,7 @@
  */
 
 import { useState, useCallback } from 'react'
+import { useAuth } from '../../contexts/AuthContext'
 import { motion, AnimatePresence } from 'motion/react'
 import {
   Brain, BarChart2, TrendingUp, Eye, Globe, Shield,
@@ -536,6 +537,7 @@ function SymbolSearchInput({ value, onChange, onSubmit, disabled }) {
 
 /* ── Main view ────────────────────────────────────────────── */
 export default function AIBrainView({ portfolio, onAnalyze }) {
+  const { accessToken } = useAuth()
   const [analysis,      setAnalysis]      = useState(null)
   const [loading,       setLoading]       = useState(false)
   const [error,         setError]         = useState(null)
@@ -568,9 +570,10 @@ export default function AIBrainView({ portfolio, onAnalyze }) {
         body.symbols = parseSymbols(customSymbols)
         delete body.scanMode
       }
+      const authHeader = accessToken ? { Authorization: `Bearer ${accessToken}` } : {}
       const res  = await fetch('/api/ai-brain/analyze', {
         method:  'POST',
-        headers: { 'Content-Type': 'application/json', ...getApiKeyHeaders() },
+        headers: { 'Content-Type': 'application/json', ...getApiKeyHeaders(), ...authHeader },
         body:    JSON.stringify(body),
       })
       const data = await res.json()
@@ -583,7 +586,7 @@ export default function AIBrainView({ portfolio, onAnalyze }) {
       setActiveAgent(-1)
       setLoading(false)
     }
-  }, [horizon, holdings, customSymbols, scanMode])
+  }, [horizon, holdings, customSymbols, scanMode, accessToken])
 
   // Count stocks with agent conflicts
   const conflictCount = analysis?.rankedStocks?.filter(s => s.agentConflict?.exists).length ?? 0

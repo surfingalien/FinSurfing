@@ -1,0 +1,21 @@
+FROM python:3.10-slim
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc g++ libffi-dev libssl-dev curl \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY start.sh .
+COPY user_settings.template.json .
+RUN chmod +x start.sh
+
+ENV PYTHONUNBUFFERED=1
+ENV OPENBB_HOST=0.0.0.0
+
+EXPOSE 6900
+
+CMD ["./start.sh"]

@@ -33,6 +33,7 @@ import BacktestView from './components/Backtest/BacktestView'
 
 import BuySignalsView from './components/Recommendations/BuySignalsView'
 import AIBrainView from './components/AIBrain/AIBrainView'
+import MarketFocusView from './components/MarketFocus/MarketFocusView'
 import AIWatchlistView from './components/AIWatchlist/AIWatchlistView'
 import AgentHubView from './components/AgentHub/AgentHubView'
 import TradeTimelineView from './components/Timeline/TradeTimelineView'
@@ -260,6 +261,9 @@ function MainApp({ onSignIn }) {
             )}
             {activeTab === 'ai-brain' && (
               <AIBrainView portfolio={portfolio} onAnalyze={navigateToAnalyze} />
+            )}
+            {activeTab === 'market-focus' && (
+              <MarketFocusView portfolio={portfolio} watchlist={watchlist.symbols} />
             )}
             {activeTab === 'ai-watchlist' && (
               <AIWatchlistView onAnalyze={navigateToAnalyze} />

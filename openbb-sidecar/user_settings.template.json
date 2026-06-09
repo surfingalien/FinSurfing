@@ -1,0 +1,14 @@
+{
+  "credentials": {
+    "fmp_api_key": "",
+    "fred_api_key": "",
+    "polygon_api_key": "",
+    "intrinio_api_key": "",
+    "benzinga_api_key": "",
+    "alpha_vantage_api_key": "",
+    "tiingo_token": ""
+  },
+  "preferences": {
+    "output_type": "OBBject"
+  }
+}

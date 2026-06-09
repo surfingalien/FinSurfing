@@ -826,10 +826,8 @@ Respond with ONLY pure JSON (absolutely no markdown fences, no backticks, no cod
 // ── POST /analyze ─────────────────────────────────────────────────────────────
 
 router.post('/analyze', requireAuth, async (req, res) => {
-  // Accept symbol/interval from body (TradingAIPanel, copilot) or query params (scheduled jobs)
   const symbol = req.body.symbol || req.query.symbol
   const interval = req.body.interval || req.query.interval || 'D'
-  // Accept both key names: "livePrice" (TradingAIPanel) and "clientLivePrice" (copilot legacy)
   const clientLivePrice = req.body.livePrice ?? req.body.clientLivePrice ?? null
 
   if (!symbol || typeof symbol !== 'string')

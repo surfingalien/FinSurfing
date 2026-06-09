@@ -36,9 +36,7 @@ const alertsRoutes          = require('./routes/alerts')
 const backtestQueueRoutes   = require('./routes/backtest-queue')
 const agenticOsRoutes       = require('./routes/agentic-os')
 const optionsFlowRoutes     = require('./routes/options-flow')
-
-
-
+const { router: marketFocusRoutes } = require('./routes/market-focus')
 
 const { seedAdminDB } = require('./db/adminSeed')
 
@@ -202,16 +200,11 @@ app.use('/api/alerts',         alertsRoutes)
 app.use('/api/backtest/queue', backtestQueueRoutes)
 app.use('/api/agentic-os',     agenticOsRoutes)
 app.use('/api/options',        optionsFlowRoutes)
+app.use('/api/market-focus',   marketFocusRoutes)
 
 // ── OpenBB sidecar proxy (optional — set OPENBB_URL env var to enable) ────────
-// openbb-sidecar/ contains a self-contained Dockerfile + Railway config.
-// Railway setup:
-//   1. New Service → Docker → root dir = openbb-sidecar/
-//   2. Set env vars: FMP_API_KEY, FRED_API_KEY, POLYGON_API_KEY, etc.
-//   3. In THIS service, set OPENBB_URL = http://<openbb-service>.railway.internal:6900
 const OPENBB_URL = process.env.OPENBB_URL
 
-// Helper: forward a request to the OpenBB FastAPI server
 async function proxyOpenBB(req, res) {
   const qs     = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : ''
   const target = OPENBB_URL.replace(/\/$/, '') + req.path + qs
@@ -221,9 +214,7 @@ async function proxyOpenBB(req, res) {
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       signal:  AbortSignal.timeout(45_000),
     }
-    if (req.method !== 'GET' && req.method !== 'HEAD') {
-      opts.body = JSON.stringify(req.body)
-    }
+    if (req.method !== 'GET' && req.method !== 'HEAD') opts.body = JSON.stringify(req.body)
     const upstream = await fetch(target, opts)
     const body     = await upstream.text()
     res.status(upstream.status).set('Content-Type', 'application/json').send(body)
@@ -233,94 +224,27 @@ async function proxyOpenBB(req, res) {
 }
 
 if (OPENBB_URL) {
-  // Health check shortcut — tells FinSurfing dashboard if OpenBB is up
   app.get('/api/openbb/status', async (req, res) => {
     try {
       const r = await fetch(`${OPENBB_URL}/api/v1/user`, { signal: AbortSignal.timeout(5000) })
       res.json({ ok: r.ok, status: r.status, url: OPENBB_URL })
-    } catch (e) {
-      res.status(502).json({ ok: false, error: e.message, url: OPENBB_URL })
-    }
+    } catch (e) { res.status(502).json({ ok: false, error: e.message, url: OPENBB_URL }) }
   })
-
-  // FinSurfing shortcut: GET /api/openbb/quote?symbol=AAPL&provider=fmp
-  // Wraps OpenBB's /api/v1/equity/price/quote into FinSurf's quoteResponse envelope
   app.get('/api/openbb/quote', async (req, res) => {
     const { symbol, provider = 'fmp' } = req.query
     if (!symbol) return res.status(400).json({ error: 'symbol required' })
     try {
-      const r = await fetch(
-        `${OPENBB_URL}/api/v1/equity/price/quote?symbol=${encodeURIComponent(symbol)}&provider=${provider}`,
-        { signal: AbortSignal.timeout(10_000) }
-      )
+      const r = await fetch(`${OPENBB_URL}/api/v1/equity/price/quote?symbol=${encodeURIComponent(symbol)}&provider=${provider}`, { signal: AbortSignal.timeout(10_000) })
       const data = await r.json()
-      // Normalize to FinSurf's quoteResponse format
       const q = Array.isArray(data?.results) ? data.results[0] : data?.results || data
       if (!q) return res.json({ quoteResponse: { result: [] } })
-      res.json({ quoteResponse: { result: [{
-        symbol:                     q.symbol,
-        shortName:                  q.name || symbol,
-        regularMarketPrice:         q.last_price ?? q.price ?? null,
-        regularMarketChange:        q.change ?? null,
-        regularMarketChangePercent: q.change_percent ?? null,
-        regularMarketVolume:        q.volume ?? null,
-        regularMarketDayHigh:       q.high ?? null,
-        regularMarketDayLow:        q.low ?? null,
-        regularMarketOpen:          q.open ?? null,
-        regularMarketPreviousClose: q.prev_close ?? null,
-        regularMarketTime:          Math.floor(Date.now() / 1000),
-        fiftyTwoWeekHigh:           q.year_high ?? null,
-        fiftyTwoWeekLow:            q.year_low ?? null,
-        marketCap:                  q.market_cap ?? null,
-      }] } })
-    } catch (e) {
-      res.status(502).json({ error: e.message })
-    }
+      res.json({ quoteResponse: { result: [{ symbol: q.symbol, shortName: q.name || symbol, regularMarketPrice: q.last_price ?? q.price ?? null, regularMarketChange: q.change ?? null, regularMarketChangePercent: q.change_percent ?? null, regularMarketVolume: q.volume ?? null, regularMarketDayHigh: q.high ?? null, regularMarketDayLow: q.low ?? null, regularMarketOpen: q.open ?? null, regularMarketPreviousClose: q.prev_close ?? null, regularMarketTime: Math.floor(Date.now() / 1000), fiftyTwoWeekHigh: q.year_high ?? null, fiftyTwoWeekLow: q.year_low ?? null, marketCap: q.market_cap ?? null }] } })
+    } catch (e) { res.status(502).json({ error: e.message }) }
   })
-
-  // FinSurfing shortcut: GET /api/openbb/earnings-surprise?symbol=AAPL
-  app.get('/api/openbb/earnings-surprise', async (req, res) => {
-    const { symbol, provider = 'fmp' } = req.query
-    if (!symbol) return res.status(400).json({ error: 'symbol required' })
-    try {
-      const r = await fetch(
-        `${OPENBB_URL}/api/v1/equity/estimates/historical?symbol=${encodeURIComponent(symbol)}&provider=${provider}&limit=8`,
-        { signal: AbortSignal.timeout(10_000) }
-      )
-      const data = await r.json()
-      res.json(data)
-    } catch (e) {
-      res.status(502).json({ error: e.message })
-    }
-  })
-
-  // FinSurfing shortcut: GET /api/openbb/options?symbol=AAPL&provider=intrinio
-  app.get('/api/openbb/options', async (req, res) => {
-    const { symbol, provider = 'intrinio' } = req.query
-    if (!symbol) return res.status(400).json({ error: 'symbol required' })
-    try {
-      const r = await fetch(
-        `${OPENBB_URL}/api/v1/equity/options/chains?symbol=${encodeURIComponent(symbol)}&provider=${provider}`,
-        { signal: AbortSignal.timeout(15_000) }
-      )
-      const data = await r.json()
-      res.json(data)
-    } catch (e) {
-      res.status(502).json({ error: e.message })
-    }
-  })
-
-  // Pass-through proxy for everything else
   app.use('/api/openbb', proxyOpenBB)
   console.log(`[OpenBB] Proxy active → ${OPENBB_URL}`)
 } else {
-  app.use('/api/openbb', (req, res) => {
-    res.status(503).json({
-      ok: false,
-      error: 'OpenBB sidecar not configured.',
-      setup: 'Deploy openbb-sidecar/ as a Railway service, then set OPENBB_URL=http://<service>.railway.internal:6900',
-    })
-  })
+  app.use('/api/openbb', (req, res) => res.status(503).json({ ok: false, error: 'OpenBB sidecar not configured.', setup: 'Set OPENBB_URL env var' }))
 }
 
 /* ── Market data helpers (AISA primary → Finnhub → FMP fallback) ─────────────

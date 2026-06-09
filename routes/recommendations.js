@@ -25,6 +25,7 @@ const { getUserPrefs, saveUserPref } = require('../db/ai_memory')
 const { PERSONAS }        = require('../lib/investor-personas')
 const { getIndicators }   = require('./macro')
 const { getSocialSentiment } = require('../lib/social-sentiment')
+const { requireAuth }       = require('../middleware/auth')
 
 const recLimit = rateLimit({
   windowMs: 60 * 1000, max: 5,
