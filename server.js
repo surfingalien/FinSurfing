@@ -2192,6 +2192,13 @@ app.get('*', (_req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'))
 })
 
+if (PROD) {
+  if (!process.env.APP_URL)
+    console.warn('[startup] WARNING: APP_URL not set — password reset links will point to http://localhost:5173')
+  if (!process.env.ALLOWED_ORIGINS)
+    console.warn('[startup] WARNING: ALLOWED_ORIGINS not set — CORS will only allow http://localhost:5173')
+}
+
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`FinSurf listening on 0.0.0.0:${PORT}`)
   // Start scheduled background jobs after server is ready

@@ -264,7 +264,7 @@ router.post('/register', async (req, res) => {
 
       const sent = await sendVerificationEmail(lEmail, code, false)
       const resp = { ok: true, requiresVerification: true, email: lEmail }
-      if (!sent) resp.demoCode = code  // no SMTP → show on screen
+      if (!sent && process.env.NODE_ENV !== 'production') resp.demoCode = code
       return res.status(201).json(resp)
     } catch (err) {
       console.error('[auth/register]', err.message)
@@ -313,7 +313,7 @@ router.post('/register', async (req, res) => {
 
   const sent = await sendVerificationEmail(lEmail, code, true)
   const resp = { ok: true, requiresVerification: true, email: lEmail }
-  if (!sent) resp.demoCode = code
+  if (!sent && process.env.NODE_ENV !== 'production') resp.demoCode = code
   return res.status(201).json(resp)
 })
 
@@ -420,7 +420,7 @@ router.post('/resend-verification', async (req, res) => {
 
   const sent = await sendVerificationEmail(lEmail, code, !DB_MODE)
   const resp = { ok: true }
-  if (!sent) resp.demoCode = code
+  if (!sent && process.env.NODE_ENV !== 'production') resp.demoCode = code
   return res.json(resp)
 })
 
