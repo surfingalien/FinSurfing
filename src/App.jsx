@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useCallback } from 'react'
+import { useState, useEffect, useMemo, useRef, useCallback, lazy, Suspense } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { PortfolioProvider, usePortfolioContext } from './contexts/PortfolioContext'
@@ -7,47 +7,63 @@ import { ProModeProvider } from './contexts/ProModeContext'
 import { ToastProvider } from './components/shared/ToastNotifications'
 import { TooltipProvider } from './components/shared/Tooltip'
 import LandingPage from './components/Landing/LandingPage'
-import AuthPage from './components/Auth/AuthPage'
 import Header from './components/Layout/Header'
 import Sidebar from './components/Layout/Sidebar'
-import DashboardView from './components/Dashboard/DashboardView'
-import PortfolioView from './components/Portfolio/PortfolioView'
-import PortfolioManagerView from './components/Portfolio/PortfolioManagerView'
-import PortfolioSetupWizard from './components/Portfolio/PortfolioSetupWizard'
-import AdminDashboard from './components/Admin/AdminDashboard'
-import WatchlistView from './components/Watchlist/WatchlistView'
-import AnalysisView from './components/Analysis/AnalysisView'
-import AdvisoryView from './components/Recommendations/AdvisoryView'
-import SimulationView from './components/MonteCarlo/SimulationView'
-
-import StrategiesView from './components/Strategies/StrategiesView'
-import AlertsView from './components/Alerts/AlertsView'
-import StockAgentView from './components/Research/StockAgentView'
-import ResearchNotesView from './components/Research/ResearchNotesView'
-import QuantMindView from './components/Research/QuantMindView'
-import PolymarketView from './components/Polymarket/PolymarketView'
-import MacroView from './components/Macro/MacroView'
-import RiskRulesView from './components/Risk/RiskRulesView'
-import TradeSetupView from './components/Orders/TradeSetupView'
-import BacktestView from './components/Backtest/BacktestView'
-
-import BuySignalsView from './components/Recommendations/BuySignalsView'
-import AIBrainView from './components/AIBrain/AIBrainView'
-import MarketFocusView from './components/MarketFocus/MarketFocusView'
-import AIWatchlistView from './components/AIWatchlist/AIWatchlistView'
-import AgentHubView from './components/AgentHub/AgentHubView'
-import TradeTimelineView from './components/Timeline/TradeTimelineView'
-import PortfolioAnalyticsView from './components/Analytics/PortfolioAnalyticsView'
-import RebalancerView from './components/Rebalancer/RebalancerView'
-import TradingViewView from './components/TradingView/TradingViewView'
-import GoalsView from './components/Goals/GoalsView'
+import CommandPalette from './components/shared/CommandPalette'
+import { useHashRoute } from './hooks/useHashRoute'
 import { usePortfolio } from './hooks/usePortfolio'
 import { useWatchlist } from './hooks/useWatchlist'
 import { useAlerts } from './hooks/useAlerts'
 import { useAlertStream, formatAnalysisToast } from './hooks/useAlertStream'
 import { useToast } from './components/shared/ToastNotifications'
-import FinSurfCopilot from './components/Copilot/FinSurfCopilot'
-import AgenticOSView from './components/AgenticOS/AgenticOSView'
+
+// ── Lazy views — each becomes its own chunk, loaded on first visit ────────────
+const AuthPage               = lazy(() => import('./components/Auth/AuthPage'))
+const PortfolioSetupWizard   = lazy(() => import('./components/Portfolio/PortfolioSetupWizard'))
+const FinSurfCopilot         = lazy(() => import('./components/Copilot/FinSurfCopilot'))
+
+const DashboardView          = lazy(() => import('./components/Dashboard/DashboardView'))
+const PortfolioView          = lazy(() => import('./components/Portfolio/PortfolioView'))
+const PortfolioManagerView   = lazy(() => import('./components/Portfolio/PortfolioManagerView'))
+const AdminDashboard         = lazy(() => import('./components/Admin/AdminDashboard'))
+const WatchlistView          = lazy(() => import('./components/Watchlist/WatchlistView'))
+const AnalysisView           = lazy(() => import('./components/Analysis/AnalysisView'))
+const AdvisoryView           = lazy(() => import('./components/Recommendations/AdvisoryView'))
+const SimulationView         = lazy(() => import('./components/MonteCarlo/SimulationView'))
+const StrategiesView         = lazy(() => import('./components/Strategies/StrategiesView'))
+const AlertsView             = lazy(() => import('./components/Alerts/AlertsView'))
+const StockAgentView         = lazy(() => import('./components/Research/StockAgentView'))
+const ResearchNotesView      = lazy(() => import('./components/Research/ResearchNotesView'))
+const QuantMindView          = lazy(() => import('./components/Research/QuantMindView'))
+const PolymarketView         = lazy(() => import('./components/Polymarket/PolymarketView'))
+const MacroView              = lazy(() => import('./components/Macro/MacroView'))
+const RiskRulesView          = lazy(() => import('./components/Risk/RiskRulesView'))
+const TradeSetupView         = lazy(() => import('./components/Orders/TradeSetupView'))
+const BacktestView           = lazy(() => import('./components/Backtest/BacktestView'))
+const BuySignalsView         = lazy(() => import('./components/Recommendations/BuySignalsView'))
+const AIBrainView            = lazy(() => import('./components/AIBrain/AIBrainView'))
+const MarketFocusView        = lazy(() => import('./components/MarketFocus/MarketFocusView'))
+const AIWatchlistView        = lazy(() => import('./components/AIWatchlist/AIWatchlistView'))
+const AgentHubView           = lazy(() => import('./components/AgentHub/AgentHubView'))
+const TradeTimelineView      = lazy(() => import('./components/Timeline/TradeTimelineView'))
+const PortfolioAnalyticsView = lazy(() => import('./components/Analytics/PortfolioAnalyticsView'))
+const RebalancerView         = lazy(() => import('./components/Rebalancer/RebalancerView'))
+const TradingViewView        = lazy(() => import('./components/TradingView/TradingViewView'))
+const GoalsView              = lazy(() => import('./components/Goals/GoalsView'))
+const AgenticOSView          = lazy(() => import('./components/AgenticOS/AgenticOSView'))
+
+// ── Shared loading spinner ────────────────────────────────────────────────────
+function LoadingScreen({ label = 'Loading…', fullScreen = false }) {
+  return (
+    <div className={`flex items-center justify-center ${fullScreen ? 'min-h-screen' : 'py-24'}`}
+         style={fullScreen ? { background: '#060810' } : undefined}>
+      <div className="flex flex-col items-center gap-4">
+        <div className="w-8 h-8 border-2 border-[#00ffcc]/30 border-t-[#00ffcc] rounded-full animate-spin" />
+        <span className="text-xs text-slate-600">{label}</span>
+      </div>
+    </div>
+  )
+}
 
 // ── Inner app (renders once auth state is known) ──────────────────────────────
 function AppInner() {
@@ -56,21 +72,9 @@ function AppInner() {
   // 'landing' | 'login' | 'register' | 'app'
   const [screen, setScreen] = useState('landing')
 
-  // On session restore, skip straight to app
-  if (!authLoading && isAuthenticated && screen === 'landing') {
-    // Don't re-render — just fall through to app section below
-  }
-
   // Show spinner while restoring session (only briefly)
   if (authLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: '#060810' }}>
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-8 h-8 border-2 border-[#00ffcc]/30 border-t-[#00ffcc] rounded-full animate-spin" />
-          <span className="text-xs text-slate-600">Restoring session…</span>
-        </div>
-      </div>
-    )
+    return <LoadingScreen label="Restoring session…" fullScreen />
   }
 
   // Authenticated — go straight to app regardless of screen state
@@ -96,11 +100,13 @@ function AppInner() {
   // Auth forms (login / register / forgot)
   if (screen === 'login' || screen === 'register') {
     return (
-      <AuthPage
-        initialView={screen}
-        onContinueWithoutAccount={() => setScreen('app')}
-        onBack={() => setScreen('landing')}
-      />
+      <Suspense fallback={<LoadingScreen fullScreen />}>
+        <AuthPage
+          initialView={screen}
+          onContinueWithoutAccount={() => setScreen('app')}
+          onBack={() => setScreen('landing')}
+        />
+      </Suspense>
     )
   }
 
@@ -117,16 +123,38 @@ function MainApp({ onSignIn }) {
   const { isAuthenticated, user, authFetch } = useAuth()
   const { portfolios, loadingPortfolios, activePortfolioId } = usePortfolioContext()
 
-  const [activeTab,       setActiveTab]       = useState('dashboard')
-  const [analyzeSymbol,   setAnalyzeSymbol]   = useState('AAPL')
-  const [wizardDone,      setWizardDone]      = useState(false)
-  const [mobileNav,       setMobileNav]       = useState(false)
+  // Hash routing: #/<tab>[/<param>] — deep links + browser back/forward
+  const [route, navigate] = useHashRoute()
+  const activeTab = route.tab
+
+  const [analyzeSymbol, setAnalyzeSymbol] = useState('AAPL')
+  const [wizardDone,    setWizardDone]    = useState(false)
+  const [mobileNav,     setMobileNav]     = useState(false)
+  const [paletteOpen,   setPaletteOpen]   = useState(false)
   const mainRef = useRef(null)
 
+  // Deep link like #/analyze/NVDA sets the symbol; it persists across tabs
+  useEffect(() => {
+    if (route.tab === 'analyze' && route.param) {
+      setAnalyzeSymbol(route.param.toUpperCase())
+    }
+  }, [route])
+
   // Reset scroll to top whenever the active tab changes
-  const changeTab = useCallback((tab) => {
-    setActiveTab(tab)
+  useEffect(() => {
     if (mainRef.current) mainRef.current.scrollTop = 0
+  }, [activeTab])
+
+  // ⌘K / Ctrl+K opens the command palette
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        setPaletteOpen(v => !v)
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
   }, [])
 
   // When authenticated: fetch holdings from API, keyed to the active portfolio.
@@ -151,21 +179,64 @@ function MainApp({ onSignIn }) {
     fireToast?.(toast.type, toast.content)
   })
 
-  const navigateTo = (tab, symbol) => {
-    if (symbol) setAnalyzeSymbol(symbol)
-    changeTab(tab)
+  const navigateTo = useCallback((tab, symbol) => {
+    navigate(tab, symbol)
+  }, [navigate])
+
+  const navigateToAnalyze = useCallback((symbol) => navigate('analyze', symbol), [navigate])
+
+  // ── View registry — one lazy chunk per tab ──
+  const views = {
+    'dashboard':       () => <DashboardView portfolio={portfolio} onAnalyze={navigateToAnalyze} />,
+    'portfolio':       () => <PortfolioView portfolio={portfolio} />,
+    'portfolios':      () => <PortfolioManagerView />,
+    'watchlist':       () => <WatchlistView watchlist={watchlist} onAnalyze={navigateToAnalyze} />,
+    'analyze':         () => <AnalysisView defaultSymbol={analyzeSymbol} />,
+    'recommendations': () => <AdvisoryView portfolio={portfolio} />,
+    'montecarlo':      () => <SimulationView portfolio={portfolio} />,
+    'strategies':      () => <StrategiesView onAnalyze={navigateToAnalyze} />,
+    'alerts':          () => (
+      <AlertsView
+        alerts={alertsHook}
+        quotesMap={quotesMap}
+        portfolioSymbols={portfolio.positions.map(p => p.symbol)}
+        watchlistSymbols={watchlist.symbols}
+      />
+    ),
+    'research':       () => <StockAgentView portfolio={portfolio} />,
+    'second-brain':   () => <ResearchNotesView portfolio={portfolio} />,
+    'quantmind':      () => <QuantMindView />,
+    'polymarket':     () => <PolymarketView portfolio={portfolio} />,
+    'macro':          () => <MacroView />,
+    'risk-rules':     () => <RiskRulesView portfolio={portfolio} />,
+    'trade-setups':   () => <TradeSetupView portfolio={portfolio} />,
+    'backtest':       () => <BacktestView />,
+    'buy-signals':    () => <BuySignalsView portfolio={portfolio} onAnalyze={navigateToAnalyze} />,
+    'ai-brain':       () => <AIBrainView portfolio={portfolio} onAnalyze={navigateToAnalyze} />,
+    'market-focus':   () => <MarketFocusView portfolio={portfolio} watchlist={watchlist.symbols} />,
+    'ai-watchlist':   () => <AIWatchlistView onAnalyze={navigateToAnalyze} />,
+    'tradingview':    () => <TradingViewView />,
+    'analytics':      () => <PortfolioAnalyticsView portfolio={portfolio} />,
+    'rebalancer':     () => <RebalancerView />,
+    'goals':          () => <GoalsView portfolio={portfolio} />,
+    'agent-hub':      () => <AgentHubView />,
+    'trade-timeline': () => <TradeTimelineView portfolio={portfolio} />,
+    'agentic-os':     () => <AgenticOSView />,
+    'admin':          () => <AdminDashboard />,
   }
 
-  const navigateToAnalyze = (symbol) => navigateTo('analyze', symbol)
+  const renderView = views[activeTab] ?? views['dashboard']
 
   // Show portfolio setup wizard for new authenticated users with no portfolios
   const showWizard = isAuthenticated && !loadingPortfolios && portfolios.length === 0 && !wizardDone
 
   if (showWizard) {
     return (
-      <PortfolioSetupWizard
-        onComplete={() => { setWizardDone(true); setActiveTab('dashboard') }}
-      />
+      <Suspense fallback={<LoadingScreen fullScreen />}>
+        <PortfolioSetupWizard
+          onComplete={() => { setWizardDone(true); navigate('dashboard') }}
+        />
+      </Suspense>
     )
   }
 
@@ -174,7 +245,7 @@ function MainApp({ onSignIn }) {
       {/* ── Sidebar ── */}
       <Sidebar
         activeTab={activeTab}
-        onTabChange={changeTab}
+        onTabChange={navigateTo}
         triggeredCount={alertsHook.triggered.length}
         onSignIn={onSignIn}
         mobileOpen={mobileNav}
@@ -183,8 +254,11 @@ function MainApp({ onSignIn }) {
 
       {/* ── Right column: top-bar + scrollable content ── */}
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
-        {/* Slim top bar (ticker + hamburger) */}
-        <Header onMobileMenuOpen={() => setMobileNav(true)} />
+        {/* Slim top bar (ticker + hamburger + ⌘K) */}
+        <Header
+          onMobileMenuOpen={() => setMobileNav(true)}
+          onOpenPalette={() => setPaletteOpen(true)}
+        />
 
         {/* Scrollable main content */}
         <main ref={mainRef} className="flex-1 overflow-y-auto">
@@ -197,103 +271,9 @@ function MainApp({ onSignIn }) {
             transition={{ duration: 0.18, ease: 'easeOut' }}
             className="max-w-screen-2xl mx-auto w-full px-4 py-6"
           >
-            {activeTab === 'dashboard' && (
-              <DashboardView portfolio={portfolio} onAnalyze={navigateToAnalyze} />
-            )}
-            {activeTab === 'portfolio' && (
-              <PortfolioView portfolio={portfolio} />
-            )}
-            {activeTab === 'portfolios' && (
-              <PortfolioManagerView />
-            )}
-            {activeTab === 'watchlist' && (
-              <WatchlistView watchlist={watchlist} onAnalyze={sym => navigateTo('analyze', sym)} />
-            )}
-            {activeTab === 'analyze' && (
-              <AnalysisView defaultSymbol={analyzeSymbol} />
-            )}
-            {activeTab === 'recommendations' && (
-              <AdvisoryView portfolio={portfolio} />
-            )}
-            {activeTab === 'montecarlo' && (
-              <SimulationView portfolio={portfolio} />
-            )}
-
-            {activeTab === 'strategies' && (
-              <StrategiesView onAnalyze={sym => navigateTo('analyze', sym)} />
-            )}
-            {activeTab === 'alerts' && (
-              <AlertsView
-                alerts={alertsHook}
-                quotesMap={quotesMap}
-                portfolioSymbols={portfolio.positions.map(p => p.symbol)}
-                watchlistSymbols={watchlist.symbols}
-              />
-            )}
-            {activeTab === 'research' && (
-              <StockAgentView portfolio={portfolio} />
-            )}
-            {activeTab === 'second-brain' && (
-              <ResearchNotesView portfolio={portfolio} />
-            )}
-            {activeTab === 'quantmind' && (
-              <QuantMindView />
-            )}
-            {activeTab === 'polymarket' && (
-              <PolymarketView portfolio={portfolio} />
-            )}
-            {activeTab === 'macro' && (
-              <MacroView />
-            )}
-            {activeTab === 'risk-rules' && (
-              <RiskRulesView portfolio={portfolio} />
-            )}
-            {activeTab === 'trade-setups' && (
-              <TradeSetupView portfolio={portfolio} />
-            )}
-
-            {activeTab === 'backtest' && (
-              <BacktestView />
-            )}
-
-            {activeTab === 'buy-signals' && (
-              <BuySignalsView portfolio={portfolio} onAnalyze={navigateToAnalyze} />
-            )}
-            {activeTab === 'ai-brain' && (
-              <AIBrainView portfolio={portfolio} onAnalyze={navigateToAnalyze} />
-            )}
-            {activeTab === 'market-focus' && (
-              <MarketFocusView portfolio={portfolio} watchlist={watchlist.symbols} />
-            )}
-            {activeTab === 'ai-watchlist' && (
-              <AIWatchlistView onAnalyze={navigateToAnalyze} />
-            )}
-            {activeTab === 'tradingview' && (
-              <TradingViewView />
-            )}
-            {activeTab === 'analytics' && (
-              <PortfolioAnalyticsView portfolio={portfolio} />
-            )}
-            {activeTab === 'rebalancer' && (
-              <RebalancerView />
-            )}
-            {activeTab === 'goals' && (
-              <GoalsView portfolio={portfolio} />
-            )}
-            {activeTab === 'agent-hub' && (
-              <AgentHubView />
-            )}
-            {activeTab === 'trade-timeline' && (
-              <TradeTimelineView portfolio={portfolio} />
-            )}
-
-            {activeTab === 'agentic-os' && (
-              <AgenticOSView />
-            )}
-
-            {activeTab === 'admin' && (
-              <AdminDashboard />
-            )}
+            <Suspense fallback={<LoadingScreen />}>
+              {renderView()}
+            </Suspense>
           </motion.div>
           </AnimatePresence>
 
@@ -306,11 +286,20 @@ function MainApp({ onSignIn }) {
         </main>
       </div>
 
-      {/* ── FinSurf Copilot — floating agentic AI panel ── */}
-      <FinSurfCopilot
-        portfolio={portfolio.positions}
-        watchlist={watchlist.symbols}
+      {/* ── Command palette (⌘K) ── */}
+      <CommandPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        onNavigate={navigateTo}
       />
+
+      {/* ── FinSurf Copilot — floating agentic AI panel ── */}
+      <Suspense fallback={null}>
+        <FinSurfCopilot
+          portfolio={portfolio.positions}
+          watchlist={watchlist.symbols}
+        />
+      </Suspense>
     </div>
   )
 }
