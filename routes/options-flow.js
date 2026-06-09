@@ -4,19 +4,84 @@
  *
  * GET /api/options/flow?symbol=AAPL
  *
- * Returns put/call ratio, IV rank, ATM IV, and a plain-text signal snippet
- * for use by the AI Copilot's get_options_flow tool.
- *
  * Provider cascade:
- *   1. FMP /api/v3/options/{symbol} — full chain, compute P/C + IV stats
- *   2. Derived from Finnhub quote IV fields (basic)
+ *   1. Polygon.io — real greeks, IV surface, unusual volume (best quality)
+ *   2. FMP /api/v3/options/{symbol} — full chain, compute P/C + IV stats
  *   3. Synthetic from recent price volatility if all else fails
  */
 
 const express = require('express')
 const router  = express.Router()
 
-// ── FMP options chain ─────────────────────────────────────────────────────────
+// ── 1. Polygon.io options chain ───────────────────────────────────────────────
+async function fetchPolygonOptions(symbol, polygonKey) {
+  if (!polygonKey) return null
+  try {
+    // Get snapshot for the ticker (includes IV, greeks, P/C data)
+    const snapUrl = `https://api.polygon.io/v3/snapshot/options/${encodeURIComponent(symbol)}?limit=250&apiKey=${polygonKey}`
+    const r = await fetch(snapUrl, { signal: AbortSignal.timeout(10_000) })
+    if (!r.ok) return null
+    const data = await r.json()
+    const results = data?.results
+    if (!Array.isArray(results) || !results.length) return null
+
+    // Get spot price from the first result's underlying
+    const spot = results[0]?.underlying_asset?.price || null
+
+    // Filter to nearest 3 expiries, strikes within 15% of spot
+    const expiries = [...new Set(results.map(o => o.details?.expiration_date))].filter(Boolean).sort().slice(0, 3)
+    const near = results.filter(o =>
+      expiries.includes(o.details?.expiration_date) &&
+      (spot ? Math.abs((o.details?.strike_price || spot) - spot) / spot < 0.15 : true)
+    )
+
+    let callVol = 0, putVol = 0, callOI = 0, putOI = 0
+    const unusual = []
+    let atmIV = null
+    let closestStrikeDist = Infinity
+
+    for (const o of near) {
+      const vol  = o.day?.volume || 0
+      const oi   = o.open_interest || 0
+      const type = o.details?.contract_type?.toLowerCase()
+      const iv   = o.implied_volatility
+      const strike = o.details?.strike_price
+
+      if (type === 'call') { callVol += vol; callOI += oi }
+      else if (type === 'put') { putVol += vol; putOI += oi }
+
+      // Track ATM IV
+      if (spot && strike && iv) {
+        const dist = Math.abs(strike - spot)
+        if (dist < closestStrikeDist) { closestStrikeDist = dist; atmIV = +(iv * 100).toFixed(1) }
+      }
+
+      // Unusual: vol > 3× OI
+      if (oi > 0 && vol > oi * 3 && vol > 100) {
+        unusual.push({
+          type, strike, expiry: o.details?.expiration_date,
+          volume: vol, oi,
+          iv: iv ? +(iv * 100).toFixed(1) : null,
+          delta: o.greeks?.delta ? +o.greeks.delta.toFixed(2) : null,
+        })
+      }
+    }
+
+    const pcRatio = callVol > 0 ? +(putVol / callVol).toFixed(2) : null
+
+    return {
+      symbol: symbol.toUpperCase(), spot: spot ? +spot.toFixed(2) : null,
+      pcRatio, atmIV, callVol, putVol, callOI, putOI,
+      unusual: unusual.sort((a, b) => b.volume - a.volume).slice(0, 5),
+      expiries, source: 'polygon',
+    }
+  } catch (e) {
+    console.warn(`[options-flow] Polygon error for ${symbol}:`, e.message)
+    return null
+  }
+}
+
+// ── 2. FMP options chain ──────────────────────────────────────────────────────
 async function fetchFMPOptions(symbol, fmpKey) {
   if (!fmpKey) return null
   try {
@@ -166,13 +231,15 @@ router.get('/flow', async (req, res) => {
   const symbol = (req.query.symbol || '').trim().toUpperCase().replace(/[^A-Z0-9.-]/g, '')
   if (!symbol) return res.status(400).json({ error: 'symbol required' })
 
-  const fmpKey  = (req.headers['x-fmp-key'] || '').trim() || process.env.FMP_API_KEY || null
-  const port    = process.env.PORT || 3001
-  const fwdHdrs = { 'Content-Type': 'application/json', 'x-internal': '1' }
+  const polygonKey = process.env.POLYGON_API_KEY || process.env.MASSIVE_API_KEY || null
+  const fmpKey     = (req.headers['x-fmp-key'] || '').trim() || process.env.FMP_API_KEY || null
+  const port       = process.env.PORT || 3001
+  const fwdHdrs    = { 'Content-Type': 'application/json', 'x-internal': '1' }
   if (req.headers['x-fmp-key'])      fwdHdrs['x-fmp-key']      = req.headers['x-fmp-key']
   if (req.headers['x-finnhub-key'])  fwdHdrs['x-finnhub-key']  = req.headers['x-finnhub-key']
 
-  let flow = await fetchFMPOptions(symbol, fmpKey)
+  let flow = await fetchPolygonOptions(symbol, polygonKey)
+  if (!flow) flow = await fetchFMPOptions(symbol, fmpKey)
   if (!flow) flow = await fetchSyntheticFlow(symbol, port, fwdHdrs)
 
   if (!flow) return res.status(502).json({ error: 'Options data unavailable for ' + symbol })

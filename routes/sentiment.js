@@ -5,10 +5,11 @@
  * GET /api/sentiment/portfolio?symbols=AAPL,MSFT,NVDA
  *
  * Provider priority (best available wins):
- *  1. Marketaux   — native per-ticker sentiment scores (-1→+1), no Claude needed
- *  2. AV NEWS_SENTIMENT — Alpha Vantage pre-scored sentiment feed
- *  3. FMP stock_news   — headlines → Claude scores
- *  4. Finnhub company-news — headlines → Claude scores (original fallback)
+ *  1. Benzinga     — pre-scored sentiment + analyst ratings (highest quality)
+ *  2. Marketaux    — native per-ticker sentiment scores (-1→+1), no Claude needed
+ *  3. AV NEWS_SENTIMENT — Alpha Vantage pre-scored sentiment feed
+ *  4. FMP stock_news   — headlines → Claude scores
+ *  5. Finnhub company-news — headlines → Claude scores (original fallback)
  *
  * Results cached 25 minutes in-process.
  */
@@ -45,7 +46,46 @@ function httpsGet(url) {
   })
 }
 
-// ── 1. Marketaux — native sentiment scores ────────────────────────────────────
+// ── 1. Benzinga — pre-scored news sentiment ───────────────────────────────────
+async function getBenzingaSentiment(symbols, key) {
+  if (!key) return null
+  try {
+    const tickers = symbols.join(',')
+    const url = `https://api.benzinga.com/api/v2/news?token=${key}&tickers=${encodeURIComponent(tickers)}&pageSize=20&displayOutput=full`
+    const data = await httpsGet(url)
+    if (!Array.isArray(data) || !data.length) return null
+
+    const scoreMap = {}, headlineMap = {}
+    for (const article of data) {
+      for (const stock of (article.stocks || [])) {
+        const sym = stock.name?.toUpperCase()
+        if (!sym || !symbols.includes(sym)) continue
+        if (!scoreMap[sym]) { scoreMap[sym] = []; headlineMap[sym] = [] }
+        // Benzinga sentiment: 'Bullish', 'Bearish', 'Neutral'
+        const s = (article.sentiment || stock.sentiment || '').toLowerCase()
+        const score = s === 'bullish' ? 0.6 : s === 'bearish' ? -0.6 : 0
+        scoreMap[sym].push(score)
+        if (article.title) headlineMap[sym].push(article.title)
+      }
+    }
+
+    const mapped = symbols.map(sym => {
+      const scores = scoreMap[sym] || []
+      if (!scores.length) return null
+      const avg = scores.reduce((a, b) => a + b, 0) / scores.length
+      const score10 = Math.round(((avg + 1) / 2) * 9 + 1)
+      const sentiment = avg > 0.1 ? 'bullish' : avg < -0.1 ? 'bearish' : 'neutral'
+      return { symbol: sym, sentiment, score: score10, summary: (headlineMap[sym][0] || '').slice(0, 80), headline_count: scores.length, source: 'benzinga' }
+    })
+    const valid = mapped.filter(Boolean)
+    return valid.length === symbols.length ? valid : null
+  } catch (e) {
+    console.warn('[sentiment] Benzinga error:', e.message)
+    return null
+  }
+}
+
+// ── 2. Marketaux — native sentiment scores ────────────────────────────────────
 async function getMarketauxSentiment(symbols, key) {
   if (!key) return null
   const tickers = symbols.join(',')
@@ -231,6 +271,7 @@ router.get('/portfolio', async (req, res) => {
   if (!symbols.length) return res.status(400).json({ error: 'symbols query param required' })
 
   // Extract provider keys from request headers / env
+  const benzingaKey = process.env.BENZINGA_API_KEY || null
   const fmpKey      = (req.headers['x-fmp-key']       || '').trim() || process.env.FMP_API_KEY
   const avKey       = (req.headers['x-av-key']        || '').trim() || process.env.ALPHA_VANTAGE_API_KEY || process.env.AV_API_KEY
   const marketauxKey= (req.headers['x-marketaux-key'] || '').trim() || process.env.MARKETAUX_API_KEY
@@ -247,7 +288,17 @@ router.get('/portfolio', async (req, res) => {
   const fmt         = d => d.toISOString().slice(0, 10)
 
   try {
-    // ── Priority 1: Marketaux (native sentiment) ──────────────────────────────
+    // ── Priority 1: Benzinga (pre-scored, highest quality) ───────────────────
+    if (benzingaKey) {
+      const results = await getBenzingaSentiment(symbols, benzingaKey)
+      if (results) {
+        const ts = Date.now()
+        sentimentCache.set(cacheKey, { results, ts, source: 'Benzinga' })
+        return res.json({ results, cached: false, updatedAt: ts, source: 'Benzinga' })
+      }
+    }
+
+    // ── Priority 2: Marketaux (native sentiment) ──────────────────────────────
     if (marketauxKey) {
       const results = await getMarketauxSentiment(symbols, marketauxKey)
       if (results) {
@@ -257,7 +308,7 @@ router.get('/portfolio', async (req, res) => {
       }
     }
 
-    // ── Priority 2: Alpha Vantage NEWS_SENTIMENT ──────────────────────────────
+    // ── Priority 3: Alpha Vantage NEWS_SENTIMENT ──────────────────────────────
     if (avKey) {
       const results = await getAVNewsSentiment(symbols, avKey)
       if (results) {

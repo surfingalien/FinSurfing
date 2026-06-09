@@ -395,6 +395,8 @@ function extractKeys(req) {
     av:        (req.headers['x-av-key']        || '').trim() || process.env.ALPHA_VANTAGE_API_KEY || process.env.AV_API_KEY || null,
     td:        (req.headers['x-td-key']        || '').trim() || process.env.TWELVE_DATA_API_KEY  || null,
     marketaux: (req.headers['x-marketaux-key'] || '').trim() || process.env.MARKETAUX_API_KEY    || null,
+    tiingo:    (req.headers['x-tiingo-key']    || '').trim() || process.env.TIINGO_API_KEY        || null,
+    polygon:   (req.headers['x-polygon-key']   || '').trim() || process.env.POLYGON_API_KEY || process.env.MASSIVE_API_KEY || null,
   }
 }
 
@@ -889,6 +891,36 @@ async function getTwelveDataQuote(symbol, keys = {}) {
       regularMarketPreviousClose: parseFloat(d.previous_close)   || null,
       fiftyTwoWeekHigh:           parseFloat(d['52_week']['high'])  || null,
       fiftyTwoWeekLow:            parseFloat(d['52_week']['low'])   || null,
+    }
+  } catch { return null }
+}
+
+// ── Tiingo helpers ────────────────────────────────────────────────────────────
+// Good for ETFs, mutual funds, and EOD prices. Free tier: 500 req/hour.
+const TIINGO_KEY = () => process.env.TIINGO_API_KEY || null
+
+async function getTiingoQuote(symbol, keys = {}) {
+  const key = keys.tiingo || TIINGO_KEY()
+  if (!key) return null
+  try {
+    const url = `https://api.tiingo.com/iex/${encodeURIComponent(symbol.toUpperCase())}?token=${key}`
+    const d = await apiFetch(url, 8000)
+    const q = Array.isArray(d) ? d[0] : d
+    if (!q?.last) return null
+    const price = parseFloat(q.last)
+    if (!price) return null
+    return {
+      symbol,
+      shortName:                  symbol,
+      regularMarketPrice:         price,
+      regularMarketChange:        q.last != null && q.prevClose != null ? +(price - q.prevClose).toFixed(4) : null,
+      regularMarketChangePercent: q.last != null && q.prevClose != null ? +((price - q.prevClose) / q.prevClose * 100).toFixed(4) : null,
+      regularMarketVolume:        parseInt(q.volume) || null,
+      regularMarketDayHigh:       parseFloat(q.high) || null,
+      regularMarketDayLow:        parseFloat(q.low)  || null,
+      regularMarketOpen:          parseFloat(q.open) || null,
+      regularMarketPreviousClose: parseFloat(q.prevClose) || null,
+      regularMarketTime:          Math.floor(Date.now() / 1000),
     }
   } catch { return null }
 }
@@ -1864,6 +1896,10 @@ app.get('/api/quote', async (req, res) => {
 
           // 6th: Twelve Data
           merge(await Promise.all(noPrice().map(s => getTwelveDataQuote(s, keys).catch(() => null))))
+          if (!noPrice().length) return stockSyms.map(s => resultMap[s])
+
+          // 7th: Tiingo — strong for ETFs/mutual funds missed by others
+          merge(await Promise.all(noPrice().map(s => getTiingoQuote(s, keys).catch(() => null))))
 
           // Final: chart-price cache or null for anything still missing
           for (const sym of stockSyms) {
