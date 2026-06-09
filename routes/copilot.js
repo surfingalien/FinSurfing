@@ -420,6 +420,83 @@ async function dispatchTool(name, input, req) {
   }
 }
 
+// ── Planner: detect ticker deep-analysis queries ──────────────────────────────
+// Returns the ticker symbol if the last user message is a deep-analysis request,
+// null otherwise. Used to trigger the parallel pre-fetch fast path.
+const DEEP_ANALYSIS_RE = /\b(analyz[ei]|analysis|check|look at|deep dive|research|breakdown|full report|what do you think of|should i buy|should i sell|tell me about|thesis on|outlook for|price target)\b/i
+const TICKER_RE = /\b([A-Z]{1,5}(?:-USD)?)\b/g
+
+function detectTickerQuery(messages) {
+  const lastUser = [...messages].reverse().find(m => m.role === 'user')
+  if (!lastUser) return null
+  const text = typeof lastUser.content === 'string' ? lastUser.content : ''
+  if (!DEEP_ANALYSIS_RE.test(text)) return null
+  const tickers = [...text.matchAll(TICKER_RE)].map(m => m[1])
+  // Filter out common English words that look like tickers
+  const SKIP = new Set(['A','I','AM','AN','AT','BE','BY','DO','GO','IF','IN','IS','IT','ME','MY','NO','OF','ON','OR','SO','TO','UP','US','WE','AND','ARE','FOR','HAS','NOT','THE','WAS'])
+  const valid = tickers.filter(t => !SKIP.has(t))
+  return valid.length === 1 ? valid[0] : null
+}
+
+// Run all analysis tools in parallel for a ticker — DeerFlow-style Planner step
+async function runPlannerPrefetch(ticker, req, send) {
+  send({ type: 'tool_start', tools: [
+    { name: 'analyze_symbol',       input: { symbol: ticker } },
+    { name: 'get_earnings_catalyst', input: { symbol: ticker } },
+    { name: 'get_options_flow',      input: { symbol: ticker } },
+    { name: 'get_social_sentiment',  input: { symbols: [ticker] } },
+  ]})
+
+  const [technical, earnings, options, social] = await Promise.allSettled([
+    dispatchTool('analyze_symbol',        { symbol: ticker },       req),
+    dispatchTool('get_earnings_catalyst', { symbol: ticker },       req),
+    dispatchTool('get_options_flow',      { symbol: ticker },       req),
+    dispatchTool('get_social_sentiment',  { symbols: [ticker] },    req),
+  ])
+
+  send({ type: 'tool_results', results: [
+    { tool: 'analyze_symbol',       preview: technical.value?.slice?.(0, 100) },
+    { tool: 'get_earnings_catalyst', preview: earnings.value?.slice?.(0, 100) },
+    { tool: 'get_options_flow',      preview: options.value?.slice?.(0, 100) },
+    { tool: 'get_social_sentiment',  preview: social.value?.slice?.(0, 100) },
+  ]})
+
+  return {
+    technical:  technical.status  === 'fulfilled' ? technical.value  : null,
+    earnings:   earnings.status   === 'fulfilled' ? earnings.value   : null,
+    options:    options.status    === 'fulfilled' ? options.value    : null,
+    social:     social.status     === 'fulfilled' ? social.value     : null,
+  }
+}
+
+const REPORTER_SYSTEM = `You are a senior equity analyst synthesising pre-fetched live data into a structured investment report.
+
+You have been given live tool results. Do NOT call any tools — all data is already provided in the user message.
+
+Produce a concise structured report using this format:
+
+## [TICKER] — [BUY/SELL/HOLD] Signal
+
+**Current Price:** $X · **Confidence:** X%
+
+### Technical Picture
+[3-4 sentences from the technical analysis data]
+
+### Earnings Catalyst
+[Next earnings date, EPS estimate, surprise history — flag if imminent]
+
+### Options Flow
+[P/C ratio interpretation, ATM IV, any unusual activity and what it implies]
+
+### Social Sentiment
+[Reddit upvote-weighted signal + Polymarket odds if available]
+
+### Verdict
+[2-3 sentences: bull case, bear case, risk/reward. Entry zone and stop.]
+
+---
+*Not financial advice. All data is live as of analysis time.*`
+
 // ── Provider registry (claudian-style providerId + providerState) ─────────────
 
 const PROVIDER_DEFAULTS = {
@@ -576,7 +653,39 @@ router.post('/chat', chatLimit, async (req, res) => {
     }
 
     // ── Claude provider (default) — native streaming tool_use ──────────────────
+
+    // Planner fast-path: for single-ticker deep analysis, pre-fetch all tools in
+    // parallel (DeerFlow-style), inject results as context so Claude synthesises
+    // in one shot rather than 3-4 sequential tool-use rounds.
     let loopMessages = messages.map(m => ({ role: m.role, content: m.content }))
+    const plannerTicker = detectTickerQuery(messages)
+    if (plannerTicker) {
+      const data = await runPlannerPrefetch(plannerTicker, req, send)
+      const contextMsg = [
+        `LIVE PRE-FETCHED DATA FOR ${plannerTicker} (all tools already executed in parallel):`,
+        data.technical  ? `\n=== TECHNICAL ANALYSIS ===\n${data.technical}`   : '',
+        data.earnings   ? `\n=== EARNINGS CATALYST ===\n${data.earnings}`     : '',
+        data.options    ? `\n=== OPTIONS FLOW ===\n${data.options}`           : '',
+        data.social     ? `\n=== SOCIAL SENTIMENT ===\n${data.social}`        : '',
+        `\n\nOriginal user question: ${messages.at(-1)?.content || ''}`,
+        '\nSynthesize ALL the above into a structured investment report. Do NOT call any tools.',
+      ].join('')
+
+      // Use Reporter system prompt for synthesis pass
+      const stream = await anthropic.messages.stream({
+        model, max_tokens: 4096,
+        system: REPORTER_SYSTEM + contextBlock,
+        messages: [{ role: 'user', content: contextMsg }],
+      })
+      for await (const event of stream) {
+        if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+          send({ type: 'text', delta: event.delta.text })
+        }
+      }
+      send({ type: 'done' })
+      res.end(); return
+    }
+
     let iterations = 0
     const MAX_ITER = 5
 
