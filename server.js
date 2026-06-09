@@ -1523,7 +1523,8 @@ function _connectFhWs() {
           regularMarketPrice:         price,
           regularMarketChange:        chg,
           regularMarketChangePercent: chgPct,
-          regularMarketPreviousClose: pc,
+          // Never overwrite a valid prevClose with null — pc:* cache may have expired
+          regularMarketPreviousClose: pc ?? prev?.regularMarketPreviousClose ?? null,
           regularMarketTime:          t.t ? Math.floor(t.t / 1000) : null,
         })
         _lastWsTick.set(sym, Date.now())
@@ -1604,7 +1605,8 @@ function _connectBinWs() {
           regularMarketPrice:         price,
           regularMarketChange:        chg,
           regularMarketChangePercent: chgPct,
-          regularMarketPreviousClose: pc,
+          // Never overwrite a valid prevClose with null — pc:* cache may have expired
+          regularMarketPreviousClose: pc ?? prev?.regularMarketPreviousClose ?? null,
           regularMarketTime:          msg.T ? Math.floor(msg.T / 1000) : null,
         })
         _lastWsTick.set(sym, Date.now())

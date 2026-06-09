@@ -263,6 +263,16 @@ export default function TradingAIPanel({ symbol, interval, price }) {
     setStreaming(false)
   }
 
+  // ── Derived display values ─────────────────────────────────────────────────
+  const analysis          = result?.analysis ?? null
+  const indicators        = result?.indicators ?? null
+  const sentiment         = result?.sentiment ?? null
+  const sentimentAlignment = result?.sentimentAlignment ?? null
+  const signal            = analysis?.signal ?? null
+  const color             = getSignalColor(signal)
+  const patterns          = indicators?.patterns ?? []
+  const ticker            = symbol.includes(':') ? symbol.split(':')[1] : symbol
+
   // ── fetchEarnings ──────────────────────────────────────────────────────────
   const fetchEarnings = useCallback(async () => {
     if (!symbol) return
@@ -282,16 +292,6 @@ export default function TradingAIPanel({ symbol, interval, price }) {
     }
     setEarningsLoading(false)
   }, [symbol, ticker])
-
-  // ── Derived display values ─────────────────────────────────────────────────
-  const analysis          = result?.analysis ?? null
-  const indicators        = result?.indicators ?? null
-  const sentiment         = result?.sentiment ?? null
-  const sentimentAlignment = result?.sentimentAlignment ?? null
-  const signal            = analysis?.signal ?? null
-  const color             = getSignalColor(signal)
-  const patterns          = indicators?.patterns ?? []
-  const ticker            = symbol.includes(':') ? symbol.split(':')[1] : symbol
 
   // ── Tabs bar ───────────────────────────────────────────────────────────────
   const TABS = [
