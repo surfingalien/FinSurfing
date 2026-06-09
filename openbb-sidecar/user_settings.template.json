@@ -1,0 +1,13 @@
+{
+  "credentials": {
+    "fmp_api_key":            "YOUR_FMP_API_KEY",
+    "fred_api_key":           "YOUR_FRED_API_KEY",
+    "polygon_api_key":        "YOUR_POLYGON_API_KEY",
+    "intrinio_api_key":       "YOUR_INTRINIO_API_KEY",
+    "benzinga_api_key":       "YOUR_BENZINGA_API_KEY",
+    "alpha_vantage_api_key":  "YOUR_AV_API_KEY"
+  },
+  "preferences": {
+    "output_type": "dataframe"
+  }
+}

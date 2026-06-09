@@ -1,0 +1,18 @@
+# OpenBB Platform core + REST API server
+openbb==4.5.0
+openbb-platform-api==0.4.0
+
+# Data provider extensions
+openbb-yfinance          # free, no key — price + fundamentals
+openbb-fmp               # Financial Modeling Prep (set FMP_API_KEY)
+openbb-fred              # FRED macro data (set FRED_API_KEY)
+openbb-intrinio          # options, earnings surprises (set INTRINIO_API_KEY)
+openbb-polygon           # real-time + options (set POLYGON_API_KEY)
+openbb-sec               # SEC EDGAR filings — free, no key
+openbb-benzinga          # news + analyst ratings (set BENZINGA_API_KEY)
+
+# Forecasting extension (TimeGPT / statsforecast / Darts)
+openbb-forecast
+
+# Runtime deps
+uvicorn[standard]==0.29.0
