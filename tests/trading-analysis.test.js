@@ -2,25 +2,42 @@
 const request = require('supertest')
 const { createApp } = require('./helpers/app')
 
-let app
-beforeAll(() => { app = createApp() })
+let app, token
+const password = 'StrongPass123!'
+
+beforeAll(async () => {
+  app = createApp()
+  // Register + verify + login to get a valid token
+  const email = `ta_${Date.now()}@example.com`
+  const reg = await request(app).post('/api/auth/register').send({ email, password })
+  await request(app).post('/api/auth/verify-email').send({ email, code: reg.body.demoCode })
+  const login = await request(app).post('/api/auth/login').send({ email, password })
+  token = login.body.accessToken
+})
 
 describe('POST /api/trading-analysis/analyze', () => {
+  test('unauthenticated request returns 401', async () => {
+    const res = await request(app)
+      .post('/api/trading-analysis/analyze')
+      .send({ symbol: 'AAPL' })
+    expect(res.status).toBe(401)
+  })
+
   test('missing symbol returns 400 with descriptive error', async () => {
     const res = await request(app)
       .post('/api/trading-analysis/analyze')
+      .set('Authorization', `Bearer ${token}`)
       .send({})
     expect(res.status).toBe(400)
     expect(res.body.error).toMatch(/symbol/i)
   })
 
-  test('symbol accepted from request body', async () => {
-    // Without an API key the route will return an error, but it must get past
-    // the "symbol is required" guard — i.e. status != 400 with a symbol error
+  test('symbol accepted from request body (gets past symbol guard)', async () => {
     const res = await request(app)
       .post('/api/trading-analysis/analyze')
+      .set('Authorization', `Bearer ${token}`)
       .send({ symbol: 'AAPL' })
-    // Should not be a 400 "symbol is required" error
+    // No API keys in test env → will fail at LLM call, but must not be 400 "symbol is required"
     if (res.status === 400) {
       expect(res.body.error).not.toMatch(/symbol is required/i)
     }
@@ -29,6 +46,7 @@ describe('POST /api/trading-analysis/analyze', () => {
   test('symbol accepted from query param (backward compat)', async () => {
     const res = await request(app)
       .post('/api/trading-analysis/analyze?symbol=AAPL')
+      .set('Authorization', `Bearer ${token}`)
       .send({})
     if (res.status === 400) {
       expect(res.body.error).not.toMatch(/symbol is required/i)
