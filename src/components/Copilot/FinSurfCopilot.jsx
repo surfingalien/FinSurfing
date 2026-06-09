@@ -50,6 +50,8 @@ function ToolBadge({ name }) {
     analyze_symbol: '📈 Analyzing symbol...',
     get_social_sentiment: '📣 Checking social sentiment...',
     get_macro: '🌐 Reading macro indicators...',
+    get_earnings_catalyst: '📅 Fetching earnings catalyst...',
+    get_options_flow: '📊 Reading options flow...',
   }
   return (
     <div className="flex items-center gap-2 text-xs text-[#00ffcc]/70 mb-2 pl-9">

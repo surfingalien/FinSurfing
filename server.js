@@ -35,6 +35,7 @@ const marketIntelRoutes     = require('./routes/market-intel')
 const alertsRoutes          = require('./routes/alerts')
 const backtestQueueRoutes   = require('./routes/backtest-queue')
 const agenticOsRoutes       = require('./routes/agentic-os')
+const optionsFlowRoutes     = require('./routes/options-flow')
 
 
 
@@ -200,6 +201,39 @@ app.use('/api/market-intel',   marketIntelRoutes)
 app.use('/api/alerts',         alertsRoutes)
 app.use('/api/backtest/queue', backtestQueueRoutes)
 app.use('/api/agentic-os',     agenticOsRoutes)
+app.use('/api/options',        optionsFlowRoutes)
+
+// ── OpenBB sidecar proxy (optional — set OPENBB_URL env var to enable) ────────
+// Deploy OpenBB Platform as a Railway sidecar: docker run -p 6900:6900 openbb-platform
+// Then set OPENBB_URL=http://openbb-sidecar:6900 in Railway env vars.
+// All /api/openbb/* requests are forwarded to the OpenBB FastAPI server.
+const OPENBB_URL = process.env.OPENBB_URL
+if (OPENBB_URL) {
+  app.use('/api/openbb', async (req, res) => {
+    const target = OPENBB_URL.replace(/\/$/, '') + req.path + (req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '')
+    try {
+      const opts = {
+        method:  req.method,
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        signal:  AbortSignal.timeout(30_000),
+      }
+      if (req.method !== 'GET' && req.method !== 'HEAD') {
+        opts.body = JSON.stringify(req.body)
+      }
+      const upstream = await fetch(target, opts)
+      const body     = await upstream.text()
+      res.status(upstream.status).set('Content-Type', 'application/json').send(body)
+    } catch (e) {
+      res.status(502).json({ error: 'OpenBB sidecar unreachable', detail: e.message })
+    }
+  })
+  console.log(`[OpenBB] Proxy active → ${OPENBB_URL}`)
+} else {
+  // Stub so frontend calls don't 404 — returns a clear message
+  app.use('/api/openbb', (req, res) => {
+    res.status(503).json({ error: 'OpenBB sidecar not configured. Set OPENBB_URL env var.' })
+  })
+}
 
 /* ── Market data helpers (AISA primary → Finnhub → FMP fallback) ─────────────
    Yahoo Finance is completely removed — its IPs are blocked on Railway.

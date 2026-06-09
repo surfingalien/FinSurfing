@@ -345,10 +345,10 @@ router.post('/analyze', brainLimit, async (req, res) => {
   let liveQuotes      = []
   let socialSnippet   = ''
 
-  const [quoteResult, socialResult] = await Promise.allSettled([
+  const port = process.env.PORT || 3001
+  const [quoteResult, socialResult, earningsResult] = await Promise.allSettled([
     (async () => {
-      const port = process.env.PORT || 3001
-      const r    = await fetch(
+      const r = await fetch(
         `http://127.0.0.1:${port}/api/quote?symbols=${universe.join(',')}`,
         { headers: fwdKeys(req), signal: AbortSignal.timeout(30_000) }
       )
@@ -356,6 +356,16 @@ router.post('/analyze', brainLimit, async (req, res) => {
       return qd?.quoteResponse?.result ?? []
     })(),
     getSocialSentiment(universe.slice(0, 5)),
+    // Fetch upcoming earnings dates for stock symbols only (not crypto/ETFs)
+    (async () => {
+      const stockSyms = universe.filter(s => !s.includes('-') && !s.includes('='))
+      if (!stockSyms.length) return null
+      const r = await fetch(
+        `http://127.0.0.1:${port}/api/earnings/calendar?symbols=${stockSyms.join(',')}`,
+        { headers: fwdKeys(req), signal: AbortSignal.timeout(10_000) }
+      )
+      return r.json()
+    })(),
   ])
 
   if (quoteResult.status === 'fulfilled') {
@@ -366,6 +376,19 @@ router.post('/analyze', brainLimit, async (req, res) => {
 
   if (socialResult.status === 'fulfilled') {
     socialSnippet = socialResult.value
+  }
+
+  // Build earnings catalyst snippet
+  let earningsSnippet = ''
+  if (earningsResult.status === 'fulfilled' && earningsResult.value?.upcoming?.length) {
+    const upcoming = earningsResult.value.upcoming.slice(0, 8)
+    earningsSnippet = '\n\nUPCOMING EARNINGS CATALYSTS (use to weight near-term risk/reward):\n'
+      + upcoming.map(e => {
+          const days = Math.round((new Date(e.nextEarningsDate) - Date.now()) / 86400000)
+          const urgency = days <= 7 ? '⚠️ IMMINENT' : days <= 21 ? '📅 Soon' : '📅'
+          const eps = e.epsEstimate ? ` · EPS est $${e.epsEstimate}` : ''
+          return `  ${urgency} ${e.symbol}: ${e.nextEarningsDate} (${days}d)${eps}`
+        }).join('\n')
   }
 
   const validQuotes = liveQuotes.filter(q => q?.regularMarketPrice != null && q.regularMarketPrice > 0)
@@ -391,7 +414,7 @@ Analyze this universe for a ${horizonLabel} horizon. Today is late May 2026.
 Universe: ${universe.join(', ')}
 Avoid holdings: ${holdingStr}
 ${scanMode.startsWith('mutualfunds') ? `\nNOTE: This universe contains mutual funds (category: ${scanMode === 'mutualfunds' ? 'Broad All-Category' : scanMode.replace('mutualfunds_','').toUpperCase()}). Score each fund on: (1) Fundamental = portfolio holdings quality, manager tenure & track record, alpha vs benchmark, (2) Technical = NAV trend, momentum, and performance relative to category peers, (3) Sentiment = fund flows, retail/institutional demand, manager commentary, (4) Macro = asset-class fit for current rate/growth/inflation regime, (5) Risk = expense ratio, max drawdown, concentration risk, redemption risk. Price targets refer to NAV zones. Omit stop-loss precision — use downside risk zones only.` : ''}${scanMode.startsWith('etfs_') ? `\nNOTE: This is an ETF sub-category scan (${scanMode.replace('etfs_','').toUpperCase()}). Scoring focus: (1) Fundamental = underlying index quality, holdings composition, expense ratio vs peers, (2) Technical = ETF price trend & momentum, discount/premium to NAV, options flow if available, (3) Sentiment = fund flows, AUM trend, institutional rotation signals, (4) Macro = how well this ETF category fits the current rate/sector/growth regime, (5) Risk = liquidity, tracking error, concentration, leverage if any.` : ''}${scanMode.startsWith('crypto_') ? `\nNOTE: This is a crypto sub-category scan (${scanMode.replace('crypto_','').toUpperCase()}). Scoring focus: (1) Fundamental = protocol TVL, revenue, developer activity, tokenomics, (2) Technical = price trend vs BTC, momentum, on-chain volume signal, (3) Sentiment = social dominance, whale flows, exchange inflows/outflows, (4) Macro = correlation to BTC cycle stage, risk-on/off regime, regulatory climate, (5) Risk = smart contract risk, liquidity depth, centralization risk. Consider current crypto market cycle phase.` : ''}${scanMode.startsWith('stocks_') ? `\nNOTE: This is a stock sector scan (GICS Sector: ${scanMode.replace('stocks_','').replace(/_/g,' ').toUpperCase()}). Scoring focus: (1) Fundamental = earnings growth, margins, valuation vs sector peers, balance sheet quality, (2) Technical = price trend, relative strength vs S&P 500, breakout/breakdown levels, (3) Sentiment = analyst upgrades/downgrades, short interest, insider activity, (4) Macro = sector-specific tailwinds/headwinds in the current rate/growth regime, (5) Risk = concentration risk, regulatory exposure, competitive moat strength.` : ''}
-${marketSnippet}
+${marketSnippet}${earningsSnippet}
 
 ⚠️ STRICT TOKEN BUDGET — respect every word limit or the response will be truncated.
 

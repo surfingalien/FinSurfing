@@ -55,13 +55,15 @@ Your mission: deliver timely, verified, and structured financial intelligence th
 
 ## Live Tools Available
 - scan_market: Run the 5-agent AI Brain to rank investment opportunities across stocks, ETFs, crypto (30+ scan universes, 3/6/12m horizons)
+- get_earnings_catalyst: Upcoming earnings date, EPS estimate, analyst consensus, and last 4 quarters of EPS surprise history
+- get_options_flow: Real-time options put/call ratio, implied volatility, and unusual activity (smart-money positioning signal)
 - get_recommendations: Get personalized buy signals using a named investor persona (Buffett, Dalio, Lynch, Burry, Wood, Marks, Soros, Greenblatt, Munger)
 - analyze_symbol: Deep technical + AI analysis — RSI, MACD, EMA9/21/50/200, Bollinger, VWAP, OBV, patterns, entry/stop/target zones
 - get_social_sentiment: Real-time Reddit sentiment (r/wallstreetbets, r/stocks, r/investing) for up to 5 tickers
 - get_macro: Current macroeconomic indicators (14 FRED series), regime assessment, rates/inflation/VIX/credit spreads
 
 ## Tool Routing Rules
-- User asks about a specific ticker → call analyze_symbol first; add get_social_sentiment if sentiment is relevant
+- User asks about a specific ticker → call analyze_symbol first; ALWAYS add get_earnings_catalyst to check for imminent catalysts; add get_options_flow for directional conviction; add get_social_sentiment if sentiment is relevant
 - User asks "top picks", "what to buy", "scan the market" → call scan_market
 - User asks for strategy recommendations by persona → call get_recommendations
 - User asks about macro, rates, inflation, VIX, regime → call get_macro
@@ -202,6 +204,28 @@ const TOOLS = [
     description: 'Get current macroeconomic indicators: interest rates, inflation, labor market, GDP, VIX, credit spreads, and AI-generated regime assessment.',
     input_schema: { type: 'object', properties: {} },
   },
+  {
+    name: 'get_earnings_catalyst',
+    description: 'Get upcoming earnings date, EPS estimate, analyst consensus, and last 4 quarters of EPS surprise history for a ticker. Use this before analyzing any stock to check if an earnings catalyst is imminent.',
+    input_schema: {
+      type: 'object',
+      required: ['symbol'],
+      properties: {
+        symbol: { type: 'string', description: 'Ticker symbol (e.g. AAPL, NVDA)' },
+      },
+    },
+  },
+  {
+    name: 'get_options_flow',
+    description: 'Get real-time options market data: put/call ratio, implied volatility, and unusual options activity (large bets vs open interest). Strong signal for smart-money positioning 1–3 weeks ahead.',
+    input_schema: {
+      type: 'object',
+      required: ['symbol'],
+      properties: {
+        symbol: { type: 'string', description: 'Ticker symbol (e.g. AAPL, TSLA)' },
+      },
+    },
+  },
 ]
 
 // ── Internal tool dispatcher ──────────────────────────────────────────────────
@@ -307,6 +331,88 @@ async function dispatchTool(name, input, req) {
       })
       const data = await r.json()
       return typeof data === 'string' ? data : (data.summary || JSON.stringify(data))
+    }
+
+    case 'get_earnings_catalyst': {
+      const sym = (input.symbol || '').toUpperCase().replace(/[^A-Z0-9.-]/g, '')
+      if (!sym) return 'No symbol provided.'
+
+      // Fetch upcoming date + EPS surprise history in parallel
+      const [dateRes, surpriseRes] = await Promise.allSettled([
+        fetch(`http://127.0.0.1:${port}/api/earnings/date?symbol=${sym}`, {
+          headers: fwdHeaders, signal: AbortSignal.timeout(10_000),
+        }).then(r => r.json()),
+        fetch(`http://127.0.0.1:${port}/api/earnings/positioning?symbols=${sym}`, {
+          headers: fwdHeaders, signal: AbortSignal.timeout(12_000),
+        }).then(r => r.json()),
+      ])
+
+      const dateData     = dateRes.status === 'fulfilled'     ? dateRes.value     : null
+      const surpriseData = surpriseRes.status === 'fulfilled' ? surpriseRes.value : null
+      const surprise     = surpriseData?.results?.[0] || surpriseData?.[0] || null
+
+      const daysUntil = dateData?.nextEarningsDate
+        ? Math.round((new Date(dateData.nextEarningsDate) - Date.now()) / 86400000)
+        : null
+
+      let lines = [`**${sym} Earnings Catalyst**`]
+
+      if (dateData?.nextEarningsDate) {
+        lines.push(`📅 Next Earnings: ${dateData.nextEarningsDate} (in ${daysUntil} days)`)
+        if (daysUntil <= 14) lines.push(`⚠️ IMMINENT — earnings in ≤14 days; elevated volatility risk`)
+      } else {
+        lines.push('📅 Next Earnings: Date not yet confirmed')
+      }
+
+      if (dateData?.epsEstimate) lines.push(`EPS Estimate: $${dateData.epsEstimate}`)
+      if (dateData?.revenueEstimate) lines.push(`Revenue Estimate: ${dateData.revenueEstimate}`)
+
+      if (surprise) {
+        const beatRate = surprise.beat_rate != null
+          ? `${Math.round(surprise.beat_rate * 100)}% (${surprise.beat_count}/${surprise.total_quarters} quarters)`
+          : 'N/A'
+        const avgSurprise = surprise.avg_eps_surprise_pct != null
+          ? `${surprise.avg_eps_surprise_pct > 0 ? '+' : ''}${surprise.avg_eps_surprise_pct.toFixed(1)}%`
+          : 'N/A'
+
+        lines.push(`\nEPS Beat Rate (last ${surprise.total_quarters}q): ${beatRate}`)
+        lines.push(`Avg EPS Surprise: ${avgSurprise}`)
+
+        if (surprise.recent_quarters?.length) {
+          lines.push('\nRecent EPS History:')
+          surprise.recent_quarters.slice(0, 4).forEach(q => {
+            if (!q.period) return
+            const sp = q.surprise_pct != null
+              ? ` (${q.surprise_pct > 0 ? '+' : ''}${q.surprise_pct.toFixed(1)}% surprise)`
+              : ''
+            lines.push(`  ${q.period}: actual $${q.actual ?? '?'} vs est $${q.estimate ?? '?'}${sp}`)
+          })
+        }
+      }
+
+      // Catalyst interpretation
+      if (daysUntil != null && daysUntil <= 21 && surprise?.avg_eps_surprise_pct > 5) {
+        lines.push('\n📊 Signal: Strong historical beat rate + imminent earnings = high-probability catalyst. Consider position sizing carefully.')
+      } else if (daysUntil != null && daysUntil <= 7) {
+        lines.push('\n📊 Signal: Earnings very close — options IV typically elevated. High binary risk event.')
+      }
+
+      return lines.join('\n') || `No earnings data available for ${sym}.`
+    }
+
+    case 'get_options_flow': {
+      const sym = (input.symbol || '').toUpperCase().replace(/[^A-Z0-9.-]/g, '')
+      if (!sym) return 'No symbol provided.'
+      try {
+        const r = await fetch(`http://127.0.0.1:${port}/api/options/flow?symbol=${sym}`, {
+          headers: fwdHeaders, signal: AbortSignal.timeout(12_000),
+        })
+        if (!r.ok) return `Options data unavailable for ${sym} (HTTP ${r.status})`
+        const data = await r.json()
+        return data.snippet || JSON.stringify(data)
+      } catch (e) {
+        return `Options flow fetch failed for ${sym}: ${e.message}`
+      }
     }
 
     default:
