@@ -16,14 +16,55 @@ cat > ~/.openbb_platform/user_settings.json <<EOF
 }
 EOF
 
-echo "[start.sh] settings written, discovering installed modules..."
-python -c "import openbb_platform_api; print('[start.sh] openbb_platform_api found at', openbb_platform_api.__file__)"
-
 HOST="${OPENBB_HOST:-0.0.0.0}"
 PORT="${PORT:-${OPENBB_PORT:-6900}}"
 
-echo "[start.sh] starting uvicorn on $HOST:$PORT"
-exec python -m uvicorn openbb_platform_api.main:app \
+echo "[start.sh] HOST=$HOST PORT=$PORT"
+
+# Discover the correct app entry point at runtime
+APP_MODULE=""
+python - <<'PYEOF'
+import sys
+attempts = [
+    ("openbb_platform_api.main", "app"),
+    ("openbb_platform_api.app", "app"),
+    ("openbb_core.api.rest_api", "app"),
+    ("openbb_platform_api", "app"),
+]
+for mod, attr in attempts:
+    try:
+        m = __import__(mod, fromlist=[attr])
+        getattr(m, attr)
+        print(f"{mod}:{attr}")
+        sys.exit(0)
+    except Exception as e:
+        print(f"[skip] {mod}:{attr} — {e}", file=sys.stderr)
+print("ERROR: no valid app module found", file=sys.stderr)
+sys.exit(1)
+PYEOF
+
+APP_MODULE=$(python - <<'PYEOF'
+import sys
+attempts = [
+    ("openbb_platform_api.main", "app"),
+    ("openbb_platform_api.app", "app"),
+    ("openbb_core.api.rest_api", "app"),
+    ("openbb_platform_api", "app"),
+]
+for mod, attr in attempts:
+    try:
+        m = __import__(mod, fromlist=[attr])
+        getattr(m, attr)
+        print(f"{mod}:{attr}")
+        sys.exit(0)
+    except Exception:
+        pass
+sys.exit(1)
+PYEOF
+)
+
+echo "[start.sh] using app module: $APP_MODULE"
+exec python -m uvicorn "$APP_MODULE" \
   --host "$HOST" \
   --port "$PORT" \
   --workers 1
