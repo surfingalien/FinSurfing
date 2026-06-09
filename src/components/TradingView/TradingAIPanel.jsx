@@ -24,6 +24,7 @@ import {
   ThumbsDown,
 } from 'lucide-react'
 import { getApiKeyHeaders } from '../../services/api'
+import { useAuth } from '../../contexts/AuthContext'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -111,6 +112,7 @@ function IndicatorRow({ label, value, colorClass, even }) {
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function TradingAIPanel({ symbol, interval, price }) {
+  const { accessToken } = useAuth()
   const [tab, setTab] = useState('analysis')
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState(null)
@@ -148,9 +150,10 @@ export default function TradingAIPanel({ symbol, interval, price }) {
         } catch { /* server will fall back to bar close */ }
       }
 
+      const authHeader = accessToken ? { Authorization: `Bearer ${accessToken}` } : {}
       const res = await fetch('/api/trading-analysis/analyze', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...getApiKeyHeaders() },
+        headers: { 'Content-Type': 'application/json', ...getApiKeyHeaders(), ...authHeader },
         body: JSON.stringify({ symbol, interval, livePrice }),
       })
       const data = await res.json()
@@ -219,7 +222,7 @@ export default function TradingAIPanel({ symbol, interval, price }) {
     try {
       const res = await fetch('/api/trading-analysis/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}) },
         body: JSON.stringify({
           message: msg,
           symbol,

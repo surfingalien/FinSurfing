@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import { Bot, X, Send, ChevronDown, Loader2, Zap, TrendingUp, BarChart2, Globe } from 'lucide-react'
 import { useApiKeys } from '../../contexts/ApiKeysContext'
+import { useAuth } from '../../contexts/AuthContext'
 
 const WELCOME = `Hi! I'm **FinSurf Copilot** — your AI analyst with live market access.
 
@@ -95,6 +96,7 @@ export default function FinSurfCopilot({ portfolio = [], watchlist = [] }) {
   const inputRef = useRef(null)
   const abortRef = useRef(null)
   const { keys } = useApiKeys?.() ?? { keys: {} }
+  const { accessToken } = useAuth?.() ?? {}
   const activeProvider = PROVIDERS.find(p => p.id === providerId) || PROVIDERS[0]
 
   useEffect(() => {
@@ -129,6 +131,7 @@ export default function FinSurfCopilot({ portfolio = [], watchlist = [] }) {
       for (const [k, v] of Object.entries(keys || {})) {
         if (v) extraHeaders[`x-${k.toLowerCase()}-key`] = v
       }
+      if (accessToken) extraHeaders['Authorization'] = `Bearer ${accessToken}`
 
       const r = await fetch('/api/copilot/chat', {
         method: 'POST',
@@ -196,7 +199,7 @@ export default function FinSurfCopilot({ portfolio = [], watchlist = [] }) {
       setStreaming(false)
       setActiveTools([])
     }
-  }, [input, messages, streaming, portfolio, watchlist, keys])
+  }, [input, messages, streaming, portfolio, watchlist, keys, accessToken])
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() }
