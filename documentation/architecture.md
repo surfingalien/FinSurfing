@@ -32,9 +32,10 @@ Express (:3001 prod / :3001 dev)
   ├── /api/portfolios/*     Portfolio CRUD (requireAuth)
   ├── /api/quote,/chart     Market data cascade (unauthenticated, rate-limited)
   ├── /api/trading-analysis AI technical analysis (requireAuth)
-  ├── /api/copilot/*        Streaming agentic chat (unauthenticated, rate-limited)
-  ├── /api/ai-brain/*       Multi-agent market scanner (unauthenticated, rate-limited)
-  ├── /api/recommendations  Persona-based picks (unauthenticated)
+  ├── /api/copilot/*        Streaming agentic chat (requireAuth, rate-limited)
+  ├── /api/ai-brain/*       Multi-agent market scanner (requireAuth on /analyze, rate-limited)
+  ├── /api/market-focus/*   Intraday session focus (GET public cache; POST /refresh requireAuth)
+  ├── /api/recommendations  Persona-based picks (requireAuth)
   ├── /api/macro/*          FRED macroeconomic data (unauthenticated)
   ├── /api/scheduler/*      Job management — requireAuth + requireAdmin on write routes
   └── /* (SPA fallback)     dist/index.html
