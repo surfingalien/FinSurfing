@@ -41,6 +41,23 @@ router.patch('/jobs/:id', requireAuth, requireAdmin, (req, res) => {
   res.json({ ok: true })
 })
 
+// Test email — sends a plain diagnostic email to MORNING_BRIEF_EMAIL/ADMIN_EMAIL
+router.post('/test-email', requireAuth, requireAdmin, async (req, res) => {
+  const recipient = process.env.MORNING_BRIEF_EMAIL || process.env.ADMIN_EMAIL
+  if (!recipient) return res.status(400).json({ error: 'MORNING_BRIEF_EMAIL or ADMIN_EMAIL not set' })
+  const { sendEmail } = require('../lib/email')
+  try {
+    const delivered = await sendEmail({
+      to:      recipient,
+      subject: 'FinSurf — email delivery test',
+      html:    `<p>Test email sent at ${new Date().toISOString()}. If you see this, email delivery is working.</p>`,
+    })
+    res.json({ ok: true, delivered, recipient, emailService: delivered ? 'ok' : 'none-configured (console only)' })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
 // Cached result endpoints — read-only, no auth needed for internal UI use
 router.get('/cache/scan',    (req, res) => res.json(getJobs().getCachedScan()    || { data: null }))
 router.get('/cache/digest',  (req, res) => res.json(getJobs().getCachedDigest()  || { results: [] }))
