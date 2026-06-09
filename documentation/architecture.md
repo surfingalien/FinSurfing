@@ -31,12 +31,12 @@ Express (:3001 prod / :3001 dev)
   ├── /api/auth/*           JWT auth (register, login, refresh, OTP)
   ├── /api/portfolios/*     Portfolio CRUD (requireAuth)
   ├── /api/quote,/chart     Market data cascade (unauthenticated, rate-limited)
-  ├── /api/trading-analysis AI technical analysis (optionalAuth)
+  ├── /api/trading-analysis AI technical analysis (requireAuth)
   ├── /api/copilot/*        Streaming agentic chat (unauthenticated, rate-limited)
-  ├── /api/ai-brain/*       Multi-agent market scanner (unauthenticated)
+  ├── /api/ai-brain/*       Multi-agent market scanner (unauthenticated, rate-limited)
   ├── /api/recommendations  Persona-based picks (unauthenticated)
   ├── /api/macro/*          FRED macroeconomic data (unauthenticated)
-  ├── /api/scheduler/*      Job management — NO auth (see security notes)
+  ├── /api/scheduler/*      Job management — requireAuth + requireAdmin on write routes
   └── /* (SPA fallback)     dist/index.html
 ```
 
@@ -48,7 +48,7 @@ Express (:3001 prod / :3001 dev)
 4. Access token expires in 15 min → client calls `POST /api/auth/refresh` → rotate refresh token, issue new access token
 5. `POST /api/auth/logout` → revoke refresh token
 
-**JWT secret**: `process.env.JWT_SECRET` — if unset, falls back to hardcoded string in `middleware/auth.js`. **This fallback must not be used in production.**
+**JWT secret**: `process.env.JWT_SECRET` — server calls `process.exit(1)` on startup if unset in production. No fallback secret is used in production.
 
 ## Trust Boundaries
 
@@ -58,8 +58,8 @@ Express (:3001 prod / :3001 dev)
 | Express → Postgres | Trusted (same Railway project) | Parameterized queries only |
 | Express → External APIs | Semi-trusted (HTTPS) | API keys from env vars |
 | Express → Claude/Groq | Semi-trusted | User-controlled content reaches LLM prompts |
-| Internal loopback calls | Trusted by `x-internal: '1'` header | **Forgeable** — see security notes |
-| Scheduler → Internal API | Trusted | Same process loopback; no auth enforced on scheduler trigger route |
+| Internal loopback calls | Trusted by loopback socket address (127.0.0.1 / ::1) | Rate limit skip checks `req.socket.remoteAddress`, not a forgeable header |
+| Scheduler → Internal API | Trusted | Same process loopback; write routes require admin auth |
 
 ## Market Data Pipeline
 
@@ -75,11 +75,16 @@ Cache TTLs: quotes 5 s (market hours) / 10 min (off-hours); charts 15 min; prev-
 ## Known Risks / Assumptions
 
 - **In-memory mode**: All user data (portfolios, holdings, sessions) lost on server restart. Railway ephemeral containers make this the default without `DATABASE_URL`.
-- **`x-internal` header**: Used to skip rate limits and trust scheduler calls; forgeable from outside — any caller can set it.
-- **Scheduler routes unauthenticated**: `POST /api/scheduler/jobs/:id/trigger` requires no auth — anyone can trigger AI Brain scans (paid Claude calls) or morning-brief emails.
-- **JWT fallback secret**: Hardcoded in `middleware/auth.js:6`; tokens signed with it are forgeable by anyone who reads the source.
+- **No DB-level RLS**: Portfolio ownership enforced in application code only (`user_id` filter in queries). A missing filter in a new route would expose all users' data. No PostgreSQL row-level security.
 - **CORS dev bypass**: `origin: PROD ? ALLOWED_ORIGINS : true` — if `NODE_ENV` is not `'production'` on Railway, CORS accepts all origins.
-- **Demo mode OTP exposure**: When no SMTP is configured, `demoCode` is returned in the register/verify-email API response body — intended for local dev, risk if accidentally active in production.
+- **No per-user AI spend cap**: Rate limits are IP-based only; authenticated users can exhaust AI API budget within the limit window.
+
+*Previously documented risks now fixed (as of June 2026):*
+- ~~`x-internal` header forgeable~~ → loopback IP check
+- ~~Scheduler routes unauthenticated~~ → `requireAuth + requireAdmin`
+- ~~JWT fallback secret~~ → `process.exit(1)` if `JWT_SECRET` unset in production
+- ~~SSRF via `providerState.baseUrl`~~ → `baseUrl` always taken from `PROVIDER_DEFAULTS`
+- ~~Demo mode OTP returned in production~~ → suppressed when `NODE_ENV=production`
 
 ## Related Documents
 
