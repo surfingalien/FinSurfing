@@ -49,6 +49,7 @@ function buildGroups(user, triggeredCount) {
     {
       label: 'AI Tools',
       items: [
+        { id: 'market-focus',    label: 'Market Focus',   icon: Radio,     tag: 'LIVE' },
         { id: 'ai-brain',        label: 'AI Brain',      icon: Brain },
         { id: 'buy-signals',     label: 'AI Buy Signals', icon: Sparkles },
         { id: 'ai-watchlist',    label: 'AI Watchlist',   icon: Bookmark },
@@ -137,6 +138,11 @@ function NavItem({ tab, active, collapsed, onClick }) {
     >
       <Icon className={`w-4 h-4 shrink-0 transition-opacity ${active ? '' : 'opacity-70 group-hover:opacity-100'}`} />
       {!collapsed && <span className="truncate">{tab.label}</span>}
+      {!collapsed && tab.tag && (
+        <span className="ml-auto text-[8px] font-bold px-1.5 py-0.5 rounded bg-[#00ffcc]/15 text-[#00ffcc] border border-[#00ffcc]/25 animate-pulse">
+          {tab.tag}
+        </span>
+      )}
       {tab.badge > 0 && (
         <span className={`
           ${collapsed ? 'absolute top-1 right-1' : 'ml-auto'}
