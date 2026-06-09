@@ -36,12 +36,10 @@ function extractJsDoc(src) {
 }
 
 function extractRequires(src) {
-  // Match require('../lib/xxx') and require('./lib/xxx')
   const re = /require\s*\(\s*['"](?:\.\.\/|\.\/)((?:lib|routes)\/[\w-]+)['"]\s*\)/g
   const deps = new Set()
   let m
   while ((m = re.exec(src)) !== null) {
-    // 'lib/alt-data' → 'lib:alt-data'
     deps.add(m[1].replace(/^(lib|routes)\//, '$1:'))
   }
   return [...deps]
@@ -53,7 +51,7 @@ function buildGraph() {
   const nodes   = []
   const edges   = []
   const seen    = new Set()
-  const depMap  = {}   // nodeId → [dep nodeId, ...]
+  const depMap  = {}
 
   function addNode(id, label, type, meta = {}) {
     if (seen.has(id)) return
@@ -68,7 +66,6 @@ function buildGraph() {
     }
   }
 
-  // ── Routes ──
   let routeFiles = []
   try { routeFiles = fs.readdirSync(path.join(ROOT, 'routes')).filter(f => f.endsWith('.js')) } catch {}
 
@@ -83,7 +80,6 @@ function buildGraph() {
     depMap[id] = deps
   }
 
-  // ── Libs ──
   let libFiles = []
   try { libFiles = fs.readdirSync(path.join(ROOT, 'lib')).filter(f => f.endsWith('.js')) } catch {}
 
@@ -98,7 +94,6 @@ function buildGraph() {
     depMap[id] = deps
   }
 
-  // ── Components ──
   let compDirs = []
   try { compDirs = fs.readdirSync(path.join(ROOT, 'src/components')) } catch {}
 
@@ -120,14 +115,12 @@ function buildGraph() {
     } catch {}
   }
 
-  // ── Auto-detected edges from require() scanning ──
   for (const [sourceId, deps] of Object.entries(depMap)) {
     for (const dep of deps) {
       addEdge(sourceId, dep, 'imports')
     }
   }
 
-  // ── Explicit component→route edges ──
   const COMP_ROUTE = [
     ['component:Copilot',         'route:copilot',          'calls'],
     ['component:AIBrain',         'route:ai-brain',         'calls'],
@@ -149,7 +142,6 @@ function buildGraph() {
   return { nodes, edges, generatedAt: new Date().toISOString() }
 }
 
-// ── 5-minute cache ─────────────────────────────────────────────────────────────
 let _cache   = null
 let _cacheAt = 0
 
@@ -159,8 +151,6 @@ function getGraph() {
   _cacheAt = Date.now()
   return _cache
 }
-
-// ── Endpoints ─────────────────────────────────────────────────────────────────
 
 router.get('/graph', (_req, res) => {
   try {

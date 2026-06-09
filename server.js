@@ -35,7 +35,7 @@ const marketIntelRoutes     = require('./routes/market-intel')
 const alertsRoutes          = require('./routes/alerts')
 const backtestQueueRoutes   = require('./routes/backtest-queue')
 const agenticOsRoutes       = require('./routes/agentic-os')
-
+const optionsFlowRoutes     = require('./routes/options-flow')
 
 const { seedAdminDB } = require('./db/adminSeed')
 
@@ -198,6 +198,31 @@ app.use('/api/market-intel',   marketIntelRoutes)
 app.use('/api/alerts',         alertsRoutes)
 app.use('/api/backtest/queue', backtestQueueRoutes)
 app.use('/api/agentic-os',     agenticOsRoutes)
+app.use('/api/options',        optionsFlowRoutes)
+
+// ── OpenBB sidecar proxy ──────────────────────────────────────────────────────
+const OPENBB_URL = process.env.OPENBB_URL
+async function proxyOpenBB(req, res) {
+  const target = `${OPENBB_URL}${req.path}${req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : ''}`
+  try {
+    const r = await fetch(target, { signal: AbortSignal.timeout(15000) })
+    const ct = r.headers.get('content-type') || 'application/json'
+    res.status(r.status).set('content-type', ct).send(await r.text())
+  } catch (e) {
+    res.status(502).json({ error: 'OpenBB sidecar unavailable', detail: e.message })
+  }
+}
+if (OPENBB_URL) {
+  app.get('/api/openbb/status', async (req, res) => {
+    try {
+      const r = await fetch(`${OPENBB_URL}/api/v1/user`, { signal: AbortSignal.timeout(5000) })
+      res.json({ ok: r.ok, status: r.status })
+    } catch (e) { res.status(503).json({ ok: false, error: e.message }) }
+  })
+  app.use('/api/openbb', proxyOpenBB)
+} else {
+  app.use('/api/openbb', (req, res) => res.status(503).json({ error: 'OpenBB sidecar not configured', hint: 'Set OPENBB_URL env var to the sidecar service URL' }))
+}
 
 /* ── Market data helpers (AISA primary → Finnhub → FMP fallback) ─────────────
    Yahoo Finance is completely removed — its IPs are blocked on Railway.
@@ -395,6 +420,7 @@ async function getAISAQuotes(symbols, keys = {}) {
           regularMarketDayLow:        d.day_low             ?? null,
           regularMarketOpen:          d.open                ?? null,
           regularMarketPreviousClose: d.previous_close      ?? null,
+          regularMarketTime:          Math.floor(Date.now() / 1000),
           fiftyTwoWeekHigh:           d.week_52_high        ?? null,
           fiftyTwoWeekLow:            d.week_52_low         ?? null,
           marketCap:                  d.market_cap          ?? null,
@@ -1183,6 +1209,7 @@ async function getNasdaqQuotes(symbols) {
         const hi52 = parseFloat((keyStats.FiftyTwoWeekHighLow?.value || '').split('/')[0]?.replace(/[^0-9.]/g, ''))
         const lo52 = parseFloat((keyStats.FiftyTwoWeekHighLow?.value || '').split('/')[1]?.replace(/[^0-9.]/g, ''))
 
+        const prevCloseNasdaq = rawChange != null ? +(rawPrice - rawChange).toFixed(4) : null
         console.log(`[Nasdaq quote] ${sym}: $${rawPrice}`)
         return {
           symbol:                     sym,
@@ -1190,6 +1217,8 @@ async function getNasdaqQuotes(symbols) {
           regularMarketPrice:         rawPrice,
           regularMarketChange:        rawChange || null,
           regularMarketChangePercent: rawPct    || null,
+          regularMarketPreviousClose: prevCloseNasdaq,
+          regularMarketTime:          Math.floor(Date.now() / 1000),
           regularMarketVolume:        parseInt((primary.volume || '0').replace(/,/g, '')) || null,
           fiftyTwoWeekHigh:           isNaN(hi52) ? null : hi52,
           fiftyTwoWeekLow:            isNaN(lo52) ? null : lo52,

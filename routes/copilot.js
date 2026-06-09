@@ -59,9 +59,11 @@ Your mission: deliver timely, verified, and structured financial intelligence th
 - analyze_symbol: Deep technical + AI analysis — RSI, MACD, EMA9/21/50/200, Bollinger, VWAP, OBV, patterns, entry/stop/target zones
 - get_social_sentiment: Real-time Reddit sentiment (r/wallstreetbets, r/stocks, r/investing) for up to 5 tickers
 - get_macro: Current macroeconomic indicators (14 FRED series), regime assessment, rates/inflation/VIX/credit spreads
+- get_earnings_catalyst: Upcoming earnings date, EPS estimate, and surprise history for a symbol — use to flag near-term catalysts
+- get_options_flow: Put/Call ratio, ATM implied volatility, and unusual options activity — use to confirm directional conviction
 
 ## Tool Routing Rules
-- User asks about a specific ticker → call analyze_symbol first; add get_social_sentiment if sentiment is relevant
+- User asks about a specific ticker → call analyze_symbol first; ALWAYS add get_earnings_catalyst to check for imminent catalysts; add get_options_flow for directional conviction
 - User asks "top picks", "what to buy", "scan the market" → call scan_market
 - User asks for strategy recommendations by persona → call get_recommendations
 - User asks about macro, rates, inflation, VIX, regime → call get_macro
@@ -112,7 +114,14 @@ Tools provide live data from: internal AI Brain (5 agents), Reddit APIs, FRED ma
 - Always end high-conviction outputs with: "Not financial advice — consult a qualified professional. Past performance does not guarantee future results."
 - Present both bull and bear cases; surface contradictions and risks
 - Format numbers: prices in $, percentages with %, scores /100
-- Respect the user's portfolio — avoid suggesting stocks they already hold`
+- Respect the user's portfolio — avoid suggesting stocks they already hold
+
+## CRITICAL — Real-Time Data Rules
+- NEVER quote a stock price, support level, resistance level, or price target from your training data
+- ALL price references MUST come from the analyze_symbol tool result — the tool fetches live market data
+- If a user asks about a specific ticker, you MUST call analyze_symbol FIRST before saying anything about price levels
+- The tool result includes "Current Price" — always use that exact figure, never a memorized price
+- Your training data prices are months or years out of date — using them will mislead users`
 
 const TOOLS = [
   {
@@ -195,6 +204,24 @@ const TOOLS = [
     description: 'Get current macroeconomic indicators: interest rates, inflation, labor market, GDP, VIX, credit spreads, and AI-generated regime assessment.',
     input_schema: { type: 'object', properties: {} },
   },
+  {
+    name: 'get_earnings_catalyst',
+    description: 'Get upcoming earnings date, consensus EPS estimate, and recent earnings surprise history for a single ticker. Use to flag near-term catalyst risk/opportunity.',
+    input_schema: {
+      type: 'object',
+      required: ['symbol'],
+      properties: { symbol: { type: 'string', description: 'Ticker symbol' } },
+    },
+  },
+  {
+    name: 'get_options_flow',
+    description: 'Get put/call ratio, ATM implied volatility, and unusual options activity for a ticker. Use to confirm directional conviction from the options market.',
+    input_schema: {
+      type: 'object',
+      required: ['symbol'],
+      properties: { symbol: { type: 'string', description: 'Ticker symbol' } },
+    },
+  },
 ]
 
 // ── Internal tool dispatcher ──────────────────────────────────────────────────
@@ -250,18 +277,33 @@ async function dispatchTool(name, input, req) {
     case 'analyze_symbol': {
       const sym = encodeURIComponent(input.symbol || '')
       const interval = input.interval || '1d'
+
+      // Pre-fetch live quote so trading-analysis uses current price, not stale bar close
+      let clientLivePrice = null
+      try {
+        const qr = await fetch(
+          `http://127.0.0.1:${port}/api/quote?symbols=${sym}`,
+          { headers: fwdHeaders, signal: AbortSignal.timeout(5000) }
+        )
+        const qd = await qr.json()
+        const lp = qd?.quoteResponse?.result?.[0]?.regularMarketPrice
+        if (lp && lp > 0) clientLivePrice = lp
+      } catch { /* proceed without live price */ }
+
       const [r, altSnippet] = await Promise.all([
         fetch(`http://127.0.0.1:${port}/api/trading-analysis/analyze?symbol=${sym}&interval=${interval}`, {
           method: 'POST', headers: fwdHeaders,
-          body: JSON.stringify({}),
+          body: JSON.stringify({ clientLivePrice }),
           signal: AbortSignal.timeout(30_000),
         }),
         getAltData(input.symbol || ''),
       ])
       const data = await r.json()
       if (!data.signal) return `Analysis failed for ${input.symbol}: ${data.error || 'unknown error'}`
+      const livePrice = clientLivePrice || data.entry
       return (
-        `**${input.symbol}** — Signal: **${data.signal}** (${data.confidence}% confidence)\n` +
+        `**${input.symbol}** [LIVE PRICE: $${livePrice}] — Signal: **${data.signal}** (${data.confidence}% confidence)\n` +
+        `Current Price: $${livePrice} (use THIS price — do not use any other price)\n` +
         `Trend: ${data.trend} · Risk/Reward: ${data.riskReward?.toFixed(1)}:1\n` +
         `Entry $${data.entry} (zone $${data.entryZoneLow}–$${data.entryZoneHigh})\n` +
         `Stop $${data.stopLoss} · Target $${data.takeProfit?.[0]}–$${data.takeProfit?.[1]}\n\n` +
@@ -285,6 +327,27 @@ async function dispatchTool(name, input, req) {
       })
       const data = await r.json()
       return typeof data === 'string' ? data : (data.summary || JSON.stringify(data))
+    }
+
+    case 'get_earnings_catalyst': {
+      const sym = input.symbol?.toUpperCase()
+      const [dateR, posR] = await Promise.allSettled([
+        fetch(`http://127.0.0.1:${port}/api/earnings/date?symbol=${sym}`, { headers: fwdHeaders, signal: AbortSignal.timeout(10_000) }),
+        fetch(`http://127.0.0.1:${port}/api/earnings/positioning?symbol=${sym}`, { headers: fwdHeaders, signal: AbortSignal.timeout(10_000) }),
+      ])
+      const dateData = dateR.status === 'fulfilled' && dateR.value.ok ? await dateR.value.json() : {}
+      const posData = posR.status === 'fulfilled' && posR.value.ok ? await posR.value.json() : {}
+      return JSON.stringify({ symbol: sym, nextEarnings: dateData, positioning: posData })
+    }
+
+    case 'get_options_flow': {
+      const sym = input.symbol?.toUpperCase()
+      const r = await fetch(`http://127.0.0.1:${port}/api/options/flow?symbol=${sym}`, {
+        headers: fwdHeaders,
+        signal: AbortSignal.timeout(10_000),
+      })
+      const data = r.ok ? await r.json() : { snippet: 'Options flow unavailable' }
+      return data.snippet || JSON.stringify(data)
     }
 
     default:
