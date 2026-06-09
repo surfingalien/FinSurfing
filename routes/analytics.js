@@ -153,12 +153,12 @@ router.get('/portfolio', async (req, res) => {
       const portfolioId = pRes.rows[0]?.id
       if (portfolioId) {
         const hRes = await query(
-          `SELECT symbol, sector, shares, avg_cost FROM holdings WHERE portfolio_id = $1`,
+          `SELECT symbol, sector, shares, avg_cost_basis FROM holdings WHERE portfolio_id = $1`,
           [portfolioId]
         )
         for (const h of hRes.rows) {
           symbols.push(h.symbol)
-          holdingMeta[h.symbol] = { sector: h.sector || 'Unknown', shares: parseFloat(h.shares), avgCost: parseFloat(h.avg_cost || 0) }
+          holdingMeta[h.symbol] = { sector: h.sector || 'Unknown', shares: parseFloat(h.shares), avgCost: parseFloat(h.avg_cost_basis || 0) }
         }
       }
     } catch (err) {

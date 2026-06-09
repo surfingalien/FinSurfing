@@ -635,7 +635,9 @@ router.post('/chat', chatLimit, async (req, res) => {
     const providerKey = (providerId || 'claude').toLowerCase()
     const defaults = PROVIDER_DEFAULTS[providerKey] || PROVIDER_DEFAULTS.claude
     const model = providerState.model || defaults.model
-    const baseUrl = providerState.baseUrl || defaults.baseUrl
+    // baseUrl is always taken from server-side PROVIDER_DEFAULTS — never from the
+    // client-supplied providerState, which would allow SSRF and API key theft.
+    const baseUrl = defaults.baseUrl
 
     if (providerKey === 'groq' || providerKey === 'codex') {
       const apiKey = providerKey === 'groq' ? process.env.GROQ_API_KEY : process.env.OPENAI_API_KEY
