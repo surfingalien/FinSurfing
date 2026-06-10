@@ -11,7 +11,7 @@ import {
   TrendingUp, SlidersHorizontal, GitBranch, Bell, Bot,
   ShieldCheck, Activity, FlaskConical, BarChart3, Sparkles,
   Brain, Bookmark, Monitor, BookOpen, Globe, Target,
-  Network, Clock, Radio, BrainCircuit,
+  Network, Clock, Radio, BrainCircuit, FolderOpen,
 } from 'lucide-react'
 
 // ── Sidebar nav groups ────────────────────────────────────────────────────────
@@ -85,6 +85,9 @@ export const ALL_TABS = new Set([
 ])
 
 // Flat command list for the palette: [{ id, label, icon, group }]
-export const NAV_COMMANDS = NAV_GROUPS.flatMap(g =>
-  g.items.map(i => ({ ...i, group: g.label }))
-)
+// Includes routes reachable outside the sidebar groups (admin stays hidden —
+// it's role-gated and the route itself rejects non-admins)
+export const NAV_COMMANDS = [
+  ...NAV_GROUPS.flatMap(g => g.items.map(i => ({ ...i, group: g.label }))),
+  { id: 'portfolios', label: 'Manage Portfolios', icon: FolderOpen, group: 'Account' },
+]

@@ -300,7 +300,7 @@ function fmtQuote(q) {
 // Fetch daily bars per symbol and compute one-line TA summaries for the prompt.
 // Concurrency-limited so a 20-symbol scan doesn't stampede the data providers.
 async function fetchTaSnapshot(universe, headers, port) {
-  const lines = []
+  const bySymbol = new Map()
   const queue = [...universe]
   const workers = Array.from({ length: 5 }, async () => {
     while (queue.length) {
@@ -324,13 +324,18 @@ async function fetchTaSnapshot(universe, headers, port) {
           bars.map(b => b.o ?? b.c), bars.map(b => b.h ?? b.c),
           bars.map(b => b.l ?? b.c), bars.map(b => b.c), bars.map(b => b.v),
         )
-        if (line) lines.push(line)
+        if (line) bySymbol.set(sym, line)
       } catch { /* missing TA for one symbol is non-fatal */ }
     }
   })
-  await Promise.all(workers)
+  // Overall time budget: return whatever resolved by 20s rather than letting a
+  // slow provider stall the whole user-facing scan
+  await Promise.race([
+    Promise.all(workers),
+    new Promise(resolve => setTimeout(resolve, 20_000)),
+  ])
   // Preserve universe order for deterministic prompts
-  return universe.map(s => lines.find(l => l.startsWith(s + ':'))).filter(Boolean)
+  return universe.map(s => bySymbol.get(s)).filter(Boolean)
 }
 
 // Write a prediction record for future win-rate tracking
@@ -351,6 +356,8 @@ function logPrediction(symbol, agents, zones, generatedAt) {
       // true = both models picked it with matching verdict; false = primary-only
       // pick during an ensemble scan; null = no ensemble ran
       ensembleConfirmed: agents.ensemble ? (agents.ensemble.confirmed && agents.ensemble.verdictMatch === true) : null,
+      entryZoneLow:      zones?.entryZoneLow  ?? null,
+      entryZoneHigh:     zones?.entryZoneHigh ?? null,
       entryZoneMid:      zones?.entryZoneLow != null ? (zones.entryZoneLow + zones.entryZoneHigh) / 2 : null,
       targetZoneMid:     zones?.targetZoneLow != null ? (zones.targetZoneLow + zones.targetZoneHigh) / 2 : null,
       verdict:           agents.agentVerdict,
