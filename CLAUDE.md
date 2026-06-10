@@ -12,7 +12,7 @@ React18+Vite SPA → Express API proxy. Dev: Vite proxies `/api/*` → :3001. Pr
 - `auth.js` — JWT in-memory + HTTP-only refresh cookie
 - `market.js` — quote/search/chart, multi-provider fallback
 - `portfolio.js` — CRUD holdings; Postgres → in-memory memstore fallback
-- `ai-brain.js` — market scanner; Claude primary + Groq `llama-3.3-70b-versatile` fallback; circuit breaker `getBreaker()`
+- `ai-brain.js` — market scanner; Claude primary + Groq `llama-3.3-70b-versatile` fallback; circuit breaker `getBreaker()`; when `GROQ_API_KEY` set, both models scan independently in parallel — per-pick `ensemble` agreement annotated in response + `ensembleConfirmed` logged for calibration; scans inject COMPUTED TECHNICALS via `lib/technical-indicators.js`
 - `trading-analysis.js` — per-symbol AI; Claude `claude-sonnet-4-6`
 - `recommendations.js` — AI Advisory; Claude primary + Groq fallback; accepts `persona` (see `lib/investor-personas.js`) + `includeMacro` body params; GET `/personas` returns persona list
 - `macro.js` — FRED macro indicators (14 series); requires `FRED_API_KEY` env var; 1h cache; `getIndicators()` exported for prompt injection

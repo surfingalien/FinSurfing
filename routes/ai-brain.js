@@ -348,6 +348,9 @@ function logPrediction(symbol, agents, zones, generatedAt) {
       compositeScore:    agents.compositeScore,
       confidence:        agents.confidence ?? null,
       priceAtPrediction: agents.currentPrice ?? null,
+      // true = both models picked it with matching verdict; false = primary-only
+      // pick during an ensemble scan; null = no ensemble ran
+      ensembleConfirmed: agents.ensemble ? (agents.ensemble.confirmed && agents.ensemble.verdictMatch === true) : null,
       entryZoneMid:      zones?.entryZoneLow != null ? (zones.entryZoneLow + zones.entryZoneHigh) / 2 : null,
       targetZoneMid:     zones?.targetZoneLow != null ? (zones.targetZoneLow + zones.targetZoneHigh) / 2 : null,
       verdict:           agents.agentVerdict,
@@ -545,14 +548,31 @@ Rules:
 - dataSource: "live" if snapshot provided, else "knowledge"
 - STRICTLY respect all ≤N word limits`
 
-  // ── Sub-agent 2: signal generation via ai-router (Claude + Groq fallback) ────
-  let raw     = ''
-  let llmUsed = 'claude'
+  // ── Sub-agent 2: signal generation ───────────────────────────────────────────
+  // When Groq is configured, both models scan INDEPENDENTLY in parallel and
+  // cross-model agreement becomes a signal (logged for calibration tracking).
+  // Claude remains primary; a failed second opinion never fails the scan.
+  let raw        = ''
+  let llmUsed    = 'claude'
+  let secondText = null
 
   try {
-    const result = await aiRouter.call({ prompt, maxTokens: 16000, symbols: universe })
-    raw     = result.text
-    llmUsed = result.llmUsed
+    if (process.env.GROQ_API_KEY) {
+      const [pri, sec] = await Promise.allSettled([
+        aiRouter.call({ prompt, maxTokens: 16000, symbols: universe }),
+        aiRouter.callGroq({ prompt, maxTokens: 16000, symbols: universe }),
+      ])
+      if (pri.status === 'rejected') throw pri.reason
+      raw     = pri.value.text
+      llmUsed = pri.value.llmUsed
+      // If Claude was overloaded and fell back to Groq, the "second opinion"
+      // is the same model — agreement would be meaningless, so skip it.
+      if (sec.status === 'fulfilled' && llmUsed !== 'groq') secondText = sec.value.text
+    } else {
+      const result = await aiRouter.call({ prompt, maxTokens: 16000, symbols: universe })
+      raw     = result.text
+      llmUsed = result.llmUsed
+    }
   } catch (err) {
     if (err instanceof CircuitOpenError) return res.status(503).json({ error: err.message, circuitOpen: true })
     if (err.status === 503)             return res.status(503).json({ error: err.message })
@@ -581,6 +601,42 @@ Rules:
     if (!Array.isArray(data.rankedStocks) || !data.rankedStocks.length)
       return res.status(500).json({ error: 'AI Brain returned no ranked stocks — try again' })
 
+    // ── Cross-model agreement — annotate each pick with the second opinion ────
+    let ensemble = null
+    if (secondText) {
+      let second = null
+      try { second = JSON.parse(secondText) }
+      catch {
+        const m = secondText.match(/\{[\s\S]*\}/)
+        if (m) { try { second = JSON.parse(m[0]) } catch { /* unusable second opinion */ } }
+      }
+      if (Array.isArray(second?.rankedStocks) && second.rankedStocks.length) {
+        const secMap = new Map(second.rankedStocks.map(s => [s.symbol, s]))
+        let overlap = 0
+        for (const stock of data.rankedStocks) {
+          const m = secMap.get(stock.symbol)
+          if (m) {
+            overlap++
+            stock.ensemble = {
+              confirmed:     true,
+              secondVerdict: m.agentVerdict ?? null,
+              verdictMatch:  !!m.agentVerdict && m.agentVerdict === stock.agentVerdict,
+              scoreDelta:    (m.compositeScore != null && stock.compositeScore != null)
+                               ? Math.abs(m.compositeScore - stock.compositeScore) : null,
+              secondRank:    m.rank ?? null,
+            }
+          } else {
+            stock.ensemble = { confirmed: false }
+          }
+        }
+        ensemble = {
+          secondModel:  'llama-3.3-70b-versatile',
+          overlapCount: overlap,
+          overlapPct:   Math.round((overlap / data.rankedStocks.length) * 100),
+        }
+      }
+    }
+
     // Log each prediction for win-rate tracking
     for (const stock of data.rankedStocks) {
       logPrediction(stock.symbol, stock, {
@@ -601,6 +657,7 @@ Rules:
       liveDataSymbols:  liveQuotes.map(q => q.symbol),
       llmUsed,
       modelUsed: llmUsed === 'claude' ? 'claude-sonnet-4-6' : 'llama-3.3-70b-versatile',
+      ensemble,
       agentsUsed: ['Fundamental Analyst','Technical Analyst','Sentiment Agent','Macro Economist','Risk Manager','Supervisor'],
     })
   } catch (err) {

@@ -153,4 +153,22 @@ describe('computeStats', () => {
     const s = computeStats(records)
     expect(s.h7.winRate).toBe(1) // (105-100)/100 from entryZoneMid
   })
+
+  test('ensemble split separates cross-model-confirmed picks from primary-only', () => {
+    const records = [
+      mkRecord({ ensembleConfirmed: true,  price30d: 120, benchRet30d: 2 }), // confirmed alpha win
+      mkRecord({ ensembleConfirmed: true,  price30d: 95,  benchRet30d: 2 }), // confirmed alpha loss
+      mkRecord({ ensembleConfirmed: false, price30d: 90,  benchRet30d: 2 }), // unconfirmed loss
+    ]
+    const s = computeStats(records)
+    expect(s.ensemble.confirmed.n).toBe(2)
+    expect(s.ensemble.confirmed.alphaWinRate).toBe(0.5)
+    expect(s.ensemble.unconfirmed.n).toBe(1)
+    expect(s.ensemble.unconfirmed.alphaWinRate).toBe(0)
+  })
+
+  test('ensemble split is null when no ensemble scans were recorded', () => {
+    const s = computeStats([mkRecord()]) // ensembleConfirmed undefined → null
+    expect(s.ensemble).toBe(null)
+  })
 })
