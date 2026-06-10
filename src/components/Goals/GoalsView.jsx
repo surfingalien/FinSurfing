@@ -8,15 +8,17 @@
  * Storage: localStorage finsurf_goals (no backend needed for the hierarchy)
  */
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useCallback } from 'react'
 import {
-  Target, Plus, Trash2, RefreshCw, CheckCircle2, Circle,
-  ChevronDown, ChevronUp, Edit3, Save, X, Sparkles,
-  Flag, Layers, FolderOpen, Calendar, Sun, AlignLeft,
-  AlertTriangle, TrendingUp,
+  Target, Plus, Trash2, CheckCircle2, Circle,
+  Edit3, Save, X, Sparkles,
+  Flag, FolderOpen, Calendar, Sun, AlignLeft,
+  TrendingUp,
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
-import { useApiKeys } from '../../contexts/ApiKeysContext'
+import { Section } from './parts/Section'
+import { DailyChecklistModal } from './parts/DailyChecklistModal'
+import { GoalAlignerModal } from './parts/GoalAlignerModal'
 
 const GOALS_KEY = 'finsurf_goals'
 
@@ -36,209 +38,6 @@ function loadGoals() {
 
 function saveGoals(g) {
   try { localStorage.setItem(GOALS_KEY, JSON.stringify(g)) } catch {}
-}
-
-// ── Section wrapper ────────────────────────────────────────────────────────────
-function Section({ title, icon: Icon, color, count, children, defaultOpen = true }) {
-  const [open, setOpen] = useState(defaultOpen)
-  return (
-    <div className="glass rounded-2xl border border-white/[0.06] overflow-hidden">
-      <button
-        onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center gap-3 px-5 py-3.5 hover:bg-white/[0.02] transition-colors"
-      >
-        <div className={`p-1.5 rounded-lg ${color} bg-white/[0.05]`}>
-          <Icon className={`w-3.5 h-3.5 ${color}`} />
-        </div>
-        <span className={`text-sm font-semibold ${color}`}>{title}</span>
-        {count > 0 && (
-          <span className="text-[10px] text-slate-500 bg-white/[0.04] border border-white/[0.08] rounded-full px-1.5 py-0.5">
-            {count}
-          </span>
-        )}
-        <span className="ml-auto text-slate-600">
-          {open ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-        </span>
-      </button>
-      {open && <div className="px-5 pb-5">{children}</div>}
-    </div>
-  )
-}
-
-// ── Daily Checklist modal ──────────────────────────────────────────────────────
-function DailyChecklistModal({ goals, portfolio, onClose, onSave }) {
-  const { authFetch }  = useAuth()
-  const { getHeaders } = useApiKeys()
-  const [generating, setGenerating] = useState(false)
-  const [error,      setError]      = useState(null)
-
-  const portfolioSymbols = portfolio?.positions?.map(p => p.symbol).filter(Boolean) || []
-
-  const generate = async () => {
-    setGenerating(true); setError(null)
-    try {
-      const res  = await authFetch('/api/research-notes/daily-checklist', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json', ...getHeaders() },
-        body:    JSON.stringify({ portfolioSymbols, goals, portfolioValue: portfolio?.totalValue }),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error)
-      onSave(data)
-      onClose()
-    } catch (e) { setError(e.message) }
-    setGenerating(false)
-  }
-
-  const today = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-      <div className="glass rounded-2xl w-full max-w-md border border-amber-500/25 shadow-2xl">
-        <div className="flex items-center gap-2 px-4 py-3 border-b border-white/[0.06]">
-          <Sun className="w-4 h-4 text-amber-400" />
-          <span className="text-sm font-semibold text-white">Daily Checklist</span>
-          <span className="text-[11px] text-slate-500 ml-1">· {today}</span>
-          <button onClick={onClose} className="ml-auto text-slate-500 hover:text-white"><X className="w-4 h-4" /></button>
-        </div>
-        <div className="p-5 space-y-4">
-          <p className="text-xs text-slate-400">
-            Generates a pre-market + evening checklist tailored to your portfolio holdings and stated goals.
-          </p>
-          <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.06] space-y-1.5">
-            {[
-              'Morning focus tasks tied to goals',
-              'Portfolio review items for each holding',
-              'Research queue based on open questions',
-              'Risk check for current positions',
-              'Evening reflection prompts',
-            ].map(item => (
-              <div key={item} className="flex items-center gap-2 text-xs text-slate-300">
-                <span className="w-1 h-1 rounded-full bg-amber-400 shrink-0" /> {item}
-              </div>
-            ))}
-          </div>
-          {portfolioSymbols.length > 0 && (
-            <div className="flex flex-wrap gap-1">
-              {portfolioSymbols.slice(0, 8).map(s => (
-                <span key={s} className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-mint-500/10 text-mint-400 border border-mint-500/20">{s}</span>
-              ))}
-            </div>
-          )}
-          {error && <p className="text-xs text-red-400">{error}</p>}
-          <div className="flex justify-end gap-2">
-            <button onClick={onClose} className="btn-ghost text-xs py-1.5 px-3">Cancel</button>
-            <button onClick={generate} disabled={generating}
-              className="btn-primary flex items-center gap-1.5 text-xs py-1.5 disabled:opacity-50">
-              {generating ? <><RefreshCw className="w-3.5 h-3.5 animate-spin" /> Generating…</> : <><Sun className="w-3.5 h-3.5" /> Generate</>}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ── Goal Aligner modal ─────────────────────────────────────────────────────────
-function GoalAlignerModal({ goals, onClose, onSave }) {
-  const { authFetch } = useAuth()
-  const [running,  setRunning]  = useState(false)
-  const [result,   setResult]   = useState(null)
-  const [error,    setError]    = useState(null)
-
-  const run = async () => {
-    setRunning(true); setError(null)
-    try {
-      const res  = await authFetch('/api/research-notes/goal-align', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ goals }),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error)
-      setResult(data)
-    } catch (e) { setError(e.message) }
-    setRunning(false)
-  }
-
-  useEffect(() => { run() }, []) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const scoreColor = result
-    ? result.score >= 75 ? 'text-emerald-400' : result.score >= 50 ? 'text-amber-400' : 'text-red-400'
-    : 'text-slate-400'
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-      <div className="glass rounded-2xl w-full max-w-xl border border-violet-500/25 shadow-2xl">
-        <div className="flex items-center gap-2 px-4 py-3 border-b border-white/[0.06]">
-          <Sparkles className="w-4 h-4 text-violet-400" />
-          <span className="text-sm font-semibold text-white">Goal Aligner</span>
-          {result && <span className={`ml-2 text-sm font-bold ${scoreColor}`}>{result.score}/100</span>}
-          <button onClick={onClose} className="ml-auto text-slate-500 hover:text-white"><X className="w-4 h-4" /></button>
-        </div>
-        <div className="p-4 space-y-3 max-h-[65vh] overflow-y-auto">
-          {running && (
-            <div className="flex items-center justify-center py-8 gap-2">
-              <RefreshCw className="w-4 h-4 text-violet-400 animate-spin" />
-              <span className="text-xs text-slate-400">Auditing last 7 days against your goals…</span>
-            </div>
-          )}
-          {error && (
-            <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-xs text-red-400">
-              {error}
-            </div>
-          )}
-
-          {result && (
-            <>
-              {result.recommendation && (
-                <div className="p-3 rounded-xl bg-violet-500/8 border border-violet-500/20">
-                  <div className="text-[10px] font-semibold text-violet-400 uppercase tracking-wider mb-1">This Week's Recommendation</div>
-                  <p className="text-xs text-slate-200">{result.recommendation}</p>
-                </div>
-              )}
-              <div className="grid grid-cols-2 gap-2">
-                {(result.aligned || []).length > 0 && (
-                  <div className="p-2.5 rounded-lg bg-emerald-500/8 border border-emerald-500/20">
-                    <div className="text-[9px] font-semibold text-emerald-400 uppercase tracking-wider mb-1.5">Aligned ✓</div>
-                    <ul className="space-y-1">
-                      {result.aligned.map((a, i) => <li key={i} className="text-[11px] text-slate-300">{a}</li>)}
-                    </ul>
-                  </div>
-                )}
-                {(result.misaligned || []).length > 0 && (
-                  <div className="p-2.5 rounded-lg bg-amber-500/8 border border-amber-500/20">
-                    <div className="text-[9px] font-semibold text-amber-400 uppercase tracking-wider mb-1.5">Gaps ⚠</div>
-                    <ul className="space-y-1">
-                      {result.misaligned.map((m, i) => <li key={i} className="text-[11px] text-slate-300">{m}</li>)}
-                    </ul>
-                  </div>
-                )}
-              </div>
-              {result.note && (
-                <div className="bg-white/[0.02] rounded-xl p-3 border border-white/[0.06] max-h-48 overflow-y-auto">
-                  <pre className="text-[11px] text-slate-400 whitespace-pre-wrap font-mono leading-relaxed">{result.note.content}</pre>
-                </div>
-              )}
-            </>
-          )}
-
-          <div className="flex justify-end gap-2 pt-1">
-            <button onClick={run} disabled={running} className="btn-ghost flex items-center gap-1.5 text-xs py-1.5">
-              <RefreshCw className={`w-3.5 h-3.5 ${running ? 'animate-spin' : ''}`} /> Re-run
-            </button>
-            {result?.note && (
-              <button onClick={() => { onSave(result.note); onClose() }}
-                className="btn-primary flex items-center gap-1.5 text-xs py-1.5">
-                <Save className="w-3.5 h-3.5" /> Save to Second Brain
-              </button>
-            )}
-            <button onClick={onClose} className="btn-ghost text-xs py-1.5 px-3">Close</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
 }
 
 // ── Main view ──────────────────────────────────────────────────────────────────

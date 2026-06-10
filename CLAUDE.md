@@ -3,7 +3,7 @@
 Guide Claude Code (claude.ai/code) for this repo.
 
 ## Commands
-`npm run dev` — Vite:5173 + Express:3001 concurrently | `npm run build` → dist/ | `node server.js` — prod only. No tests/lint.
+`npm run dev` — Vite:5173 + Express:3001 concurrently | `npm run build` → dist/ | `node server.js` — prod only | `npm test` — Jest unit tests in `tests/` (also run by CI on every PR). No lint.
 
 ## Stack
 React18+Vite SPA → Express API proxy. Dev: Vite proxies `/api/*` → :3001. Prod: single process :3001 serves dist/+API.

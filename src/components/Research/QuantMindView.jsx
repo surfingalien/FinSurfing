@@ -1,8 +1,9 @@
 import { useState, useCallback } from 'react'
 import {
-  BookOpen, Search, Brain, Loader2, ChevronDown, ChevronUp,
-  ExternalLink, Trash2, Layers, Users, Plus, Compass,
+  BookOpen, Search, Brain, Loader2, Layers, Users, Plus, Compass,
 } from 'lucide-react'
+import SearchResultRow from './quantmind/SearchResultRow'
+import PaperCard from './quantmind/PaperCard'
 
 const PERSONAS = [
   { id: 'quant_analyst',    label: 'Quant Analyst',     color: 'text-violet-400' },
@@ -22,146 +23,6 @@ const CATEGORIES = [
   { id: 'q-fin.CP', label: 'Computational' },
   { id: 'stat.ML',  label: 'ML/Stats' },
 ]
-
-function RelevanceDot({ score }) {
-  const pct = Math.round((score || 0) * 100)
-  const color = pct >= 75 ? 'bg-emerald-400' : pct >= 50 ? 'bg-amber-400' : 'bg-slate-500'
-  return (
-    <span className="flex items-center gap-1.5">
-      <span className={`w-2 h-2 rounded-full ${color}`} />
-      <span className="text-xs text-slate-400">{pct}%</span>
-    </span>
-  )
-}
-
-function TagPill({ label }) {
-  return (
-    <span className="px-2 py-0.5 rounded-full bg-violet-500/15 text-violet-300 text-xs border border-violet-500/25">
-      {label}
-    </span>
-  )
-}
-
-// ── Search result row (compact) ───────────────────────────────────────────────
-function SearchResultRow({ result, onLoad, loading }) {
-  return (
-    <div className="flex items-start gap-3 py-3 border-b border-slate-700/40 last:border-0">
-      <div className="flex-1 min-w-0">
-        <p className="text-sm text-slate-200 leading-snug mb-0.5 line-clamp-2">{result.title}</p>
-        <p className="text-xs text-slate-500">
-          {(result.authors || []).slice(0, 2).join(', ')}
-          {result.authors?.length > 2 ? ' et al.' : ''}
-          {' · '}{result.published?.slice(0, 10)}
-          {' · '}<span className="text-slate-600">{(result.categories || []).slice(0, 2).join(', ')}</span>
-        </p>
-        {result.abstract && (
-          <p className="text-xs text-slate-500 mt-1 line-clamp-2">{result.abstract}</p>
-        )}
-      </div>
-      <div className="flex items-center gap-2 flex-shrink-0">
-        <a
-          href={result.source_url} target="_blank" rel="noreferrer"
-          className="text-slate-600 hover:text-violet-400 transition-colors"
-          title="Open abstract"
-        >
-          <ExternalLink className="w-3.5 h-3.5" />
-        </a>
-        {result.loaded ? (
-          <span className="text-xs text-emerald-500 font-medium">Loaded</span>
-        ) : (
-          <button
-            onClick={() => onLoad(result.arxiv_id)}
-            disabled={loading}
-            className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-violet-600/80 hover:bg-violet-500 disabled:opacity-40 text-white text-xs font-medium transition-colors"
-          >
-            {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
-            Load
-          </button>
-        )}
-      </div>
-    </div>
-  )
-}
-
-// ── Loaded paper card ─────────────────────────────────────────────────────────
-function PaperCard({ paper, onRemove, selected, onToggleSelect }) {
-  const [expanded, setExpanded] = useState(false)
-  return (
-    <div className={`rounded-xl border transition-colors ${
-      selected ? 'border-violet-500/60 bg-violet-500/5' : 'border-slate-700/50 bg-slate-800/40'
-    }`}>
-      <div className="p-4">
-        <div className="flex items-start gap-3">
-          <button
-            onClick={() => onToggleSelect(paper.arxiv_id)}
-            className={`mt-0.5 w-4 h-4 rounded border flex-shrink-0 transition-colors ${
-              selected ? 'bg-violet-500 border-violet-500' : 'border-slate-600 hover:border-violet-400'
-            }`}
-          >
-            {selected && <span className="block w-full h-full text-white text-[10px] text-center leading-4">✓</span>}
-          </button>
-
-          <div className="flex-1 min-w-0">
-            <div className="flex items-start justify-between gap-2 mb-1">
-              <h3 className="text-sm font-medium text-slate-200 leading-snug">{paper.title}</h3>
-              <RelevanceDot score={paper.relevance_score} />
-            </div>
-
-            <p className="text-xs text-slate-500 mb-2">
-              {(paper.authors || []).slice(0, 3).join(', ')}
-              {paper.authors?.length > 3 ? ' et al.' : ''}
-              {' · '}{paper.published?.slice(0, 10)}
-            </p>
-
-            {paper.quant_applicability && (
-              <p className="text-xs text-violet-300/80 italic mb-2">"{paper.quant_applicability}"</p>
-            )}
-
-            <div className="flex flex-wrap gap-1 mb-3">
-              {(paper.tags || []).slice(0, 5).map(t => <TagPill key={t} label={t} />)}
-            </div>
-
-            {(paper.key_contributions || []).length > 0 && (
-              <div>
-                <button
-                  onClick={() => setExpanded(e => !e)}
-                  className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-200 transition-colors mb-1"
-                >
-                  {expanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-                  {expanded ? 'Hide' : 'Show'} key contributions
-                </button>
-                {expanded && (
-                  <ul className="space-y-1 pl-3 border-l border-slate-700">
-                    {paper.key_contributions.map((kc, i) => (
-                      <li key={i} className="text-xs text-slate-400">{kc}</li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="flex items-center justify-between mt-3 pt-3 border-t border-slate-700/50">
-          <div className="flex gap-2">
-            <a href={paper.source_url} target="_blank" rel="noreferrer"
-              className="flex items-center gap-1 text-xs text-slate-400 hover:text-violet-300 transition-colors">
-              <ExternalLink className="w-3 h-3" /> Abstract
-            </a>
-            <a href={paper.pdf_url} target="_blank" rel="noreferrer"
-              className="flex items-center gap-1 text-xs text-slate-400 hover:text-violet-300 transition-colors">
-              <BookOpen className="w-3 h-3" /> PDF
-            </a>
-          </div>
-          <button onClick={() => onRemove(paper.arxiv_id)}
-            className="flex items-center gap-1 text-xs text-slate-600 hover:text-red-400 transition-colors">
-            <Trash2 className="w-3 h-3" /> Remove
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
 
 // ── Main view ─────────────────────────────────────────────────────────────────
 export default function QuantMindView() {
