@@ -38,7 +38,7 @@ React18+Vite SPA → Express API proxy. Dev: Vite proxies `/api/*` → :3001. Pr
 `broad` | `stocks` + 11 GICS (`stocks_tech` … `stocks_real_estate`) | 8 ETF (`etfs_broad` `etfs_sector` `etfs_bond` `etfs_commodity` `etfs_intl` `etfs_leveraged` `etfs_thematic` `etfs_real_estate`) | 8 crypto (`crypto_l1` `crypto_l2` `crypto_defi` `crypto_ai` `crypto_meme` `crypto_infra` `crypto_exchange` `crypto_stable`) | 8 mutual fund (`mutualfunds` `mutualfunds_index` `mutualfunds_bond` …)
 
 ## Design
-`#060810` bg · `#00ffcc` accent · `.glass` glassmorphism · CSS vars (no tailwind.config.js) · `src/components/<Feature>/<Feature>View.jsx`
+`#060810` bg · `#00ffcc` accent · `.glass` glassmorphism · CSS vars (no tailwind.config.js) · `src/components/<Feature>/<Feature>View.jsx`. Large views keep sub-components in per-view subdirs: `Research/notes/` `AgenticOS/tabs/` `AIBrain/scan/` `Research/advisory/` `Dashboard/widgets/` `Backtest/parts/`
 
 ## Frontend Routing & Nav
 Hash routes `#/<tab>[/<param>]` (e.g. `#/analyze/NVDA`) via `src/hooks/useHashRoute.js`; unknown tabs → dashboard. All views `React.lazy` (one Vite chunk each) behind a single `Suspense` in `App.jsx`. `src/navigation.js` is the single source of truth for nav groups/tabs, shared by `Sidebar`, `CommandPalette` (⌘K / Ctrl+K: view search + ticker jump), and route validation.
