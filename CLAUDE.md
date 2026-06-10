@@ -20,6 +20,8 @@ React18+Vite SPA → Express API proxy. Dev: Vite proxies `/api/*` → :3001. Pr
 - `market-focus.js` — intraday session focus; GET returns cached AI analysis of top items to watch (holdings + watchlist + macro); POST `/refresh` triggers fresh run (`requireAuth`); refreshes every 30 min during market hours via `lib/scheduled-jobs.js:intradayFocusHandler`
 - `copilot.js` — streaming agentic chat (`requireAuth`); multi-provider (Claude native stream → Groq/OpenAI-compat fallback); SSRF-safe: `baseUrl` always from server-side `PROVIDER_DEFAULTS`, never from request body; `TOOLS` registry: scan/recommendations/analyze/sentiment/macro/earnings/options + `classify_symbol` `sector_universe` (symbol-db), `portfolio_risk` (analytics), `get_calibration` (brain-learnings incl. baseline)
 
+- `mcp.js` — Model Context Protocol endpoint (`POST /api/mcp`, streamable HTTP, stateless, JSON responses, `requireAuth` Bearer JWT); exposes the copilot `TOOLS` registry + `dispatchTool` (exported from `copilot.js`) to any MCP client; tests `tests/mcp.test.js` use the official SDK client
+
 **DB**: `DATABASE_URL` → Postgres; missing → memstore. Schema: `db/schema.sql`.
 **Client state**: localStorage: watchlist, alerts, AI watchlist, `finsurf_api_keys`. Portfolio → DB when authed.
 

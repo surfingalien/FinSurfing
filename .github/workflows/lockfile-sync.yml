@@ -1,0 +1,43 @@
+# Regenerates package-lock.json on the runner and pushes it back to the
+# branch. Exists because some development environments (e.g. Claude Code
+# remote sandboxes) cannot reach the npm registry, so dependency additions
+# land in package.json without a lockfile update — which breaks `npm ci`
+# in the test workflow and on Railway deploys.
+#
+# Scoped to claude/* branches; triggers when package.json (or this file)
+# changes. The bot push does not re-trigger workflows, so re-run the test
+# workflow (or push any commit) after the lockfile lands.
+name: lockfile-sync
+
+on:
+  push:
+    branches: ['claude/**']
+    paths: ['package.json', '.github/workflows/lockfile-sync.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Regenerate lockfile
+        run: npm install --package-lock-only --no-audit --no-fund
+
+      - name: Commit and push if changed
+        run: |
+          if ! git diff --quiet package-lock.json; then
+            git config user.name  "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add package-lock.json
+            git commit -m "chore: sync package-lock.json with package.json"
+            git push
+          else
+            echo "Lockfile already in sync"
+          fi

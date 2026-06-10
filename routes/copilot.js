@@ -874,3 +874,6 @@ router.post('/chat', requireAuth, chatLimit, async (req, res) => {
 })
 
 module.exports = router
+// Shared with routes/mcp.js so the MCP endpoint exposes the same registry
+module.exports.TOOLS = TOOLS
+module.exports.dispatchTool = dispatchTool
