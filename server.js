@@ -37,6 +37,7 @@ const backtestQueueRoutes   = require('./routes/backtest-queue')
 const agenticOsRoutes       = require('./routes/agentic-os')
 const optionsFlowRoutes     = require('./routes/options-flow')
 const symbolRoutes          = require('./routes/symbols')
+const mcpRoutes             = require('./routes/mcp')
 const { router: marketFocusRoutes } = require('./routes/market-focus')
 
 const { seedAdminDB } = require('./db/adminSeed')
@@ -203,6 +204,7 @@ app.use('/api/agentic-os',     agenticOsRoutes)
 app.use('/api/options',        optionsFlowRoutes)
 app.use('/api/market-focus',   marketFocusRoutes)
 app.use('/api/symbols',        symbolRoutes)
+app.use('/api/mcp',            mcpRoutes)
 
 // ── OpenBB sidecar proxy (optional — set OPENBB_URL env var to enable) ────────
 const OPENBB_URL = process.env.OPENBB_URL
