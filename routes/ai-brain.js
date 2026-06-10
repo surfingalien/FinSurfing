@@ -25,6 +25,7 @@ const { getLearningsBlock } = require('../lib/brain-learnings')
 const { compactTaLine }     = require('../lib/technical-indicators')
 const { fetchDailyBars }    = require('../lib/internal-api')
 const { tryParseAiJson }    = require('../lib/ai-json')
+const { baselineFromBars }  = require('../lib/ml-baseline')
 
 const router   = express.Router()
 const aiRouter = getRouter('ai-brain')
@@ -299,10 +300,13 @@ function fmtQuote(q) {
   )
 }
 
-// Fetch daily bars per symbol and compute one-line TA summaries for the prompt.
+// Fetch daily bars per symbol and compute one-line TA summaries for the prompt,
+// plus the mechanical ML-baseline direction call from the same bars (logged with
+// each prediction so calibration can compare AI picks against a dumb benchmark).
 // Concurrency-limited so a 20-symbol scan doesn't stampede the data providers.
 async function fetchTaSnapshot(universe, headers) {
-  const bySymbol = new Map()
+  const bySymbol  = new Map()
+  const baselines = new Map()
   const queue = [...universe]
   const workers = Array.from({ length: 5 }, async () => {
     while (queue.length) {
@@ -316,6 +320,8 @@ async function fetchTaSnapshot(universe, headers) {
         bars.map(b => b.l ?? b.c), bars.map(b => b.c), bars.map(b => b.v),
       )
       if (line) bySymbol.set(sym, line)
+      const baseline = baselineFromBars(bars)
+      if (baseline) baselines.set(sym, baseline)
     }
   })
   // Overall time budget: return whatever resolved by 20s rather than letting a
@@ -325,11 +331,11 @@ async function fetchTaSnapshot(universe, headers) {
     new Promise(resolve => setTimeout(resolve, 20_000)),
   ])
   // Preserve universe order for deterministic prompts
-  return universe.map(s => bySymbol.get(s)).filter(Boolean)
+  return { lines: universe.map(s => bySymbol.get(s)).filter(Boolean), baselines }
 }
 
 // Write a prediction record for future win-rate tracking
-function logPrediction(symbol, agents, zones, generatedAt) {
+function logPrediction(symbol, agents, zones, generatedAt, baseline = null) {
   try {
     const dir = path.dirname(PREDICTION_LOG)
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
@@ -354,6 +360,11 @@ function logPrediction(symbol, agents, zones, generatedAt) {
       thesisAssumptions: agents.thesisAssumptions ?? [],
       agentConflict:     agents.agentConflict ?? null,
       supervisorNote:    agents.supervisorSynthesis ?? null,
+      // Mechanical ML-baseline 7d direction call from the same bars the scan
+      // saw (lib/ml-baseline.js) — lets calibration compare AI vs baseline
+      baselineProb:     baseline?.prob ?? null,
+      baselineDir:      baseline?.dir ?? null,
+      baselineFeatures: baseline?.features ?? null,
       // outcome fields filled later by a scheduled job
       price7d: null, price30d: null, price90d: null,
     })
@@ -425,9 +436,10 @@ router.post('/analyze', requireAuth, brainLimit, async (req, res) => {
 
   // Server-computed technical indicators (RSI/MACD/EMA/S-R/volume per symbol)
   let taSnippet = ''
-  if (taResult.status === 'fulfilled' && taResult.value.length) {
+  const taBaselines = (taResult.status === 'fulfilled' && taResult.value.baselines) || new Map()
+  if (taResult.status === 'fulfilled' && taResult.value.lines.length) {
     taSnippet = '\n\nCOMPUTED TECHNICALS (server-calculated from daily bars — authoritative; base technicalScore on these, do not invent indicator values):\n'
-      + taResult.value.join('\n')
+      + taResult.value.lines.join('\n')
   }
 
   // Build earnings catalyst snippet
@@ -636,7 +648,7 @@ Rules:
         entryZoneHigh:  stock.entryZoneHigh,
         targetZoneLow:  stock.targetZoneLow,
         targetZoneHigh: stock.targetZoneHigh,
-      }, generatedAt)
+      }, generatedAt, taBaselines.get(stock.symbol))
     }
 
     return res.json({
