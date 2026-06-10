@@ -31,6 +31,8 @@ const Anthropic = require('@anthropic-ai/sdk')
 const { requireAuth } = require('../middleware/auth')
 const { getSocialSentiment } = require('../lib/social-sentiment')
 const { getAltDataSnippet }  = require('../lib/alt-data')
+const symbolDb = require('../lib/symbol-db')
+const { computeStats, readPredictions } = require('../lib/brain-learnings')
 
 // Use warm cache from scheduled-jobs if available, fall back to live fetch
 async function getAltData(symbol) {
@@ -229,6 +231,48 @@ const TOOLS = [
       },
     },
   },
+  {
+    name: 'classify_symbol',
+    description: 'Look up a symbol in the 300k-entry FinanceDatabase catalog: asset class (equity/etf/fund/crypto), GICS-style sector and industry, country, market-cap bucket, or ETF/fund category and family. Use when unsure what kind of instrument a ticker is.',
+    input_schema: {
+      type: 'object',
+      required: ['symbol'],
+      properties: {
+        symbol: { type: 'string', description: 'Ticker symbol (e.g. AAPL, VTSAX, BTC-USD)' },
+      },
+    },
+  },
+  {
+    name: 'sector_universe',
+    description: 'List the top US equities in a GICS sector, largest market-cap buckets first. Use to find comparable companies or build a sector watchlist.',
+    input_schema: {
+      type: 'object',
+      required: ['sector'],
+      properties: {
+        sector: { type: 'string', description: 'Sector name, e.g. Information Technology, Energy, Health Care, Financials' },
+        size:   { type: 'number', description: 'How many symbols to return (default 25, max 50)' },
+      },
+    },
+  },
+  {
+    name: 'portfolio_risk',
+    description: 'Measured portfolio risk vs SPY: Sharpe, Sortino, annualized volatility, max drawdown, 95% VaR/CVaR, weighted beta, and per-holding metrics — computed from real 1y price history. Uses the authenticated portfolio when no symbols are given.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        symbols: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Optional: analyze these symbols equal-weighted instead of the saved portfolio (max 20)',
+        },
+      },
+    },
+  },
+  {
+    name: 'get_calibration',
+    description: "The AI Brain's measured track record: win rates and benchmark-beating alpha at 7d/30d, calibration by stated confidence, cross-model ensemble lift, and how the AI compares to a mechanical TA baseline on identical picks. Use when asked how reliable the AI's signals are.",
+    input_schema: { type: 'object', properties: {} },
+  },
 ]
 
 // ── Internal tool dispatcher ──────────────────────────────────────────────────
@@ -411,6 +455,68 @@ async function dispatchTool(name, input, req) {
       } catch (e) {
         return `Options flow fetch failed for ${sym}: ${e.message}`
       }
+    }
+
+    case 'classify_symbol': {
+      const sym = (input.symbol || '').toUpperCase().replace(/[^A-Z0-9.\-=]/g, '')
+      if (!sym) return 'No symbol provided.'
+      if (!symbolDb.stats().loaded) return 'Symbol catalog not loaded yet — it populates shortly after server start and refreshes weekly.'
+      const rec = symbolDb.classify(sym)
+      if (!rec) return `${sym} not found in the symbol catalog (covers US equities + global ETFs/funds/crypto).`
+      if (rec.assetClass === 'equity')
+        return `${rec.symbol} — ${rec.name} | equity | Sector: ${rec.sector || '?'} | Industry: ${rec.industry || '?'} | ${rec.country || '?'} | ${rec.marketCap || '?'}`
+      if (rec.assetClass === 'crypto')
+        return `${rec.symbol} — ${rec.name} | cryptocurrency (base: ${rec.base})`
+      return `${rec.symbol} — ${rec.name} | ${rec.assetClass} | Category: ${rec.categoryGroup || '?'} / ${rec.category || '?'} | Family: ${rec.family || '?'}`
+    }
+
+    case 'sector_universe': {
+      if (!symbolDb.stats().loaded) return 'Symbol catalog not loaded yet — it populates shortly after server start and refreshes weekly.'
+      const size = Math.min(Math.max(parseInt(input.size) || 25, 1), 50)
+      const syms = symbolDb.sectorUniverse(input.sector || '', { size })
+      if (syms.length) return `Top ${syms.length} US ${input.sector} equities by cap bucket: ${syms.join(', ')}`
+      const sectors = symbolDb.listSectors().map(s => s.sector).filter(Boolean)
+      return `No equities found for sector "${input.sector}". Available sectors: ${sectors.join(', ')}`
+    }
+
+    case 'portfolio_risk': {
+      const qs = Array.isArray(input.symbols) && input.symbols.length
+        ? `?symbols=${input.symbols.slice(0, 20).map(s => String(s).toUpperCase()).join(',')}`
+        : ''
+      const r = await fetch(`http://127.0.0.1:${port}/api/analytics/portfolio${qs}`, {
+        headers: fwdHeaders, signal: AbortSignal.timeout(45_000),
+      })
+      if (!r.ok) return `Portfolio analytics unavailable (HTTP ${r.status}).`
+      const d = await r.json()
+      if (!d.symbols?.length) return 'No holdings found — add positions to your portfolio or pass symbols explicitly.'
+      const p = d.riskMetrics?.portfolio, b = d.riskMetrics?.benchmark
+      const lines = [`**Portfolio Risk** (${d.symbols.length} holdings vs ${d.benchmark}, 1y daily, ${p?.weighting || 'equal'}-weighted)`]
+      if (p) lines.push(
+        `Sharpe ${p.sharpe ?? 'N/A'} | Sortino ${p.sortino ?? 'N/A'} | Vol ${p.volatility ?? 'N/A'}% | MaxDD ${p.maxDrawdown ?? 'N/A'}% | AnnRet ${p.annualReturn ?? 'N/A'}%`,
+        `1-day VaR(95) ${p.var95 ?? 'N/A'}% | CVaR(95) ${p.cvar95 ?? 'N/A'}% | Portfolio beta ${d.portfolioBeta ?? 'N/A'}`)
+      if (b) lines.push(`${d.benchmark} benchmark: Sharpe ${b.sharpe ?? 'N/A'} | Vol ${b.volatility ?? 'N/A'}% | MaxDD ${b.maxDrawdown ?? 'N/A'}% | AnnRet ${b.annualReturn ?? 'N/A'}%`)
+      const hr = d.riskMetrics?.holdings || {}
+      const rows = Object.entries(hr).slice(0, 20).map(([s, h]) =>
+        `  ${s}: Sharpe ${h.sharpe ?? 'N/A'}, MaxDD ${h.maxDrawdown ?? 'N/A'}%, AnnRet ${h.annualReturn ?? 'N/A'}%, beta ${d.betas?.[s] ?? 'N/A'}`)
+      if (rows.length) lines.push('Per holding:', ...rows)
+      if (d.sectors?.length) lines.push(`Sector weights: ${d.sectors.map(s => `${s.name} ${s.weight}%`).join(', ')}`)
+      return lines.join('\n')
+    }
+
+    case 'get_calibration': {
+      const stats = computeStats(readPredictions())
+      if (!stats.totalResolved) return 'No resolved predictions yet — the track record builds as AI Brain picks age past 7 and 30 days.'
+      const pc = v => v == null ? 'N/A' : `${Math.round(v * 100)}%`
+      const lines = [`**AI Brain Track Record** (${stats.totalResolved} resolved predictions)`]
+      const hz = (label, h) => h && lines.push(
+        `${label}: win ${pc(h.winRate)} | beats benchmark ${pc(h.alphaWinRate)} | avg ${h.avgReturn ?? 'N/A'}% (alpha ${h.avgAlpha ?? 'N/A'}%) | target hit ${pc(h.targetHitRate)} | n=${h.nTradeable} tradeable (${h.neverEntered} never filled)`)
+      hz('7d', stats.h7); hz('30d', stats.h30)
+      const cal = Object.entries(stats.calibration || {})
+      if (cal.length) lines.push('Confidence calibration: ' + cal.map(([k, c]) => `${k} ${pc(c.alphaWinRate ?? c.winRate)} (n=${c.n})`).join(' | '))
+      if (stats.ensemble) lines.push('Cross-model ensemble: ' + Object.entries(stats.ensemble).map(([k, c]) => `${k} ${pc(c.alphaWinRate ?? c.winRate)} (n=${c.n})`).join(' | '))
+      if (stats.baseline) lines.push(
+        `Vs mechanical TA baseline (n=${stats.baseline.n}, 7d): AI win ${pc(stats.baseline.aiWinRate7d)} vs baseline accuracy ${pc(stats.baseline.baselineAccuracy7d)}; AI wins ${pc(stats.baseline.aiWinWhenBaselineAgrees)} when baseline agrees, ${pc(stats.baseline.aiWinWhenBaselineDisagrees)} when it disagrees`)
+      return lines.join('\n')
     }
 
     default:
