@@ -40,6 +40,9 @@ React18+Vite SPA → Express API proxy. Dev: Vite proxies `/api/*` → :3001. Pr
 ## Design
 `#060810` bg · `#00ffcc` accent · `.glass` glassmorphism · CSS vars (no tailwind.config.js) · `src/components/<Feature>/<Feature>View.jsx`
 
+## Frontend Routing & Nav
+Hash routes `#/<tab>[/<param>]` (e.g. `#/analyze/NVDA`) via `src/hooks/useHashRoute.js`; unknown tabs → dashboard. All views `React.lazy` (one Vite chunk each) behind a single `Suspense` in `App.jsx`. `src/navigation.js` is the single source of truth for nav groups/tabs, shared by `Sidebar`, `CommandPalette` (⌘K / Ctrl+K: view search + ticker jump), and route validation.
+
 ## TradingView
 `window.TradingView.widget()` via tv.js CDN. `normalise()` in `TradingViewView.jsx`: Yahoo tickers → `EXCHANGE:SYMBOL`. `cryptoMap` 100+ tokens (USD+USDT). Studies: RSI, Volume, MACD.
 
@@ -55,7 +58,10 @@ React18+Vite SPA → Express API proxy. Dev: Vite proxies `/api/*` → :3001. Pr
 14 FRED series (rates, inflation, labor, growth, VIX, credit). `GET /api/macro/indicators` returns full dataset + regime assessment + AI macro summary string. `GET /api/macro/summary` returns compact string for prompt injection. Requires `FRED_API_KEY` env var (free).
 
 ## AI Brain Self-Improvement (`lib/brain-learnings.js`)
-Nightly loop: `resolveOutcomes()` fetches actual prices for predictions logged 7d/30d ago → writes back to `data/ai-brain-predictions.jsonl`. `runMetaAnalysis()` has Claude read resolved predictions and write structured learnings to `data/brain-learnings.json`. `getLearningsBlock()` returns a prompt-injection string injected into the AI Brain system prompt. Reads from disk JSONL only — no user input reaches the file path.
+Nightly loop: `resolveOutcomes()` resolves predictions logged 7d/30d ago against the historical daily bar at exactly +7/+30d (not run-time price), records entry-zone fill (`entered`) and benchmark return (SPY equities / BTC crypto) → writes back to `data/ai-brain-predictions.jsonl`. `computeStats()` derives win rates, alpha win rates, target-hit rates and per-confidence calibration deterministically in code. `runMetaAnalysis()` has Claude interpret (not compute) those stats and write structured learnings to `data/brain-learnings.json`. `getLearningsBlock()` returns a prompt-injection string injected into the AI Brain system prompt. Reads from disk JSONL only — no user input reaches the file path.
+
+## Technical Indicators (`lib/technical-indicators.js`)
+Pure TA math (RSI, EMA, MACD, BB, ATR, StochRSI, VWAP, OBV, pivot S/R, patterns, volume) shared by `routes/trading-analysis.js` and `routes/ai-brain.js`. `compactTaLine()` builds one-line per-symbol summaries injected into AI Brain scans as COMPUTED TECHNICALS so technicalScore is grounded in real data. Unit tests: `tests/technical-indicators.test.js`, `tests/brain-learnings.test.js`.
 
 ## Deploy
 Railway auto-deploy `main` (`railway.toml` + `Procfile`).
