@@ -16,6 +16,7 @@ React18+Vite SPA → Express API proxy. Dev: Vite proxies `/api/*` → :3001. Pr
 - `trading-analysis.js` — per-symbol AI; Claude `claude-sonnet-4-6`
 - `recommendations.js` — AI Advisory; Claude primary + Groq fallback; accepts `persona` (see `lib/investor-personas.js`) + `includeMacro` body params; GET `/personas` returns persona list
 - `macro.js` — FRED macro indicators (14 series); requires `FRED_API_KEY` env var; 1h cache; `getIndicators()` exported for prompt injection
+- `symbols.js` — symbol classification/search/universes from `lib/symbol-db.js` (FinanceDatabase weekly snapshot → `data/symbol-db.json`; lazy boot load + Monday refresh job); POST `/refresh` requireAuth
 - `market-focus.js` — intraday session focus; GET returns cached AI analysis of top items to watch (holdings + watchlist + macro); POST `/refresh` triggers fresh run (`requireAuth`); refreshes every 30 min during market hours via `lib/scheduled-jobs.js:intradayFocusHandler`
 - `copilot.js` — streaming agentic chat (`requireAuth`); multi-provider (Claude native stream → Groq/OpenAI-compat fallback); SSRF-safe: `baseUrl` always from server-side `PROVIDER_DEFAULTS`, never from request body
 
