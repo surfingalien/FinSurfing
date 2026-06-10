@@ -80,7 +80,11 @@ export default function PortfolioView({ portfolio }) {
         <SummaryCard
           label="Total Gain/Loss"
           value={`${summary.totalGL >= 0 ? '+' : ''}${fmtLarge(Math.abs(summary.totalGL))}`}
-          sub={fmtPct(summary.totalGLPct)}
+          sub={summary.unpricedCount > 0
+            ? `⚠ ${summary.unpricedCount} unpriced — P&L incomplete`
+            : summary.staleCount > 0
+              ? `${fmtPct(summary.totalGLPct)} · ${summary.staleCount} stale price${summary.staleCount > 1 ? 's' : ''}`
+              : fmtPct(summary.totalGLPct)}
           up={summary.totalGL >= 0}
         />
         <SummaryCard

@@ -24,7 +24,7 @@ function enrichPosition(pos, quote) {
       ? q.change * pos.shares
       : 0
 
-  return { ...pos, price, costBasis, mktValue, gainLoss, gainLossPct, todayGL }
+  return { ...pos, ...q, price, costBasis, mktValue, gainLoss, gainLossPct, todayGL }
 }
 
 function portfolioSummary(enriched) {
@@ -33,7 +33,11 @@ function portfolioSummary(enriched) {
   const totalGL    = totalValue - totalCost
   const totalGLPct = totalCost > 0 ? (totalGL / totalCost) * 100 : 0
   const todayTotal = enriched.reduce((s, p) => s + (p.todayGL ?? 0), 0)
-  return { totalCost, totalValue, totalGL, totalGLPct, todayTotal }
+  const totalCount   = enriched.length
+  const staleCount   = enriched.filter(p => p.price != null && p.stale).length
+  const unpricedCount= enriched.filter(p => p.price == null).length
+  const pricedCount  = totalCount - staleCount - unpricedCount
+  return { totalCost, totalValue, totalGL, totalGLPct, todayTotal, totalCount, pricedCount, staleCount, unpricedCount }
 }
 
 describe('P&L calculation — enrichPosition()', () => {
@@ -136,5 +140,49 @@ describe('P&L calculation — portfolioSummary()', () => {
     ]
     const s = portfolioSummary(enriched)
     expect(s.todayTotal).toBe(30)
+  })
+})
+
+// ── Regression: missing/stale quotes must not silently hide losses ───────────
+// Bug: holdings with no quote were counted at cost basis (break-even), so the
+// headline Total P&L understated losses (reported $-399 vs actual $-2060).
+describe('P&L with missing and stale quotes', () => {
+  const yesterdaySec = Math.floor(Date.now() / 1000) - 86400
+
+  test('unpriced holding hides its loss in totalGL but is exposed via unpricedCount', () => {
+    const enriched = [
+      enrichPosition({ symbol: 'A', shares: 10, avgCost: 100 }, { price: 60 }),   // −400 priced
+      enrichPosition({ symbol: 'B', shares: 10, avgCost: 200 }, null),            // real loss unknown
+    ]
+    const s = portfolioSummary(enriched)
+    expect(s.totalGL).toBe(-400)        // unpriced B counted at break-even...
+    expect(s.unpricedCount).toBe(1)     // ...but the gap is now visible
+    expect(s.pricedCount).toBe(1)
+  })
+
+  test('stale last-known quote keeps the real gainLoss but contributes 0 to todayGL', () => {
+    // Last-known fallback: old marketTime, stale flag set by the hook
+    const e = enrichPosition(
+      { symbol: 'C', shares: 10, avgCost: 100 },
+      { price: 40, prevClose: 42, marketTime: yesterdaySec, stale: true },
+    )
+    expect(e.gainLoss).toBe(-600)       // loss measured at last real price
+    expect(e.todayGL).toBe(0)           // no fake "today" move from stale data
+    const s = portfolioSummary([e])
+    expect(s.totalGL).toBe(-600)        // the -2060-style loss is no longer hidden
+    expect(s.staleCount).toBe(1)
+    expect(s.unpricedCount).toBe(0)
+  })
+
+  test('live quote arriving after a stale one clears the stale count', () => {
+    const nowSec = Math.floor(Date.now() / 1000)
+    const e = enrichPosition(
+      { symbol: 'D', shares: 5, avgCost: 50 },
+      { price: 45, prevClose: 44, marketTime: nowSec, stale: false },
+    )
+    const s = portfolioSummary([e])
+    expect(s.staleCount).toBe(0)
+    expect(s.pricedCount).toBe(1)
+    expect(e.todayGL).toBeCloseTo(5)    // (45−44) × 5
   })
 })
