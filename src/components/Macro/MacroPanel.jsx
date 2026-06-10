@@ -7,8 +7,8 @@
  *   compact  — if true renders a slim inline banner instead of the full grid
  */
 
-import { useState, useEffect, useCallback } from 'react'
 import { TrendingUp, TrendingDown, Minus, RefreshCw, AlertTriangle, Globe } from 'lucide-react'
+import { useQuery, fetchJson } from '../../hooks/useQuery'
 
 const CATEGORY_LABELS = {
   rates:     '📈 Rates',
@@ -78,25 +78,13 @@ export function MacroBanner({ regime, signals }) {
 
 /* ── Full panel ─────────────────────────────────────────────────────────── */
 export default function MacroPanel() {
-  const [data,    setData]    = useState(null)
-  const [loading, setLoading] = useState(false)
-  const [error,   setError]   = useState(null)
-
-  const load = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      const res  = await fetch('/api/macro/indicators')
-      const json = await res.json()
-      if (!res.ok) throw new Error(json.error || 'Macro fetch failed')
-      setData(json)
-    } catch (e) {
-      setError(e.message)
-    }
-    setLoading(false)
-  }, [])
-
-  useEffect(() => { load() }, [load])
+  // Server caches FRED for 1h — share one fetch app-wide and keep it for 10 min
+  const { data, error: queryError, loading, refetch: load } = useQuery(
+    'macro-indicators',
+    () => fetchJson('/api/macro/indicators'),
+    { staleMs: 10 * 60_000 },
+  )
+  const error = queryError?.message ?? null
 
   if (loading) return (
     <div className="glass rounded-xl p-6 flex items-center gap-3 text-slate-400 text-sm">

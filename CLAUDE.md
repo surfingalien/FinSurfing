@@ -43,6 +43,9 @@ React18+Vite SPA → Express API proxy. Dev: Vite proxies `/api/*` → :3001. Pr
 ## Frontend Routing & Nav
 Hash routes `#/<tab>[/<param>]` (e.g. `#/analyze/NVDA`) via `src/hooks/useHashRoute.js`; unknown tabs → dashboard. All views `React.lazy` (one Vite chunk each) behind a single `Suspense` in `App.jsx`. `src/navigation.js` is the single source of truth for nav groups/tabs, shared by `Sidebar`, `CommandPalette` (⌘K / Ctrl+K: view search + ticker jump), and route validation.
 
+## Frontend Data Layer (`src/hooks/useQuery.js`)
+Zero-dep shared fetch cache: module-level cache keyed by string, in-flight dedupe, stale-while-revalidate (`staleMs`), optional polling (`refetchMs`), `invalidateQuery(key)`. Prefer `useQuery(key, () => fetchJson(url), { staleMs })` over hand-rolled `data/loading/error` state for GET-on-mount views (adopted: `MacroPanel`, `TrackRecordPanel`). Keys are global — embed params (and user id for authed endpoints) in the key.
+
 ## TradingView
 `window.TradingView.widget()` via tv.js CDN. `normalise()` in `TradingViewView.jsx`: Yahoo tickers → `EXCHANGE:SYMBOL`. `cryptoMap` 100+ tokens (USD+USDT). Studies: RSI, Volume, MACD.
 

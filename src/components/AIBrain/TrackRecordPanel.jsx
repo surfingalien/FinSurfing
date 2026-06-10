@@ -7,8 +7,9 @@
  * key learnings the Brain injects into its own future scans.
  */
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Target, ChevronDown, ChevronUp, Sparkles, Scale } from 'lucide-react'
+import { useQuery, fetchJson } from '../../hooks/useQuery'
 
 const fmtPct = v => (v == null ? '—' : `${Math.round(v * 100)}%`)
 
@@ -36,18 +37,15 @@ function BucketRow({ label, bucket, accent = 'text-mint-400' }) {
 }
 
 export default function TrackRecordPanel() {
-  const [data,     setData]     = useState(null)
   const [expanded, setExpanded] = useState(false)
+  // Learnings refresh nightly — cache for the whole session
+  const { data, error } = useQuery(
+    'ai-brain-learnings',
+    () => fetchJson('/api/ai-brain/learnings'),
+    { staleMs: 60 * 60_000 },
+  )
 
-  useEffect(() => {
-    let alive = true
-    fetch('/api/ai-brain/learnings')
-      .then(r => r.json())
-      .then(d => { if (alive) setData(d) })
-      .catch(() => { if (alive) setData({ available: false }) })
-    return () => { alive = false }
-  }, [])
-
+  if (error) return null
   if (!data) return null
 
   const stats = data.stats
