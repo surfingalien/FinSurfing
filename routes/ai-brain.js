@@ -23,6 +23,8 @@ const { getSocialSentiment } = require('../lib/social-sentiment')
 const { requireAuth }     = require('../middleware/auth')
 const { getLearningsBlock } = require('../lib/brain-learnings')
 const { compactTaLine }     = require('../lib/technical-indicators')
+const { fetchDailyBars }    = require('../lib/internal-api')
+const { tryParseAiJson }    = require('../lib/ai-json')
 
 const router   = express.Router()
 const aiRouter = getRouter('ai-brain')
@@ -299,33 +301,21 @@ function fmtQuote(q) {
 
 // Fetch daily bars per symbol and compute one-line TA summaries for the prompt.
 // Concurrency-limited so a 20-symbol scan doesn't stampede the data providers.
-async function fetchTaSnapshot(universe, headers, port) {
+async function fetchTaSnapshot(universe, headers) {
   const bySymbol = new Map()
   const queue = [...universe]
   const workers = Array.from({ length: 5 }, async () => {
     while (queue.length) {
       const sym = queue.shift()
-      try {
-        const r = await fetch(
-          `http://127.0.0.1:${port}/api/chart?symbol=${encodeURIComponent(sym)}&interval=1d&range=6mo`,
-          { headers, signal: AbortSignal.timeout(12_000) }
-        )
-        const d    = await r.json()
-        const res0 = d?.chart?.result?.[0]
-        const ts   = res0?.timestamp
-        const q    = res0?.indicators?.quote?.[0]
-        if (!ts?.length || !q?.close) continue
-        const bars = ts.map((t, i) => ({
-          o: q.open?.[i], h: q.high?.[i], l: q.low?.[i], c: q.close?.[i], v: q.volume?.[i] ?? 0,
-        })).filter(b => b.c != null && !isNaN(b.c))
-        if (bars.length < 30) continue
-        const line = compactTaLine(
-          sym,
-          bars.map(b => b.o ?? b.c), bars.map(b => b.h ?? b.c),
-          bars.map(b => b.l ?? b.c), bars.map(b => b.c), bars.map(b => b.v),
-        )
-        if (line) bySymbol.set(sym, line)
-      } catch { /* missing TA for one symbol is non-fatal */ }
+      // Missing TA for one symbol is non-fatal — fetchDailyBars returns [] on failure
+      const bars = await fetchDailyBars(sym, { headers, timeoutMs: 12_000 })
+      if (bars.length < 30) continue
+      const line = compactTaLine(
+        sym,
+        bars.map(b => b.o ?? b.c), bars.map(b => b.h ?? b.c),
+        bars.map(b => b.l ?? b.c), bars.map(b => b.c), bars.map(b => b.v),
+      )
+      if (line) bySymbol.set(sym, line)
     }
   })
   // Overall time budget: return whatever resolved by 20s rather than letting a
@@ -420,7 +410,7 @@ router.post('/analyze', requireAuth, brainLimit, async (req, res) => {
       )
       return r.json()
     })(),
-    fetchTaSnapshot(universe, fwdKeys(req), port),
+    fetchTaSnapshot(universe, fwdKeys(req)),
   ])
 
   if (quoteResult.status === 'fulfilled') {
@@ -611,12 +601,7 @@ Rules:
     // ── Cross-model agreement — annotate each pick with the second opinion ────
     let ensemble = null
     if (secondText) {
-      let second = null
-      try { second = JSON.parse(secondText) }
-      catch {
-        const m = secondText.match(/\{[\s\S]*\}/)
-        if (m) { try { second = JSON.parse(m[0]) } catch { /* unusable second opinion */ } }
-      }
+      const second = tryParseAiJson(secondText)
       if (Array.isArray(second?.rankedStocks) && second.rankedStocks.length) {
         const secMap = new Map(second.rankedStocks.map(s => [s.symbol, s]))
         let overlap = 0
