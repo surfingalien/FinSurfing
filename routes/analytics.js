@@ -37,87 +37,12 @@ async function fetchCloses(symbol, range = '1y', fwdHeaders = {}) {
   } catch { return [] }
 }
 
-// ── Daily returns from close array ───────────────────────────────────────────
-function dailyReturns(closes) {
-  const out = []
-  for (let i = 1; i < closes.length; i++)
-    out.push((closes[i] - closes[i - 1]) / closes[i - 1])
-  return out
-}
-
-// ── Risk metrics ──────────────────────────────────────────────────────────────
-const RISK_FREE_ANNUAL = 0.045   // ~4.5% T-bill rate
-
-function sharpeRatio(returns) {
-  if (returns.length < 20) return null
-  const avg = returns.reduce((s, v) => s + v, 0) / returns.length
-  const variance = returns.reduce((s, v) => s + (v - avg) ** 2, 0) / returns.length
-  const stdDev = Math.sqrt(variance)
-  if (stdDev === 0) return null
-  const annualReturn = avg * 252
-  const annualStdDev = stdDev * Math.sqrt(252)
-  return (annualReturn - RISK_FREE_ANNUAL) / annualStdDev
-}
-
-function sortinoRatio(returns) {
-  if (returns.length < 20) return null
-  const avg = returns.reduce((s, v) => s + v, 0) / returns.length
-  const downside = returns.filter(r => r < 0)
-  if (downside.length === 0) return null
-  const downsideVariance = downside.reduce((s, v) => s + v ** 2, 0) / returns.length
-  const downsideStd = Math.sqrt(downsideVariance) * Math.sqrt(252)
-  if (downsideStd === 0) return null
-  return (avg * 252 - RISK_FREE_ANNUAL) / downsideStd
-}
-
-function maxDrawdown(closes) {
-  if (closes.length < 2) return null
-  let peak = closes[0], maxDD = 0
-  for (const c of closes) {
-    if (c > peak) peak = c
-    const dd = (c - peak) / peak
-    if (dd < maxDD) maxDD = dd
-  }
-  return maxDD  // negative number, e.g. -0.23 = -23%
-}
-
-function annualizedReturn(closes) {
-  if (closes.length < 2) return null
-  const totalReturn = (closes[closes.length - 1] - closes[0]) / closes[0]
-  const years = closes.length / 252
-  return (1 + totalReturn) ** (1 / years) - 1
-}
-
-// ── Pearson correlation ───────────────────────────────────────────────────────
-function pearson(a, b) {
-  const n   = Math.min(a.length, b.length)
-  if (n < 5) return null
-  const ax  = a.slice(-n)
-  const bx  = b.slice(-n)
-  const ma  = ax.reduce((s, v) => s + v, 0) / n
-  const mb  = bx.reduce((s, v) => s + v, 0) / n
-  let num = 0, da2 = 0, db2 = 0
-  for (let i = 0; i < n; i++) {
-    const da = ax[i] - ma; const db = bx[i] - mb
-    num += da * db; da2 += da * da; db2 += db * db
-  }
-  return da2 === 0 || db2 === 0 ? 0 : num / Math.sqrt(da2 * db2)
-}
-
-// ── Beta vs benchmark ─────────────────────────────────────────────────────────
-function beta(stockRet, mktRet) {
-  const n  = Math.min(stockRet.length, mktRet.length)
-  if (n < 5) return null
-  const sr = stockRet.slice(-n); const mr = mktRet.slice(-n)
-  const ms = sr.reduce((a, v) => a + v, 0) / n
-  const mm = mr.reduce((a, v) => a + v, 0) / n
-  let cov = 0, varM = 0
-  for (let i = 0; i < n; i++) {
-    cov  += (sr[i] - ms) * (mr[i] - mm)
-    varM += (mr[i] - mm) ** 2
-  }
-  return varM === 0 ? 0 : cov / varM
-}
+// ── Risk/performance math: lib/portfolio-metrics.js (unit-tested) ────────────
+const {
+  dailyReturns, sharpeRatio, sortinoRatio, maxDrawdown, annualizedReturn,
+  annualizedVolatility, valueAtRisk, conditionalVaR, pearson, beta,
+  weightedReturnSeries, equityFromReturns,
+} = require('../lib/portfolio-metrics')
 
 // ── Main route ────────────────────────────────────────────────────────────────
 // Accepts optional ?symbols=AAPL,MSFT,GOOG query param for manual analysis
@@ -231,23 +156,22 @@ router.get('/portfolio', async (req, res) => {
     weight: totalHoldings > 0 ? +((count / totalHoldings) * 100).toFixed(1) : 0,
   })).sort((a, b) => b.weight - a.weight)
 
-  // ── Portfolio risk metrics (Sharpe, Sortino, Max Drawdown) ───────────────
-  // Build equal-weighted portfolio daily returns for risk calculations
+  // ── Portfolio risk metrics (Sharpe, Sortino, drawdown, vol, VaR) ─────────
+  // Value-weighted by shares × latest close when real position sizes are
+  // known (portfolio mode); equal-weighted for manual ?symbols= lists.
+  const manualMode = !!req.query.symbols
   const riskMetrics = {}
   try {
     const alignedLength = Math.min(...symsToFetch.map(s => closeMap[s].length))
     if (alignedLength >= 20 && symsToFetch.length > 0) {
-      // Equal-weighted portfolio return series
-      const portReturns = []
-      for (let i = 1; i < alignedLength; i++) {
-        let ret = 0
-        for (const sym of symsToFetch) {
-          const closes = closeMap[sym].map(p => p.close)
-          const offset = closes.length - alignedLength
-          ret += (closes[offset + i] - closes[offset + i - 1]) / closes[offset + i - 1]
-        }
-        portReturns.push(ret / symsToFetch.length)
-      }
+      const closeSeries = symsToFetch.map(s => closeMap[s].map(p => p.close))
+      const weights = manualMode ? null : symsToFetch.map(s => {
+        const closes = closeMap[s].map(p => p.close)
+        const last   = closes[closes.length - 1] || 0
+        return (holdingMeta[s]?.shares || 0) * last
+      })
+      const portReturns = weightedReturnSeries(closeSeries, weights)
+      const portEquity  = equityFromReturns(portReturns)
 
       // Per-holding risk metrics
       const holdingRisk = {}
@@ -264,8 +188,12 @@ router.get('/portfolio', async (req, res) => {
       riskMetrics.portfolio = {
         sharpe:       sharpeRatio(portReturns)  != null ? +sharpeRatio(portReturns).toFixed(3)  : null,
         sortino:      sortinoRatio(portReturns) != null ? +sortinoRatio(portReturns).toFixed(3) : null,
-        maxDrawdown:  null,
-        annualReturn: null,
+        maxDrawdown:  maxDrawdown(portEquity)   != null ? +(maxDrawdown(portEquity) * 100).toFixed(2) : null,
+        annualReturn: annualizedReturn(portEquity) != null ? +(annualizedReturn(portEquity) * 100).toFixed(2) : null,
+        volatility:   annualizedVolatility(portReturns) != null ? +(annualizedVolatility(portReturns) * 100).toFixed(2) : null,
+        var95:        valueAtRisk(portReturns)     != null ? +(valueAtRisk(portReturns) * 100).toFixed(2)     : null,
+        cvar95:       conditionalVaR(portReturns)  != null ? +(conditionalVaR(portReturns) * 100).toFixed(2)  : null,
+        weighting:    manualMode ? 'equal' : 'value',
       }
 
       // SPY benchmark metrics for comparison
@@ -276,6 +204,9 @@ router.get('/portfolio', async (req, res) => {
           ? +(maxDrawdown(spyData.map(p => p.close)) * 100).toFixed(2) : null,
         annualReturn: annualizedReturn(spyData.map(p => p.close)) != null
           ? +(annualizedReturn(spyData.map(p => p.close)) * 100).toFixed(2) : null,
+        volatility:   annualizedVolatility(spyRet) != null ? +(annualizedVolatility(spyRet) * 100).toFixed(2) : null,
+        var95:        valueAtRisk(spyRet)    != null ? +(valueAtRisk(spyRet) * 100).toFixed(2)    : null,
+        cvar95:       conditionalVaR(spyRet) != null ? +(conditionalVaR(spyRet) * 100).toFixed(2) : null,
       }
       riskMetrics.holdings = holdingRisk
     }
