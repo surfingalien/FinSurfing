@@ -22,6 +22,7 @@ const { CircuitOpenError } = require('../lib/circuit-breaker')
 const { getSocialSentiment } = require('../lib/social-sentiment')
 const { requireAuth }     = require('../middleware/auth')
 const { getLearningsBlock } = require('../lib/brain-learnings')
+const { compactTaLine }     = require('../lib/technical-indicators')
 
 const router   = express.Router()
 const aiRouter = getRouter('ai-brain')
@@ -296,6 +297,47 @@ function fmtQuote(q) {
   )
 }
 
+// Fetch daily bars per symbol and compute one-line TA summaries for the prompt.
+// Concurrency-limited so a 20-symbol scan doesn't stampede the data providers.
+async function fetchTaSnapshot(universe, headers, port) {
+  const bySymbol = new Map()
+  const queue = [...universe]
+  const workers = Array.from({ length: 5 }, async () => {
+    while (queue.length) {
+      const sym = queue.shift()
+      try {
+        const r = await fetch(
+          `http://127.0.0.1:${port}/api/chart?symbol=${encodeURIComponent(sym)}&interval=1d&range=6mo`,
+          { headers, signal: AbortSignal.timeout(12_000) }
+        )
+        const d    = await r.json()
+        const res0 = d?.chart?.result?.[0]
+        const ts   = res0?.timestamp
+        const q    = res0?.indicators?.quote?.[0]
+        if (!ts?.length || !q?.close) continue
+        const bars = ts.map((t, i) => ({
+          o: q.open?.[i], h: q.high?.[i], l: q.low?.[i], c: q.close?.[i], v: q.volume?.[i] ?? 0,
+        })).filter(b => b.c != null && !isNaN(b.c))
+        if (bars.length < 30) continue
+        const line = compactTaLine(
+          sym,
+          bars.map(b => b.o ?? b.c), bars.map(b => b.h ?? b.c),
+          bars.map(b => b.l ?? b.c), bars.map(b => b.c), bars.map(b => b.v),
+        )
+        if (line) bySymbol.set(sym, line)
+      } catch { /* missing TA for one symbol is non-fatal */ }
+    }
+  })
+  // Overall time budget: return whatever resolved by 20s rather than letting a
+  // slow provider stall the whole user-facing scan
+  await Promise.race([
+    Promise.all(workers),
+    new Promise(resolve => setTimeout(resolve, 20_000)),
+  ])
+  // Preserve universe order for deterministic prompts
+  return universe.map(s => bySymbol.get(s)).filter(Boolean)
+}
+
 // Write a prediction record for future win-rate tracking
 function logPrediction(symbol, agents, zones, generatedAt) {
   try {
@@ -309,6 +351,13 @@ function logPrediction(symbol, agents, zones, generatedAt) {
       macroScore:        agents.macroScore,
       riskScore:         agents.riskScore,
       compositeScore:    agents.compositeScore,
+      confidence:        agents.confidence ?? null,
+      priceAtPrediction: agents.currentPrice ?? null,
+      // true = both models picked it with matching verdict; false = primary-only
+      // pick during an ensemble scan; null = no ensemble ran
+      ensembleConfirmed: agents.ensemble ? (agents.ensemble.confirmed && agents.ensemble.verdictMatch === true) : null,
+      entryZoneLow:      zones?.entryZoneLow  ?? null,
+      entryZoneHigh:     zones?.entryZoneHigh ?? null,
       entryZoneMid:      zones?.entryZoneLow != null ? (zones.entryZoneLow + zones.entryZoneHigh) / 2 : null,
       targetZoneMid:     zones?.targetZoneLow != null ? (zones.targetZoneLow + zones.targetZoneHigh) / 2 : null,
       verdict:           agents.agentVerdict,
@@ -351,7 +400,7 @@ router.post('/analyze', requireAuth, brainLimit, async (req, res) => {
   let socialSnippet   = ''
 
   const port = process.env.PORT || 3001
-  const [quoteResult, socialResult, earningsResult] = await Promise.allSettled([
+  const [quoteResult, socialResult, earningsResult, taResult] = await Promise.allSettled([
     (async () => {
       const r = await fetch(
         `http://127.0.0.1:${port}/api/quote?symbols=${universe.join(',')}`,
@@ -371,6 +420,7 @@ router.post('/analyze', requireAuth, brainLimit, async (req, res) => {
       )
       return r.json()
     })(),
+    fetchTaSnapshot(universe, fwdKeys(req), port),
   ])
 
   if (quoteResult.status === 'fulfilled') {
@@ -381,6 +431,13 @@ router.post('/analyze', requireAuth, brainLimit, async (req, res) => {
 
   if (socialResult.status === 'fulfilled') {
     socialSnippet = socialResult.value
+  }
+
+  // Server-computed technical indicators (RSI/MACD/EMA/S-R/volume per symbol)
+  let taSnippet = ''
+  if (taResult.status === 'fulfilled' && taResult.value.length) {
+    taSnippet = '\n\nCOMPUTED TECHNICALS (server-calculated from daily bars — authoritative; base technicalScore on these, do not invent indicator values):\n'
+      + taResult.value.join('\n')
   }
 
   // Build earnings catalyst snippet
@@ -420,7 +477,7 @@ Analyze this universe for a ${horizonLabel} horizon. Today is late May 2026.
 Universe: ${universe.join(', ')}
 Avoid holdings: ${holdingStr}
 ${scanMode.startsWith('mutualfunds') ? `\nNOTE: This universe contains mutual funds (category: ${scanMode === 'mutualfunds' ? 'Broad All-Category' : scanMode.replace('mutualfunds_','').toUpperCase()}). Score each fund on: (1) Fundamental = portfolio holdings quality, manager tenure & track record, alpha vs benchmark, (2) Technical = NAV trend, momentum, and performance relative to category peers, (3) Sentiment = fund flows, retail/institutional demand, manager commentary, (4) Macro = asset-class fit for current rate/growth/inflation regime, (5) Risk = expense ratio, max drawdown, concentration risk, redemption risk. Price targets refer to NAV zones. Omit stop-loss precision — use downside risk zones only.` : ''}${scanMode.startsWith('etfs_') ? `\nNOTE: This is an ETF sub-category scan (${scanMode.replace('etfs_','').toUpperCase()}). Scoring focus: (1) Fundamental = underlying index quality, holdings composition, expense ratio vs peers, (2) Technical = ETF price trend & momentum, discount/premium to NAV, options flow if available, (3) Sentiment = fund flows, AUM trend, institutional rotation signals, (4) Macro = how well this ETF category fits the current rate/sector/growth regime, (5) Risk = liquidity, tracking error, concentration, leverage if any.` : ''}${scanMode.startsWith('crypto_') ? `\nNOTE: This is a crypto sub-category scan (${scanMode.replace('crypto_','').toUpperCase()}). Scoring focus: (1) Fundamental = protocol TVL, revenue, developer activity, tokenomics, (2) Technical = price trend vs BTC, momentum, on-chain volume signal, (3) Sentiment = social dominance, whale flows, exchange inflows/outflows, (4) Macro = correlation to BTC cycle stage, risk-on/off regime, regulatory climate, (5) Risk = smart contract risk, liquidity depth, centralization risk. Consider current crypto market cycle phase.` : ''}${scanMode.startsWith('stocks_') ? `\nNOTE: This is a stock sector scan (GICS Sector: ${scanMode.replace('stocks_','').replace(/_/g,' ').toUpperCase()}). Scoring focus: (1) Fundamental = earnings growth, margins, valuation vs sector peers, balance sheet quality, (2) Technical = price trend, relative strength vs S&P 500, breakout/breakdown levels, (3) Sentiment = analyst upgrades/downgrades, short interest, insider activity, (4) Macro = sector-specific tailwinds/headwinds in the current rate/growth regime, (5) Risk = concentration risk, regulatory exposure, competitive moat strength.` : ''}
-${marketSnippet}${earningsSnippet}
+${marketSnippet}${taSnippet}${earningsSnippet}
 
 ⚠️ STRICT TOKEN BUDGET — respect every word limit or the response will be truncated.
 
@@ -498,14 +555,31 @@ Rules:
 - dataSource: "live" if snapshot provided, else "knowledge"
 - STRICTLY respect all ≤N word limits`
 
-  // ── Sub-agent 2: signal generation via ai-router (Claude + Groq fallback) ────
-  let raw     = ''
-  let llmUsed = 'claude'
+  // ── Sub-agent 2: signal generation ───────────────────────────────────────────
+  // When Groq is configured, both models scan INDEPENDENTLY in parallel and
+  // cross-model agreement becomes a signal (logged for calibration tracking).
+  // Claude remains primary; a failed second opinion never fails the scan.
+  let raw        = ''
+  let llmUsed    = 'claude'
+  let secondText = null
 
   try {
-    const result = await aiRouter.call({ prompt, maxTokens: 16000, symbols: universe })
-    raw     = result.text
-    llmUsed = result.llmUsed
+    if (process.env.GROQ_API_KEY) {
+      const [pri, sec] = await Promise.allSettled([
+        aiRouter.call({ prompt, maxTokens: 16000, symbols: universe }),
+        aiRouter.callGroq({ prompt, maxTokens: 16000, symbols: universe }),
+      ])
+      if (pri.status === 'rejected') throw pri.reason
+      raw     = pri.value.text
+      llmUsed = pri.value.llmUsed
+      // If Claude was overloaded and fell back to Groq, the "second opinion"
+      // is the same model — agreement would be meaningless, so skip it.
+      if (sec.status === 'fulfilled' && llmUsed !== 'groq') secondText = sec.value.text
+    } else {
+      const result = await aiRouter.call({ prompt, maxTokens: 16000, symbols: universe })
+      raw     = result.text
+      llmUsed = result.llmUsed
+    }
   } catch (err) {
     if (err instanceof CircuitOpenError) return res.status(503).json({ error: err.message, circuitOpen: true })
     if (err.status === 503)             return res.status(503).json({ error: err.message })
@@ -534,6 +608,42 @@ Rules:
     if (!Array.isArray(data.rankedStocks) || !data.rankedStocks.length)
       return res.status(500).json({ error: 'AI Brain returned no ranked stocks — try again' })
 
+    // ── Cross-model agreement — annotate each pick with the second opinion ────
+    let ensemble = null
+    if (secondText) {
+      let second = null
+      try { second = JSON.parse(secondText) }
+      catch {
+        const m = secondText.match(/\{[\s\S]*\}/)
+        if (m) { try { second = JSON.parse(m[0]) } catch { /* unusable second opinion */ } }
+      }
+      if (Array.isArray(second?.rankedStocks) && second.rankedStocks.length) {
+        const secMap = new Map(second.rankedStocks.map(s => [s.symbol, s]))
+        let overlap = 0
+        for (const stock of data.rankedStocks) {
+          const m = secMap.get(stock.symbol)
+          if (m) {
+            overlap++
+            stock.ensemble = {
+              confirmed:     true,
+              secondVerdict: m.agentVerdict ?? null,
+              verdictMatch:  !!m.agentVerdict && m.agentVerdict === stock.agentVerdict,
+              scoreDelta:    (m.compositeScore != null && stock.compositeScore != null)
+                               ? Math.abs(m.compositeScore - stock.compositeScore) : null,
+              secondRank:    m.rank ?? null,
+            }
+          } else {
+            stock.ensemble = { confirmed: false }
+          }
+        }
+        ensemble = {
+          secondModel:  'llama-3.3-70b-versatile',
+          overlapCount: overlap,
+          overlapPct:   Math.round((overlap / data.rankedStocks.length) * 100),
+        }
+      }
+    }
+
     // Log each prediction for win-rate tracking
     for (const stock of data.rankedStocks) {
       logPrediction(stock.symbol, stock, {
@@ -554,6 +664,7 @@ Rules:
       liveDataSymbols:  liveQuotes.map(q => q.symbol),
       llmUsed,
       modelUsed: llmUsed === 'claude' ? 'claude-sonnet-4-6' : 'llama-3.3-70b-versatile',
+      ensemble,
       agentsUsed: ['Fundamental Analyst','Technical Analyst','Sentiment Agent','Macro Economist','Risk Manager','Supervisor'],
     })
   } catch (err) {

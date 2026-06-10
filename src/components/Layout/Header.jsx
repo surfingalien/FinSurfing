@@ -10,13 +10,13 @@
  */
 
 import { useState, useEffect, useRef } from 'react'
-import { Menu, Terminal } from 'lucide-react'
+import { Menu, Terminal, Search } from 'lucide-react'
 import { fetchQuotes, subscribeQuotes } from '../../services/api'
 import { TICKER_SYMBOLS } from '../../data/portfolio'
 import { fmt, fmtPct } from '../../services/api'
 import { useProMode } from '../../contexts/ProModeContext'
 
-export default function Header({ onMobileMenuOpen }) {
+export default function Header({ onMobileMenuOpen, onOpenPalette }) {
   const [tickerData, setTickerData] = useState([])
   const [time,       setTime]       = useState(new Date())
   const [marketOpen, setMarketOpen] = useState(false)
@@ -121,6 +121,20 @@ export default function Header({ onMobileMenuOpen }) {
           {time.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
         </span>
       </div>
+
+      {/* Command palette (⌘K) */}
+      {onOpenPalette && (
+        <button
+          onClick={onOpenPalette}
+          title="Quick navigation (⌘K)"
+          className="shrink-0 px-3 h-full flex items-center gap-1.5 text-[10px] font-mono
+                     text-slate-500 hover:text-slate-300 hover:bg-white/[0.04]
+                     border-l border-white/[0.06] transition-colors"
+        >
+          <Search className="w-3 h-3" />
+          <kbd className="hidden sm:block text-[9px] border border-white/[0.08] rounded px-1 py-px">⌘K</kbd>
+        </button>
+      )}
 
       {/* Pro Mode toggle */}
       <button

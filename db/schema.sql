@@ -373,6 +373,9 @@ CREATE TABLE IF NOT EXISTS research_notes (
 
 CREATE INDEX IF NOT EXISTS idx_research_notes_user    ON research_notes(user_id, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_research_notes_symbol  ON research_notes(user_id, symbol);
+-- Full-text search across title + content (GET /api/research-notes/search)
+CREATE INDEX IF NOT EXISTS idx_research_notes_fts     ON research_notes
+  USING GIN (to_tsvector('english', coalesce(title,'') || ' ' || coalesce(content,'')));
 
 CREATE TRIGGER research_notes_updated_at
   BEFORE UPDATE ON research_notes

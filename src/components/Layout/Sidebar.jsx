@@ -11,13 +11,10 @@
 import { useState, useEffect, useRef } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import {
-  LayoutDashboard, PieChart, Eye, LineChart, Lightbulb,
-  TrendingUp, SlidersHorizontal, GitBranch, Bell, Bot,
-  ShieldCheck, ChevronLeft, ChevronRight, LogIn, LogOut,
-  User, KeyRound, Activity, X, Menu, FolderOpen, Calendar,
-  FlaskConical, BarChart3, Settings, Sparkles, Brain, Bookmark, Monitor, BookOpen, Globe, Target,
-  Network, Clock, Radio, BrainCircuit,
+  ChevronLeft, ChevronRight, LogIn, LogOut,
+  KeyRound, X, FolderOpen, Settings,
 } from 'lucide-react'
+import { NAV_GROUPS, ADMIN_GROUP } from '../../navigation'
 import { useAuth } from '../../contexts/AuthContext'
 import { useApiKeys } from '../../contexts/ApiKeysContext'
 import AccountSwitcher from '../Portfolio/AccountSwitcher'
@@ -29,67 +26,14 @@ import { Tooltip } from '../shared/Tooltip'
 // ── Nav item definitions ──────────────────────────────────────────────────────
 
 function buildGroups(user, triggeredCount) {
-  const groups = [
-    {
-      label: 'Overview',
-      items: [
-        { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-        { id: 'portfolio',  label: 'Portfolio', icon: PieChart },
-        { id: 'watchlist',  label: 'Watchlist', icon: Eye },
-        { id: 'alerts',     label: 'Alerts',    icon: Bell, badge: triggeredCount },
-      ],
-    },
-    {
-      label: 'Markets',
-      items: [
-        { id: 'analyze',        label: 'Analyze',       icon: LineChart },
-        { id: 'tradingview',    label: 'TradingView',   icon: Monitor },
-      ],
-    },
-    {
-      label: 'AI Tools',
-      items: [
-        { id: 'market-focus',    label: 'Market Focus',   icon: Radio,     tag: 'LIVE' },
-        { id: 'ai-brain',        label: 'AI Brain',      icon: Brain },
-        { id: 'buy-signals',     label: 'AI Buy Signals', icon: Sparkles },
-        { id: 'ai-watchlist',    label: 'AI Watchlist',   icon: Bookmark },
-        { id: 'agent-hub',       label: 'Agent Hub',      icon: Network },
-        { id: 'agentic-os',      label: 'Agentic OS',     icon: BrainCircuit },
-        { id: 'trade-timeline',  label: 'Trade Timeline', icon: Clock },
-        { id: 'research',        label: 'AI Agent',       icon: Bot },
-        { id: 'second-brain',    label: 'Second Brain',   icon: BookOpen },
-        { id: 'quantmind',       label: 'QuantMind',      icon: FlaskConical },
-        { id: 'recommendations', label: 'Advisory',       icon: Lightbulb },
-        { id: 'macro',           label: 'Macro',          icon: Globe },
-        { id: 'polymarket',      label: 'Polymarket',     icon: TrendingUp },
-      ],
-    },
-    {
-      label: 'Strategies',
-      items: [
-        { id: 'strategies', label: 'Strategies',     icon: GitBranch },
-        { id: 'backtest',   label: 'Backtester',     icon: FlaskConical },
-      ],
-    },
-    {
-      label: 'Planning',
-      items: [
-        { id: 'goals',        label: 'Goals',          icon: Target      },
-        { id: 'analytics',    label: 'Risk Analytics', icon: Activity    },
-        { id: 'risk-rules',   label: 'Risk Rules',     icon: ShieldCheck },
-        { id: 'trade-setups', label: 'Trade Setups',   icon: SlidersHorizontal },
-        { id: 'montecarlo',   label: 'Retirement',     icon: TrendingUp  },
-        { id: 'rebalancer',   label: 'AI Rebalancer',  icon: BarChart3   },
-      ],
-    },
-  ]
+  const groups = NAV_GROUPS.map(group => ({
+    ...group,
+    items: group.items.map(item =>
+      item.id === 'alerts' ? { ...item, badge: triggeredCount } : item
+    ),
+  }))
 
-  if (user?.role === 'admin') {
-    groups.push({
-      label: 'Admin',
-      items: [{ id: 'admin', label: 'Admin', icon: ShieldCheck, admin: true }],
-    })
-  }
+  if (user?.role === 'admin') groups.push(ADMIN_GROUP)
 
   return groups
 }
