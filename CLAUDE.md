@@ -18,7 +18,7 @@ React18+Vite SPA → Express API proxy. Dev: Vite proxies `/api/*` → :3001. Pr
 - `macro.js` — FRED macro indicators (14 series); requires `FRED_API_KEY` env var; 1h cache; `getIndicators()` exported for prompt injection
 - `symbols.js` — symbol classification/search/universes from `lib/symbol-db.js` (FinanceDatabase weekly snapshot → `data/symbol-db.json`; lazy boot load + Monday refresh job); POST `/refresh` requireAuth
 - `market-focus.js` — intraday session focus; GET returns cached AI analysis of top items to watch (holdings + watchlist + macro); POST `/refresh` triggers fresh run (`requireAuth`); refreshes every 30 min during market hours via `lib/scheduled-jobs.js:intradayFocusHandler`
-- `copilot.js` — streaming agentic chat (`requireAuth`); multi-provider (Claude native stream → Groq/OpenAI-compat fallback); SSRF-safe: `baseUrl` always from server-side `PROVIDER_DEFAULTS`, never from request body
+- `copilot.js` — streaming agentic chat (`requireAuth`); multi-provider (Claude native stream → Groq/OpenAI-compat fallback); SSRF-safe: `baseUrl` always from server-side `PROVIDER_DEFAULTS`, never from request body; `TOOLS` registry: scan/recommendations/analyze/sentiment/macro/earnings/options + `classify_symbol` `sector_universe` (symbol-db), `portfolio_risk` (analytics), `get_calibration` (brain-learnings incl. baseline)
 
 **DB**: `DATABASE_URL` → Postgres; missing → memstore. Schema: `db/schema.sql`.
 **Client state**: localStorage: watchlist, alerts, AI watchlist, `finsurf_api_keys`. Portfolio → DB when authed.
