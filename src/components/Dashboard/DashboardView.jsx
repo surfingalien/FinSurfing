@@ -85,11 +85,15 @@ export default function DashboardView({ portfolio, onAnalyze }) {
         else if (dayMove < 0) dnCount++
       }
     })
+    // Quote coverage: unpriced holdings are counted at cost (break-even), so
+    // surface when the headline P&L is incomplete instead of silently wrong
+    const unpricedCount = positions.filter(p => quotes[p.symbol]?.price == null).length
+    const staleCount    = positions.filter(p => quotes[p.symbol]?.price != null && quotes[p.symbol]?.stale).length
     return {
       totalValue, totalCost, todayGL,
       totalGL:    totalValue - totalCost,
       totalGLPct: totalCost > 0 ? ((totalValue - totalCost) / totalCost) * 100 : 0,
-      upCount, dnCount,
+      upCount, dnCount, unpricedCount, staleCount,
     }
   }, [positions, quotes])
 
@@ -141,6 +145,13 @@ export default function DashboardView({ portfolio, onAnalyze }) {
             {totals.totalGL >= 0 ? '+' : ''}${Math.abs(totals.totalGL).toFixed(0)}{' '}
             ({totals.totalGLPct >= 0 ? '+' : ''}{totals.totalGLPct.toFixed(2)}%) all-time
           </div>
+          {(totals.unpricedCount > 0 || totals.staleCount > 0) && (
+            <div className="text-[10px] text-amber-500 mt-0.5">
+              {totals.unpricedCount > 0
+                ? `⚠ ${totals.unpricedCount} holding${totals.unpricedCount > 1 ? 's' : ''} unpriced — P&L incomplete`
+                : `${totals.staleCount} stale price${totals.staleCount > 1 ? 's' : ''}`}
+            </div>
+          )}
         </motion.div>
 
         <motion.div className="glass-card"

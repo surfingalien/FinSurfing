@@ -39,6 +39,33 @@ function saveStored(userId, positions) {
   try { localStorage.setItem(lsKey(userId), JSON.stringify(positions)) } catch {}
 }
 
+// ── Last-known quotes (survive provider outages + server cache wipes) ─────────
+// When a refresh comes back without a symbol (provider failure, rate limit,
+// empty server cache after a deploy), we fall back to the last real price,
+// marked stale, instead of silently counting the position at cost basis —
+// which made Total P&L understate losses.
+const LAST_QUOTES_KEY = 'finsurf_last_quotes'
+
+function loadLastQuotes() {
+  try { return JSON.parse(localStorage.getItem(LAST_QUOTES_KEY)) || {} } catch { return {} }
+}
+
+function saveLastQuotes(freshQuotes) {
+  try {
+    const stored = loadLastQuotes()
+    for (const q of freshQuotes) {
+      if (!q.symbol || q.price == null) continue
+      stored[q.symbol] = {
+        symbol: q.symbol, name: q.name, price: q.price,
+        prevClose: q.prevClose ?? null, marketTime: q.marketTime ?? null,
+        change: q.change ?? null, changePct: q.changePct ?? null,
+        savedAt: Date.now(),
+      }
+    }
+    localStorage.setItem(LAST_QUOTES_KEY, JSON.stringify(stored))
+  } catch {}
+}
+
 // ── API mode: localStorage backup (survives Railway server restarts) ───────────
 function apiLsKey(pid) { return `finsurf_api_holdings_${pid}` }
 
@@ -151,7 +178,13 @@ export function usePortfolio({ userId, activePortfolioId, authFetch } = {}) {
       const symbols = positions.map(p => p.symbol)
       const results = await fetchQuotes(symbols, { force: true })
       const map = {}
-      results.forEach(q => { if (q.symbol) map[q.symbol] = q })
+      results.forEach(q => { if (q.symbol && q.price != null) map[q.symbol] = q })
+      saveLastQuotes(results)
+      // Symbols the providers failed to price: fall back to last known quote
+      const stored = loadLastQuotes()
+      for (const sym of symbols) {
+        if (!map[sym] && stored[sym]) map[sym] = { ...stored[sym], stale: true }
+      }
       setQuotes(map)
       setLastUpdated(new Date())
     } catch (e) {
@@ -180,6 +213,7 @@ export function usePortfolio({ userId, activePortfolioId, authFetch } = {}) {
             change:    change    ?? existing.change,
             changePct: changePct ?? existing.changePct,
             marketTime: ts ? Math.floor(ts / 1000) : existing.marketTime,
+            stale: false,   // a live tick supersedes any last-known fallback
           },
         }
       })
@@ -304,10 +338,17 @@ export function usePortfolio({ userId, activePortfolioId, authFetch } = {}) {
   })
 
   const totalCost  = enriched.reduce((s, p) => s + p.costBasis, 0)
+  // Positions with no price at all (not even a last-known fallback) are
+  // counted at cost — i.e. shown as break-even. unpricedCount exposes how
+  // many holdings that affects so the UI can flag an incomplete P&L.
   const totalValue = enriched.reduce((s, p) => s + (p.mktValue ?? p.costBasis), 0)
   const totalGL    = totalValue - totalCost
   const totalGLPct = totalCost > 0 ? (totalGL / totalCost) * 100 : 0
   const todayTotal = enriched.reduce((s, p) => s + (p.todayGL ?? 0), 0)
+  const totalCount   = enriched.length
+  const staleCount   = enriched.filter(p => p.price !== null && p.stale).length
+  const unpricedCount= enriched.filter(p => p.price === null).length
+  const pricedCount  = totalCount - staleCount - unpricedCount
 
   return {
     positions: enriched,
@@ -319,6 +360,6 @@ export function usePortfolio({ userId, activePortfolioId, authFetch } = {}) {
     addPosition,
     removePosition,
     updatePosition,
-    summary: { totalCost, totalValue, totalGL, totalGLPct, todayTotal },
+    summary: { totalCost, totalValue, totalGL, totalGLPct, todayTotal, totalCount, pricedCount, staleCount, unpricedCount },
   }
 }
