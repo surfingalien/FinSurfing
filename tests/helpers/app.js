@@ -23,6 +23,7 @@ function createApp() {
   app.use('/api/portfolios', require('../../routes/portfolios'))
   app.use('/api/scheduler', require('../../routes/scheduler'))
   app.use('/api/trading-analysis', require('../../routes/trading-analysis'))
+  app.use('/api/research-notes', require('../../routes/research-notes'))
 
   return app
 }

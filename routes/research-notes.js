@@ -176,6 +176,108 @@ router.get('/', async (req, res) => {
   return res.json(notes.slice(0, lim))
 })
 
+// ── Lexical search (no embeddings required) ─────────────────────────────────
+// Postgres mode uses ranked full-text search; memstore mode uses term scoring.
+
+const SEARCH_STOPWORDS = new Set([
+  'the','a','an','and','or','of','to','in','on','for','is','are','was','with',
+  'that','this','it','as','at','by','be','from','have','has','will','would',
+])
+
+function tokenizeQuery(text) {
+  return String(text || '')
+    .toLowerCase()
+    .split(/[^a-z0-9$.\-]+/)
+    .filter(w => w.length > 1 && !SEARCH_STOPWORDS.has(w))
+}
+
+// Score a note against query terms: symbol match > title > tags > content
+function scoreNote(note, terms) {
+  if (!terms.length) return 0
+  const title   = (note.title   || '').toLowerCase()
+  const content = (note.content || '').toLowerCase()
+  const tags    = (note.tags    || []).join(' ').toLowerCase()
+  const sym     = (note.symbol  || '').toLowerCase()
+  let score = 0
+  for (const t of terms) {
+    if (sym && sym === t) score += 5
+    if (title.includes(t)) score += 3
+    if (tags.includes(t))  score += 2
+    let idx = 0, n = 0
+    while ((idx = content.indexOf(t, idx)) !== -1 && n < 5) { n++; idx += t.length }
+    score += n
+  }
+  return score
+}
+
+function rankNotes(notes, terms, lim, excludeId = null) {
+  return notes
+    .filter(n => n.id !== excludeId)
+    .map(n => ({ note: n, score: scoreNote(n, terms) }))
+    .filter(x => x.score > 0)
+    .sort((a, b) => b.score - a.score || String(b.note.updated_at).localeCompare(String(a.note.updated_at)))
+    .slice(0, lim)
+    .map(x => ({ ...x.note, rank: x.score }))
+}
+
+// ── GET /api/research-notes/search?q=... ─────────────────────────────────────
+router.get('/search', async (req, res) => {
+  const userId = req.user.userId
+  const q   = String(req.query.q || '').trim()
+  const lim = Math.min(50, parseInt(req.query.limit) || 20)
+  if (!q) return res.status(400).json({ error: 'q is required' })
+
+  if (DB_MODE) {
+    const { rows } = await query(`
+      SELECT *,
+             ts_rank(to_tsvector('english', coalesce(title,'') || ' ' || coalesce(content,'')),
+                     plainto_tsquery('english', $2)) AS rank
+      FROM research_notes
+      WHERE user_id = $1
+        AND (to_tsvector('english', coalesce(title,'') || ' ' || coalesce(content,'')) @@ plainto_tsquery('english', $2)
+             OR symbol = upper($2))
+      ORDER BY rank DESC, updated_at DESC
+      LIMIT $3
+    `, [userId, q, lim])
+    return res.json({ query: q, results: rows })
+  }
+
+  const terms = tokenizeQuery(q)
+  const mine  = [...MEM.notes.values()].filter(n => n.user_id === userId)
+  return res.json({ query: q, results: rankNotes(mine, terms, lim) })
+})
+
+// ── GET /api/research-notes/:id/related ──────────────────────────────────────
+// Surfaces notes lexically similar to this one (shared symbol/title/tag terms)
+// so contradicting or supporting theses stop living in isolation.
+router.get('/:id/related', async (req, res) => {
+  const userId = req.user.userId
+  const { id } = req.params
+  const lim = Math.min(20, parseInt(req.query.limit) || 5)
+
+  let note, candidates
+  if (DB_MODE) {
+    const { rows: [n] } = await query(
+      `SELECT * FROM research_notes WHERE id = $1 AND user_id = $2`, [id, userId])
+    if (!n) return res.status(404).json({ error: 'note not found' })
+    note = n
+    const { rows } = await query(
+      `SELECT * FROM research_notes WHERE user_id = $1 ORDER BY updated_at DESC LIMIT 200`, [userId])
+    candidates = rows
+  } else {
+    note = MEM.notes.get(id)
+    if (!note || note.user_id !== userId) return res.status(404).json({ error: 'note not found' })
+    candidates = [...MEM.notes.values()].filter(n => n.user_id === userId)
+  }
+
+  const terms = [...new Set([
+    ...(note.symbol ? [note.symbol.toLowerCase()] : []),
+    ...tokenizeQuery(note.title),
+    ...(note.tags || []).map(t => String(t).toLowerCase()),
+  ])]
+  return res.json({ noteId: id, related: rankNotes(candidates, terms, lim, id) })
+})
+
 // ── POST /api/research-notes ─────────────────────────────────────────────────
 router.post('/', async (req, res) => {
   const userId = req.user.userId

@@ -23,6 +23,7 @@ import {
 } from 'lucide-react'
 import { useAIWatchlist } from '../../hooks/useAIWatchlist'
 import { exportAnalysisToPDF } from '../../utils/pdfExport'
+import TrackRecordPanel from './TrackRecordPanel'
 
 /* ── scan modes ────────────────────────────────────────────── */
 const SCAN_MODES = [
@@ -647,6 +648,9 @@ export default function AIBrainView({ portfolio, onAnalyze }) {
           </button>
         </div>
       </div>
+
+      {/* ── Track record — measured accuracy, calibration, ensemble ── */}
+      <TrackRecordPanel />
 
       {/* ── Scan mode selector ── */}
       {!customSymbols.trim() && (
