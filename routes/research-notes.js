@@ -35,6 +35,8 @@ const DB_MODE = !!process.env.DATABASE_URL
 function newId() { return crypto.randomUUID() }
 function now()   { return new Date().toISOString() }
 
+const { parseAiJson } = require('../lib/ai-json')
+
 // Fetch JSON from Finnhub API
 function finnhubGet(path, key) {
   const sep = path.includes('?') ? '&' : '?'
@@ -134,19 +136,7 @@ function getFinnhubKey(req) {
 }
 
 // Parse JSON from Claude's text response — handles markdown fences + common malformations
-function parseAiJson(text) {
-  if (!text?.trim()) throw new Error('AI returned an empty response — please try again.')
-  // Strip markdown code fences (```json ... ```)
-  const unwrapped = text.replace(/^```(?:json)?\s*/im, '').replace(/\s*```\s*$/im, '').trim()
-  // Direct parse
-  try { return JSON.parse(unwrapped) } catch {}
-  // Extract first JSON object
-  const match = unwrapped.match(/\{[\s\S]*\}/)
-  if (!match) throw new Error('AI response did not contain valid JSON — please try again.')
-  try { return JSON.parse(match[0]) } catch (e) {
-    throw new Error(`AI response JSON parse failed — please try again. (${e.message.slice(0, 60)})`)
-  }
-}
+// parseAiJson now lives in lib/ai-json.js (shared by all AI routes)
 
 function isStaleNote(updatedAt) {
   if (!updatedAt) return false
