@@ -23,7 +23,7 @@ React18+Vite SPA → Express API proxy. Dev: Vite proxies `/api/*` → :3001. Pr
 **Client state**: localStorage: watchlist, alerts, AI watchlist, `finsurf_api_keys`. Portfolio → DB when authed.
 
 ## Market Data Pipeline (`server.js`)
-- `KNOWN_CRYPTO` (~80) → Binance → CoinGecko (`COINGECKO_IDS` map)
+- `KNOWN_CRYPTO` (~80) → Binance → CoinGecko (`COINGECKO_IDS` map) — classifiers in `lib/crypto-classify.js` (`isCryptoSymbol`, `toBinancePair`, `cgId`; tests in `tests/crypto-classify.test.js`)
 - `KNOWN_MUTUAL_FUNDS` (~120) → FMP only (NAV quotes)
 - Else → Finnhub → AISA → FMP → AlphaVantage → Nasdaq → TwelveData → cache
 
