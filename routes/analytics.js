@@ -19,6 +19,12 @@ router.use(optionalAuth)
 
 const DB_MODE = !!process.env.DATABASE_URL
 
+// In-process response cache. This endpoint fans out up to 21 chart fetches
+// (holdings + SPY); without a cache every dashboard load on a cold chart
+// cache hammers the market-data providers and can exhaust free-tier quotas.
+const _respCache = new Map()
+const RESP_TTL   = 30 * 60_000
+
 // ── Fetch daily closes via internal /api/chart proxy (Finnhub → FMP) ──────────
 async function fetchCloses(symbol, range = '1y', fwdHeaders = {}) {
   const port = process.env.PORT || 3001
@@ -97,6 +103,12 @@ router.get('/portfolio', async (req, res) => {
 
   // Cap at 20 symbols to keep response time reasonable
   const symsToFetch = [...new Set(symbols)].slice(0, 20)
+
+  // Serve cached response when fresh (keyed by mode + symbols so a user's
+  // saved-portfolio call never collides with a manual ?symbols= call)
+  const cacheKey = (req.query.symbols ? 'm:' : `u:${userId}:`) + [...symsToFetch].sort().join(',')
+  const hit = _respCache.get(cacheKey)
+  if (hit && Date.now() - hit.ts < RESP_TTL) return res.json(hit.data)
 
   // Fetch benchmark + all holdings in parallel
   const [spyData, ...holdingData] = await Promise.all([
@@ -214,7 +226,7 @@ router.get('/portfolio', async (req, res) => {
     console.warn('[analytics] risk metrics error:', e.message)
   }
 
-  return res.json({
+  const payload = {
     symbols:       symsToFetch,
     portfolioBeta: portfolioBeta != null ? +portfolioBeta.toFixed(3) : null,
     betas:         Object.fromEntries(
@@ -224,7 +236,14 @@ router.get('/portfolio', async (req, res) => {
     sectors,
     riskMetrics,
     benchmark: 'SPY',
-  })
+  }
+  // Cache only responses that actually carry prices — a provider outage
+  // shouldn't pin an empty result for 30 minutes
+  if (Object.keys(riskMetrics).length) {
+    _respCache.set(cacheKey, { ts: Date.now(), data: payload })
+    if (_respCache.size > 200) _respCache.delete(_respCache.keys().next().value)
+  }
+  return res.json(payload)
 })
 
 module.exports = router
