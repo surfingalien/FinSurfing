@@ -12,6 +12,10 @@
  *   bb_reversion   — buy at lower band touch, sell at upper band touch
  */
 
+// Shared risk-free rate so backtest Sharpe/Sortino use the same hurdle as
+// the live portfolio analytics (was a hardcoded 5% vs 4.5% elsewhere)
+const { RISK_FREE_ANNUAL } = require('../lib/portfolio-metrics')
+
 // ── Series helpers ────────────────────────────────────────────────────────────
 
 function smaSeries(closes, period) {
@@ -200,7 +204,7 @@ function simulate(timestamps, closes, strategy, params, initialCapital = 10000) 
   const stdDev    = Math.sqrt(variance)
   const annRet    = meanRet * 252
   const annStd    = stdDev * Math.sqrt(252)
-  const sharpe    = annStd > 0 ? (annRet - 0.05) / annStd : 0
+  const sharpe    = annStd > 0 ? (annRet - RISK_FREE_ANNUAL) / annStd : 0
 
   // Calmar
   const calmar    = maxDD > 0 ? annRet / (maxDD / 100) : 0
@@ -221,7 +225,7 @@ function simulate(timestamps, closes, strategy, params, initialCapital = 10000) 
   const downside = dailyRet.filter(r => r < 0)
   const downVar  = downside.reduce((s, v) => s + v ** 2, 0) / (dailyRet.length || 1)
   const downStd  = Math.sqrt(downVar) * Math.sqrt(252)
-  const sortino  = downStd > 0 ? (annRet - 0.05) / downStd : 0
+  const sortino  = downStd > 0 ? (annRet - RISK_FREE_ANNUAL) / downStd : 0
 
   // Consecutive wins / losses
   let maxConsecWins = 0, maxConsecLoss = 0, curW = 0, curL = 0
