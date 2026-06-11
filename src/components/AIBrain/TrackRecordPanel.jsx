@@ -135,6 +135,36 @@ export default function TrackRecordPanel() {
             </div>
           )}
 
+          {stats.baseline && (
+            <div>
+              <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest text-slate-500 mb-1.5">
+                <Scale className="w-3 h-3" /> Vs mechanical TA baseline (7d, {stats.baseline.n} picks)
+              </div>
+              <div className="flex items-center justify-between text-xs py-1 border-b border-white/[0.04]">
+                <span className="text-slate-400">AI win rate</span>
+                <span className="font-mono text-mint-400">{fmtPct(stats.baseline.aiWinRate7d)}</span>
+              </div>
+              <div className="flex items-center justify-between text-xs py-1 border-b border-white/[0.04]">
+                <span className="text-slate-400">Baseline accuracy</span>
+                <span className="font-mono text-slate-300">{fmtPct(stats.baseline.baselineAccuracy7d)}</span>
+              </div>
+              <div className="flex items-center justify-between text-xs py-1 border-b border-white/[0.04]">
+                <span className="text-slate-400">AI win when baseline agrees</span>
+                <span className="font-mono text-slate-300">{fmtPct(stats.baseline.aiWinWhenBaselineAgrees)}</span>
+              </div>
+              <div className="flex items-center justify-between text-xs py-1">
+                <span className="text-slate-400">AI win when baseline disagrees</span>
+                <span className="font-mono text-slate-300">{fmtPct(stats.baseline.aiWinWhenBaselineDisagrees)}</span>
+              </div>
+              {stats.baseline.aiWinRate7d != null && stats.baseline.baselineAccuracy7d != null
+                && stats.baseline.aiWinRate7d <= stats.baseline.baselineAccuracy7d && (
+                <p className="text-[10px] text-amber-400/80 mt-1.5">
+                  ⚠️ The AI is not currently beating a simple momentum model on identical picks.
+                </p>
+              )}
+            </div>
+          )}
+
           {data.keyLearnings?.length > 0 && (
             <div className="sm:col-span-2">
               <div className="text-[10px] uppercase tracking-widest text-slate-500 mb-1.5">
