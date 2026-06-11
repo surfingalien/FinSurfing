@@ -13,6 +13,7 @@
 
 const express = require('express')
 const { simulate, optimizeStrategy } = require('../utils/backtest')
+const { runPortfolioBacktest } = require('../utils/portfolio-backtest')
 
 const router = express.Router()
 
@@ -135,6 +136,76 @@ router.post('/optimize', async (req, res) => {
       return res.status(504).json({ error: 'Market data request timed out' })
     console.error('[backtest/optimize]', err.message)
     return res.status(500).json({ error: 'Optimization failed: ' + err.message })
+  }
+})
+
+// ── Portfolio backtest ────────────────────────────────────────────────────────
+// POST /api/backtest/portfolio
+// body: { symbols: ['AAPL','MSFT'] | [{symbol,weight}], range, initialCapital,
+//         rebalance: 'none'|'monthly'|'quarterly'|'threshold', thresholdPct,
+//         stopLossPct, takeProfitPct, commissionPct }
+router.post('/portfolio', async (req, res) => {
+  const {
+    symbols, range = '1y', initialCapital = 10000,
+    rebalance = 'monthly', thresholdPct, stopLossPct, takeProfitPct, commissionPct,
+  } = req.body
+
+  const list = Array.isArray(symbols) ? symbols.slice(0, 15) : []
+  const parsed = list.map(x => typeof x === 'string'
+    ? { symbol: x, weight: null }
+    : { symbol: x?.symbol, weight: x?.weight ?? null })
+    .map(x => ({ ...x, symbol: String(x.symbol || '').toUpperCase().replace(/[^A-Z0-9.-]/g, '') }))
+    .filter(x => x.symbol)
+  if (parsed.length < 2)
+    return res.status(400).json({ error: 'symbols: at least 2 required (max 15)' })
+  if (!VALID_RANGES.includes(range))
+    return res.status(400).json({ error: `range must be one of: ${VALID_RANGES.join(', ')}` })
+  if (!['none', 'monthly', 'quarterly', 'threshold'].includes(rebalance))
+    return res.status(400).json({ error: 'rebalance must be none|monthly|quarterly|threshold' })
+
+  const capital = Math.max(100, Math.min(Number(initialCapital) || 10000, 10_000_000))
+
+  try {
+    const port = process.env.PORT || 3001
+    const fwdHeaders = {}
+    for (const h of ['x-aisa-key','x-finnhub-key','x-fmp-key','x-td-key','x-av-key']) {
+      if (req.headers[h]) fwdHeaders[h] = req.headers[h]
+    }
+
+    const seriesBySymbol = {}
+    await Promise.all(parsed.map(async ({ symbol }) => {
+      const r = await fetch(
+        `http://127.0.0.1:${port}/api/chart?symbol=${encodeURIComponent(symbol)}&interval=1d&range=${range}`,
+        { headers: fwdHeaders, signal: AbortSignal.timeout(30_000) }
+      )
+      const data   = await r.json()
+      const result = data?.chart?.result?.[0]
+      const ts     = result?.timestamp || []
+      const cl     = result?.indicators?.quote?.[0]?.close || []
+      seriesBySymbol[symbol] = ts.map((t, i) => ({
+        date: new Date(t * 1000).toISOString().slice(0, 10), close: cl[i],
+      })).filter(p => p.close != null && !isNaN(p.close))
+    }))
+
+    const missing = parsed.filter(p => (seriesBySymbol[p.symbol] || []).length < 30).map(p => p.symbol)
+    if (missing.length)
+      return res.status(422).json({ error: `Insufficient price history for: ${missing.join(', ')}` })
+
+    const weights = parsed.some(p => p.weight != null)
+      ? Object.fromEntries(parsed.map(p => [p.symbol, p.weight ?? 0]))
+      : null
+
+    const result = runPortfolioBacktest({
+      seriesBySymbol, weights, initialCapital: capital,
+      rebalance, thresholdPct, stopLossPct, takeProfitPct, commissionPct,
+    })
+    if (result.error) return res.status(422).json(result)
+    return res.json({ range, initialCapital: capital, ...result })
+  } catch (err) {
+    if (err.name === 'AbortError' || err.name === 'TimeoutError')
+      return res.status(504).json({ error: 'Market data request timed out' })
+    console.error('[backtest/portfolio]', err.message)
+    return res.status(500).json({ error: 'Portfolio backtest failed: ' + err.message })
   }
 })
 
