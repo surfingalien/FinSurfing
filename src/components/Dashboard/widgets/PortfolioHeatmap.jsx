@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { fmt } from '../../../services/api'
 
 /* ── Heatmap cell ────────────────────────────── */
-function HeatCell({ symbol, price, changePct, pctOfPortfolio, onClick }) {
+function HeatCell({ symbol, price, changePct, pctOfPortfolio, stale, onClick }) {
   const hasData = changePct != null
   const cp = changePct ?? 0
   const bg = !hasData ? 'rgba(100,116,139,0.12)'
@@ -23,10 +23,12 @@ function HeatCell({ symbol, price, changePct, pctOfPortfolio, onClick }) {
     >
       <div className="font-mono font-black text-white text-sm leading-none">{symbol}</div>
       {price != null && (
-        <div className="text-[10px] text-white/70 font-mono mt-1">${fmt(price)}</div>
+        <div className={`text-[10px] font-mono mt-1 ${stale ? 'text-amber-200/60' : 'text-white/70'}`}>
+          ${fmt(price)}{stale ? ' ⏱' : ''}
+        </div>
       )}
       <div className={`text-xs font-bold font-mono mt-auto ${clr}`}>
-        {hasData ? `${cp >= 0 ? '+' : ''}${cp.toFixed(2)}%` : '—'}
+        {hasData ? `${cp >= 0 ? '+' : ''}${cp.toFixed(2)}%` : stale ? 'stale' : '—'}
       </div>
     </button>
   )
@@ -42,16 +44,20 @@ export default function PortfolioHeatmap({ positions, quotes, onAnalyze }) {
     return positions.map(p => {
       const q     = quotes[p.symbol]
       const price = q?.price ?? null
+      const stale = !!q?.stale
       const mktV  = (price ?? p.avgCost) * p.shares
-      let changePct = q?.changePct ?? null
+      // A stale (last-known) quote's day-change is from an old session —
+      // never color the cell with it; show the price marked stale instead
+      let changePct = stale ? null : (q?.changePct ?? null)
       // Derive changePct from prevClose when the API didn't supply it directly
-      if (changePct == null && price != null && q?.prevClose != null && q.prevClose > 0) {
+      if (!stale && changePct == null && price != null && q?.prevClose != null && q.prevClose > 0) {
         changePct = (price - q.prevClose) / q.prevClose * 100
       }
       return {
         symbol: p.symbol,
         price,
         changePct,
+        stale,
         mktValue:  mktV,
         pctOfPortfolio: totalValue > 0 ? (mktV / totalValue) * 100 : 0,
       }

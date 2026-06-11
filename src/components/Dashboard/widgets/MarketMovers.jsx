@@ -8,7 +8,8 @@ export default function MarketMovers({ positions, quotes }) {
     positions
       .map(p => {
         const q = quotes[p.symbol]
-        return q ? { symbol: p.symbol, price: q.price, changePct: q.changePct ?? 0 } : null
+        // Stale last-known quotes carry an old session's change — not a mover
+        return q && !q.stale ? { symbol: p.symbol, price: q.price, changePct: q.changePct ?? 0 } : null
       })
       .filter(Boolean)
       .sort((a, b) => b.changePct - a.changePct)
