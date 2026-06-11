@@ -52,6 +52,43 @@ function makeClient() {
   return { client, transport }
 }
 
+describe('MCP_API_KEY static auth (opt-in)', () => {
+  const post = (token) => fetch(baseUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json, text/event-stream',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ jsonrpc: '2.0', method: 'ping', id: 1 }),
+  })
+
+  afterEach(() => { delete process.env.MCP_API_KEY })
+
+  test('matching static key is accepted', async () => {
+    process.env.MCP_API_KEY = 'static-test-key-123'
+    const res = await post('static-test-key-123')
+    expect(res.status).toBe(200)
+  })
+
+  test('wrong static key falls through to JWT auth and fails', async () => {
+    process.env.MCP_API_KEY = 'static-test-key-123'
+    const res = await post('wrong-key')
+    expect(res.status).toBe(401)
+  })
+
+  test('a valid JWT still works when MCP_API_KEY is set', async () => {
+    process.env.MCP_API_KEY = 'static-test-key-123'
+    const res = await post(token)
+    expect(res.status).toBe(200)
+  })
+
+  test('static keys are rejected when MCP_API_KEY is unset', async () => {
+    const res = await post('static-test-key-123')
+    expect(res.status).toBe(401)
+  })
+})
+
 describe('auth gating', () => {
   test('POST without a token is rejected with 401', async () => {
     const res = await fetch(baseUrl, {
