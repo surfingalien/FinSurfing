@@ -1058,7 +1058,7 @@ async function getStooqChart(symbol, interval = '1d', range = '1y') {
 // Crypto classification + exchange mapping moved to lib/crypto-classify.js
 const { isCryptoSymbol, toBinancePair, cgId } = require('./lib/crypto-classify')
 // Disk-persisted last-known quotes — final /api/quote fallback (lib/last-quotes.js)
-const { record: recordLastQuotes, recall: recallLastQuote } = require('./lib/last-quotes')
+const { record: recordLastQuotes, recall: recallLastQuote, size: lastQuotesSize } = require('./lib/last-quotes')
 
 async function getBinanceChart(symbol, interval = '1d', range = '1y') {
   if (!isCryptoSymbol(symbol)) return null
@@ -1886,6 +1886,48 @@ app.get('/api/quote', async (req, res) => {
   } catch (e) {
     res.json({ quoteResponse: { result: symbols.map(s => recallLastQuote(s) || ({ symbol: s, regularMarketPrice: null })) } })
   }
+})
+
+/* ── Provider health — diagnose an empty /api/quote in seconds ───────────────
+   Probes every quote provider live with one symbol each (8s budget),
+   reporting key presence (booleans only), success, price, latency, and the
+   state of the cache + last-known-quote fallback store. */
+app.get('/api/health/providers', async (req, res) => {
+  const keys = extractKeys(req)
+  const SYM  = 'AAPL'
+  const wrap = p => Promise.resolve(p).then(r => (Array.isArray(r) ? r : [r]))
+  const probes = [
+    ['aisa',       !!keys.aisa,    () => wrap(getAISAQuotes([SYM], keys))],
+    ['finnhub',    !!keys.finnhub, () => wrap(getFinnhubQuotes([SYM], keys))],
+    ['fmp',        !!keys.fmp,     () => wrap(getFMPQuotes([SYM], keys))],
+    ['twelvedata', !!keys.td,      () => wrap(getTwelveDataQuote(SYM, keys))],
+    ['tiingo',     !!keys.tiingo,  () => wrap(getTiingoQuote(SYM, keys))],
+    ['nasdaq',     true,           () => wrap(getNasdaqQuotes([SYM]))],
+    ['binance',    true,           () => wrap(getBinanceSingleQuote('BTC-USD'))],
+    ['coingecko',  true,           () => wrap(getCoinGeckoQuote('BTC-USD'))],
+  ]
+  const providers = await Promise.all(probes.map(async ([provider, keyConfigured, fn]) => {
+    const t0 = Date.now()
+    try {
+      const arr = await Promise.race([
+        fn(),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('probe timeout (8s)')), 8000)),
+      ])
+      const q = (arr || []).find(x => x?.regularMarketPrice != null)
+      return { provider, keyConfigured, ok: q != null, price: q?.regularMarketPrice ?? null,
+               ms: Date.now() - t0, error: q ? null : 'no price returned' }
+    } catch (e) {
+      return { provider, keyConfigured, ok: false, price: null, ms: Date.now() - t0, error: e.message }
+    }
+  }))
+  res.json({
+    at: new Date().toISOString(),
+    probeSymbols: { stocks: SYM, crypto: 'BTC-USD' },
+    providers,
+    anyStockProviderOk: providers.some(p => p.ok && !['binance', 'coingecko'].includes(p.provider)),
+    lastQuotesStored: lastQuotesSize(),
+    quoteCacheEntries: _quoteCache.size,
+  })
 })
 
 /* ── Chart (OHLCV) ─────────────────────────────── */
