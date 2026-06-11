@@ -1057,6 +1057,8 @@ async function getStooqChart(symbol, interval = '1d', range = '1y') {
 // Well-known crypto base tickers (bare symbols without -USD suffix)
 // Crypto classification + exchange mapping moved to lib/crypto-classify.js
 const { isCryptoSymbol, toBinancePair, cgId } = require('./lib/crypto-classify')
+// Disk-persisted last-known quotes — final /api/quote fallback (lib/last-quotes.js)
+const { record: recordLastQuotes, recall: recallLastQuote } = require('./lib/last-quotes')
 
 async function getBinanceChart(symbol, interval = '1d', range = '1y') {
   if (!isCryptoSymbol(symbol)) return null
@@ -1870,11 +1872,19 @@ app.get('/api/quote', async (req, res) => {
 
     const cryptoMap = Object.fromEntries(cryptoResults.map(r => [r.symbol, r]))
     const stockMap  = Object.fromEntries(stockResults.map(r => [r.symbol, r]))
-    const merged = symbols.map(s => cryptoMap[s] || stockMap[s] || { symbol: s, regularMarketPrice: null })
+    // Final fallback: when every provider failed, serve the disk-persisted
+    // last-known quote (flagged stale) instead of a null price — survives
+    // deploys, unlike the in-memory TTL cache.
+    const merged = symbols.map(s => {
+      const q = cryptoMap[s] || stockMap[s]
+      if (q?.regularMarketPrice != null) return q
+      return recallLastQuote(s) || q || { symbol: s, regularMarketPrice: null }
+    })
+    recordLastQuotes(merged)
 
     return res.json({ quoteResponse: { result: merged } })
   } catch (e) {
-    res.json({ quoteResponse: { result: symbols.map(s => ({ symbol: s, regularMarketPrice: null })) } })
+    res.json({ quoteResponse: { result: symbols.map(s => recallLastQuote(s) || ({ symbol: s, regularMarketPrice: null })) } })
   }
 })
 

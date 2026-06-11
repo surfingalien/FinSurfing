@@ -58,6 +58,9 @@ export async function fetchQuotes(symbols, { force = false } = {}) {
       marketTime: q.regularMarketTime ?? null,
       marketCap:  q.marketCap ?? null,
       pe:        q.trailingPE ?? q.pe ?? null,
+      // Server flags quotes recalled from its last-known store (all live
+      // providers failed) — surfaces as the stale-price warning in P&L cards
+      stale:     q.stale ?? false,
     }))
   })
 }
