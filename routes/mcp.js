@@ -22,6 +22,7 @@
  */
 
 const express = require('express')
+const crypto  = require('crypto')
 const { requireAuth } = require('../middleware/auth')
 const { Server } = require('@modelcontextprotocol/sdk/server/index.js')
 const { StreamableHTTPServerTransport } = require('@modelcontextprotocol/sdk/server/streamableHttp.js')
@@ -62,7 +63,25 @@ function buildServer(req) {
   return server
 }
 
-router.post('/', requireAuth, async (req, res) => {
+// MCP clients are long-lived; JWT access tokens are not. When the operator
+// sets MCP_API_KEY, that static key is accepted as the Bearer token
+// (constant-time compare); otherwise — and for any non-matching token —
+// normal JWT auth applies unchanged. Opt-in only.
+function mcpAuth(req, res, next) {
+  const configured = process.env.MCP_API_KEY
+  const header = req.headers.authorization || ''
+  if (configured && header.startsWith('Bearer ')) {
+    const given = Buffer.from(header.slice(7))
+    const want  = Buffer.from(configured)
+    if (given.length === want.length && crypto.timingSafeEqual(given, want)) {
+      req.user = { userId: 'mcp-api-key', email: null, role: 'user' }
+      return next()
+    }
+  }
+  return requireAuth(req, res, next)
+}
+
+router.post('/', mcpAuth, async (req, res) => {
   try {
     const server    = buildServer(req)
     const transport = new StreamableHTTPServerTransport({
