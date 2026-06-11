@@ -1890,10 +1890,22 @@ app.get('/api/quote', async (req, res) => {
 
 /* ── Provider health — diagnose an empty /api/quote in seconds ───────────────
    Probes every quote provider live with one symbol each (8s budget),
-   reporting key presence (booleans only), success, price, latency, and the
-   state of the cache + last-known-quote fallback store. */
+   reporting key presence + source (booleans/labels only), success, price,
+   latency, and the cache + last-known-quote store state.
+   Browser-saved API keys (finsurf_api_keys → x-*-key headers) OVERRIDE server
+   env keys in the quote pipeline — a stale saved key can break a provider for
+   that user while the server is healthy. keySource exposes this; pass
+   ?useEnvKeys=1 to probe with server env keys only for an A/B comparison. */
 app.get('/api/health/providers', async (req, res) => {
-  const keys = extractKeys(req)
+  const useEnv = req.query.useEnvKeys === '1'
+  const keys = useEnv ? extractKeys({ headers: {} }) : extractKeys(req)
+  const HEADER_FOR = { aisa: 'x-aisa-key', finnhub: 'x-finnhub-key', fmp: 'x-fmp-key', twelvedata: 'x-td-key', tiingo: 'x-tiingo-key' }
+  const keySource = (provider, configured) => {
+    if (!configured) return 'none'
+    if (useEnv) return 'env'
+    const h = HEADER_FOR[provider]
+    return h && (req.headers[h] || '').trim() ? 'header (browser-saved — overrides server key!)' : 'env'
+  }
   const SYM  = 'AAPL'
   const wrap = p => Promise.resolve(p).then(r => (Array.isArray(r) ? r : [r]))
   const probes = [
@@ -1914,14 +1926,17 @@ app.get('/api/health/providers', async (req, res) => {
         new Promise((_, rej) => setTimeout(() => rej(new Error('probe timeout (8s)')), 8000)),
       ])
       const q = (arr || []).find(x => x?.regularMarketPrice != null)
-      return { provider, keyConfigured, ok: q != null, price: q?.regularMarketPrice ?? null,
+      return { provider, keyConfigured, keySource: keySource(provider, keyConfigured),
+               ok: q != null, price: q?.regularMarketPrice ?? null,
                ms: Date.now() - t0, error: q ? null : 'no price returned' }
     } catch (e) {
-      return { provider, keyConfigured, ok: false, price: null, ms: Date.now() - t0, error: e.message }
+      return { provider, keyConfigured, keySource: keySource(provider, keyConfigured),
+               ok: false, price: null, ms: Date.now() - t0, error: e.message }
     }
   }))
   res.json({
     at: new Date().toISOString(),
+    keyMode: useEnv ? 'env only (?useEnvKeys=1)' : 'as the app would use them (browser headers override env)',
     probeSymbols: { stocks: SYM, crypto: 'BTC-USD' },
     providers,
     anyStockProviderOk: providers.some(p => p.ok && !['binance', 'coingecko'].includes(p.provider)),
