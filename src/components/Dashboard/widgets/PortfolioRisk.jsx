@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { useQuery, fetchJson } from '../../../hooks/useQuery'
 
 /* ── Sector beta proxies ─────────────────────── */
 const SECTOR_BETA = {
@@ -57,6 +58,19 @@ export default function PortfolioRisk({ positions, quotes }) {
   const betaColor = risk.portfolioBeta > 1.3 ? 'text-red-400' : risk.portfolioBeta > 1.1 ? 'text-amber-400' : 'text-emerald-400'
   const concColor = risk.concRisk === 'High' ? 'text-red-400' : risk.concRisk === 'Moderate' ? 'text-amber-400' : 'text-emerald-400'
 
+  // Measured risk from real 1y price history (routes/analytics.js →
+  // lib/portfolio-metrics.js). Sector-beta cards above are instant proxies;
+  // this section is the slower, authoritative view. Equal-weighted in
+  // ?symbols= mode; heavy endpoint, so cache for 30 min per symbol set.
+  const symbolsKey = positions.map(p => p.symbol).sort().join(',')
+  const { data: measured } = useQuery(
+    `portfolio-analytics:${symbolsKey}`,
+    () => fetchJson(`/api/analytics/portfolio?symbols=${encodeURIComponent(symbolsKey)}`),
+    { staleMs: 30 * 60_000, enabled: !!symbolsKey },
+  )
+  const m = measured?.riskMetrics?.portfolio
+  const b = measured?.riskMetrics?.benchmark
+
   return (
     <div className="space-y-4">
       {/* Risk metric cards */}
@@ -92,6 +106,41 @@ export default function PortfolioRisk({ positions, quotes }) {
           </div>
         </div>
       </div>
+
+      {/* Measured risk — real 1y price history via /api/analytics/portfolio */}
+      {m && (
+        <div>
+          <div className="text-xs font-semibold text-slate-400 mb-2">
+            Measured Risk <span className="text-slate-600 font-normal">(1y daily, equal-weighted{b ? ' · vs SPY' : ''})</span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="glass-card text-center">
+              <div className="text-xs text-slate-500 mb-1">Sharpe</div>
+              <div className={`text-xl font-black font-mono ${m.sharpe != null && b?.sharpe != null && m.sharpe < b.sharpe ? 'text-amber-400' : 'text-white'}`}>
+                {m.sharpe ?? '—'}
+              </div>
+              {b?.sharpe != null && <div className="text-[10px] text-slate-600 mt-0.5">SPY {b.sharpe}</div>}
+            </div>
+            <div className="glass-card text-center">
+              <div className="text-xs text-slate-500 mb-1">Volatility</div>
+              <div className="text-xl font-black font-mono text-white">{m.volatility != null ? `${m.volatility}%` : '—'}</div>
+              {b?.volatility != null && <div className="text-[10px] text-slate-600 mt-0.5">SPY {b.volatility}%</div>}
+            </div>
+            <div className="glass-card text-center">
+              <div className="text-xs text-slate-500 mb-1">Max Drawdown</div>
+              <div className={`text-xl font-black font-mono ${m.maxDrawdown != null && m.maxDrawdown < -25 ? 'text-red-400' : 'text-white'}`}>
+                {m.maxDrawdown != null ? `${m.maxDrawdown}%` : '—'}
+              </div>
+              {b?.maxDrawdown != null && <div className="text-[10px] text-slate-600 mt-0.5">SPY {b.maxDrawdown}%</div>}
+            </div>
+            <div className="glass-card text-center">
+              <div className="text-xs text-slate-500 mb-1">1-day VaR 95%</div>
+              <div className="text-xl font-black font-mono text-white">{m.var95 != null ? `${m.var95}%` : '—'}</div>
+              {m.cvar95 != null && <div className="text-[10px] text-slate-600 mt-0.5">CVaR {m.cvar95}%</div>}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Sector allocation bars */}
       <div>
