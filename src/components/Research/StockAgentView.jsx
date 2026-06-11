@@ -12,7 +12,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import {
   Send, RefreshCw, Sparkles, BarChart2,
-  AlertTriangle, X, Search, Share2,
+  AlertTriangle, X, Search,
 } from 'lucide-react'
 import AIAdvisoryView from './AIAdvisoryView'
 import { MessageBubble } from './agent/MessageBubble'
@@ -325,10 +325,6 @@ I'm your real-time stock analyst powered by Claude. I can:
 
             {messages.length > 1 && (
               <>
-                <button onClick={() => setShowPublish(true)} disabled={streaming}
-                  className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 glass rounded-lg text-xs text-mint-400 hover:text-mint-300 border border-mint-500/20 hover:border-mint-500/40 transition-all disabled:opacity-50">
-                  <Share2 className="w-3 h-3" /> Publish Signal
-                </button>
                 <button onClick={clearChat}
                   className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 glass rounded-lg text-xs text-slate-400 hover:text-white border border-white/[0.06] hover:border-white/[0.15] transition-all">
                   <X className="w-3 h-3" /> Clear
