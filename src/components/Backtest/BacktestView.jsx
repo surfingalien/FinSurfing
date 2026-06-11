@@ -16,6 +16,7 @@ import EquityChart from './parts/EquityChart'
 import TradeLog from './parts/TradeLog'
 import OptimizerPanel from './parts/OptimizerPanel'
 import QueuePanel from './parts/QueuePanel'
+import PortfolioBacktestPanel from './parts/PortfolioBacktestPanel'
 
 // ── Strategy definitions ──────────────────────────────────────────────────────
 
@@ -141,9 +142,10 @@ export default function BacktestView() {
       {/* Tabs */}
       <div className="flex items-center gap-1 border-b border-white/[0.06] pb-0">
         {[
-          { id: 'backtest', label: 'Backtest',  icon: <Play        className="w-3.5 h-3.5" /> },
-          { id: 'optimize', label: 'Optimizer', icon: <Cpu         className="w-3.5 h-3.5" /> },
-          { id: 'queue',    label: 'Queue',     icon: <ListOrdered className="w-3.5 h-3.5" /> },
+          { id: 'backtest',  label: 'Backtest',  icon: <Play        className="w-3.5 h-3.5" /> },
+          { id: 'portfolio', label: 'Portfolio', icon: <BarChart3   className="w-3.5 h-3.5" /> },
+          { id: 'optimize',  label: 'Optimizer', icon: <Cpu         className="w-3.5 h-3.5" /> },
+          { id: 'queue',     label: 'Queue',     icon: <ListOrdered className="w-3.5 h-3.5" /> },
         ].map(t => (
           <button key={t.id} onClick={() => setTab(t.id)}
             className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-all ${
@@ -412,6 +414,8 @@ export default function BacktestView() {
           getApiKeyHeaders={getApiKeyHeaders}
         />
       )}
+
+      {tab === 'portfolio' && <PortfolioBacktestPanel getApiKeyHeaders={getApiKeyHeaders} />}
 
       {tab === 'queue' && <QueuePanel />}
     </div>
