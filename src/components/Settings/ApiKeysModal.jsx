@@ -202,12 +202,26 @@ export default function ApiKeysModal({ onClose }) {
         td:        'x-td-key',
         marketaux: 'x-marketaux-key',
       }
-      const res = await fetch(provider.test, {
-        headers: { [headerMap[provider.id]]: val },
-        signal:  AbortSignal.timeout(12000),
-      })
-      const data = await res.json()
-      const ok = provider.check(data)
+      // Providers covered by the health probe get a TRUE per-provider test —
+      // the old /api/quote test cascades through every provider, so a dead
+      // key could show "Working!" whenever any other provider answered.
+      const HEALTH_NAME = { aisa: 'aisa', finnhub: 'finnhub', fmp: 'fmp', td: 'twelvedata' }
+      let ok
+      if (HEALTH_NAME[provider.id]) {
+        const res = await fetch('/api/health/providers', {
+          headers: { [headerMap[provider.id]]: val },
+          signal:  AbortSignal.timeout(15000),
+        })
+        const data = await res.json()
+        ok = data?.providers?.find(p => p.provider === HEALTH_NAME[provider.id])?.ok === true
+      } else {
+        const res = await fetch(provider.test, {
+          headers: { [headerMap[provider.id]]: val },
+          signal:  AbortSignal.timeout(12000),
+        })
+        const data = await res.json()
+        ok = provider.check(data)
+      }
       setTestState(s => ({ ...s, [provider.id]: ok ? 'ok' : 'error' }))
     } catch {
       setTestState(s => ({ ...s, [provider.id]: 'error' }))
@@ -245,7 +259,7 @@ export default function ApiKeysModal({ onClose }) {
             </div>
             <div>
               <h2 className="text-base font-bold text-white">API Keys</h2>
-              <p className="text-[11px] text-slate-500">Stored in your browser — never sent to our servers</p>
+              <p className="text-[11px] text-slate-500">Saved in your browser and sent with your requests — <span className="text-amber-400/90">your keys override the server's keys</span>, so a stale key here can break a provider just for you</p>
             </div>
           </div>
           <button onClick={onClose} className="p-1.5 rounded-lg text-slate-500 hover:text-white hover:bg-white/[0.06] transition-all">
