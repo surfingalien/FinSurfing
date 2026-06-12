@@ -1059,6 +1059,7 @@ async function getStooqChart(symbol, interval = '1d', range = '1y') {
 const { isCryptoSymbol, toBinancePair, cgId } = require('./lib/crypto-classify')
 // Disk-persisted last-known quotes — final /api/quote fallback (lib/last-quotes.js)
 const { record: recordLastQuotes, recall: recallLastQuote, size: lastQuotesSize } = require('./lib/last-quotes')
+const { fetchStooqQuotes } = require('./lib/stooq')
 
 async function getBinanceChart(symbol, interval = '1d', range = '1y') {
   if (!isCryptoSymbol(symbol)) return null
@@ -1854,6 +1855,11 @@ app.get('/api/quote', async (req, res) => {
 
           // 8th: Polygon — real-time snapshot, good breadth
           merge(await Promise.all(noPrice().map(s => getPolygonQuote(s, keys).catch(() => null))))
+          if (!noPrice().length) return stockSyms.map(s => resultMap[s])
+
+          // 9th: Stooq — keyless CSV fallback; works when every keyed
+          // provider is down or misconfigured (delayed/EOD, price only)
+          merge(await fetchStooqQuotes(noPrice()).catch(() => null))
 
           // Final: chart-price cache or null for anything still missing
           for (const sym of stockSyms) {
@@ -1915,6 +1921,7 @@ app.get('/api/health/providers', async (req, res) => {
     ['twelvedata', !!keys.td,      () => wrap(getTwelveDataQuote(SYM, keys))],
     ['tiingo',     !!keys.tiingo,  () => wrap(getTiingoQuote(SYM, keys))],
     ['nasdaq',     true,           () => wrap(getNasdaqQuotes([SYM]))],
+    ['stooq',      true,           () => wrap(fetchStooqQuotes([SYM]))],
     ['binance',    true,           () => wrap(getBinanceSingleQuote('BTC-USD'))],
     ['coingecko',  true,           () => wrap(getCoinGeckoQuote('BTC-USD'))],
   ]

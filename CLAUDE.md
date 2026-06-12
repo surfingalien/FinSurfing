@@ -28,7 +28,8 @@ React18+Vite SPA → Express API proxy. Dev: Vite proxies `/api/*` → :3001. Pr
 ## Market Data Pipeline (`server.js`)
 - `KNOWN_CRYPTO` (~80) → Binance → CoinGecko (`COINGECKO_IDS` map) — classifiers in `lib/crypto-classify.js` (`isCryptoSymbol`, `toBinancePair`, `cgId`; tests in `tests/crypto-classify.test.js`)
 - `KNOWN_MUTUAL_FUNDS` (~120) → FMP only (NAV quotes)
-- Else → Finnhub → AISA → FMP → AlphaVantage → Nasdaq → TwelveData → cache → `lib/last-quotes.js` (disk-persisted last-known quote, served with `stale: true`; survives deploys)
+- Else → Finnhub → AISA → FMP → AlphaVantage → Nasdaq → TwelveData → Tiingo → Polygon → `lib/stooq.js` (keyless CSV, delayed, price-only) → cache → `lib/last-quotes.js` (disk-persisted last-known quote, served with `stale: true`; survives deploys)
+- `GET /api/health/providers` live-probes every provider (`?useEnvKeys=1` ignores browser keys); NOTE browser-saved keys (`finsurf_api_keys` headers) override env keys in `extractKeys`
 
 **ETF detection** `isEtfLike(s)`: `s!=null && s.pe==null && s.revenueGrowth==null && s.earningsGrowth==null`
 **FMP search** ETF keywords (no leading space): vanguard, ishares, spdr, invesco, schwab, fidelity, blackrock, direxion, proshares, wisdomtree, etf, fund, trust
