@@ -37,7 +37,13 @@ const backtestQueueRoutes   = require('./routes/backtest-queue')
 const agenticOsRoutes       = require('./routes/agentic-os')
 const optionsFlowRoutes     = require('./routes/options-flow')
 const symbolRoutes          = require('./routes/symbols')
-const mcpRoutes             = require('./routes/mcp')
+// MCP endpoint depends on @modelcontextprotocol/sdk — a load failure here
+// (runtime/version mismatch) must degrade to a 503 on /api/mcp, never crash
+// the server: a boot crash fails Railway's healthcheck and silently pins
+// prod to the previous deployment.
+let mcpRoutes = null
+try { mcpRoutes = require('./routes/mcp') }
+catch (e) { console.error('[mcp] route disabled — failed to load:', e.message) }
 const { router: marketFocusRoutes } = require('./routes/market-focus')
 
 const { seedAdminDB } = require('./db/adminSeed')
@@ -204,7 +210,8 @@ app.use('/api/agentic-os',     agenticOsRoutes)
 app.use('/api/options',        optionsFlowRoutes)
 app.use('/api/market-focus',   marketFocusRoutes)
 app.use('/api/symbols',        symbolRoutes)
-app.use('/api/mcp',            mcpRoutes)
+if (mcpRoutes) app.use('/api/mcp', mcpRoutes)
+else app.use('/api/mcp', (_req, res) => res.status(503).json({ error: 'MCP endpoint unavailable (failed to initialize at boot — check server logs)' }))
 
 // ── OpenBB sidecar proxy (optional — set OPENBB_URL env var to enable) ────────
 const OPENBB_URL = process.env.OPENBB_URL
