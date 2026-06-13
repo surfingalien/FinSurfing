@@ -86,9 +86,13 @@ const { seedAdminDB } = require('./db/adminSeed')
   }
 })()
 
-const app  = express()
-const PORT = parseInt(process.env.PORT, 10) || 3001
-const PROD = process.env.NODE_ENV === 'production'
+const app      = express()
+const PORT     = parseInt(process.env.PORT, 10) || 3001
+const PROD     = process.env.NODE_ENV === 'production'
+const BOOT_AT  = new Date().toISOString()
+const GIT_SHA  = process.env.RAILWAY_GIT_COMMIT_SHA
+             || process.env.GIT_COMMIT
+             || (() => { try { return require('child_process').execSync('git rev-parse --short HEAD', { stdio: ['ignore','pipe','ignore'] }).toString().trim() } catch { return 'unknown' } })()
 
 // ── Compression (gzip/brotli — skip SSE streams) ─────────────────────────────
 app.use(compression({
@@ -1711,6 +1715,10 @@ setInterval(async () => {
 
 
 /* ── Health (includes DB status + demo mode) ───── */
+app.get('/api/version', (_req, res) => {
+  res.json({ sha: GIT_SHA, bootAt: BOOT_AT, uptime: Math.floor(process.uptime()) })
+})
+
 app.get('/health', async (_req, res) => {
   const demoMode = !process.env.DATABASE_URL
   let dbOk = false
