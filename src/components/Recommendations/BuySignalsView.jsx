@@ -95,7 +95,7 @@ export default function BuySignalsView({ portfolio, onAnalyze }) {
     } finally {
       setLoading(false)
     }
-  }, [holdings, customSymbols, accessToken])
+  }, [holdings, customSymbols, accessToken, personaId, includeFunds])
 
   const displayed = (recs?.recommendations ?? []).filter(r => {
     if (filter !== 'all' && r.type !== filter) return false
