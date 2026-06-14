@@ -114,7 +114,7 @@ router.post('/', requireAuth, recLimit, async (req, res) => {
   if (process.env.AI_RECOMMENDATIONS_DISABLED === 'true')
     return res.status(503).json({ error: 'AI Buy Signals are temporarily disabled (kill switch active)', killSwitch: true })
 
-  const { holdings = [], focusSymbols = [], persona: personaId = 'default', includeMacro = true } = req.body
+  const { holdings = [], focusSymbols = [], persona: personaId = 'default', includeMacro = true, includeFunds = false } = req.body
   const persona    = PERSONAS[personaId] ?? PERSONAS.default
   const holdingStr = holdings.length    ? holdings.join(', ') : 'none'
   const focusStr   = focusSymbols.length ? focusSymbols.join(', ') : ''
@@ -151,7 +151,15 @@ router.post('/', requireAuth, recLimit, async (req, res) => {
 
   const countInstructions = focusStr
     ? `Generate ${Math.min(focusSymbols.length, 20)} recommendations covering the focus symbols above.`
-    : `Generate exactly 20 recommendations split across asset classes and time horizons:
+    : includeFunds
+      ? `Generate exactly 22 recommendations split across asset classes and time horizons:
+- 6 Stocks for 3-month holding
+- 4 Stocks for 6-month holding
+- 4 ETFs (mix of 3m and 6m)
+- 3 Cryptocurrencies (mix of 3m and 6m)
+- 3 Mutual Funds (use common tickers like FXAIX, VFIAX, FCNTX, FDGRX, PRGFX, PRWCX — type must be "Fund")
+- 2 additional high-conviction picks of any type`
+      : `Generate exactly 20 recommendations split across asset classes and time horizons:
 - 7 Stocks for 3-month holding
 - 5 Stocks for 6-month holding
 - 4 ETFs (mix of 3m and 6m)
@@ -172,7 +180,7 @@ ${persona.constraints ? '\n' + persona.constraints : ''}
 
 Rules:
 - Use standard tickers (BTC-USD for Bitcoin, ETH-USD for Ethereum, SOL-USD for Solana, etc.)
-- Be realistic: target returns 5–40%, stop-loss 5–15%
+- Be realistic: target returns 5–40%, stop-loss 5–15%${includeFunds ? '\n- For type "Fund": use the NAV as entryPrice, sector = fund category (e.g. "Large-Cap Growth"), stopLoss = max acceptable NAV drawdown %' : ''}
 - Diversify unless the persona specifies concentration
 - Each thesis must be specific, not generic, and reflect the persona's investment style
 - entryPrice: use the LIVE PRICE above if provided, otherwise your best estimate of current market price
@@ -185,7 +193,7 @@ Respond ONLY with a JSON object — no markdown, no explanation, just the JSON:
     {
       "symbol": "string",
       "name": "string",
-      "type": "Stock" | "ETF" | "Crypto",
+      "type": "Stock" | "ETF" | "Crypto" | "Fund",
       "period": "3m" | "6m",
       "sector": "string (for stocks/ETFs) or 'Digital Asset' for crypto",
       "targetReturn": number,
