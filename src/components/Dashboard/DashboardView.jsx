@@ -61,41 +61,26 @@ export default function DashboardView({ portfolio, onAnalyze }) {
   const fg         = useMemo(() => calcFearGreed(quotesArr, vixPrice), [quotesArr, vixPrice])
   const sectorPerf = useMemo(() => calcSectorPerformance(quotes, positions), [quotes, positions])
 
-  /* Portfolio totals */
+  /* Portfolio totals — use the hook's pre-computed summary to avoid divergence */
   const totals = useMemo(() => {
-    let totalCost = 0, totalValue = 0, todayGL = 0, upCount = 0, dnCount = 0
+    const s = portfolio?.summary
+    // upCount/dnCount: count positions with a positive/negative today move
+    let upCount = 0, dnCount = 0
     positions.forEach(p => {
-      const q     = quotes[p.symbol]
-      const price = q?.price ?? p.avgCost
-      totalCost  += p.avgCost * p.shares
-      totalValue += price * p.shares
-      // Only count today's move when the quote timestamp is from today's date
-      const prevClose  = q?.prevClose ?? null
-      const marketTime = q?.marketTime ?? null
-      // No timestamp → treat as stale so daily P&L resets at midnight
-      const isToday    = marketTime
-        ? new Date(marketTime * 1000).toDateString() === new Date().toDateString()
-        : false
-      const dayMove = isToday
-        ? (price !== null && prevClose !== null ? price - prevClose : q?.change ?? null)
-        : 0   // reset to zero between sessions
-      if (dayMove != null) {
-        todayGL += dayMove * p.shares
-        if (dayMove > 0) upCount++
-        else if (dayMove < 0) dnCount++
-      }
+      if ((p.todayGL ?? 0) > 0) upCount++
+      else if ((p.todayGL ?? 0) < 0) dnCount++
     })
-    // Quote coverage: unpriced holdings are counted at cost (break-even), so
-    // surface when the headline P&L is incomplete instead of silently wrong
-    const unpricedCount = positions.filter(p => quotes[p.symbol]?.price == null).length
-    const staleCount    = positions.filter(p => quotes[p.symbol]?.price != null && quotes[p.symbol]?.stale).length
     return {
-      totalValue, totalCost, todayGL,
-      totalGL:    totalValue - totalCost,
-      totalGLPct: totalCost > 0 ? ((totalValue - totalCost) / totalCost) * 100 : 0,
-      upCount, dnCount, unpricedCount, staleCount,
+      totalValue:   s?.totalValue   ?? 0,
+      totalCost:    s?.totalCost    ?? 0,
+      totalGL:      s?.totalGL      ?? 0,
+      totalGLPct:   s?.totalGLPct   ?? 0,
+      todayGL:      s?.todayTotal   ?? 0,
+      upCount, dnCount,
+      unpricedCount: s?.unpricedCount ?? 0,
+      staleCount:    s?.staleCount    ?? 0,
     }
-  }, [positions, quotes])
+  }, [portfolio?.summary, positions])
 
   /* Auto-scan when data loads */
   const runScan = useCallback(async () => {
