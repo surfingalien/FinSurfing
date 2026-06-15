@@ -45,6 +45,9 @@ let mcpRoutes = null
 try { mcpRoutes = require('./routes/mcp') }
 catch (e) { console.error('[mcp] route disabled — failed to load:', e.message) }
 const { router: marketFocusRoutes } = require('./routes/market-focus')
+const dcfRoutes           = require('./routes/dcf')
+const patternFinderRoutes = require('./routes/pattern-finder')
+const dividendRoutes      = require('./routes/dividend')
 
 const { seedAdminDB } = require('./db/adminSeed')
 
@@ -212,6 +215,9 @@ app.use('/api/market-focus',   marketFocusRoutes)
 app.use('/api/symbols',        symbolRoutes)
 if (mcpRoutes) app.use('/api/mcp', mcpRoutes)
 else app.use('/api/mcp', (_req, res) => res.status(503).json({ error: 'MCP endpoint unavailable (failed to initialize at boot — check server logs)' }))
+app.use('/api/dcf',      dcfRoutes)
+app.use('/api/patterns', patternFinderRoutes)
+app.use('/api/dividend', dividendRoutes)
 
 // ── OpenBB sidecar proxy (optional — set OPENBB_URL env var to enable) ────────
 const OPENBB_URL = process.env.OPENBB_URL

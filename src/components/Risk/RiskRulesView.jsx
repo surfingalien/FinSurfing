@@ -12,11 +12,11 @@
  *   max_portfolio_loss    — total portfolio unrealised loss > X%
  */
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   Shield, Plus, Trash2, ToggleLeft, ToggleRight,
   AlertTriangle, CheckCircle2, ChevronDown, ChevronUp,
-  Info, Play,
+  Info, Play, TrendingDown, Zap,
 } from 'lucide-react'
 
 const STORAGE_KEY = 'finsurf_risk_rules'
@@ -311,6 +311,109 @@ function AddRuleModal({ onAdd, onClose }) {
   )
 }
 
+// ── Sector beta estimates for stress testing (when analytics data unavailable) ─
+const SECTOR_BETA = {
+  'Technology': 1.35, 'Communication Services': 1.25, 'Consumer Discretionary': 1.20,
+  'Financials': 1.10, 'Industrials': 1.05, 'Materials': 1.00, 'Energy': 0.95,
+  'Health Care': 0.80, 'Real Estate': 0.75, 'Consumer Staples': 0.65, 'Utilities': 0.55,
+  'Digital Asset': 2.10, 'Crypto': 2.10,
+}
+const ASSET_BETA = { equity: 1.0, etf: 0.90, crypto: 2.10, bond: 0.30, fund: 0.75 }
+
+function estimateBeta(pos) {
+  if (pos.sector && SECTOR_BETA[pos.sector]) return SECTOR_BETA[pos.sector]
+  if (pos.assetClass && ASSET_BETA[pos.assetClass]) return ASSET_BETA[pos.assetClass]
+  return 1.0
+}
+
+const SCENARIOS = [
+  { label: 'Correction',   mktMove: -0.10, color: 'text-amber-400',  bg: 'bg-amber-500/10',  border: 'border-amber-500/20'  },
+  { label: 'Bear Market',  mktMove: -0.20, color: 'text-orange-400', bg: 'bg-orange-500/10', border: 'border-orange-500/20' },
+  { label: 'Crash',        mktMove: -0.30, color: 'text-red-400',    bg: 'bg-red-500/10',    border: 'border-red-500/20'    },
+  { label: 'Severe Crash', mktMove: -0.50, color: 'text-red-500',    bg: 'bg-red-500/15',    border: 'border-red-500/30'    },
+  { label: 'Rally +15%',   mktMove: +0.15, color: 'text-emerald-400',bg: 'bg-emerald-500/10',border: 'border-emerald-500/20'},
+]
+
+function StressTestPanel({ portfolio }) {
+  const positions = portfolio?.positions ?? []
+  const totalValue = portfolio?.summary?.totalValue ?? positions.reduce((s, p) => s + (p.mktValue ?? p.costBasis ?? 0), 0)
+
+  const weightedBeta = useMemo(() => {
+    if (!totalValue) return 1.0
+    return positions.reduce((sum, p) => {
+      const weight = (p.mktValue ?? 0) / totalValue
+      return sum + estimateBeta(p) * weight
+    }, 0)
+  }, [positions, totalValue])
+
+  const hedgingSuggestions = useMemo(() => {
+    if (!positions.length) return []
+    const suggestions = []
+    const cryptoVal = positions.filter(p => p.assetClass === 'crypto' || SECTOR_BETA[p.sector] === 2.10).reduce((s, p) => s + (p.mktValue ?? 0), 0)
+    const techVal   = positions.filter(p => p.sector === 'Technology' || p.sector === 'Communication Services').reduce((s, p) => s + (p.mktValue ?? 0), 0)
+    const cryptoPct = totalValue ? (cryptoVal / totalValue) * 100 : 0
+    const techPct   = totalValue ? (techVal / totalValue) * 100 : 0
+
+    if (weightedBeta > 1.3) suggestions.push({ hedge: 'SPY Puts / SPXU', reason: `Portfolio β ${weightedBeta.toFixed(2)} — high market sensitivity`, urgency: 'high' })
+    if (cryptoPct > 15)     suggestions.push({ hedge: 'BITI / BTC Puts',  reason: `${cryptoPct.toFixed(0)}% crypto exposure — volatile tail risk`, urgency: 'high' })
+    if (techPct > 35)       suggestions.push({ hedge: 'QQQ Puts / SQQQ',  reason: `${techPct.toFixed(0)}% tech/comm concentration`, urgency: 'medium' })
+    if (weightedBeta > 1.0) suggestions.push({ hedge: 'VXX / UVXY',       reason: 'Volatility hedge for market shock events', urgency: 'low' })
+    if (positions.length <= 5) suggestions.push({ hedge: 'Add 3–5 uncorrelated positions', reason: 'Concentrated portfolio amplifies single-name risk', urgency: 'medium' })
+    return suggestions.slice(0, 4)
+  }, [positions, totalValue, weightedBeta])
+
+  if (!totalValue) return null
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2">
+        <TrendingDown className="w-4 h-4 text-red-400" />
+        <h2 className="text-sm font-semibold text-white">Portfolio Stress Test</h2>
+        <span className="text-[10px] text-slate-600 ml-auto">β {weightedBeta.toFixed(2)} estimated</span>
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+        {SCENARIOS.map(s => {
+          const portMove   = s.mktMove * weightedBeta
+          const dollarMove = totalValue * portMove
+          return (
+            <div key={s.label} className={`rounded-xl p-3 border text-center ${s.bg} ${s.border}`}>
+              <div className="text-[10px] text-slate-500 mb-1">{s.label}</div>
+              <div className={`text-sm font-black font-mono ${s.color}`}>
+                {portMove >= 0 ? '+' : ''}{(portMove * 100).toFixed(1)}%
+              </div>
+              <div className={`text-[11px] font-mono mt-0.5 ${s.color}`}>
+                {dollarMove >= 0 ? '+' : ''}${Math.abs(dollarMove).toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+              </div>
+              <div className="text-[9px] text-slate-600 mt-0.5">mkt {s.mktMove >= 0 ? '+' : ''}{(s.mktMove*100).toFixed(0)}%</div>
+            </div>
+          )
+        })}
+      </div>
+
+      {hedgingSuggestions.length > 0 && (
+        <div className="space-y-2">
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-400">
+            <Zap className="w-3.5 h-3.5 text-mint-400" /> Hedging Suggestions
+          </div>
+          {hedgingSuggestions.map((h, i) => (
+            <div key={i} className={`flex items-start gap-3 p-3 rounded-xl border ${
+              h.urgency === 'high' ? 'bg-red-500/5 border-red-500/20' :
+              h.urgency === 'medium' ? 'bg-amber-500/5 border-amber-500/15' :
+              'bg-white/[0.02] border-white/[0.06]'
+            }`}>
+              <span className={`text-xs font-mono font-bold shrink-0 ${
+                h.urgency === 'high' ? 'text-red-400' : h.urgency === 'medium' ? 'text-amber-400' : 'text-slate-400'
+              }`}>{h.hedge}</span>
+              <span className="text-[11px] text-slate-500">{h.reason}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Main view ─────────────────────────────────────────────────────────────────
 export default function RiskRulesView({ portfolio }) {
   const [rules,       setRules]       = useState(loadRules)
@@ -450,10 +553,17 @@ export default function RiskRulesView({ portfolio }) {
         </div>
       )}
 
+      {/* Stress test */}
+      {portfolio?.positions?.length > 0 && (
+        <div className="glass rounded-xl p-4 border border-white/[0.06]">
+          <StressTestPanel portfolio={portfolio} />
+        </div>
+      )}
+
       {/* Info */}
       <div className="flex items-start gap-2 p-3 rounded-xl bg-white/[0.02] border border-white/[0.05] text-xs text-slate-500">
         <Info className="w-3.5 h-3.5 shrink-0 mt-0.5 text-slate-600" />
-        <span>Rules are stored locally in your browser. Click <strong className="text-slate-400">Evaluate</strong> to check your current portfolio against all active rules. Portfolio peak is tracked per-browser for drawdown calculations.</span>
+        <span>Rules are stored locally in your browser. Click <strong className="text-slate-400">Evaluate</strong> to check your current portfolio against all active rules. Stress test uses beta estimates by sector/asset class — visit Risk Analytics for precise correlation data.</span>
       </div>
     </div>
   )

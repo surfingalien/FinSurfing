@@ -12,6 +12,7 @@ import {
   ShieldCheck, Activity, FlaskConical, BarChart3, Sparkles,
   Brain, Bookmark, Monitor, BookOpen, Globe, Target,
   Network, Clock, Radio, BrainCircuit, FolderOpen,
+  Search, DollarSign,
 } from 'lucide-react'
 
 // ── Sidebar nav groups ────────────────────────────────────────────────────────
@@ -48,6 +49,9 @@ export const NAV_GROUPS = [
       { id: 'recommendations', label: 'Advisory',       icon: Lightbulb },
       { id: 'macro',           label: 'Macro',          icon: Globe },
       { id: 'polymarket',      label: 'Polymarket',     icon: TrendingUp },
+      { id: 'dcf-valuation',   label: 'DCF Valuation',  icon: TrendingUp },
+      { id: 'pattern-finder',  label: 'Pattern Finder', icon: Search },
+      { id: 'dividend-screen', label: 'Dividend Screen', icon: DollarSign },
     ],
   },
   {
