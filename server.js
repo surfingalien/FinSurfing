@@ -637,7 +637,7 @@ async function getFMPQuotes(symbols, keys = {}) {
       regularMarketDayLow:        q.dayLow          ?? null,
       regularMarketOpen:          q.open            ?? null,
       regularMarketPreviousClose: q.previousClose   ?? null,
-      regularMarketTime:          q.timestamp       ?? null,
+      regularMarketTime:          q.timestamp       ?? Math.floor(Date.now() / 1000),
       fiftyTwoWeekHigh:           q.yearHigh        ?? null,
       fiftyTwoWeekLow:            q.yearLow         ?? null,
       marketCap:                  q.marketCap       ?? null,
@@ -824,6 +824,7 @@ async function getTwelveDataQuote(symbol, keys = {}) {
       regularMarketDayLow:        parseFloat(d.low)              || null,
       regularMarketOpen:          parseFloat(d.open)             || null,
       regularMarketPreviousClose: parseFloat(d.previous_close)   || null,
+      regularMarketTime:          parseInt(d.timestamp)           || Math.floor(Date.now() / 1000),
       fiftyTwoWeekHigh:           parseFloat(d['52_week']['high'])  || null,
       fiftyTwoWeekLow:            parseFloat(d['52_week']['low'])   || null,
     }
@@ -1395,6 +1396,7 @@ async function getAVQuotes(symbols, keys = {}) {
           regularMarketDayLow:        parseFloat(q?.['04. low'])            || null,
           regularMarketOpen:          parseFloat(q?.['02. open'])           || null,
           regularMarketPreviousClose: parseFloat(q?.['08. previous close']) || null,
+          regularMarketTime:          Math.floor(Date.now() / 1000),
         }
       } catch { return { symbol: sym, regularMarketPrice: null } }
     }))
