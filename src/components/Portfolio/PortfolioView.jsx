@@ -34,9 +34,62 @@ function SummaryCard({ label, value, sub, up }) {
   )
 }
 
+function EditPositionModal({ pos, onSave, onClose }) {
+  const [shares,  setShares]  = useState(String(pos.shares))
+  const [avgCost, setAvgCost] = useState(String(pos.avgCost))
+  const canSave = !!(parseFloat(shares) > 0 && parseFloat(avgCost) >= 0)
+
+  const handleSave = () => {
+    if (!canSave) return
+    onSave(pos.symbol, { shares: parseFloat(shares), avgCost: parseFloat(avgCost) })
+    onClose()
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative glass rounded-2xl p-6 w-full max-w-sm space-y-4 border border-white/[0.1]">
+        <div className="flex items-center justify-between">
+          <h2 className="text-base font-semibold text-white">Edit {pos.symbol}</h2>
+          <button onClick={onClose} className="text-slate-500 hover:text-white text-lg leading-none">×</button>
+        </div>
+        <div>
+          <label className="text-xs text-slate-400 mb-1.5 block">Shares / Units</label>
+          <input type="number" min="0.001" step="0.001" value={shares}
+            onChange={e => setShares(e.target.value)} className="input" />
+        </div>
+        <div>
+          <label className="text-xs text-slate-400 mb-1.5 block">Avg Cost Basis (per share)</label>
+          <div className="relative">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm">$</span>
+            <input type="number" min="0" step="0.01" value={avgCost}
+              onChange={e => setAvgCost(e.target.value)} className="input pl-7" />
+          </div>
+        </div>
+        {canSave && (
+          <div className="glass rounded-lg px-4 py-2.5 text-sm flex justify-between text-slate-400">
+            <span>Total Cost Basis</span>
+            <span className="font-mono text-white font-semibold">
+              ${(parseFloat(shares) * parseFloat(avgCost)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </span>
+          </div>
+        )}
+        <div className="flex gap-3 pt-1">
+          <button onClick={onClose} className="btn-ghost flex-1">Cancel</button>
+          <button onClick={handleSave} disabled={!canSave}
+            className="btn-primary flex-1 disabled:opacity-40 disabled:cursor-not-allowed">
+            Save Changes
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function PortfolioView({ portfolio }) {
-  const { positions, loading, refresh, addPosition, removePosition, summary } = portfolio
-  const [showAdd, setShowAdd] = useState(false)
+  const { positions, loading, refresh, addPosition, removePosition, updatePosition, summary } = portfolio
+  const [showAdd,  setShowAdd]  = useState(false)
+  const [editPos,  setEditPos]  = useState(null)
   const [sortBy, setSortBy] = useState('mktValue')
   const [sortDir, setSortDir] = useState(-1)
   const [selectedTab, setSelectedTab] = useState('holdings')
@@ -186,12 +239,22 @@ export default function PortfolioView({ portfolio }) {
                       {pos.gainLossPct !== null ? fmtPct(pos.gainLossPct) : '—'}
                     </td>
                     <td className="px-4 py-3">
-                      <button
-                        onClick={() => removePosition(pos.symbol)}
-                        className="opacity-0 group-hover:opacity-100 p-1 text-slate-500 hover:text-red-400 transition-all"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                        <button
+                          onClick={() => setEditPos(pos)}
+                          className="p-1 text-slate-500 hover:text-mint-400 transition-colors"
+                          title="Edit position"
+                        >
+                          <Edit3 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => removePosition(pos.symbol)}
+                          className="p-1 text-slate-500 hover:text-red-400 transition-colors"
+                          title="Remove position"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -249,6 +312,13 @@ export default function PortfolioView({ portfolio }) {
       )}
 
       {showAdd && <AddStockModal onAdd={addPosition} onClose={() => setShowAdd(false)} />}
+      {editPos && (
+        <EditPositionModal
+          pos={editPos}
+          onSave={updatePosition}
+          onClose={() => setEditPos(null)}
+        />
+      )}
     </div>
   )
 }
