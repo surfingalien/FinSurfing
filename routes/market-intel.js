@@ -26,11 +26,14 @@ function extractKeys(req) {
   }
 }
 
-async function safeFetch(url, timeoutMs = 10_000) {
+async function safeFetch(url, timeoutMs = 10_000, extraHeaders = {}) {
   const ctrl = new AbortController()
   const tid  = setTimeout(() => ctrl.abort(), timeoutMs)
   try {
-    const r = await fetch(url, { signal: ctrl.signal })
+    // SEC.gov and several free data hosts reject requests without a descriptive
+    // User-Agent. Always send one so EDGAR/FINRA don't 403.
+    const headers = { 'User-Agent': 'FinSurfing/1.0 (contact@finsurfing.app)', 'Accept': 'application/json', ...extraHeaders }
+    const r = await fetch(url, { signal: ctrl.signal, headers })
     if (!r.ok) throw new Error(`HTTP ${r.status}`)
     return await r.json()
   } finally {
@@ -47,11 +50,41 @@ router.get('/insider', async (req, res) => {
 
   if (!symbol) return res.status(400).json({ error: 'symbol required' })
 
-  try {
-    // EDGAR full-text search — free public API
-    const searchUrl = `https://efts.sec.gov/LATEST/search-index?q=%22${encodeURIComponent(symbol)}%22&dateRange=custom&startdt=${daysAgo(90)}&forms=4&hits.hits._source=period_of_report,entity_name,file_date,display_date_filed`
-    const raw = await safeFetch(searchUrl)
+  const { fmp } = extractKeys(req)
 
+  // 1st choice: FMP insider-trading (rich data — names, shares, prices, buy/sell).
+  // This is the same source the Pattern Finder uses and is far more reliable than
+  // scraping SEC EDGAR full-text search.
+  if (fmp) {
+    try {
+      const data = await safeFetch(
+        `https://financialmodelingprep.com/api/v4/insider-trading?symbol=${encodeURIComponent(symbol)}&page=0&apikey=${fmp}`
+      )
+      if (Array.isArray(data) && data.length) {
+        const transactions = data.slice(0, limit).map(t => {
+          const type = String(t.transactionType || '').toUpperCase()
+          const isBuy = type.includes('P') || type.includes('A') || type.includes('BUY')
+          return {
+            filingDate:  t.filingDate || null,
+            period:      t.transactionDate || null,
+            filerName:   t.reportingName || 'Unknown',
+            role:        t.typeOfOwner || null,
+            type:        isBuy ? 'buy' : 'sell',
+            shares:      Number(t.securitiesTransacted) || null,
+            price:       Number(t.price) || null,
+            formType:    '4',
+          }
+        })
+        return res.json({ symbol, source: 'FMP (Form 4)', count: transactions.length, transactions })
+      }
+    } catch { /* fall through to SEC EDGAR */ }
+  }
+
+  // 2nd choice: SEC EDGAR full-text search (keyless). Requires a User-Agent
+  // (handled in safeFetch) or SEC returns 403.
+  try {
+    const searchUrl = `https://efts.sec.gov/LATEST/search-index?q=%22${encodeURIComponent(symbol)}%22&forms=4&startdt=${daysAgo(90)}&enddt=${daysAgo(0)}`
+    const raw  = await safeFetch(searchUrl)
     const hits = raw?.hits?.hits || []
     const transactions = hits.slice(0, limit).map(h => {
       const s = h._source || {}
@@ -63,15 +96,17 @@ router.get('/insider', async (req, res) => {
         accession:   h._id || null,
       }
     })
-
-    res.json({
-      symbol,
-      source: 'SEC EDGAR (Form 4)',
-      count:  transactions.length,
-      transactions,
-    })
+    return res.json({ symbol, source: 'SEC EDGAR (Form 4)', count: transactions.length, transactions })
   } catch (err) {
-    res.status(502).json({ error: `SEC EDGAR fetch failed: ${err.message}` })
+    // Degrade gracefully: insider data is supplementary. Return an empty (but
+    // valid) result with a note instead of a hard 502 that fails the agent card.
+    return res.json({
+      symbol,
+      source: 'unavailable',
+      count:  0,
+      transactions: [],
+      note:   fmp ? `Insider data unavailable (${err.message})` : 'Set FMP_API_KEY for reliable insider data; SEC EDGAR fallback unavailable',
+    })
   }
 })
 
