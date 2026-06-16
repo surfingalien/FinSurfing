@@ -12,8 +12,10 @@
 
 const express    = require('express')
 const rateLimit  = require('express-rate-limit')
-const Anthropic  = require('@anthropic-ai/sdk')
 const { requireAuth } = require('../middleware/auth')
+const { getRouter } = require('../lib/ai-router')
+
+const aiRouter = getRouter('market-focus')
 
 const router = express.Router()
 
@@ -91,8 +93,6 @@ async function fetchMacroSummary() {
 // ── Core analysis ─────────────────────────────────────────────────────────────
 
 async function runFocusAnalysis({ holdings = [], watchlist = [] }) {
-  const apiKey = process.env.ANTHROPIC_API_KEY
-  if (!apiKey) return null
 
   // Combine and deduplicate — holdings take priority
   const allSymbols = [...new Set([...holdings.slice(0, 15), ...watchlist.slice(0, 10)])]
@@ -190,13 +190,7 @@ Rules:
 - If market closed / pre-market, focus on preparation for next session`
 
   try {
-    const client = new Anthropic({ apiKey })
-    const msg = await client.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 2000,
-      messages: [{ role: 'user', content: prompt }],
-    })
-    const text = msg.content?.[0]?.text || ''
+    const { text } = await aiRouter.call({ prompt, maxTokens: 2000, symbols: allSymbols })
     const match = text.match(/\{[\s\S]*\}/)
     if (!match) throw new Error('No JSON in focus analysis response')
     const data = JSON.parse(match[0])

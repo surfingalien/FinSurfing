@@ -125,6 +125,14 @@ function PositioningPanel({ symbol, onNavigate, authFetch, getHeaders }) {
                 <div className="text-[9px] text-slate-500 uppercase tracking-wider">Avg EPS Surprise</div>
               </div>
             )}
+            {data.avg_price_move_pct != null && (
+              <div className="text-center">
+                <div className={`text-sm font-black font-mono ${data.avg_price_move_pct >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                  {data.avg_price_move_pct >= 0 ? '+' : ''}{data.avg_price_move_pct.toFixed(1)}%
+                </div>
+                <div className="text-[9px] text-slate-500 uppercase tracking-wider">Avg Price Move</div>
+              </div>
+            )}
           </div>
 
           {/* Last 4 quarters table */}
@@ -227,14 +235,24 @@ function EarningsCard({ item, onAnalyze, onNavigate, authFetch, getHeaders }) {
           <p className="text-xs text-slate-500 truncate mt-0.5">{item.name}</p>
         </div>
 
-        {hasEps && (
-          <div className="text-right shrink-0">
-            <div className="text-xs font-mono text-slate-300">{item.epsEstimate} EPS est.</div>
-            {item.epsLow && item.epsHigh && (
-              <div className="text-[10px] text-slate-600">{item.epsLow} – {item.epsHigh}</div>
-            )}
-          </div>
-        )}
+        <div className="text-right shrink-0 space-y-1">
+          {hasEps && (
+            <div>
+              <div className="text-xs font-mono text-slate-300">{item.epsEstimate} EPS est.</div>
+              {item.epsLow && item.epsHigh && (
+                <div className="text-[10px] text-slate-600">{item.epsLow} – {item.epsHigh}</div>
+              )}
+            </div>
+          )}
+          {item.impliedMove != null && (
+            <div className="flex items-center justify-end gap-1">
+              <span className="text-[9px] text-slate-600 uppercase tracking-wide">Implied ±</span>
+              <span className="text-[11px] font-mono font-bold text-violet-400">
+                {item.impliedMove.toFixed(1)}%
+              </span>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="flex items-center gap-3 mt-2">

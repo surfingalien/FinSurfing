@@ -51,6 +51,9 @@ const RebalancerView         = lazy(() => import('./components/Rebalancer/Rebala
 const TradingViewView        = lazy(() => import('./components/TradingView/TradingViewView'))
 const GoalsView              = lazy(() => import('./components/Goals/GoalsView'))
 const AgenticOSView          = lazy(() => import('./components/AgenticOS/AgenticOSView'))
+const DCFView                = lazy(() => import('./components/DCF/DCFView'))
+const PatternFinderView      = lazy(() => import('./components/PatternFinder/PatternFinderView'))
+const DividendView           = lazy(() => import('./components/Dividend/DividendView'))
 
 // ── Shared loading spinner ────────────────────────────────────────────────────
 function LoadingScreen({ label = 'Loading…', fullScreen = false }) {
@@ -222,6 +225,9 @@ function MainApp({ onSignIn }) {
     'agent-hub':      () => <AgentHubView />,
     'trade-timeline': () => <TradeTimelineView portfolio={portfolio} />,
     'agentic-os':     () => <AgenticOSView />,
+    'dcf-valuation':  () => <DCFView onAnalyze={navigateToAnalyze} />,
+    'pattern-finder': () => <PatternFinderView onAnalyze={navigateToAnalyze} />,
+    'dividend-screen': () => <DividendView onAnalyze={navigateToAnalyze} />,
     'admin':          () => <AdminDashboard />,
   }
 

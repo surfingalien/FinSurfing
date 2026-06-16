@@ -185,7 +185,25 @@ export function usePortfolio({ userId, activePortfolioId, authFetch } = {}) {
       for (const sym of symbols) {
         if (!map[sym] && stored[sym]) map[sym] = { ...stored[sym], stale: true }
       }
-      setQuotes(map)
+      // Merge into existing quotes: preserve prevClose / marketTime when the
+      // new REST response doesn't include them (e.g. WS-updated cache had a
+      // brief gap where pc: cache was empty and stored null for prevClose).
+      setQuotes(prev => {
+        const merged = {}
+        for (const sym of symbols) {
+          const q   = map[sym]
+          const old = prev[sym]
+          if (!q) { if (old) merged[sym] = old; continue }
+          merged[sym] = {
+            ...q,
+            prevClose:  q.prevClose  ?? old?.prevClose  ?? null,
+            marketTime: q.marketTime ?? old?.marketTime ?? null,
+            change:     q.change     ?? old?.change     ?? null,
+            changePct:  q.changePct  ?? old?.changePct  ?? null,
+          }
+        }
+        return merged
+      })
       setLastUpdated(new Date())
     } catch (e) {
       console.warn('Quote refresh failed:', e.message)
