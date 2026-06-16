@@ -27,16 +27,31 @@ export default function AddStockModal({ onAdd, onClose }) {
     return () => clearTimeout(t)
   }, [query])
 
+  // Derive a direct ticker from raw input when search yields nothing
+  const directSymbol = !selected && !searching && results.length === 0 && query.trim()
+    ? query.trim().toUpperCase().split(/[\s—]+/)[0].replace(/[^A-Z0-9.\-]/g, '').slice(0, 10)
+    : null
+
+  const effectiveSymbol = selected?.symbol || directSymbol
+  const effectiveName   = selected?.name   || directSymbol
+  const canAdd = !!(effectiveSymbol && shares && avgCost)
+
   const handleAdd = () => {
-    if (!selected || !shares || !avgCost) return
+    if (!canAdd) return
     onAdd({
-      symbol: selected.symbol,
-      name: selected.name,
-      shares: parseFloat(shares),
+      symbol:  effectiveSymbol,
+      name:    effectiveName,
+      shares:  parseFloat(shares),
       avgCost: parseFloat(avgCost),
-      sector: 'Technology',
+      sector:  selected?.sector || null,
     })
     onClose()
+  }
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && directSymbol) {
+      setSelected({ symbol: directSymbol, name: directSymbol })
+    }
   }
 
   return (
@@ -52,7 +67,8 @@ export default function AddStockModal({ onAdd, onClose }) {
               ref={inputRef}
               value={query}
               onChange={e => { setQuery(e.target.value); setSelected(null) }}
-              placeholder="e.g. AAPL or Apple"
+              onKeyDown={handleKeyDown}
+              placeholder="Search or type ticker + Enter"
               className="input pl-9"
             />
           </div>
@@ -72,11 +88,19 @@ export default function AddStockModal({ onAdd, onClose }) {
             </div>
           )}
           {searching && <div className="text-xs text-slate-500 mt-1 px-1">Searching…</div>}
+          {directSymbol && (
+            <button
+              onClick={() => { setSelected({ symbol: directSymbol, name: directSymbol }); setQuery(directSymbol) }}
+              className="mt-1.5 w-full text-left px-3 py-2 text-xs rounded-lg bg-white/[0.03] border border-white/[0.08] hover:bg-white/[0.06] transition-colors text-slate-400"
+            >
+              Add <span className="font-mono font-semibold text-mint-400">{directSymbol}</span> directly (unlisted / delisted / crypto)
+            </button>
+          )}
         </div>
 
         {/* Shares */}
         <div>
-          <label className="text-xs text-slate-400 mb-1.5 block">Number of Shares</label>
+          <label className="text-xs text-slate-400 mb-1.5 block">Number of Shares / Units</label>
           <input
             type="number"
             min="0.001"
@@ -95,7 +119,7 @@ export default function AddStockModal({ onAdd, onClose }) {
             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm">$</span>
             <input
               type="number"
-              min="0.01"
+              min="0"
               step="0.01"
               value={avgCost}
               onChange={e => setAvgCost(e.target.value)}
@@ -105,7 +129,7 @@ export default function AddStockModal({ onAdd, onClose }) {
           </div>
         </div>
 
-        {selected && shares && avgCost && (
+        {effectiveSymbol && shares && avgCost && (
           <div className="glass rounded-lg px-4 py-3 text-sm">
             <div className="flex justify-between text-slate-400">
               <span>Total Cost Basis</span>
@@ -113,6 +137,11 @@ export default function AddStockModal({ onAdd, onClose }) {
                 ${(parseFloat(shares) * parseFloat(avgCost)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
             </div>
+            {!selected?.name && directSymbol && (
+              <div className="text-[10px] text-amber-400/70 mt-1">
+                Live price data may not be available for this symbol — P&L will show "—" until a provider covers it.
+              </div>
+            )}
           </div>
         )}
 
@@ -120,7 +149,7 @@ export default function AddStockModal({ onAdd, onClose }) {
           <button onClick={onClose} className="btn-ghost flex-1">Cancel</button>
           <button
             onClick={handleAdd}
-            disabled={!selected || !shares || !avgCost}
+            disabled={!canAdd}
             className="btn-primary flex-1 flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <Plus className="w-4 h-4" />
