@@ -1128,7 +1128,7 @@ async function getBinanceSingleQuote(symbol) {
     const chg   = +(price - prev).toFixed(6)
     console.log(`[Binance] quote OK: ${symbol} → ${binSym} $${price}`)
     const base = symbol.includes('-') ? symbol.split('-')[0] : symbol
-    return {
+    const q = {
       symbol,
       shortName:                  base,
       regularMarketPrice:         price,
@@ -1139,7 +1139,13 @@ async function getBinanceSingleQuote(symbol) {
       regularMarketDayLow:        parseFloat(d.lowPrice)  || null,
       regularMarketOpen:          parseFloat(d.openPrice) || null,
       regularMarketPreviousClose: prev,
+      regularMarketTime:          Math.floor(Date.now() / 1000),
     }
+    // Seed fhq: cache and pc: cache so Binance WS tick handler can compute
+    // change/changePct from prevClose without needing a separate REST call.
+    cacheSet(`fhq:${symbol}`, q)
+    cacheSet(`pc:${symbol}`, prev)
+    return q
   } catch (e) { console.warn('[Binance] quote error:', e.message); return null }
 }
 
