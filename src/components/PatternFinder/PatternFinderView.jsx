@@ -82,7 +82,10 @@ export default function PatternFinderView({ onAnalyze }) {
       const res = await fetch(`/api/patterns/${encodeURIComponent(sym)}`, {
         headers: getApiKeyHeaders(),
       })
-      if (!res.ok) throw new Error(`Request failed (${res.status})`)
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body.error || `Request failed (${res.status})`)
+      }
       const json = await res.json()
       setData(json)
     } catch (err) {
@@ -92,11 +95,11 @@ export default function PatternFinderView({ onAnalyze }) {
     }
   }, [symbol])
 
-  const seasonal = data?.seasonal || data?.monthlyReturns || []
-  const dayOfWeek = data?.dayOfWeek || data?.dayOfWeekReturns || []
-  const insider = data?.insider || {}
-  const institutional = data?.institutional || {}
-  const shortInterest = data?.shortInterest || {}
+  const seasonal = data?.computed?.seasonalPatterns || data?.seasonalPatterns?.monthlyReturns || data?.monthlyReturns || []
+  const dayOfWeek = data?.computed?.dayOfWeekPatterns || data?.dayOfWeekPatterns || data?.dayOfWeekReturns || []
+  const insider = data?.computed?.insiderActivity || data?.insiderActivity || data?.insider || {}
+  const institutional = data?.computed?.institutionalOwnership || data?.institutionalOwnership || data?.institutional || {}
+  const shortInterest = data?.computed?.shortInterest || data?.shortInterest || {}
 
   const maxDay = Math.max(1, ...dayOfWeek.map(d => Math.abs(Number(d.avgReturn ?? d.return ?? 0))))
 
@@ -243,7 +246,7 @@ export default function PatternFinderView({ onAnalyze }) {
                   </span>
                 </div>
               )}
-              {Array.isArray(insider.transactions) && insider.transactions.length > 0 && (
+              {Array.isArray(insider.recentTransactions || insider.transactions) && (insider.recentTransactions || insider.transactions).length > 0 && (
                 <div className="overflow-x-auto">
                   <table className="w-full text-xs">
                     <thead>
@@ -256,7 +259,7 @@ export default function PatternFinderView({ onAnalyze }) {
                       </tr>
                     </thead>
                     <tbody>
-                      {insider.transactions.slice(0, 8).map((t, i) => (
+                      {(insider.recentTransactions || insider.transactions).slice(0, 8).map((t, i) => (
                         <tr key={i} className="border-b border-white/[0.03]">
                           <td className="py-1.5 pr-3 text-slate-400">{t.date}</td>
                           <td className="py-1.5 pr-3 text-slate-300">{t.name || t.insider}</td>

@@ -65,9 +65,12 @@ export default function DividendView({ onAnalyze }) {
       const res = await fetch('/api/dividend/screen', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...getApiKeyHeaders() },
-        body: JSON.stringify({ amount: Number(amount) || 0, monthlyGoal: Number(goal) || 0, symbols }),
+        body: JSON.stringify({ investmentAmount: Number(amount) || 0, monthlyIncomeGoal: Number(goal) || 0, symbols }),
       })
-      if (!res.ok) throw new Error(`Request failed (${res.status})`)
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body.error || `Request failed (${res.status})`)
+      }
       const json = await res.json()
       setData(json)
     } catch (err) {
@@ -77,7 +80,7 @@ export default function DividendView({ onAnalyze }) {
     }
   }, [amount, goal, customSymbols])
 
-  const summary = data?.summary || {}
+  const summary = data?.portfolioSummary || data?.summary || {}
   const stocks = data?.stocks || []
 
   const filtered = useMemo(() => {
@@ -160,15 +163,15 @@ export default function DividendView({ onAnalyze }) {
             </div>
             <div className="glass-card text-center">
               <div className="text-xs text-slate-500">Average Yield</div>
-              <div className="font-mono font-bold text-mint-400 text-lg">{summary.averageYield != null ? Number(summary.averageYield).toFixed(1) + '%' : '—'}</div>
+              <div className="font-mono font-bold text-mint-400 text-lg">{(summary.avgYield ?? summary.averageYield) != null ? Number(summary.avgYield ?? summary.averageYield).toFixed(1) + '%' : '—'}</div>
             </div>
             <div className="glass-card text-center">
               <div className="text-xs text-slate-500">Avg Safety Score</div>
-              <div className="font-mono font-bold text-white text-lg">{summary.averageSafetyScore != null ? Number(summary.averageSafetyScore).toFixed(1) + '/10' : '—'}</div>
+              <div className="font-mono font-bold text-white text-lg">{(summary.avgSafetyScore ?? summary.averageSafetyScore) != null ? Number(summary.avgSafetyScore ?? summary.averageSafetyScore).toFixed(1) + '/10' : '—'}</div>
             </div>
             <div className="glass-card text-center">
               <div className="text-xs text-slate-500">10-Year DRIP Value</div>
-              <div className="font-mono font-bold text-emerald-400 text-lg">{fmtUsd(summary.dripValue10yr)}</div>
+              <div className="font-mono font-bold text-emerald-400 text-lg">{fmtUsd(summary.drip10yr ?? summary.dripValue10yr)}</div>
             </div>
           </div>
 
@@ -202,7 +205,7 @@ export default function DividendView({ onAnalyze }) {
                     <div className="text-xs text-slate-500 truncate">{s.name}</div>
                   </div>
                   <div className="text-right shrink-0">
-                    <div className="font-mono font-bold text-emerald-400 text-2xl leading-none">{s.yield != null ? Number(s.yield).toFixed(1) + '%' : '—'}</div>
+                    <div className="font-mono font-bold text-emerald-400 text-2xl leading-none">{(s.currentYield ?? s.yield) != null ? Number(s.currentYield ?? s.yield).toFixed(1) + '%' : '—'}</div>
                     <div className="text-xs text-slate-500">yield</div>
                   </div>
                 </div>
@@ -218,7 +221,7 @@ export default function DividendView({ onAnalyze }) {
                   {s.payoutRatio != null && (
                     <div className="flex justify-between"><span className="text-slate-500">Payout</span><span className="text-slate-300 font-mono">{Number(s.payoutRatio).toFixed(0)}%</span></div>
                   )}
-                  <div className="flex justify-between"><span className="text-slate-500">5yr growth</span><span className="text-slate-300 font-mono">{s.dividendGrowth5yr != null ? Number(s.dividendGrowth5yr).toFixed(1) + '%' : '—'}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-500">5yr growth</span><span className="text-slate-300 font-mono">{(s.dividendGrowthRate5yr ?? s.dividendGrowth5yr) != null ? Number(s.dividendGrowthRate5yr ?? s.dividendGrowth5yr).toFixed(1) + '%' : '—'}</span></div>
                   <div className="flex justify-between"><span className="text-slate-500">Inc / $1k</span><span className="text-slate-300 font-mono">{s.incomePer1000 != null ? '$' + Number(s.incomePer1000).toFixed(0) : '—'}</span></div>
                 </div>
 

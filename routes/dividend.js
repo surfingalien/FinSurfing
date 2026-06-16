@@ -35,11 +35,24 @@ const SYSTEM_PROMPT =
   'You are a dividend income strategist. Return ONLY valid JSON matching the ' +
   'exact schema provided. No markdown, no explanation.'
 
+// See routes/dcf.js for why FMP errors must be surfaced (plan/rate limits
+// arrive as HTTP 200 with an {"Error Message": ...} body).
+let _lastFmpError = null
+
 async function fmpJson(url) {
   try {
     const r = await fetch(url, { signal: AbortSignal.timeout(10000) })
-    if (!r.ok) return null
-    return await r.json()
+    if (!r.ok) {
+      if (r.status === 401 || r.status === 403) _lastFmpError = 'FMP API key invalid or lacks access to this data'
+      else if (r.status === 429) _lastFmpError = 'FMP rate limit reached — try again shortly'
+      return null
+    }
+    const d = await r.json()
+    if (d && !Array.isArray(d) && (d['Error Message'] || d.error)) {
+      _lastFmpError = d['Error Message'] || d.error
+      return null
+    }
+    return d
   } catch {
     return null
   }
@@ -176,13 +189,14 @@ router.post('/screen', dividendLimit, async (req, res) => {
       return res.status(400).json({ error: 'No valid symbols provided' })
   }
 
-  const investmentAmount = num(body.investmentAmount) && num(body.investmentAmount) > 0
-    ? num(body.investmentAmount) : 10000
-  const monthlyIncomeGoal = num(body.monthlyIncomeGoal)
+  const investmentAmount = (num(body.investmentAmount) || num(body.amount) || 0) > 0
+    ? (num(body.investmentAmount) || num(body.amount)) : 10000
+  const monthlyIncomeGoal = num(body.monthlyIncomeGoal) ?? num(body.monthlyGoal)
 
   const fmpKey = req.headers['x-fmp-key'] || FMP_KEY()
   if (!fmpKey) return res.status(400).json({ error: 'FMP_API_KEY required' })
 
+  _lastFmpError = null
   try {
     const v3 = 'https://financialmodelingprep.com/api/v3'
 
@@ -200,8 +214,11 @@ router.post('/screen', dividendLimit, async (req, res) => {
       .filter(r => r.status === 'fulfilled' && r.value)
       .map(r => r.value)
 
-    if (!stocks.length)
+    if (!stocks.length) {
+      if (_lastFmpError)
+        return res.status(502).json({ error: `Financial data provider error: ${_lastFmpError}` })
       return res.status(404).json({ error: 'No dividend data found for the requested symbols' })
+    }
 
     const prompt = buildPrompt(stocks, investmentAmount, monthlyIncomeGoal)
 
