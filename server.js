@@ -501,7 +501,9 @@ async function getFinnhubQuotes(symbols, keys = {}) {
     const results = await Promise.all(symbols.map(async sym => {
       const ck = `fhq:${sym}`
       const cached = cacheGet(ck)
-      if (cached) return cached
+      // Only use cache if it has prevClose or changePct (WS ticks may have set
+      // fhq: with price but null prevClose before pc: cache was seeded)
+      if (cached?.regularMarketPreviousClose != null || cached?.regularMarketChangePercent != null) return cached
       try {
         const d = await apiFetch(fhUrl(`/quote?symbol=${encodeURIComponent(sym)}`, key), 8000)
         // d.c === 0 means no current trade (market closed on free tier) — return null so
@@ -1839,9 +1841,12 @@ app.get('/api/quote', async (req, res) => {
               && r.regularMarketPreviousClose == null
           })
 
-          // 0th: instant caches
+          // 0th: instant caches — skip fhq: entries that have price but no
+          // prevClose/changePct (written by WS ticks before pc: cache was seeded)
           for (const sym of stockSyms) {
-            const cached = cacheGet(`fhq:${sym}`)
+            const fhq = cacheGet(`fhq:${sym}`)
+            const fhqOk = fhq && (fhq.regularMarketPreviousClose != null || fhq.regularMarketChangePercent != null)
+            const cached = (fhqOk ? fhq : null)
               || cacheGet(`aisaq:${sym}`)
               || (() => { const p = getPriceFromChartCache(sym); return p != null ? { symbol: sym, shortName: sym, regularMarketPrice: p } : null })()
             if (cached) resultMap[sym] = cached

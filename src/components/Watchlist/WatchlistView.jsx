@@ -64,10 +64,20 @@ export default function WatchlistView({ watchlist }) {
   }
 
   const handleAdd = (sym) => {
-    addSymbol(sym)
+    const clean = sym.trim().toUpperCase().replace(/[^A-Z0-9.\-]/g, '')
+    if (!clean) return
+    addSymbol(clean)
     setAddQuery('')
     setSearchResults([])
     setShowSearch(false)
+  }
+
+  const handleSearchKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      const typed = addQuery.trim().toUpperCase().replace(/[^A-Z0-9.\-]/g, '')
+      if (typed) handleAdd(typed)
+    }
   }
 
   return (
@@ -107,7 +117,8 @@ export default function WatchlistView({ watchlist }) {
             <input
               value={addQuery}
               onChange={e => handleSearch(e.target.value)}
-              placeholder="Search symbol or company name…"
+              onKeyDown={handleSearchKeyDown}
+              placeholder="Search symbol or name, or type ticker + Enter…"
               className="input pl-9"
               autoFocus
             />
@@ -128,6 +139,15 @@ export default function WatchlistView({ watchlist }) {
                 </button>
               ))}
             </div>
+          )}
+          {!searching && addQuery.trim() && searchResults.length === 0 && (
+            <button
+              onClick={() => handleAdd(addQuery)}
+              className="mt-2 w-full flex items-center gap-3 px-3 py-2.5 glass rounded-lg hover:bg-mint-500/[0.08] border border-mint-500/20 text-left transition-colors"
+            >
+              <PlusCircle className="w-4 h-4 text-mint-400 shrink-0" />
+              <span className="text-sm text-mint-400">Add <span className="font-mono font-bold">{addQuery.trim().toUpperCase()}</span> directly</span>
+            </button>
           )}
         </div>
       )}

@@ -37,7 +37,11 @@ async function fmpJson(url) {
   try {
     const r = await fetch(url, { signal: AbortSignal.timeout(10000) })
     if (!r.ok) return null
-    return await r.json()
+    const d = await r.json()
+    // FMP returns plan/rate errors as a 200 with an Error Message field —
+    // treat those as no-data so callers don't try to iterate an error object.
+    if (d && !Array.isArray(d) && (d['Error Message'] || d.error)) return null
+    return d
   } catch {
     return null
   }

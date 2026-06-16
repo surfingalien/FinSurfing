@@ -62,7 +62,10 @@ export default function DCFView({ onAnalyze }) {
         headers: { 'Content-Type': 'application/json', ...getApiKeyHeaders() },
         body: JSON.stringify({ symbol: sym }),
       })
-      if (!res.ok) throw new Error(`Request failed (${res.status})`)
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body.error || `Request failed (${res.status})`)
+      }
       const json = await res.json()
       setData(json)
     } catch (err) {

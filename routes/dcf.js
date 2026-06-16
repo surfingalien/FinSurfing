@@ -31,11 +31,26 @@ const SYSTEM_PROMPT =
   'exact schema provided. No markdown, no explanation.'
 
 // ── FMP fetch helper — never throws, returns null on any failure ──────────────
+// Tracks the last FMP error message seen during a request so the handler can
+// distinguish "symbol genuinely has no data" from "FMP rejected the call"
+// (rate limit, or fundamental endpoints not included in the API plan — both
+// return HTTP 200 with an {"Error Message": ...} body).
+let _lastFmpError = null
+
 async function fmpJson(url) {
   try {
     const r = await fetch(url, { signal: AbortSignal.timeout(10000) })
-    if (!r.ok) return null
+    if (!r.ok) {
+      if (r.status === 401 || r.status === 403) _lastFmpError = 'FMP API key invalid or lacks access to this data'
+      else if (r.status === 429) _lastFmpError = 'FMP rate limit reached — try again shortly'
+      return null
+    }
     const d = await r.json()
+    // FMP signals plan/rate errors as a 200 with an Error Message field
+    if (d && !Array.isArray(d) && (d['Error Message'] || d.error)) {
+      _lastFmpError = d['Error Message'] || d.error
+      return null
+    }
     return d
   } catch {
     return null
@@ -120,6 +135,7 @@ router.post('/', dcfLimit, async (req, res) => {
   const fmpKey = req.headers['x-fmp-key'] || FMP_KEY()
   if (!fmpKey) return res.status(400).json({ error: 'FMP_API_KEY required' })
 
+  _lastFmpError = null
   try {
     const base = 'https://financialmodelingprep.com/api/v3'
     const [income, cashflow, balance, profileArr] = await Promise.all([
@@ -134,9 +150,12 @@ router.post('/', dcfLimit, async (req, res) => {
     const balanceRow  = Array.isArray(balance) ? balance[0] : null
     const profileRow  = Array.isArray(profileArr) ? profileArr[0] : null
 
-    // Company not found → 404
-    if (!incomeArr.length && !cashflowArr.length && !profileRow)
+    // No usable data → distinguish an FMP error from a genuinely unknown symbol
+    if (!incomeArr.length && !cashflowArr.length && !profileRow) {
+      if (_lastFmpError)
+        return res.status(502).json({ error: `Financial data provider error: ${_lastFmpError}` })
       return res.status(404).json({ error: `No fundamental data found for ${sym}` })
+    }
 
     // Build per-year historical financials (align income + cash flow by calendar year)
     const cfByYear = {}
