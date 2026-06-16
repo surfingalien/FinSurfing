@@ -81,7 +81,7 @@ export default function PortfolioView({ portfolio }) {
           label="Total Gain/Loss"
           value={`${summary.totalGL >= 0 ? '+' : ''}${fmtLarge(Math.abs(summary.totalGL))}`}
           sub={summary.unpricedCount > 0
-            ? `⚠ ${summary.unpricedCount} unpriced — P&L incomplete`
+            ? `⚠ ${summary.unpricedCount} position${summary.unpricedCount > 1 ? 's' : ''} unpriced (counted at cost) — P&L understated`
             : summary.staleCount > 0
               ? `${fmtPct(summary.totalGLPct)} · ${summary.staleCount} stale price${summary.staleCount > 1 ? 's' : ''}`
               : fmtPct(summary.totalGLPct)}
@@ -174,8 +174,10 @@ export default function PortfolioView({ portfolio }) {
                         ? `${pos.todayGL >= 0 ? '+' : ''}$${fmt(Math.abs(pos.todayGL))}`
                         : <span className="text-slate-600">—</span>}
                     </td>
-                    <td className="px-3 py-3 text-right font-mono text-white font-medium">
-                      {pos.mktValue !== null ? `$${fmt(pos.mktValue)}` : `$${fmt(pos.costBasis)}`}
+                    <td className="px-3 py-3 text-right font-mono font-medium">
+                      {pos.mktValue !== null
+                        ? <span className="text-white">${fmt(pos.mktValue)}</span>
+                        : <span className="text-slate-500" title="No live price — showing cost basis">${fmt(pos.costBasis)} <span className="text-[10px]">cost</span></span>}
                     </td>
                     <td className={`px-3 py-3 text-right font-mono hidden md:table-cell ${(pos.gainLoss ?? 0) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                       {pos.gainLoss !== null ? `${pos.gainLoss >= 0 ? '+' : ''}$${fmt(Math.abs(pos.gainLoss))}` : '—'}
