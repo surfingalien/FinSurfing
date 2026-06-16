@@ -329,6 +329,26 @@ setInterval(() => {
   }
 }, 5 * 60_000)
 
+// ── Concurrency-limited map ───────────────────────────────────────────────────
+// Runs `fn` over `items` with at most `limit` in flight at once. Free-tier
+// providers (Finnhub 30/min, Nasdaq) return HTTP 429 when a large portfolio
+// fires one request per symbol all at once via Promise.all — the burst trips
+// the per-second/connection limit and a few symbols silently come back unpriced.
+// Throttling the fan-out keeps every symbol within the rate budget so it gets a
+// real price instead of cascading down to a delayed/last-known fallback.
+async function mapLimit(items, limit, fn) {
+  const results = new Array(items.length)
+  let next = 0
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length) {
+      const i = next++
+      results[i] = await fn(items[i], i)
+    }
+  })
+  await Promise.all(workers)
+  return results
+}
+
 // ── Extract user-supplied API keys from request headers ───────────────────────
 // Browser stores keys in localStorage and attaches them as custom headers.
 // Header keys take precedence over server env vars so users can use their own.
@@ -498,7 +518,10 @@ async function getFinnhubQuotes(symbols, keys = {}) {
   const key = keys.finnhub || FH_KEY()
   if (!key) return null
   try {
-    const results = await Promise.all(symbols.map(async sym => {
+    // Cap concurrency: free-tier Finnhub trips its burst/connection limit when a
+    // multi-holding portfolio fires every symbol at once, returning 429 → null
+    // for the overflow. 6 in flight keeps the batch inside the rate budget.
+    const results = await mapLimit(symbols, 6, async sym => {
       const ck = `fhq:${sym}`
       const cached = cacheGet(ck)
       // Only use cache if it has prevClose or changePct (WS ticks may have set
@@ -528,7 +551,7 @@ async function getFinnhubQuotes(symbols, keys = {}) {
         if (d.pc) cacheSet(`pc:${sym}`, d.pc)
         return q
       } catch { return { symbol: sym, regularMarketPrice: null } }
-    }))
+    })
     return results
   } catch { return null }
 }
@@ -1294,7 +1317,9 @@ async function getNasdaqQuotes(symbols) {
     'Referer':         'https://www.nasdaq.com/',
     'Origin':          'https://www.nasdaq.com',
   }
-  const results = await Promise.all(symbols.map(async (sym) => {
+  // Each symbol probes up to 3 asset classes serially; cap concurrency so a
+  // large portfolio doesn't burst dozens of requests at Nasdaq and get throttled.
+  const results = await mapLimit(symbols, 5, async (sym) => {
     for (const assetclass of ['stocks', 'etf', 'index']) {
       try {
         const url = `https://api.nasdaq.com/api/quote/${encodeURIComponent(sym)}/info?assetClass=${assetclass}`
@@ -1332,7 +1357,7 @@ async function getNasdaqQuotes(symbols) {
       } catch { /* try next assetclass */ }
     }
     return null
-  }))
+  })
   return results
 }
 
