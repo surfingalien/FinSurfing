@@ -51,7 +51,8 @@ export default function AIAdvisoryView({ portfolio }) {
       ])
 
       const chartD = daily.value
-      if (!chartD?.candles?.length) throw new Error('No price history for ' + s)
+      if (!chartD?.candles?.length)
+        throw new Error(`No price history for ${s}. None of the configured data providers carry this symbol — it may be illiquid, recently listed, delisted, or non-US. A TradingView chart can still render it, but the Advisory engine needs historical bars.`)
 
       setCandles(chartD.candles)
       const quote      = daily.status === 'fulfilled' ? qs.value?.[0] ?? null : null

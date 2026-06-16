@@ -2063,7 +2063,7 @@ app.get('/api/chart', async (req, res) => {
       if (stooqD) return res.json(saveChart(stooqD, 'Stooq-daily'))
     }
 
-    res.status(502).json({ chart: { result: null, error: { code: 'unavailable', description: 'No market data provider returned data' } } })
+    res.status(502).json({ error: `No price history available for ${symbol} — not covered by any data provider (may be illiquid, delisted, or non-US)`, chart: { result: null, error: { code: 'unavailable', description: 'No market data provider returned data' } } })
   } catch (e) {
     res.status(500).json({ error: e.message })
   }

@@ -456,8 +456,18 @@ router.post('/analyze', requireAuth, async (req, res) => {
       if (bars) { yInterval = '1wk'; range = '2y' }
     }
 
-    if (!bars)
-      return res.status(422).json({ error: `No market data available for ${sym}. Add an AISA, Finnhub, or FMP API key in Settings for full coverage.` })
+    if (!bars) {
+      // Distinguish "no keys → keys would help" from "keys present but the symbol
+      // genuinely isn't covered by any data provider". TradingView's widget charts
+      // many illiquid/delisted/non-US tickers that our OHLCV providers don't carry,
+      // so a working chart does NOT guarantee our backend can analyze the symbol.
+      const hasDataKey = !!(fwdHeaders['x-aisa-key'] || fwdHeaders['x-finnhub-key'] || fwdHeaders['x-fmp-key'] || fwdHeaders['x-td-key'] || fwdHeaders['x-av-key']
+        || process.env.AISA_API_KEY || process.env.FINNHUB_API_KEY || process.env.FMP_API_KEY || process.env.TWELVEDATA_API_KEY || process.env.ALPHAVANTAGE_API_KEY)
+      const msg = hasDataKey
+        ? `No price history available for ${sym}. The TradingView chart may render it, but none of the configured data providers carry OHLCV data for this symbol — it may be illiquid, recently listed, delisted, or non-US. AI Analysis needs historical bars to compute indicators.`
+        : `No market data available for ${sym}. Add an AISA, Finnhub, or FMP API key in Settings for full coverage.`
+      return res.status(422).json({ error: msg })
+    }
 
     const ts      = bars.map(b => b.t)
     const opens   = bars.map(b => b.o ?? b.c)
