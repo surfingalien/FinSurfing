@@ -273,6 +273,17 @@ const TOOLS = [
     description: "The AI Brain's measured track record: win rates and benchmark-beating alpha at 7d/30d, calibration by stated confidence, cross-model ensemble lift, and how the AI compares to a mechanical TA baseline on identical picks. Use when asked how reliable the AI's signals are.",
     input_schema: { type: 'object', properties: {} },
   },
+  {
+    name: 'get_analyst_consensus',
+    description: 'Get Wall Street analyst consensus for a stock: median price target, analyst count, recommendation mean (1=Strong Buy → 5=Strong Sell), forward P/E, and EPS estimates. Use to validate or challenge an AI thesis with institutional opinion.',
+    input_schema: {
+      type: 'object',
+      required: ['symbol'],
+      properties: {
+        symbol: { type: 'string', description: 'Ticker symbol (e.g. AAPL, NVDA, MSFT)' },
+      },
+    },
+  },
 ]
 
 // ── Internal tool dispatcher ──────────────────────────────────────────────────
@@ -517,6 +528,55 @@ async function dispatchTool(name, input, req) {
       if (stats.baseline) lines.push(
         `Vs mechanical TA baseline (n=${stats.baseline.n}, 7d): AI win ${pc(stats.baseline.aiWinRate7d)} vs baseline accuracy ${pc(stats.baseline.baselineAccuracy7d)}; AI wins ${pc(stats.baseline.aiWinWhenBaselineAgrees)} when baseline agrees, ${pc(stats.baseline.aiWinWhenBaselineDisagrees)} when it disagrees`)
       return lines.join('\n')
+    }
+
+    case 'get_analyst_consensus': {
+      const sym = (input.symbol || '').toUpperCase().replace(/[^A-Z0-9.-]/g, '')
+      if (!sym) return 'No symbol provided.'
+      try {
+        const r = await fetch(
+          `http://127.0.0.1:${port}/api/quote?symbols=${encodeURIComponent(sym)}`,
+          { headers: fwdHeaders, signal: AbortSignal.timeout(10_000) }
+        )
+        const d = await r.json()
+        const q = d?.quoteResponse?.result?.[0]
+        if (!q) return `No quote data available for ${sym}.`
+
+        const target   = q.targetMedianPrice
+        const recMean  = q.recommendationMean
+        const count    = q.numberOfAnalystOpinions
+        const fwdPE    = q.forwardPE
+        const fwdEps   = q.forwardEps
+        const trailPE  = q.trailingPE
+        const price    = q.regularMarketPrice
+
+        if (target == null && recMean == null) return `No analyst consensus data available for ${sym} — this is common for crypto, ETFs, and small-caps.`
+
+        const recLabel = recMean == null ? 'N/A'
+          : recMean <= 1.5 ? 'Strong Buy'
+          : recMean <= 2.5 ? 'Buy'
+          : recMean <= 3.5 ? 'Hold'
+          : recMean <= 4.5 ? 'Underperform'
+          : 'Sell'
+
+        const upside = (target != null && price != null && price > 0)
+          ? ((target - price) / price * 100).toFixed(1)
+          : null
+
+        const lines = [`**${sym} — Analyst Consensus** (${count ?? '?'} analysts)`]
+        if (target != null) lines.push(`📊 Median Price Target: $${target.toFixed(2)}${upside != null ? ` (${upside > 0 ? '+' : ''}${upside}% from current $${price?.toFixed(2)})` : ''}`)
+        if (recMean != null) lines.push(`🎯 Consensus: ${recLabel} (${recMean.toFixed(2)}/5 — lower = more bullish)`)
+        if (fwdPE   != null) lines.push(`📈 Forward P/E: ${fwdPE.toFixed(1)}`)
+        if (trailPE != null) lines.push(`📉 Trailing P/E: ${trailPE.toFixed(1)}`)
+        if (fwdEps  != null) lines.push(`💵 Forward EPS (est.): $${fwdEps.toFixed(2)}`)
+        if (upside != null) {
+          if (parseFloat(upside) > 20) lines.push(`\n✅ Analysts see significant upside — strong tailwind for bullish thesis.`)
+          else if (parseFloat(upside) < -5) lines.push(`\n⚠️ Analysts project downside from current price — contrarian headwind.`)
+        }
+        return lines.join('\n')
+      } catch (e) {
+        return `Analyst consensus fetch failed for ${sym}: ${e.message}`
+      }
     }
 
     default:
