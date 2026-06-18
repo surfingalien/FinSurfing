@@ -294,7 +294,7 @@ function tvToChartParams(tvInterval) {
 
 // ── Analysis prompt builder ────────────────────────────────────────────────────
 
-function buildAnalysisPrompt(symbol, interval, price, indicators, patterns, vol, priceLabel = 'last bar close', sentiment = null, priorMemories = [], socialSnippet = '') {
+function buildAnalysisPrompt(symbol, interval, price, indicators, patterns, vol, priceLabel = 'last bar close', sentiment = null, priorMemories = [], socialSnippet = '', analystSnippet = '') {
   const { rsi, macd, ema9, ema21, ema50, ema200, bb, atr, stochRsi, vwap, obv, sr } = indicators
 
   const rsiInterp = rsi == null ? 'N/A'
@@ -363,7 +363,7 @@ ${volInterp}
 
 DETECTED PATTERNS:
 ${patternsStr}
-${sentimentSection}${socialSnippet}
+${sentimentSection}${socialSnippet}${analystSnippet}
 ANALYSIS INSTRUCTIONS:
 1. Look for CONTRADICTIONS between indicators (e.g. RSI overbought but MACD still bullish, price above EMA50 but OBV falling, BB squeeze while RSI diverging). List each contradiction explicitly.
 2. For price targets, provide a ZONE (low/high) based on key S/R and ATR, not a single precise number. Entry zone should reflect realistic fill range around current price.
@@ -482,6 +482,7 @@ router.post('/analyze', requireAuth, async (req, res) => {
     // then try a fresh quote from the internal API, then fall back to last bar close.
     let price = closes[closes.length - 1]
     let priceLabel = 'last bar close'
+    let analystTarget = null, analystCount = null, analystRecMean = null, forwardPE = null
 
     if (clientLivePrice && typeof clientLivePrice === 'number' && clientLivePrice > 0) {
       price = clientLivePrice
@@ -493,12 +494,19 @@ router.post('/analyze', requireAuth, async (req, res) => {
           { headers: fwdHeaders, signal: AbortSignal.timeout(5000) }
         )
         const qd = await qr.json()
-        const lp = qd?.quoteResponse?.result?.[0]?.regularMarketPrice
+        const q0 = qd?.quoteResponse?.result?.[0]
+        const lp = q0?.regularMarketPrice
         if (lp && lp > 0 && (Math.abs(lp - price) / price < 0.5 || isCryptoSymbol(sym))) {
           // Sanity check: accept if within 50% of bar close, OR always for crypto
           // (crypto quote from Binance/CoinGecko is authoritative even when bars are stale)
           price = lp
           priceLabel = 'live quote'
+        }
+        if (q0) {
+          analystTarget    = q0.targetMedianPrice ?? null
+          analystCount     = q0.numberOfAnalystOpinions ?? null
+          analystRecMean   = q0.recommendationMean ?? null
+          forwardPE        = q0.forwardPE ?? null
         }
       } catch { /* keep last bar close */ }
     }
@@ -531,8 +539,15 @@ router.post('/analyze', requireAuth, async (req, res) => {
     if (sentiment) console.log(`[trading-analysis] ${sym} StockTwits: ${sentiment.bullish}B ${sentiment.bearish}Be ${sentiment.neutral}N / ${sentiment.total}`)
     if (priorMemories.length) console.log(`[trading-analysis] ${sym} memory: ${priorMemories.length} prior analyses injected`)
 
+    // Build analyst snippet from quote data
+    const analystParts = []
+    if (analystTarget != null) analystParts.push(`Median target: $${analystTarget.toFixed(analystTarget >= 1 ? 2 : 4)}${analystCount ? ` (${analystCount} analysts)` : ''}`)
+    if (analystRecMean != null) analystParts.push(`Consensus score: ${analystRecMean.toFixed(1)}/5 (1=Strong Buy, 5=Strong Sell)`)
+    if (forwardPE != null) analystParts.push(`Fwd P/E: ${forwardPE.toFixed(1)}`)
+    const analystSnippet = analystParts.length ? `\nANALYST CONSENSUS:\n${analystParts.join(' | ')}\n` : ''
+
     // Build prompt and call Claude
-    const analysisPrompt = buildAnalysisPrompt(sym, interval, price, indicators, patterns, vol, priceLabel, sentiment, priorMemories, socialSnippetRaw)
+    const analysisPrompt = buildAnalysisPrompt(sym, interval, price, indicators, patterns, vol, priceLabel, sentiment, priorMemories, socialSnippetRaw, analystSnippet)
 
     const { text: rawText } = await aiRouter.call({
       prompt:    analysisPrompt,
