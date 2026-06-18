@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import {
   Brain, ChevronDown, ChevronUp, AlertTriangle,
-  Target, Shield, Bookmark, BookmarkCheck,
+  Target, Shield, Bookmark, BookmarkCheck, Zap,
 } from 'lucide-react'
 import { useAIWatchlist } from '../../../hooks/useAIWatchlist'
 import { AGENTS, VERDICT_CONFIG, CONFIDENCE_CONFIG, VOLUME_SIGNAL } from './constants'
@@ -80,6 +80,12 @@ export default function StockCard({ stock, onAnalyze, horizon }) {
               </div>
             </div>
 
+            {stock.highConviction && (
+              <div className="flex items-center gap-1.5 mb-2 px-2 py-1 rounded-lg bg-gradient-to-r from-amber-500/15 to-yellow-500/10 border border-amber-500/30">
+                <span className="text-[10px]">⭐</span>
+                <span className="text-[10px] font-bold text-amber-300 tracking-wide">High Conviction — multiple signals align</span>
+              </div>
+            )}
             <div className="flex gap-2 mb-3 flex-wrap">
               <div className="flex items-center gap-1 text-[11px]">
                 <Target className="w-3 h-3 text-emerald-400" />
@@ -125,8 +131,14 @@ export default function StockCard({ stock, onAnalyze, horizon }) {
 
             <PriceZones stock={stock} />
 
+            {stock.catalyst && (
+              <div className="flex items-center gap-1.5 mt-2.5 px-2 py-1.5 rounded-lg bg-violet-500/10 border border-violet-500/20">
+                <Zap className="w-3 h-3 text-violet-400 shrink-0" />
+                <span className="text-[10px] text-violet-300 font-medium leading-snug">{stock.catalyst}</span>
+              </div>
+            )}
             {stock.keyDrivers?.length > 0 && (
-              <div className="flex flex-wrap gap-1 mt-3">
+              <div className="flex flex-wrap gap-1 mt-2">
                 {stock.keyDrivers.map((d, i) => (
                   <span key={i} className="text-[10px] px-1.5 py-0.5 rounded bg-white/[0.04] text-slate-400">{d}</span>
                 ))}
@@ -166,6 +178,15 @@ export default function StockCard({ stock, onAnalyze, horizon }) {
             transition={{ duration: 0.2 }}
             className="border-t border-white/[0.06] px-4 pb-4 space-y-3 pt-3 overflow-hidden"
           >
+            {stock.catalyst && (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-violet-500/8 border border-violet-500/15">
+                <Zap className="w-3.5 h-3.5 text-violet-400 shrink-0" />
+                <div>
+                  <span className="text-[10px] font-semibold text-violet-400">Catalyst: </span>
+                  <span className="text-[11px] text-slate-300">{stock.catalyst}</span>
+                </div>
+              </div>
+            )}
             {AGENTS.map(a => (
               <div key={a.key} className={`rounded-xl p-3 ${a.bg} border ${a.border}`}>
                 <div className={`flex items-center gap-1.5 mb-1 text-[11px] font-semibold ${a.color}`}>

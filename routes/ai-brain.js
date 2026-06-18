@@ -19,7 +19,7 @@ const fs                  = require('fs')
 const path                = require('path')
 const { getRouter }       = require('../lib/ai-router')
 const { CircuitOpenError } = require('../lib/circuit-breaker')
-const { getSocialSentiment, getCryptoFearGreed } = require('../lib/social-sentiment')
+const { getSocialSentiment, getCryptoFearGreed, getBtcDominance } = require('../lib/social-sentiment')
 const { getAltDataSnippet }  = require('../lib/alt-data')
 const { getIndicators }      = require('./macro')
 const { requireAuth }     = require('../middleware/auth')
@@ -372,6 +372,10 @@ function logPrediction(symbol, agents, zones, generatedAt, baseline = null) {
       thesisAssumptions: agents.thesisAssumptions ?? [],
       agentConflict:     agents.agentConflict ?? null,
       supervisorNote:    agents.supervisorSynthesis ?? null,
+      // Signals logged for future calibration analysis
+      volumeSignal:      agents.volumeSignal ?? null,
+      daysToEarnings:    agents.daysToEarnings ?? null,
+      catalyst:          agents.catalyst ?? null,
       // Mechanical ML-baseline 7d direction call from the same bars the scan
       // saw (lib/ml-baseline.js) — lets calibration compare AI vs baseline
       baselineProb:     baseline?.prob ?? null,
@@ -418,7 +422,7 @@ router.post('/analyze', requireAuth, brainLimit, async (req, res) => {
   const isStockScan  = !isCryptoScan && !scanMode.startsWith('etfs') && !scanMode.startsWith('mutualfunds')
   const stockSyms    = universe.filter(s => !s.includes('-') && !s.includes('='))
 
-  const [quoteResult, socialResult, earningsResult, taResult, macroResult, altDataResult, fngResult] = await Promise.allSettled([
+  const [quoteResult, socialResult, earningsResult, taResult, macroResult, altDataResult, fngResult, btcDomResult] = await Promise.allSettled([
     (async () => {
       const r = await fetch(
         `http://127.0.0.1:${port}/api/quote?symbols=${universe.join(',')}`,
@@ -427,7 +431,7 @@ router.post('/analyze', requireAuth, brainLimit, async (req, res) => {
       const qd = await r.json()
       return qd?.quoteResponse?.result ?? []
     })(),
-    getSocialSentiment(universe.slice(0, 5)),
+    getSocialSentiment(universe.slice(0, 8)),
     // Fetch upcoming earnings dates for stock symbols only (not crypto/ETFs)
     (async () => {
       if (!stockSyms.length) return null
@@ -442,10 +446,12 @@ router.post('/analyze', requireAuth, brainLimit, async (req, res) => {
     getIndicators().catch(() => null),
     // Alt-data (OpenInsider + FINRA short interest) for stock scans only
     isStockScan && stockSyms.length
-      ? Promise.all(stockSyms.slice(0, 5).map(s => getAltDataSnippet(s).catch(() => null)))
+      ? Promise.all(stockSyms.slice(0, 15).map(s => getAltDataSnippet(s).catch(() => null)))
       : Promise.resolve(null),
     // Crypto Fear & Greed Index for crypto scans
     isCryptoScan ? getCryptoFearGreed().catch(() => null) : Promise.resolve(null),
+    // BTC Dominance for crypto scans (CoinGecko global API)
+    isCryptoScan ? getBtcDominance().catch(() => null) : Promise.resolve(null),
   ])
 
   if (quoteResult.status === 'fulfilled') {
@@ -479,9 +485,12 @@ router.post('/analyze', requireAuth, brainLimit, async (req, res) => {
     if (parts.length) altDataSnippet = '\n' + parts.join('\n')
   }
 
-  // Crypto Fear & Greed Index
+  // Crypto Fear & Greed Index + BTC Dominance
   if (fngResult.status === 'fulfilled' && fngResult.value?.snippet) {
     macroSnippet = (macroSnippet || '\n\nMACRO REGIME:') + '\n  ' + fngResult.value.snippet
+  }
+  if (btcDomResult.status === 'fulfilled' && btcDomResult.value?.snippet) {
+    macroSnippet = (macroSnippet || '\n\nMACRO REGIME:') + '\n  ' + btcDomResult.value.snippet
   }
 
   // Build earnings catalyst snippet
@@ -573,6 +582,8 @@ Respond ONLY with valid JSON (no markdown, no text outside the JSON object):
         "≤10 words — falsifiable assumption 3"
       ],
       "volumeSignal": "Confirming|Weak|Diverging|Unknown",
+      "highConviction": false,
+      "catalyst": "≤10 words — specific near-term event or trigger driving the thesis NOW",
       "keyDrivers": ["≤4 words","≤4 words"],
       "bearCase": "≤10 words — primary downside risk",
       "thesisBreaker": "≤8 words — event that invalidates this pick"
@@ -591,14 +602,16 @@ Rules:
 - Include up to 20 top picks ranked by compositeScore; prefer symbols NOT already in holdings
 - compositeScore = weighted avg (fundamental 25%, technical 20%, sentiment 15%, macro 20%, risk 20%)
 - All scores 0-100; riskScore: higher = safer
-- fundamentalScore: boost +10 when analyst consensus target >15% above current price with ≥5 analysts; cut -10 when target <current price (analyst downside)
-- sentimentScore: boost +8 for net insider buying (★ BUY signals from OpenInsider); cut -8 for net insider selling; boost +5 for Reddit/social bullish bias; cut -5 for high short interest (FINRA >15% float short)
+- fundamentalScore: boost +10 when AnalystTarget from LIVE SNAPSHOT is >15% above current price with ≥5 analysts (shown as "AnalystTarget=$xxx(Nx)"); cut -10 when analyst target is below current price
+- sentimentScore: boost +8 when INSIDER ACTIVITY shows "🟢 net buying"; cut -8 when it shows "🔴 net selling"; boost +5 when Reddit/social sentiment is bullish (>55% bullish posts by upvote weight); cut -5 when FINRA short ratio >15%
 - riskScore: cut -15 when earnings ≤7 days away (binary binary event); cut -8 when earnings 8–21 days away; cut -10 for IMMINENT short squeeze risk (high short interest + rising price)
 - macroScore: use FRED regime context — cut -10 in rate-rising / credit-spread-widening regime for rate-sensitive sectors
 - agentConflict.exists = true when ANY two agent scores differ by ≥25 points
 - agentConflict.agents = the two most-divergent agents
 - Price zones: entryZoneLow/High = ±2% around ideal entry; targetZoneLow/High = ±3% around target; stopZoneLow/High = ±1.5% around stop
 - volumeSignal: "Confirming" if vol > 1.1x avg and price trending up; "Weak" if vol < 0.8x; "Diverging" if vol rising but price falling (or vice versa); "Unknown" if no data
+- highConviction: set true ONLY when ≥3 of these independent confirming signals are present: (1) net insider buying in last 90d, (2) analyst target >15% upside with ≥5 analysts, (3) volumeSignal=Confirming, (4) compositeScore ≥ 80, (5) ensemble cross-model confirmed, (6) macroScore ≥ 75 (clear macro tailwind); otherwise false
+- catalyst: the single most time-sensitive trigger for this pick (e.g. "earnings beat expected next week", "Fed pivot boosts rate-sensitive sector", "breakout above 200-day MA"); required for all picks
 - thesisAssumptions: 3 specific, falsifiable conditions that must hold for the bull case to play out
 - dataSource: "live" if snapshot provided, else "knowledge"
 - STRICTLY respect all ≤N word limits`

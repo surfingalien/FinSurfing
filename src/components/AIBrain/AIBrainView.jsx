@@ -37,7 +37,8 @@ export default function AIBrainView({ portfolio, onAnalyze }) {
   const [horizon,       setHorizon]       = useState('6m')
   const [scanMode,      setScanMode]      = useState('broad')
   const [activeAgent,   setActiveAgent]   = useState(-1)
-  const [customSymbols, setCustomSymbols] = useState('')
+  const [customSymbols,    setCustomSymbols]    = useState('')
+  const [showConvictionOnly, setShowConvictionOnly] = useState(false)
 
   const holdings = portfolio?.positions?.map(p => p.symbol) ?? []
 
@@ -81,8 +82,12 @@ export default function AIBrainView({ portfolio, onAnalyze }) {
     }
   }, [horizon, holdings, customSymbols, scanMode, accessToken])
 
-  // Count stocks with agent conflicts
-  const conflictCount = analysis?.rankedStocks?.filter(s => s.agentConflict?.exists).length ?? 0
+  const conflictCount     = analysis?.rankedStocks?.filter(s => s.agentConflict?.exists).length ?? 0
+  const convictionCount   = analysis?.rankedStocks?.filter(s => s.highConviction).length ?? 0
+  const visibleStocks     = !analysis ? [] :
+    showConvictionOnly
+      ? analysis.rankedStocks.filter(s => s.highConviction)
+      : analysis.rankedStocks
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -365,19 +370,33 @@ export default function AIBrainView({ portfolio, onAnalyze }) {
           {analysis.agentNotes && <AgentNotesPanel notes={analysis.agentNotes} />}
 
           <div>
-            <div className="flex items-center gap-2 mb-3">
+            <div className="flex items-center gap-2 mb-3 flex-wrap">
               <Zap className="w-3.5 h-3.5 text-amber-400" />
               <span className="text-sm font-semibold text-white">
                 Ranked Picks — {HORIZON_OPTIONS.find(o => o.value === analysis.horizon)?.label} Horizon
               </span>
-              <span className="text-xs text-slate-500 ml-auto flex items-center gap-2">
-                <Layers className="w-3 h-3" /> Zones · Assumptions · Conflicts
-                <span className="text-slate-600">·</span>
-                {analysis.rankedStocks.length} recommendations
-              </span>
+              <div className="ml-auto flex items-center gap-2">
+                {convictionCount > 0 && (
+                  <button
+                    onClick={() => setShowConvictionOnly(v => !v)}
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-semibold border transition-all ${
+                      showConvictionOnly
+                        ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                        : 'bg-white/[0.04] text-slate-400 border-white/[0.07] hover:text-amber-300 hover:border-amber-500/30'
+                    }`}
+                  >
+                    ⭐ {showConvictionOnly ? 'All picks' : `High Conviction (${convictionCount})`}
+                  </button>
+                )}
+                <span className="text-xs text-slate-500 flex items-center gap-2">
+                  <Layers className="w-3 h-3" /> Zones · Assumptions · Conflicts
+                  <span className="text-slate-600">·</span>
+                  {visibleStocks.length} of {analysis.rankedStocks.length}
+                </span>
+              </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {analysis.rankedStocks.map((stock, i) => (
+              {visibleStocks.map((stock, i) => (
                 <StockCard key={`${stock.symbol}-${i}`} stock={stock} onAnalyze={onAnalyze} horizon={horizon} />
               ))}
             </div>

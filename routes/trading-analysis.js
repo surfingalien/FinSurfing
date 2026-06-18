@@ -391,6 +391,7 @@ Respond with ONLY pure JSON (absolutely no markdown fences, no backticks, no cod
     "bollinger": "concise interpretation string",
     "volume": "concise interpretation string"
   },
+  "catalyst": "≤10 words — specific technical event or trigger driving this signal NOW",
   "contradictions": ["contradiction1 if any", "contradiction2 if any"],
   "patterns": ["pattern1", "pattern2"],
   "reasoning": "3-4 sentence analysis weighing bull and bear cases",
