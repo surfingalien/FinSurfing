@@ -140,6 +140,7 @@ function FocusCard({ item, idx }) {
                 {item.timeframe && <span>⏱ {item.timeframe}</span>}
                 {item.priceTarget && <span className="text-emerald-500">🎯 Target ${item.priceTarget}</span>}
                 {item.stopWatch   && <span className="text-red-500">🛑 Stop ${item.stopWatch}</span>}
+                {item.analystTarget && <span className="text-sky-400">👥 Analysts ${item.analystTarget}</span>}
               </div>
             </div>
           </motion.div>

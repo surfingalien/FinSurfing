@@ -180,8 +180,9 @@ Respond ONLY with valid JSON (no markdown):
       "action": "Hold|Buy dip|Trim|Cut|Watch|Skip",
       "prediction": "≤12 words — predicted direction and reasoning for today",
       "signal": "≤10 words — specific technical/flow signal driving this",
-      "priceTarget": null,
-      "stopWatch": null,
+      "priceTarget": 182.50,
+      "stopWatch": 174.00,
+      "analystTarget": 190.00,
       "confidence": "High|Medium|Low",
       "timeframe": "Next 1h|Rest of session|2-3 days|Week"
     }
@@ -194,7 +195,9 @@ Respond ONLY with valid JSON (no markdown):
 Rules:
 - Sort focusItems: urgent first, then watch, then hold, skip last
 - Only include up to 10 items total
-- priceTarget / stopWatch: numeric price or null
+- priceTarget: the next meaningful upside price level to watch (resistance, prior high, round number) — always provide a number, do NOT leave null
+- stopWatch: the key support level that, if broken, signals trouble — always provide a number for holdings and urgent/watch items, null only for skip items
+- analystTarget: the analyst_target from the snapshot above if available, otherwise null
 - Holdings (★) get more weight — protect capital first
 - If market closed / pre-market, focus on preparation for next session`
 
