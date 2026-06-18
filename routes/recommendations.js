@@ -91,7 +91,7 @@ async function fetchCatalystContext(symbols, fwdHeaders, port) {
 
 // Fetch live quotes from the internal /api/quote endpoint
 async function fetchLiveQuotes(symbols, fwdHeaders) {
-  if (!symbols.length) return {}
+  if (!symbols.length) return { priceMap: {}, analystMap: {} }
   const port = process.env.PORT || 3001
   try {
     const r = await fetch(
@@ -99,14 +99,22 @@ async function fetchLiveQuotes(symbols, fwdHeaders) {
       { headers: fwdHeaders, signal: AbortSignal.timeout(15000) }
     )
     const d = await r.json()
-    const map = {}
+    const priceMap = {}, analystMap = {}
     for (const q of (d?.quoteResponse?.result ?? [])) {
-      if (q?.symbol && q.regularMarketPrice != null) map[q.symbol] = q.regularMarketPrice
+      if (!q?.symbol) continue
+      if (q.regularMarketPrice != null) priceMap[q.symbol] = q.regularMarketPrice
+      const target  = q.targetMedianPrice
+      const recMean = q.recommendationMean
+      const count   = q.numberOfAnalystOpinions
+      const fwdPE   = q.forwardPE
+      if (target != null || recMean != null || fwdPE != null) {
+        analystMap[q.symbol] = { target, recMean, count, fwdPE }
+      }
     }
-    return map
+    return { priceMap, analystMap }
   } catch (e) {
     console.warn('[recommendations] live quote fetch failed:', e.message)
-    return {}
+    return { priceMap: {}, analystMap: {} }
   }
 }
 
@@ -131,18 +139,30 @@ router.post('/', requireAuth, recLimit, async (req, res) => {
 
   // ── Step 1: Pre-fetch live prices + catalyst context + macro in parallel ─────
   const symbolsForContext = focusSymbols.length ? focusSymbols : []
-  const [preLivePrices, { earningsSnippet, sentimentSnippet }, macroData, socialSentimentSnippet] = await Promise.all([
-    focusSymbols.length ? fetchLiveQuotes(focusSymbols, fwdHeaders) : Promise.resolve({}),
+  const [quoteData, { earningsSnippet, sentimentSnippet }, macroData, socialSentimentSnippet] = await Promise.all([
+    focusSymbols.length ? fetchLiveQuotes(focusSymbols, fwdHeaders) : Promise.resolve({ priceMap: {}, analystMap: {} }),
     fetchCatalystContext(symbolsForContext, fwdHeaders, port),
     includeMacro ? getIndicators().catch(() => null) : Promise.resolve(null),
     getSocialSentiment(focusSymbols.length ? focusSymbols.slice(0, 5) : holdings.slice(0, 5)),
   ])
 
+  const { priceMap: preLivePrices, analystMap } = quoteData
   const macroSnippet = macroData?.macroSummary ?? ''
 
   const livePriceSnippet = Object.keys(preLivePrices).length
     ? '\nLIVE PRICES (use these exact values for entryPrice — do not guess):\n' +
       Object.entries(preLivePrices).map(([s, p]) => `  ${s}: $${p}`).join('\n')
+    : ''
+
+  const analystRows = Object.entries(analystMap).map(([s, a]) => {
+    const parts = []
+    if (a.target != null) parts.push(`target $${a.target.toFixed(2)}${a.count ? ` (${a.count}×)` : ''}`)
+    if (a.recMean != null) parts.push(`consensus ${a.recMean.toFixed(1)}/5`)
+    if (a.fwdPE  != null) parts.push(`fwdP/E ${a.fwdPE.toFixed(1)}`)
+    return `  ${s}: ${parts.join(' | ')}`
+  })
+  const analystConsensusSnippet = analystRows.length
+    ? '\nANALYST CONSENSUS (validate your picks — flag divergences in thesis):\n' + analystRows.join('\n')
     : ''
 
   const focusInstructions = focusStr
@@ -173,7 +193,7 @@ router.post('/', requireAuth, recLimit, async (req, res) => {
   const prompt = `${personaBlock}You are a senior portfolio strategist channeling the investment philosophy above. Provide specific actionable buy recommendations for a retail investor.
 
 Current portfolio holdings (avoid overlap): ${holdingStr}${focusInstructions}
-${livePriceSnippet}${macroSnippet}${earningsSnippet}${sentimentSnippet}${socialSentimentSnippet}${historySnippet}
+${livePriceSnippet}${analystConsensusSnippet}${macroSnippet}${earningsSnippet}${sentimentSnippet}${socialSentimentSnippet}${historySnippet}
 
 ${countInstructions}
 ${persona.constraints ? '\n' + persona.constraints : ''}
@@ -243,7 +263,7 @@ Respond ONLY with a JSON object — no markdown, no explanation, just the JSON:
 
     // ── Re-anchor prices to live market data ─────────────────────────────────
     const recSymbols     = data.recommendations.map(r => r.symbol).filter(Boolean)
-    const postLivePrices = await fetchLiveQuotes(recSymbols, fwdHeaders)
+    const { priceMap: postLivePrices } = await fetchLiveQuotes(recSymbols, fwdHeaders)
     const allLivePrices  = { ...preLivePrices, ...postLivePrices }
 
     let pricesAnchored = 0
