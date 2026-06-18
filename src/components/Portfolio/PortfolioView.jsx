@@ -1,9 +1,10 @@
 import { useState } from 'react'
-import { PlusCircle, RefreshCw, TrendingUp, TrendingDown, Trash2, Edit3 } from 'lucide-react'
+import { PlusCircle, RefreshCw, TrendingUp, TrendingDown, Trash2, Edit3, Upload } from 'lucide-react'
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, AreaChart, Area, XAxis, YAxis } from 'recharts'
 import { fmt, fmtPct, fmtLarge } from '../../services/api'
 import { ChangeBadge, SectionCard, LoadingPulse } from '../shared/StockCard'
 import AddStockModal from './AddStockModal'
+import ImportModal from './ImportModal'
 
 const SECTOR_COLORS = {
   'Technology': '#6366f1',
@@ -86,10 +87,11 @@ function EditPositionModal({ pos, onSave, onClose }) {
   )
 }
 
-export default function PortfolioView({ portfolio }) {
+export default function PortfolioView({ portfolio, portfolioId, authFetch }) {
   const { positions, loading, refresh, addPosition, removePosition, updatePosition, summary } = portfolio
-  const [showAdd,  setShowAdd]  = useState(false)
-  const [editPos,  setEditPos]  = useState(null)
+  const [showAdd,    setShowAdd]    = useState(false)
+  const [showImport, setShowImport] = useState(false)
+  const [editPos,    setEditPos]    = useState(null)
   const [sortBy, setSortBy] = useState('mktValue')
   const [sortDir, setSortDir] = useState(-1)
   const [selectedTab, setSelectedTab] = useState('holdings')
@@ -166,6 +168,12 @@ export default function PortfolioView({ portfolio }) {
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
             <span className="hidden sm:inline">Refresh</span>
           </button>
+          {authFetch && (
+            <button onClick={() => setShowImport(true)} className="btn-ghost flex items-center gap-1.5 py-1.5">
+              <Upload className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Import</span>
+            </button>
+          )}
           <button onClick={() => setShowAdd(true)} className="btn-primary flex items-center gap-1.5">
             <PlusCircle className="w-3.5 h-3.5" />
             Add Stock
@@ -312,6 +320,14 @@ export default function PortfolioView({ portfolio }) {
       )}
 
       {showAdd && <AddStockModal onAdd={addPosition} onClose={() => setShowAdd(false)} />}
+      {showImport && authFetch && (
+        <ImportModal
+          portfolioId={portfolioId}
+          authFetch={authFetch}
+          onImported={() => { refresh(); setShowImport(false) }}
+          onClose={() => setShowImport(false)}
+        />
+      )}
       {editPos && (
         <EditPositionModal
           pos={editPos}
