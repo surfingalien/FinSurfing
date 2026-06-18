@@ -71,12 +71,13 @@ Your mission: deliver timely, verified, and structured financial intelligence th
 - get_calibration: AI Brain track record — win rates, alpha, confidence calibration, vs mechanical TA baseline
 
 ## Tool Routing Rules
-- User asks about a specific ticker → call analyze_symbol first; ALWAYS add get_earnings_catalyst (imminent catalyst check); add get_analyst_consensus (institutional view); add get_options_flow for directional conviction; add get_social_sentiment if sentiment relevant
+- User asks about a specific ticker → call analyze_symbol first; ALWAYS add get_earnings_catalyst (imminent catalyst check); add get_analyst_consensus (institutional view); add get_options_flow for directional conviction; add get_insider_activity for US stocks (insider buy/sell signal); add get_social_sentiment if sentiment relevant
 - User asks "top picks", "what to buy", "scan the market" → call scan_market
 - User asks for strategy recommendations by persona → call get_recommendations
 - User asks about macro, rates, inflation, VIX, regime → call get_macro
 - User asks about sentiment on a ticker → call get_social_sentiment
 - User asks "what do analysts think of X" or "analyst target" → call get_analyst_consensus
+- User asks about insider buying/selling, "are insiders buying?", short interest, short squeeze → call get_insider_activity
 - User asks about earnings, EPS, next report date → call get_earnings_catalyst
 - User asks about options, IV, put/call ratio → call get_options_flow
 - User asks about portfolio risk, Sharpe, drawdown → call portfolio_risk
@@ -289,6 +290,17 @@ const TOOLS = [
       required: ['symbol'],
       properties: {
         symbol: { type: 'string', description: 'Ticker symbol (e.g. AAPL, NVDA, MSFT)' },
+      },
+    },
+  },
+  {
+    name: 'get_insider_activity',
+    description: 'Get insider buying/selling activity (OpenInsider, last 90 days) and short interest (FINRA) for a US stock. Net insider buying is a high-conviction bullish signal. High short interest (>15% float) signals squeeze risk or strong bearish conviction. Not available for crypto or ETFs.',
+    input_schema: {
+      type: 'object',
+      required: ['symbol'],
+      properties: {
+        symbol: { type: 'string', description: 'US stock ticker (e.g. AAPL, NVDA). Not applicable to crypto or ETFs.' },
       },
     },
   },
@@ -587,6 +599,19 @@ async function dispatchTool(name, input, req) {
       }
     }
 
+    case 'get_insider_activity': {
+      const sym = (input.symbol || '').toUpperCase().replace(/[^A-Z0-9.-]/g, '')
+      if (!sym) return 'No symbol provided.'
+      if (sym.includes('-USD')) return `${sym} is a crypto asset — insider activity data is not applicable.`
+      try {
+        const snippet = await getAltData(sym)
+        if (!snippet) return `No insider or short interest data found for ${sym} in the last 90 days (OpenInsider + FINRA).`
+        return snippet
+      } catch (e) {
+        return `Insider activity fetch failed for ${sym}: ${e.message}`
+      }
+    }
+
     default:
       return `Unknown tool: ${name}`
   }
@@ -612,20 +637,24 @@ function detectTickerQuery(messages) {
 
 // Run all analysis tools in parallel for a ticker — DeerFlow-style Planner step
 async function runPlannerPrefetch(ticker, req, send) {
-  send({ type: 'tool_start', tools: [
+  const isCrypto = ticker.includes('-USD')
+  const tools = [
     { name: 'analyze_symbol',         input: { symbol: ticker } },
     { name: 'get_earnings_catalyst',  input: { symbol: ticker } },
     { name: 'get_options_flow',       input: { symbol: ticker } },
     { name: 'get_social_sentiment',   input: { symbols: [ticker] } },
     { name: 'get_analyst_consensus',  input: { symbol: ticker } },
-  ]})
+  ]
+  if (!isCrypto) tools.push({ name: 'get_insider_activity', input: { symbol: ticker } })
+  send({ type: 'tool_start', tools })
 
-  const [technical, earnings, options, social, analyst] = await Promise.allSettled([
+  const [technical, earnings, options, social, analyst, insider] = await Promise.allSettled([
     dispatchTool('analyze_symbol',        { symbol: ticker },       req),
     dispatchTool('get_earnings_catalyst', { symbol: ticker },       req),
     dispatchTool('get_options_flow',      { symbol: ticker },       req),
     dispatchTool('get_social_sentiment',  { symbols: [ticker] },    req),
     dispatchTool('get_analyst_consensus', { symbol: ticker },       req),
+    isCrypto ? Promise.resolve(null) : dispatchTool('get_insider_activity', { symbol: ticker }, req),
   ])
 
   send({ type: 'tool_results', results: [
@@ -634,6 +663,7 @@ async function runPlannerPrefetch(ticker, req, send) {
     { tool: 'get_options_flow',      preview: options.value?.slice?.(0, 100) },
     { tool: 'get_social_sentiment',  preview: social.value?.slice?.(0, 100) },
     { tool: 'get_analyst_consensus', preview: analyst.value?.slice?.(0, 100) },
+    ...(isCrypto ? [] : [{ tool: 'get_insider_activity', preview: insider.value?.slice?.(0, 100) }]),
   ]})
 
   return {
@@ -642,6 +672,7 @@ async function runPlannerPrefetch(ticker, req, send) {
     options:    options.status    === 'fulfilled' ? options.value    : null,
     social:     social.status     === 'fulfilled' ? social.value     : null,
     analyst:    analyst.status    === 'fulfilled' ? analyst.value    : null,
+    insider:    (!isCrypto && insider.status === 'fulfilled') ? insider.value : null,
   }
 }
 
@@ -670,8 +701,11 @@ Produce a concise structured report using this format:
 ### Analyst Consensus
 [Median price target, upside %, consensus rating, forward P/E — flag if AI and analysts diverge significantly]
 
+### Insider Activity & Short Interest
+[Net insider buying/selling signal, notable transactions, FINRA short ratio — skip section if data unavailable]
+
 ### Verdict
-[2-3 sentences: bull case, bear case, risk/reward. Entry zone and stop. Note any AI vs analyst divergence.]
+[2-3 sentences: bull case, bear case, risk/reward. Entry zone and stop. Note any AI vs analyst divergence or insider signal.]
 
 ---
 *Not financial advice. All data is live as of analysis time.*`
@@ -849,6 +883,7 @@ router.post('/chat', requireAuth, chatLimit, async (req, res) => {
         data.options    ? `\n=== OPTIONS FLOW ===\n${data.options}`                : '',
         data.social     ? `\n=== SOCIAL SENTIMENT ===\n${data.social}`             : '',
         data.analyst    ? `\n=== ANALYST CONSENSUS ===\n${data.analyst}`           : '',
+        data.insider    ? `\n=== INSIDER ACTIVITY & SHORT INTEREST ===\n${data.insider}` : '',
         `\n\nOriginal user question: ${messages.at(-1)?.content || ''}`,
         '\nSynthesize ALL the above into a structured investment report. Do NOT call any tools.',
       ].join('')
