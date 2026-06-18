@@ -191,7 +191,7 @@ const TOOLS = [
   },
   {
     name: 'get_social_sentiment',
-    description: 'Fetch real-time Reddit/social sentiment for up to 5 tickers. Returns mention counts, bullish/bearish breakdown, and top community posts.',
+    description: 'Fetch real-time multi-source sentiment for up to 5 tickers: Reddit (upvote-weighted bull/bear, top posts), Google News headlines (bullish/bearish keyword-scored), and Polymarket prediction-market odds for ticker events.',
     input_schema: {
       type: 'object',
       required: ['symbols'],

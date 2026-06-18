@@ -14,6 +14,7 @@ const express    = require('express')
 const rateLimit  = require('express-rate-limit')
 const { requireAuth } = require('../middleware/auth')
 const { getRouter } = require('../lib/ai-router')
+const { getSocialSentiment } = require('../lib/social-sentiment')
 
 const aiRouter = getRouter('market-focus')
 
@@ -107,9 +108,10 @@ async function runFocusAnalysis({ holdings = [], watchlist = [] }) {
     timeZone: 'America/New_York', weekday: 'short', hour: 'numeric', minute: '2-digit', hour12: true
   })
 
-  const [quotes, macroSummary] = await Promise.all([
+  const [quotes, macroSummary, socialSnippet] = await Promise.all([
     fetchLiveQuotes(allSymbols),
     fetchMacroSummary(),
+    getSocialSentiment(allSymbols.slice(0, 5)).catch(() => ''),
   ])
 
   // Build quote snapshot
@@ -132,7 +134,7 @@ async function runFocusAnalysis({ holdings = [], watchlist = [] }) {
 
   const prompt = `You are a real-time trading intelligence system. It is ${etTime} ET — ${sessionLabel}.
 
-${macroSummary ? `MACRO CONTEXT: ${macroSummary}\n` : ''}
+${macroSummary ? `MACRO CONTEXT: ${macroSummary}\n` : ''}${socialSnippet || ''}
 LIVE SNAPSHOT (★ = user holding, ○ = watchlist):
 ${quoteRows || 'No live data — use recent knowledge'}
 

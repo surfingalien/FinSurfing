@@ -94,6 +94,15 @@ export default function StockCard({ stock, onAnalyze, horizon }) {
                   {volSig.label}
                 </span>
               )}
+              {stock.ensemble?.confirmed && (
+                <span className={`text-[9px] font-medium px-1.5 py-0.5 rounded border ${
+                  stock.ensemble.verdictMatch
+                    ? 'bg-[#00ffcc]/10 text-[#00ffcc] border-[#00ffcc]/20'
+                    : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                }`}>
+                  {stock.ensemble.verdictMatch ? '🤝 Confirmed' : '⚡ Split'}
+                </span>
+              )}
               {stock.sector && (
                 <span className="text-[10px] text-slate-500 bg-white/[0.04] px-1.5 py-0.5 rounded">{stock.sector}</span>
               )}
@@ -189,6 +198,21 @@ export default function StockCard({ stock, onAnalyze, horizon }) {
                   <span className="font-semibold text-red-400">Thesis Breaker: </span>
                   <span>{stock.thesisBreaker}</span>
                 </div>
+              </div>
+            )}
+
+            {stock.ensemble?.confirmed && (
+              <div className={`flex items-center gap-2 text-[11px] rounded-lg px-3 py-2 ${
+                stock.ensemble.verdictMatch
+                  ? 'bg-[#00ffcc]/5 border border-[#00ffcc]/15 text-[#00ffcc]/80'
+                  : 'bg-amber-500/5 border border-amber-500/15 text-amber-400/80'
+              }`}>
+                <span>{stock.ensemble.verdictMatch ? '🤝' : '⚡'}</span>
+                <span>
+                  <span className="font-semibold">{stock.ensemble.verdictMatch ? 'Cross-model confirmed' : 'Model disagreement'}</span>
+                  {stock.ensemble.secondVerdict && ` — second model: ${stock.ensemble.secondVerdict}`}
+                  {stock.ensemble.scoreDelta != null && ` (Δ${stock.ensemble.scoreDelta} pts)`}
+                </span>
               </div>
             )}
           </motion.div>
