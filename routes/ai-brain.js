@@ -282,23 +282,33 @@ function fwdKeys(req) {
 
 function fmtQuote(q) {
   if (!q?.regularMarketPrice) return null
-  const price = q.regularMarketPrice
-  const chg   = q.regularMarketChangePercent
-  const sign  = (chg ?? 0) >= 0 ? '+' : ''
-  const pe    = q.trailingPE
-  const hi    = q.fiftyTwoWeekHigh
-  const lo    = q.fiftyTwoWeekLow
-  const cap   = q.marketCap
-  const vol   = q.regularMarketVolume
+  const price  = q.regularMarketPrice
+  const chg    = q.regularMarketChangePercent
+  const sign   = (chg ?? 0) >= 0 ? '+' : ''
+  const pe     = q.trailingPE
+  const fwdPe  = q.forwardPE
+  const hi     = q.fiftyTwoWeekHigh
+  const lo     = q.fiftyTwoWeekLow
+  const cap    = q.marketCap
+  const vol    = q.regularMarketVolume
   const avgVol = q.averageDailyVolume3Month
-  const chgStr = chg != null ? ` (${sign}${chg.toFixed(2)}%)` : ''
-  const volRatio = (vol && avgVol) ? ` Vol=${(vol/avgVol).toFixed(2)}x avg` : ''
+  const target = q.targetMedianPrice   // analyst consensus price target
+  const recMean = q.recommendationMean // 1=Strong Buy → 5=Strong Sell
+  const analysts = q.numberOfAnalystOpinions
+
+  const chgStr    = chg != null ? ` (${sign}${chg.toFixed(2)}%)` : ''
+  const volRatio  = (vol && avgVol) ? ` Vol=${(vol/avgVol).toFixed(2)}x avg` : ''
+  const analystStr = target != null
+    ? ` AnalystTarget=$${target.toFixed(0)}${analysts ? `(${analysts}×)` : ''}${recMean != null ? ` Rec=${recMean.toFixed(1)}` : ''}`
+    : ''
+  const peStr = fwdPe ? `fwdP/E=${fwdPe.toFixed(1)}` : pe ? `P/E=${pe.toFixed(1)}` : 'P/E=N/A'
+
   return (
     `${q.symbol}: $${price.toFixed(price >= 1 ? 2 : 6)}${chgStr}` +
     ` MktCap=${cap ? '$' + (cap / 1e9).toFixed(0) + 'B' : 'N/A'}` +
-    ` P/E=${pe ? pe.toFixed(1) : 'N/A'}` +
+    ` ${peStr}` +
     ` 52w=$${lo?.toFixed(0) ?? '?'}-$${hi?.toFixed(0) ?? '?'}` +
-    volRatio
+    volRatio + analystStr
   )
 }
 

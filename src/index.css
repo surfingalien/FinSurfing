@@ -70,6 +70,18 @@
   .divider { @apply border-t border-white/[0.06] my-4; }
 }
 
+/* Price flash animations — triggered when live quotes update */
+@keyframes flashUp {
+  0%   { background-color: rgba(52,211,153,0.35); }
+  100% { background-color: transparent; }
+}
+@keyframes flashDown {
+  0%   { background-color: rgba(248,113,113,0.35); }
+  100% { background-color: transparent; }
+}
+.flash-up   { animation: flashUp   0.8s ease-out forwards; border-radius: 4px; }
+.flash-down { animation: flashDown 0.8s ease-out forwards; border-radius: 4px; }
+
 /* Ticker bar animation */
 .ticker-track {
   display: flex;
