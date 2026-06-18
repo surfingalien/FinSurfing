@@ -597,8 +597,8 @@ Rules:
 - Include up to 20 top picks ranked by compositeScore; prefer symbols NOT already in holdings
 - compositeScore = weighted avg (fundamental 25%, technical 20%, sentiment 15%, macro 20%, risk 20%)
 - All scores 0-100; riskScore: higher = safer
-- fundamentalScore: boost +10 when analyst consensus target >15% above current price with ≥5 analysts; cut -10 when target <current price (analyst downside)
-- sentimentScore: boost +8 for net insider buying (★ BUY signals from OpenInsider); cut -8 for net insider selling; boost +5 for Reddit/social bullish bias; cut -5 for high short interest (FINRA >15% float short)
+- fundamentalScore: boost +10 when AnalystTarget from LIVE SNAPSHOT is >15% above current price with ≥5 analysts (shown as "AnalystTarget=$xxx(Nx)"); cut -10 when analyst target is below current price
+- sentimentScore: boost +8 when INSIDER ACTIVITY shows "🟢 net buying"; cut -8 when it shows "🔴 net selling"; boost +5 when Reddit/social sentiment is bullish (>55% bullish posts by upvote weight); cut -5 when FINRA short ratio >15%
 - riskScore: cut -15 when earnings ≤7 days away (binary binary event); cut -8 when earnings 8–21 days away; cut -10 for IMMINENT short squeeze risk (high short interest + rising price)
 - macroScore: use FRED regime context — cut -10 in rate-rising / credit-spread-widening regime for rate-sensitive sectors
 - agentConflict.exists = true when ANY two agent scores differ by ≥25 points
