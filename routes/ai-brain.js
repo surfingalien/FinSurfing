@@ -375,6 +375,7 @@ function logPrediction(symbol, agents, zones, generatedAt, baseline = null) {
       // Signals logged for future calibration analysis
       volumeSignal:      agents.volumeSignal ?? null,
       daysToEarnings:    agents.daysToEarnings ?? null,
+      catalyst:          agents.catalyst ?? null,
       // Mechanical ML-baseline 7d direction call from the same bars the scan
       // saw (lib/ml-baseline.js) — lets calibration compare AI vs baseline
       baselineProb:     baseline?.prob ?? null,
@@ -576,6 +577,7 @@ Respond ONLY with valid JSON (no markdown, no text outside the JSON object):
         "≤10 words — falsifiable assumption 3"
       ],
       "volumeSignal": "Confirming|Weak|Diverging|Unknown",
+      "catalyst": "≤10 words — specific near-term event or trigger driving the thesis NOW",
       "keyDrivers": ["≤4 words","≤4 words"],
       "bearCase": "≤10 words — primary downside risk",
       "thesisBreaker": "≤8 words — event that invalidates this pick"
@@ -602,6 +604,7 @@ Rules:
 - agentConflict.agents = the two most-divergent agents
 - Price zones: entryZoneLow/High = ±2% around ideal entry; targetZoneLow/High = ±3% around target; stopZoneLow/High = ±1.5% around stop
 - volumeSignal: "Confirming" if vol > 1.1x avg and price trending up; "Weak" if vol < 0.8x; "Diverging" if vol rising but price falling (or vice versa); "Unknown" if no data
+- catalyst: the single most time-sensitive trigger for this pick (e.g. "earnings beat expected next week", "Fed pivot boosts rate-sensitive sector", "breakout above 200-day MA"); required for all picks
 - thesisAssumptions: 3 specific, falsifiable conditions that must hold for the bull case to play out
 - dataSource: "live" if snapshot provided, else "knowledge"
 - STRICTLY respect all ≤N word limits`

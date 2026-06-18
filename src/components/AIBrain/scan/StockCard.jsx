@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import {
   Brain, ChevronDown, ChevronUp, AlertTriangle,
-  Target, Shield, Bookmark, BookmarkCheck,
+  Target, Shield, Bookmark, BookmarkCheck, Zap,
 } from 'lucide-react'
 import { useAIWatchlist } from '../../../hooks/useAIWatchlist'
 import { AGENTS, VERDICT_CONFIG, CONFIDENCE_CONFIG, VOLUME_SIGNAL } from './constants'
@@ -125,8 +125,14 @@ export default function StockCard({ stock, onAnalyze, horizon }) {
 
             <PriceZones stock={stock} />
 
+            {stock.catalyst && (
+              <div className="flex items-center gap-1.5 mt-2.5 px-2 py-1.5 rounded-lg bg-violet-500/10 border border-violet-500/20">
+                <Zap className="w-3 h-3 text-violet-400 shrink-0" />
+                <span className="text-[10px] text-violet-300 font-medium leading-snug">{stock.catalyst}</span>
+              </div>
+            )}
             {stock.keyDrivers?.length > 0 && (
-              <div className="flex flex-wrap gap-1 mt-3">
+              <div className="flex flex-wrap gap-1 mt-2">
                 {stock.keyDrivers.map((d, i) => (
                   <span key={i} className="text-[10px] px-1.5 py-0.5 rounded bg-white/[0.04] text-slate-400">{d}</span>
                 ))}
