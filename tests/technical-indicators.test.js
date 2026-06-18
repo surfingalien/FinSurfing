@@ -116,6 +116,37 @@ describe('volumeAnalysis', () => {
   })
 })
 
+describe('computeADX', () => {
+  test('returns null with insufficient data', () => {
+    expect(ta.computeADX(highs.slice(0, 10), lows.slice(0, 10), closes.slice(0, 10))).toBe(null)
+  })
+
+  test('returns a value in 0-100 range for a valid uptrend series', () => {
+    const adx = ta.computeADX(highs, lows, closes)
+    expect(adx).not.toBe(null)
+    expect(adx).toBeGreaterThanOrEqual(0)
+    expect(adx).toBeLessThanOrEqual(100)
+  })
+
+  test('steady monotonic uptrend yields high ADX (strong trend)', () => {
+    const n = 60
+    const ch = Array.from({ length: n }, (_, i) => 100 + i * 2)
+    const cl = Array.from({ length: n }, (_, i) => 99 + i * 2)
+    const cc = Array.from({ length: n }, (_, i) => 100 + i * 2)
+    const adx = ta.computeADX(ch, cl, cc)
+    expect(adx).toBeGreaterThan(25)
+  })
+
+  test('flat/sideways market yields low ADX (ranging)', () => {
+    const n = 60
+    const ch = Array.from({ length: n }, (_, i) => 100 + (i % 2 === 0 ? 1 : -1))
+    const cl = Array.from({ length: n }, (_, i) => 100 + (i % 2 === 0 ? -1 : 1))
+    const cc = Array.from({ length: n }, () => 100)
+    const adx = ta.computeADX(ch, cl, cc)
+    expect(adx).toBeLessThan(25)
+  })
+})
+
 describe('compactTaLine', () => {
   test('returns null with insufficient history', () => {
     expect(ta.compactTaLine('X', opens.slice(0, 5), highs.slice(0, 5), lows.slice(0, 5), closes.slice(0, 5), volumes.slice(0, 5))).toBe(null)
@@ -126,5 +157,11 @@ describe('compactTaLine', () => {
     expect(line).toMatch(/^NVDA: /)
     expect(line).toMatch(/RSI=/)
     expect(line).toMatch(/MACD=/)
+  })
+
+  test('includes ADX and 52w% position when enough bars available', () => {
+    const line = ta.compactTaLine('NVDA', opens, highs, lows, closes, volumes)
+    expect(line).toMatch(/ADX=/)
+    expect(line).toMatch(/52w%=/)
   })
 })
