@@ -60,7 +60,7 @@ Your mission: deliver timely, verified, and structured financial intelligence th
 - scan_market: Run the 5-agent AI Brain to rank investment opportunities across stocks, ETFs, crypto (30+ scan universes, 3/6/12m horizons)
 - get_recommendations: Get personalized buy signals using a named investor persona (Buffett, Dalio, Lynch, Burry, Wood, Marks, Soros, Greenblatt, Munger)
 - analyze_symbol: Deep technical + AI analysis — RSI, MACD, EMA9/21/50/200, Bollinger, VWAP, OBV, patterns, entry/stop/target zones
-- get_social_sentiment: Real-time multi-source sentiment (Reddit r/wallstreetbets + r/stocks, Google News headlines, Polymarket odds) for up to 5 tickers
+- get_social_sentiment: Real-time multi-source sentiment (Reddit r/wallstreetbets + r/stocks, Google News headlines, Polymarket odds) for up to 8 tickers
 - get_macro: Current macroeconomic indicators (14 FRED series), regime assessment, rates/inflation/VIX/credit spreads
 - get_earnings_catalyst: Upcoming earnings date, EPS estimate, beat rate, and last 4 quarters of EPS surprise history — flag imminent binary events
 - get_options_flow: Put/Call ratio, ATM implied volatility, and unusual options activity — smart-money directional conviction signal
@@ -201,7 +201,7 @@ const TOOLS = [
   },
   {
     name: 'get_social_sentiment',
-    description: 'Fetch real-time multi-source sentiment for up to 5 tickers: Reddit (upvote-weighted bull/bear, top posts), Google News headlines (bullish/bearish keyword-scored), and Polymarket prediction-market odds for ticker events.',
+    description: 'Fetch real-time multi-source sentiment for up to 8 tickers: Reddit (upvote-weighted bull/bear, top posts), Google News headlines (bullish/bearish keyword-scored), and Polymarket prediction-market odds for ticker events.',
     input_schema: {
       type: 'object',
       required: ['symbols'],
@@ -401,7 +401,7 @@ async function dispatchTool(name, input, req) {
     }
 
     case 'get_social_sentiment': {
-      const symbols = (input.symbols || []).slice(0, 5)
+      const symbols = (input.symbols || []).slice(0, 8)
       const snippet = await getSocialSentiment(symbols)
       return snippet || 'No Reddit data available for these symbols right now.'
     }
