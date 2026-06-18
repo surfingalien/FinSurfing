@@ -372,6 +372,9 @@ function logPrediction(symbol, agents, zones, generatedAt, baseline = null) {
       thesisAssumptions: agents.thesisAssumptions ?? [],
       agentConflict:     agents.agentConflict ?? null,
       supervisorNote:    agents.supervisorSynthesis ?? null,
+      // Signals logged for future calibration analysis
+      volumeSignal:      agents.volumeSignal ?? null,
+      daysToEarnings:    agents.daysToEarnings ?? null,
       // Mechanical ML-baseline 7d direction call from the same bars the scan
       // saw (lib/ml-baseline.js) — lets calibration compare AI vs baseline
       baselineProb:     baseline?.prob ?? null,
@@ -427,7 +430,7 @@ router.post('/analyze', requireAuth, brainLimit, async (req, res) => {
       const qd = await r.json()
       return qd?.quoteResponse?.result ?? []
     })(),
-    getSocialSentiment(universe.slice(0, 5)),
+    getSocialSentiment(universe.slice(0, 8)),
     // Fetch upcoming earnings dates for stock symbols only (not crypto/ETFs)
     (async () => {
       if (!stockSyms.length) return null
@@ -442,7 +445,7 @@ router.post('/analyze', requireAuth, brainLimit, async (req, res) => {
     getIndicators().catch(() => null),
     // Alt-data (OpenInsider + FINRA short interest) for stock scans only
     isStockScan && stockSyms.length
-      ? Promise.all(stockSyms.slice(0, 5).map(s => getAltDataSnippet(s).catch(() => null)))
+      ? Promise.all(stockSyms.slice(0, 8).map(s => getAltDataSnippet(s).catch(() => null)))
       : Promise.resolve(null),
     // Crypto Fear & Greed Index for crypto scans
     isCryptoScan ? getCryptoFearGreed().catch(() => null) : Promise.resolve(null),
