@@ -530,11 +530,16 @@ router.post('/analyze', requireAuth, async (req, res) => {
 
     const indicators = { rsi, macd, ema9, ema21, ema50, ema200, bb, atr, stochRsi, vwap, obv, sr, patterns, volume: vol }
 
-    // Fetch StockTwits + broader social sentiment + prior memory in parallel
-    const [sentiment, socialSnippetRaw, priorMemories] = await Promise.all([
+    // Fetch StockTwits + social sentiment + prior memory + earnings in parallel
+    const [sentiment, socialSnippetRaw, priorMemories, earningsData] = await Promise.all([
       fetchStockTwits(sym).catch(() => null),
       getSocialSentiment([sym]).catch(() => ''),
       recallMemory(req.user?.userId, sym),
+      !isCryptoSymbol(sym)
+        ? fetch(`http://127.0.0.1:${port}/api/earnings/date?symbol=${encodeURIComponent(sym)}`,
+            { headers: fwdHeaders, signal: AbortSignal.timeout(6000) })
+            .then(r => r.json()).catch(() => null)
+        : Promise.resolve(null),
     ])
     if (sentiment) console.log(`[trading-analysis] ${sym} StockTwits: ${sentiment.bullish}B ${sentiment.bearish}Be ${sentiment.neutral}N / ${sentiment.total}`)
     if (priorMemories.length) console.log(`[trading-analysis] ${sym} memory: ${priorMemories.length} prior analyses injected`)
@@ -546,8 +551,19 @@ router.post('/analyze', requireAuth, async (req, res) => {
     if (forwardPE != null) analystParts.push(`Fwd P/E: ${forwardPE.toFixed(1)}`)
     const analystSnippet = analystParts.length ? `\nANALYST CONSENSUS:\n${analystParts.join(' | ')}\n` : ''
 
+    // Build earnings snippet
+    let earningsSnippet = ''
+    if (earningsData?.nextEarningsDate) {
+      const daysUntil = Math.round((new Date(earningsData.nextEarningsDate) - Date.now()) / 86400000)
+      const eps = earningsData.epsEstimate != null ? ` (EPS est. $${earningsData.epsEstimate})` : ''
+      earningsSnippet = `\nEARNINGS CATALYST:\nNext report: ${earningsData.nextEarningsDate} — ${daysUntil >= 0 ? `in ${daysUntil} days` : `${Math.abs(daysUntil)} days ago`}${eps}`
+      if (daysUntil >= 0 && daysUntil <= 7)  earningsSnippet += '\n⚠️ IMMINENT — earnings within 7 days: elevated IV, binary outcome risk, widen stop or avoid new entry'
+      else if (daysUntil >= 0 && daysUntil <= 14) earningsSnippet += '\n⚠️ Approaching earnings — elevated options IV expected, note binary risk in reasoning'
+      earningsSnippet += '\n'
+    }
+
     // Build prompt and call Claude
-    const analysisPrompt = buildAnalysisPrompt(sym, interval, price, indicators, patterns, vol, priceLabel, sentiment, priorMemories, socialSnippetRaw, analystSnippet)
+    const analysisPrompt = buildAnalysisPrompt(sym, interval, price, indicators, patterns, vol, priceLabel, sentiment, priorMemories, socialSnippetRaw, analystSnippet + earningsSnippet)
 
     const { text: rawText } = await aiRouter.call({
       prompt:    analysisPrompt,
