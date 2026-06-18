@@ -117,6 +117,7 @@ When evaluating strategies, always classify: risk level (Low/Medium/High/Very Hi
 - Multi-timeframe confirmation: check 1H, 4H, 1D, 1W for confluence
 - Key levels: support/resistance, MA20/50/200, Fibonacci 38.2%/50%/61.8%
 - Momentum: RSI overbought/oversold/divergence, MACD crossovers, volume confirmation
+- Trend strength: ADX(14) ≥25 = strong trend (follow-trend signals more reliable); <20 = ranging/choppy (mean-reversion and counter-trend setups preferred)
 - Bridge TA with fundamentals: breakout + earnings catalyst = higher conviction
 
 ## Source & Data Transparency
@@ -689,7 +690,7 @@ Produce a concise structured report using this format:
 **Current Price:** $X · **Confidence:** X%
 
 ### Technical Picture
-[3-4 sentences from the technical analysis data]
+[3-4 sentences from the technical analysis data — include RSI level, MACD trend, ADX trend strength (≥25=trending/follow-trend, <20=ranging/mean-reversion), EMA stack, and volume signal]
 
 ### Earnings Catalyst
 [Next earnings date, EPS estimate, surprise history — flag if imminent]
