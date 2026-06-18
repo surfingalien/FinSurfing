@@ -455,6 +455,17 @@ export default function TradingAIPanel({ symbol, interval, price }) {
                   </div>
                 </div>
 
+                {/* ── Catalyst ─────────────────────────────────────────── */}
+                {analysis.catalyst && (
+                  <div className="mx-3 mb-3 flex items-center gap-2 px-2.5 py-2 rounded-lg bg-violet-500/8 border border-violet-500/15">
+                    <Zap className="w-3.5 h-3.5 text-violet-400 shrink-0" />
+                    <span className="text-[11px] text-violet-300 leading-snug">
+                      <span className="font-semibold text-violet-400">Catalyst: </span>
+                      {analysis.catalyst}
+                    </span>
+                  </div>
+                )}
+
                 {/* ── Probability bar ───────────────────────────────────── */}
                 {(analysis.bullishProbability != null || analysis.bearishProbability != null) && (
                   <div className="px-3 mb-3">
