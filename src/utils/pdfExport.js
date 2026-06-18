@@ -216,6 +216,8 @@ function buildStockDetailSections(rankedStocks) {
             <span class="price-pill-value" style="color:#10b981;font-weight:700;">${fmtPct(s.targetReturn)}</span>
           </div>
         </div>
+        ${s.highConviction ? `<div style="margin:8px 0;padding:6px 12px;border-radius:6px;background:#fef3c7;border:1px solid #fbbf24;font-size:11px;font-weight:700;color:#92400e;">⭐ HIGH CONVICTION — Multiple confirming signals align</div>` : ''}
+        ${s.catalyst ? `<div style="margin:8px 0;padding:6px 12px;border-radius:6px;background:#f5f3ff;border:1px solid #8b5cf6;font-size:11px;color:#5b21b6;"><strong>⚡ Catalyst:</strong> ${escHtml(s.catalyst)}</div>` : ''}
         <div class="detail-agents-grid">
           ${agentCards}
         </div>

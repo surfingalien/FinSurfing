@@ -178,6 +178,15 @@ export default function StockCard({ stock, onAnalyze, horizon }) {
             transition={{ duration: 0.2 }}
             className="border-t border-white/[0.06] px-4 pb-4 space-y-3 pt-3 overflow-hidden"
           >
+            {stock.catalyst && (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-violet-500/8 border border-violet-500/15">
+                <Zap className="w-3.5 h-3.5 text-violet-400 shrink-0" />
+                <div>
+                  <span className="text-[10px] font-semibold text-violet-400">Catalyst: </span>
+                  <span className="text-[11px] text-slate-300">{stock.catalyst}</span>
+                </div>
+              </div>
+            )}
             {AGENTS.map(a => (
               <div key={a.key} className={`rounded-xl p-3 ${a.bg} border ${a.border}`}>
                 <div className={`flex items-center gap-1.5 mb-1 text-[11px] font-semibold ${a.color}`}>

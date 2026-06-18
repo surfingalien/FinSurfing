@@ -330,8 +330,9 @@ async function dispatchTool(name, input, req) {
       return (
         `Market Regime: ${data.marketRegime} · ${data.macroOutlook}\n\n` +
         top.map((s, i) =>
-          `${i + 1}. **${s.symbol}** — ${s.agentVerdict} (score ${s.compositeScore}/100)\n` +
+          `${i + 1}. **${s.symbol}** — ${s.agentVerdict} (score ${s.compositeScore}/100)${s.highConviction ? ' ⭐ HIGH CONVICTION' : ''}\n` +
           `   Entry $${s.entryZoneLow}–$${s.entryZoneHigh} · Target $${s.targetZoneLow}–$${s.targetZoneHigh} · Stop $${s.stopZoneLow}–$${s.stopZoneHigh}\n` +
+          (s.catalyst ? `   ⚡ Catalyst: ${s.catalyst}\n` : '') +
           `   ${s.supervisorSynthesis}\n` +
           (s.agentConflict?.exists ? `   ⚠️ Conflict: ${s.agentConflict.meaning}` : '')
         ).join('\n')
