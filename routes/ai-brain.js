@@ -25,6 +25,7 @@ const { getIndicators }      = require('./macro')
 const { requireAuth }     = require('../middleware/auth')
 const { getLearningsBlock } = require('../lib/brain-learnings')
 const { compactTaLine }     = require('../lib/technical-indicators')
+const { getOptionsFlowCompact } = require('../lib/options-flow-cache')
 const { fetchDailyBars }    = require('../lib/internal-api')
 const { tryParseAiJson }    = require('../lib/ai-json')
 const { baselineFromBars }  = require('../lib/ml-baseline')
@@ -422,7 +423,9 @@ router.post('/analyze', requireAuth, brainLimit, async (req, res) => {
   const isStockScan  = !isCryptoScan && !scanMode.startsWith('etfs') && !scanMode.startsWith('mutualfunds')
   const stockSyms    = universe.filter(s => !s.includes('-') && !s.includes('='))
 
-  const [quoteResult, socialResult, earningsResult, taResult, macroResult, altDataResult, fngResult, btcDomResult] = await Promise.allSettled([
+  const isOptionsEligible = !isCryptoScan && !scanMode.startsWith('mutualfunds')
+
+  const [quoteResult, socialResult, earningsResult, taResult, macroResult, altDataResult, fngResult, btcDomResult, optionsResult] = await Promise.allSettled([
     (async () => {
       const r = await fetch(
         `http://127.0.0.1:${port}/api/quote?symbols=${universe.join(',')}`,
@@ -452,6 +455,10 @@ router.post('/analyze', requireAuth, brainLimit, async (req, res) => {
     isCryptoScan ? getCryptoFearGreed().catch(() => null) : Promise.resolve(null),
     // BTC Dominance for crypto scans (CoinGecko global API)
     isCryptoScan ? getBtcDominance().catch(() => null) : Promise.resolve(null),
+    // Options flow (P/C ratio + unusual activity) for stocks and ETFs — top 5 symbols, 15-min cache
+    isOptionsEligible && stockSyms.length
+      ? Promise.all(stockSyms.slice(0, 5).map(s => getOptionsFlowCompact(s, port, fwdKeys(req)).catch(() => null)))
+      : Promise.resolve(null),
   ])
 
   if (quoteResult.status === 'fulfilled') {
@@ -483,6 +490,15 @@ router.post('/analyze', requireAuth, brainLimit, async (req, res) => {
   if (altDataResult.status === 'fulfilled' && Array.isArray(altDataResult.value)) {
     const parts = altDataResult.value.filter(Boolean)
     if (parts.length) altDataSnippet = '\n' + parts.join('\n')
+  }
+
+  // Options flow: put/call ratio + unusual activity for stocks and ETFs
+  let optionsSnippet = ''
+  if (optionsResult?.status === 'fulfilled' && Array.isArray(optionsResult.value)) {
+    const parts = optionsResult.value.filter(Boolean)
+    if (parts.length) {
+      optionsSnippet = '\n\nOPTIONS FLOW (P/C ratio + unusual activity — use to anchor sentimentScore):\n  ' + parts.join('\n  ')
+    }
   }
 
   // Crypto Fear & Greed Index + BTC Dominance
@@ -530,7 +546,7 @@ Analyze this universe for a ${horizonLabel} horizon. Today is ${todayLabel}.
 Universe: ${universe.join(', ')}
 Avoid holdings: ${holdingStr}
 ${scanMode.startsWith('mutualfunds') ? `\nNOTE: This universe contains mutual funds (category: ${scanMode === 'mutualfunds' ? 'Broad All-Category' : scanMode.replace('mutualfunds_','').toUpperCase()}). Score each fund on: (1) Fundamental = portfolio holdings quality, manager tenure & track record, alpha vs benchmark, (2) Technical = NAV trend, momentum, and performance relative to category peers, (3) Sentiment = fund flows, retail/institutional demand, manager commentary, (4) Macro = asset-class fit for current rate/growth/inflation regime, (5) Risk = expense ratio, max drawdown, concentration risk, redemption risk. Price targets refer to NAV zones. Omit stop-loss precision — use downside risk zones only.` : ''}${scanMode.startsWith('etfs_') ? `\nNOTE: This is an ETF sub-category scan (${scanMode.replace('etfs_','').toUpperCase()}). Scoring focus: (1) Fundamental = underlying index quality, holdings composition, expense ratio vs peers, (2) Technical = ETF price trend & momentum, discount/premium to NAV, options flow if available, (3) Sentiment = fund flows, AUM trend, institutional rotation signals, (4) Macro = how well this ETF category fits the current rate/sector/growth regime, (5) Risk = liquidity, tracking error, concentration, leverage if any.` : ''}${scanMode.startsWith('crypto_') ? `\nNOTE: This is a crypto sub-category scan (${scanMode.replace('crypto_','').toUpperCase()}). Scoring focus: (1) Fundamental = protocol TVL, revenue, developer activity, tokenomics, (2) Technical = price trend vs BTC, momentum, on-chain volume signal, (3) Sentiment = social dominance, whale flows, exchange inflows/outflows, (4) Macro = correlation to BTC cycle stage, risk-on/off regime, regulatory climate, (5) Risk = smart contract risk, liquidity depth, centralization risk. Consider current crypto market cycle phase.` : ''}${scanMode.startsWith('stocks_') ? `\nNOTE: This is a stock sector scan (GICS Sector: ${scanMode.replace('stocks_','').replace(/_/g,' ').toUpperCase()}). Scoring focus: (1) Fundamental = earnings growth, margins, valuation vs sector peers, balance sheet quality, (2) Technical = price trend, relative strength vs S&P 500, breakout/breakdown levels, (3) Sentiment = analyst upgrades/downgrades, short interest, insider activity, (4) Macro = sector-specific tailwinds/headwinds in the current rate/growth regime, (5) Risk = concentration risk, regulatory exposure, competitive moat strength.` : ''}
-${marketSnippet}${macroSnippet}${taSnippet}${earningsSnippet}${altDataSnippet}
+${marketSnippet}${macroSnippet}${taSnippet}${earningsSnippet}${altDataSnippet}${optionsSnippet}
 
 ⚠️ STRICT TOKEN BUDGET — respect every word limit or the response will be truncated.
 
@@ -603,14 +619,14 @@ Rules:
 - compositeScore = weighted avg (fundamental 25%, technical 20%, sentiment 15%, macro 20%, risk 20%)
 - All scores 0-100; riskScore: higher = safer
 - fundamentalScore: boost +10 when AnalystTarget from LIVE SNAPSHOT is >15% above current price with ≥5 analysts (shown as "AnalystTarget=$xxx(Nx)"); cut -10 when analyst target is below current price
-- sentimentScore: boost +8 when INSIDER ACTIVITY shows "🟢 net buying"; cut -8 when it shows "🔴 net selling"; boost +5 when Reddit/social sentiment is bullish (>55% bullish posts by upvote weight); cut -5 when FINRA short ratio >15%
+- sentimentScore: boost +8 when INSIDER ACTIVITY shows "🟢 net buying"; cut -8 when it shows "🔴 net selling"; boost +5 when Reddit/social sentiment is bullish (>55% bullish posts by upvote weight); cut -5 when FINRA short ratio >15%; additionally boost +6 when OPTIONS FLOW shows P/C<0.70🟢 (smart-money call buying); cut -6 when P/C>1.30🔴 (heavy protective put buying or bearish speculation)
 - riskScore: cut -15 when earnings ≤7 days away (binary binary event); cut -8 when earnings 8–21 days away; cut -10 for IMMINENT short squeeze risk (high short interest + rising price)
 - macroScore: use FRED regime context — cut -10 in rate-rising / credit-spread-widening regime for rate-sensitive sectors
 - agentConflict.exists = true when ANY two agent scores differ by ≥25 points
 - agentConflict.agents = the two most-divergent agents
 - Price zones: entryZoneLow/High = ±2% around ideal entry; targetZoneLow/High = ±3% around target; stopZoneLow/High = ±1.5% around stop
 - volumeSignal: "Confirming" if vol > 1.1x avg and price trending up; "Weak" if vol < 0.8x; "Diverging" if vol rising but price falling (or vice versa); "Unknown" if no data
-- highConviction: set true ONLY when ≥3 of these independent confirming signals are present: (1) net insider buying in last 90d, (2) analyst target >15% upside with ≥5 analysts, (3) volumeSignal=Confirming, (4) compositeScore ≥ 80, (5) ensemble cross-model confirmed, (6) macroScore ≥ 75 (clear macro tailwind); otherwise false
+- highConviction: set true ONLY when ≥3 of these independent confirming signals are present: (1) net insider buying in last 90d, (2) analyst target >15% upside with ≥5 analysts, (3) volumeSignal=Confirming, (4) compositeScore ≥ 80, (5) ensemble cross-model confirmed, (6) macroScore ≥ 75 (clear macro tailwind), (7) OPTIONS FLOW P/C<0.70🟢 with at least 1 unusual-CALL (smart-money bullish positioning); otherwise false
 - catalyst: the single most time-sensitive trigger for this pick (e.g. "earnings beat expected next week", "Fed pivot boosts rate-sensitive sector", "breakout above 200-day MA"); required for all picks
 - thesisAssumptions: 3 specific, falsifiable conditions that must hold for the bull case to play out
 - dataSource: "live" if snapshot provided, else "knowledge"

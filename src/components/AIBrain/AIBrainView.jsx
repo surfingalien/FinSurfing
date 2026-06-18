@@ -82,9 +82,11 @@ export default function AIBrainView({ portfolio, onAnalyze }) {
     }
   }, [horizon, holdings, customSymbols, scanMode, accessToken])
 
-  const conflictCount     = analysis?.rankedStocks?.filter(s => s.agentConflict?.exists).length ?? 0
-  const convictionCount   = analysis?.rankedStocks?.filter(s => s.highConviction).length ?? 0
-  const visibleStocks     = !analysis ? [] :
+  const conflictCount          = analysis?.rankedStocks?.filter(s => s.agentConflict?.exists).length ?? 0
+  const convictionCount        = analysis?.rankedStocks?.filter(s => s.highConviction).length ?? 0
+  const confirmedCount         = analysis?.rankedStocks?.filter(s => s.ensemble?.confirmed && s.ensemble?.verdictMatch).length ?? 0
+  const earningsImminentCount  = analysis?.rankedStocks?.filter(s => s.daysToEarnings != null && s.daysToEarnings >= 0 && s.daysToEarnings <= 7).length ?? 0
+  const visibleStocks          = !analysis ? [] :
     showConvictionOnly
       ? analysis.rankedStocks.filter(s => s.highConviction)
       : analysis.rankedStocks
@@ -395,6 +397,30 @@ export default function AIBrainView({ portfolio, onAnalyze }) {
                 </span>
               </div>
             </div>
+            {(convictionCount > 0 || confirmedCount > 0 || earningsImminentCount > 0 || conflictCount > 0) && (
+              <div className="flex flex-wrap gap-2 mb-3 text-[10px]">
+                {convictionCount > 0 && (
+                  <span className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-300">
+                    ⭐ {convictionCount} high-conviction
+                  </span>
+                )}
+                {confirmedCount > 0 && (
+                  <span className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#00ffcc]/8 border border-[#00ffcc]/15 text-[#00ffcc]">
+                    🤝 {confirmedCount} cross-confirmed
+                  </span>
+                )}
+                {conflictCount > 0 && (
+                  <span className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500/8 border border-amber-500/15 text-amber-400">
+                    ⚡ {conflictCount} agent conflict{conflictCount > 1 ? 's' : ''}
+                  </span>
+                )}
+                {earningsImminentCount > 0 && (
+                  <span className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-orange-500/10 border border-orange-500/20 text-orange-300">
+                    ⚠️ {earningsImminentCount} earnings ≤7d
+                  </span>
+                )}
+              </div>
+            )}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {visibleStocks.map((stock, i) => (
                 <StockCard key={`${stock.symbol}-${i}`} stock={stock} onAnalyze={onAnalyze} horizon={horizon} />
