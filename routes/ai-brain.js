@@ -577,6 +577,7 @@ Respond ONLY with valid JSON (no markdown, no text outside the JSON object):
         "≤10 words — falsifiable assumption 3"
       ],
       "volumeSignal": "Confirming|Weak|Diverging|Unknown",
+      "highConviction": false,
       "catalyst": "≤10 words — specific near-term event or trigger driving the thesis NOW",
       "keyDrivers": ["≤4 words","≤4 words"],
       "bearCase": "≤10 words — primary downside risk",
@@ -604,6 +605,7 @@ Rules:
 - agentConflict.agents = the two most-divergent agents
 - Price zones: entryZoneLow/High = ±2% around ideal entry; targetZoneLow/High = ±3% around target; stopZoneLow/High = ±1.5% around stop
 - volumeSignal: "Confirming" if vol > 1.1x avg and price trending up; "Weak" if vol < 0.8x; "Diverging" if vol rising but price falling (or vice versa); "Unknown" if no data
+- highConviction: set true ONLY when ≥3 of these independent confirming signals are present: (1) net insider buying in last 90d, (2) analyst target >15% upside with ≥5 analysts, (3) volumeSignal=Confirming, (4) compositeScore ≥ 80, (5) ensemble cross-model confirmed, (6) macroScore ≥ 75 (clear macro tailwind); otherwise false
 - catalyst: the single most time-sensitive trigger for this pick (e.g. "earnings beat expected next week", "Fed pivot boosts rate-sensitive sector", "breakout above 200-day MA"); required for all picks
 - thesisAssumptions: 3 specific, falsifiable conditions that must hold for the bull case to play out
 - dataSource: "live" if snapshot provided, else "knowledge"

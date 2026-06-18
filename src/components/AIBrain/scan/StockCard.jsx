@@ -80,6 +80,12 @@ export default function StockCard({ stock, onAnalyze, horizon }) {
               </div>
             </div>
 
+            {stock.highConviction && (
+              <div className="flex items-center gap-1.5 mb-2 px-2 py-1 rounded-lg bg-gradient-to-r from-amber-500/15 to-yellow-500/10 border border-amber-500/30">
+                <span className="text-[10px]">⭐</span>
+                <span className="text-[10px] font-bold text-amber-300 tracking-wide">High Conviction — multiple signals align</span>
+              </div>
+            )}
             <div className="flex gap-2 mb-3 flex-wrap">
               <div className="flex items-center gap-1 text-[11px]">
                 <Target className="w-3 h-3 text-emerald-400" />
