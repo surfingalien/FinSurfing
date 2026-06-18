@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { PlusCircle, RefreshCw, TrendingUp, TrendingDown, Trash2, Edit3, Upload } from 'lucide-react'
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, AreaChart, Area, XAxis, YAxis } from 'recharts'
 import { fmt, fmtPct, fmtLarge } from '../../services/api'
@@ -22,6 +22,40 @@ const SECTOR_COLORS = {
 }
 
 const COLORS = ['#00ffcc','#6366f1','#f59e0b','#3b82f6','#ec4899','#10b981','#f97316','#8b5cf6','#64748b','#a16207']
+
+// Flashes green/red for 800ms whenever `value` changes (price tick from SSE stream)
+function useFlash(value) {
+  const prev = useRef(value)
+  const [cls, setCls] = useState('')
+  useEffect(() => {
+    if (prev.current == null || value == null || value === prev.current) {
+      prev.current = value
+      return
+    }
+    setCls(value > prev.current ? 'flash-up' : 'flash-down')
+    prev.current = value
+    const t = setTimeout(() => setCls(''), 800)
+    return () => clearTimeout(t)
+  }, [value])
+  return cls
+}
+
+function FlashPrice({ price, className = '' }) {
+  const flash = useFlash(price)
+  if (price == null) return <span className="text-white">—</span>
+  return <span className={`${className} ${flash}`}>${fmt(price)}</span>
+}
+
+function FlashPnL({ value, className = '' }) {
+  const flash = useFlash(value)
+  if (value == null) return <span className="text-slate-600">—</span>
+  const color = value >= 0 ? 'text-emerald-400' : 'text-red-400'
+  return (
+    <span className={`${color} ${className} ${flash}`}>
+      {value >= 0 ? '+' : ''}${fmt(Math.abs(value))}
+    </span>
+  )
+}
 
 function SummaryCard({ label, value, sub, up }) {
   return (
@@ -225,23 +259,21 @@ export default function PortfolioView({ portfolio, portfolioId, authFetch }) {
                     </td>
                     <td className="px-3 py-3 text-right font-mono text-slate-300">{pos.shares}</td>
                     <td className="px-3 py-3 text-right font-mono text-white">
-                      {pos.price !== null ? `$${fmt(pos.price)}` : '—'}
+                      <FlashPrice price={pos.price} />
                     </td>
                     <td className="px-3 py-3 text-right hidden sm:table-cell">
                       <ChangeBadge pct={pos.changePct} />
                     </td>
-                    <td className={`px-3 py-3 text-right font-mono text-xs hidden sm:table-cell ${(pos.todayGL ?? 0) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                      {pos.todayGL != null
-                        ? `${pos.todayGL >= 0 ? '+' : ''}$${fmt(Math.abs(pos.todayGL))}`
-                        : <span className="text-slate-600">—</span>}
+                    <td className="px-3 py-3 text-right font-mono text-xs hidden sm:table-cell">
+                      <FlashPnL value={pos.todayGL} />
                     </td>
                     <td className="px-3 py-3 text-right font-mono font-medium">
                       {pos.mktValue !== null
-                        ? <span className="text-white">${fmt(pos.mktValue)}</span>
+                        ? <FlashPrice price={pos.mktValue} className="text-white" />
                         : <span className="text-slate-500" title="No live price — showing cost basis">${fmt(pos.costBasis)} <span className="text-[10px]">cost</span></span>}
                     </td>
-                    <td className={`px-3 py-3 text-right font-mono hidden md:table-cell ${(pos.gainLoss ?? 0) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                      {pos.gainLoss !== null ? `${pos.gainLoss >= 0 ? '+' : ''}$${fmt(Math.abs(pos.gainLoss))}` : '—'}
+                    <td className="px-3 py-3 text-right font-mono hidden md:table-cell">
+                      <FlashPnL value={pos.gainLoss} />
                     </td>
                     <td className={`px-3 py-3 text-right font-mono hidden lg:table-cell ${(pos.gainLossPct ?? 0) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                       {pos.gainLossPct !== null ? fmtPct(pos.gainLossPct) : '—'}
