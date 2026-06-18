@@ -19,7 +19,7 @@ const fs                  = require('fs')
 const path                = require('path')
 const { getRouter }       = require('../lib/ai-router')
 const { CircuitOpenError } = require('../lib/circuit-breaker')
-const { getSocialSentiment, getCryptoFearGreed } = require('../lib/social-sentiment')
+const { getSocialSentiment, getCryptoFearGreed, getBtcDominance } = require('../lib/social-sentiment')
 const { getAltDataSnippet }  = require('../lib/alt-data')
 const { getIndicators }      = require('./macro')
 const { requireAuth }     = require('../middleware/auth')
@@ -422,7 +422,7 @@ router.post('/analyze', requireAuth, brainLimit, async (req, res) => {
   const isStockScan  = !isCryptoScan && !scanMode.startsWith('etfs') && !scanMode.startsWith('mutualfunds')
   const stockSyms    = universe.filter(s => !s.includes('-') && !s.includes('='))
 
-  const [quoteResult, socialResult, earningsResult, taResult, macroResult, altDataResult, fngResult] = await Promise.allSettled([
+  const [quoteResult, socialResult, earningsResult, taResult, macroResult, altDataResult, fngResult, btcDomResult] = await Promise.allSettled([
     (async () => {
       const r = await fetch(
         `http://127.0.0.1:${port}/api/quote?symbols=${universe.join(',')}`,
@@ -450,6 +450,8 @@ router.post('/analyze', requireAuth, brainLimit, async (req, res) => {
       : Promise.resolve(null),
     // Crypto Fear & Greed Index for crypto scans
     isCryptoScan ? getCryptoFearGreed().catch(() => null) : Promise.resolve(null),
+    // BTC Dominance for crypto scans (CoinGecko global API)
+    isCryptoScan ? getBtcDominance().catch(() => null) : Promise.resolve(null),
   ])
 
   if (quoteResult.status === 'fulfilled') {
@@ -483,9 +485,12 @@ router.post('/analyze', requireAuth, brainLimit, async (req, res) => {
     if (parts.length) altDataSnippet = '\n' + parts.join('\n')
   }
 
-  // Crypto Fear & Greed Index
+  // Crypto Fear & Greed Index + BTC Dominance
   if (fngResult.status === 'fulfilled' && fngResult.value?.snippet) {
     macroSnippet = (macroSnippet || '\n\nMACRO REGIME:') + '\n  ' + fngResult.value.snippet
+  }
+  if (btcDomResult.status === 'fulfilled' && btcDomResult.value?.snippet) {
+    macroSnippet = (macroSnippet || '\n\nMACRO REGIME:') + '\n  ' + btcDomResult.value.snippet
   }
 
   // Build earnings catalyst snippet
