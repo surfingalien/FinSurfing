@@ -2,9 +2,10 @@ import { useMemo } from 'react'
 import { fmt } from '../../../services/api'
 
 /* ── Heatmap cell ────────────────────────────── */
-function HeatCell({ symbol, price, changePct, pctOfPortfolio, stale, onClick }) {
+function HeatCell({ symbol, price, changePct, unrealizedPct, pctOfPortfolio, stale, onClick }) {
   const hasData = changePct != null
   const cp = changePct ?? 0
+  // Color cell by today's change
   const bg = !hasData ? 'rgba(100,116,139,0.12)'
            : cp >= 4  ? 'rgba(16,185,129,0.80)'
            : cp >= 2  ? 'rgba(16,185,129,0.55)'
@@ -14,6 +15,7 @@ function HeatCell({ symbol, price, changePct, pctOfPortfolio, stale, onClick }) 
            : cp >= -4 ? 'rgba(248,113,113,0.55)'
            :             'rgba(239,68,68,0.80)'
   const clr = !hasData ? 'text-slate-500' : cp >= 1 ? 'text-emerald-100' : cp >= 0 ? 'text-emerald-300' : cp >= -1 ? 'text-red-300' : 'text-red-100'
+  const upnlClr = unrealizedPct == null ? '' : unrealizedPct >= 0 ? 'text-emerald-400' : 'text-red-400'
 
   return (
     <button
@@ -30,6 +32,11 @@ function HeatCell({ symbol, price, changePct, pctOfPortfolio, stale, onClick }) 
       <div className={`text-xs font-bold font-mono mt-auto ${clr}`}>
         {hasData ? `${cp >= 0 ? '+' : ''}${cp.toFixed(2)}%` : stale ? 'stale' : '—'}
       </div>
+      {unrealizedPct != null && (
+        <div className={`text-[9px] font-mono leading-none mt-0.5 ${upnlClr}`} title="Unrealized P&L from cost">
+          {unrealizedPct >= 0 ? '+' : ''}{unrealizedPct.toFixed(1)}% total
+        </div>
+      )}
     </button>
   )
 }
@@ -53,10 +60,14 @@ export default function PortfolioHeatmap({ positions, quotes, onAnalyze }) {
       if (!stale && changePct == null && price != null && q?.prevClose != null && q.prevClose > 0) {
         changePct = (price - q.prevClose) / q.prevClose * 100
       }
+      const unrealizedPct = (price != null && p.avgCost > 0)
+        ? (price - p.avgCost) / p.avgCost * 100
+        : null
       return {
         symbol: p.symbol,
         price,
         changePct,
+        unrealizedPct,
         stale,
         mktValue:  mktV,
         pctOfPortfolio: totalValue > 0 ? (mktV / totalValue) * 100 : 0,

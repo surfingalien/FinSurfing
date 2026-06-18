@@ -126,7 +126,14 @@ async function runFocusAnalysis({ holdings = [], watchlist = [] }) {
       const lo52 = q.fiftyTwoWeekLow
       const pctFrom52hi = hi52 ? ((q.regularMarketPrice - hi52) / hi52 * 100).toFixed(1) : null
       const isHolding = holdings.includes(q.symbol)
-      return `${isHolding ? '★' : '○'} ${q.symbol}: $${q.regularMarketPrice.toFixed(q.regularMarketPrice >= 1 ? 2 : 6)} (${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%)${volRatio ? ` vol=${volRatio}x` : ''}${pctFrom52hi !== null ? ` 52wk_hi${pctFrom52hi}%` : ''}`
+      // Analyst consensus
+      const target  = q.targetMedianPrice
+      const recMean = q.recommendationMean
+      const count   = q.numberOfAnalystOpinions
+      const analystStr = target != null
+        ? ` analyst_target=$${target.toFixed(0)}${count ? `(${count}×)` : ''}${recMean != null ? ` rec=${recMean.toFixed(1)}/5` : ''}`
+        : ''
+      return `${isHolding ? '★' : '○'} ${q.symbol}: $${q.regularMarketPrice.toFixed(q.regularMarketPrice >= 1 ? 2 : 6)} (${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%)${volRatio ? ` vol=${volRatio}x` : ''}${pctFrom52hi !== null ? ` 52wk_hi${pctFrom52hi}%` : ''}${analystStr}`
     })
     .join('\n')
 
