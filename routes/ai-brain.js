@@ -446,7 +446,7 @@ router.post('/analyze', requireAuth, brainLimit, async (req, res) => {
     getIndicators().catch(() => null),
     // Alt-data (OpenInsider + FINRA short interest) for stock scans only
     isStockScan && stockSyms.length
-      ? Promise.all(stockSyms.slice(0, 8).map(s => getAltDataSnippet(s).catch(() => null)))
+      ? Promise.all(stockSyms.slice(0, 15).map(s => getAltDataSnippet(s).catch(() => null)))
       : Promise.resolve(null),
     // Crypto Fear & Greed Index for crypto scans
     isCryptoScan ? getCryptoFearGreed().catch(() => null) : Promise.resolve(null),
