@@ -17,6 +17,8 @@ const {
   computeStochRSI, computeVWAP, computeOBV, findSR, detectPatterns, volumeAnalysis,
 } = require('../lib/technical-indicators')
 
+const { getSocialSentiment } = require('../lib/social-sentiment')
+
 const aiRouter = getRouter('trading-analysis')
 
 const router = express.Router()
@@ -292,7 +294,7 @@ function tvToChartParams(tvInterval) {
 
 // ── Analysis prompt builder ────────────────────────────────────────────────────
 
-function buildAnalysisPrompt(symbol, interval, price, indicators, patterns, vol, priceLabel = 'last bar close', sentiment = null, priorMemories = []) {
+function buildAnalysisPrompt(symbol, interval, price, indicators, patterns, vol, priceLabel = 'last bar close', sentiment = null, priorMemories = [], socialSnippet = '') {
   const { rsi, macd, ema9, ema21, ema50, ema200, bb, atr, stochRsi, vwap, obv, sr } = indicators
 
   const rsiInterp = rsi == null ? 'N/A'
@@ -327,7 +329,7 @@ function buildAnalysisPrompt(symbol, interval, price, indicators, patterns, vol,
   const patternsStr = patterns && patterns.length ? patterns.join(', ') : 'none detected'
 
   const sentimentSection = sentiment
-    ? `\nRETAIL SENTIMENT (StockTwits — last ${sentiment.total} posts):\nBullish: ${sentiment.bullish} | Bearish: ${sentiment.bearish} | Neutral: ${sentiment.neutral}${sentiment.snippets.length ? '\nSample posts:\n' + sentiment.snippets.join('\n') : ''}\n`
+    ? `\nRETAIL SENTIMENT (StockTwits — last ${sentiment.total} posts): Bullish ${sentiment.bullish} | Bearish ${sentiment.bearish} | Neutral ${sentiment.neutral}${sentiment.snippets.length ? '\nSample posts:\n' + sentiment.snippets.join('\n') : ''}`
     : ''
 
   const memoryBlock = priorMemories.length
@@ -361,7 +363,7 @@ ${volInterp}
 
 DETECTED PATTERNS:
 ${patternsStr}
-
+${sentimentSection}${socialSnippet}
 ANALYSIS INSTRUCTIONS:
 1. Look for CONTRADICTIONS between indicators (e.g. RSI overbought but MACD still bullish, price above EMA50 but OBV falling, BB squeeze while RSI diverging). List each contradiction explicitly.
 2. For price targets, provide a ZONE (low/high) based on key S/R and ATR, not a single precise number. Entry zone should reflect realistic fill range around current price.
@@ -520,16 +522,17 @@ router.post('/analyze', requireAuth, async (req, res) => {
 
     const indicators = { rsi, macd, ema9, ema21, ema50, ema200, bb, atr, stochRsi, vwap, obv, sr, patterns, volume: vol }
 
-    // Fetch StockTwits sentiment (fire-and-forget, non-blocking on failure)
-    const sentiment = await fetchStockTwits(sym)
+    // Fetch StockTwits + broader social sentiment + prior memory in parallel
+    const [sentiment, socialSnippetRaw, priorMemories] = await Promise.all([
+      fetchStockTwits(sym).catch(() => null),
+      getSocialSentiment([sym]).catch(() => ''),
+      recallMemory(req.user?.userId, sym),
+    ])
     if (sentiment) console.log(`[trading-analysis] ${sym} StockTwits: ${sentiment.bullish}B ${sentiment.bearish}Be ${sentiment.neutral}N / ${sentiment.total}`)
-
-    // Recall prior analyses for this user+symbol (no-op if DB unavailable)
-    const priorMemories = await recallMemory(req.user?.userId, sym)
     if (priorMemories.length) console.log(`[trading-analysis] ${sym} memory: ${priorMemories.length} prior analyses injected`)
 
     // Build prompt and call Claude
-    const analysisPrompt = buildAnalysisPrompt(sym, interval, price, indicators, patterns, vol, priceLabel, sentiment, priorMemories)
+    const analysisPrompt = buildAnalysisPrompt(sym, interval, price, indicators, patterns, vol, priceLabel, sentiment, priorMemories, socialSnippetRaw)
 
     const { text: rawText } = await aiRouter.call({
       prompt:    analysisPrompt,
