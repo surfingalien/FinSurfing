@@ -19,7 +19,7 @@ const fs                  = require('fs')
 const path                = require('path')
 const { getRouter }       = require('../lib/ai-router')
 const { CircuitOpenError } = require('../lib/circuit-breaker')
-const { getSocialSentiment } = require('../lib/social-sentiment')
+const { getSocialSentiment, getCryptoFearGreed } = require('../lib/social-sentiment')
 const { getAltDataSnippet }  = require('../lib/alt-data')
 const { getIndicators }      = require('./macro')
 const { requireAuth }     = require('../middleware/auth')
@@ -404,10 +404,11 @@ router.post('/analyze', requireAuth, brainLimit, async (req, res) => {
   let socialSnippet   = ''
 
   const port = process.env.PORT || 3001
-  const isStockScan = !scanMode.startsWith('crypto') && !scanMode.startsWith('etfs') && !scanMode.startsWith('mutualfunds')
-  const stockSyms   = universe.filter(s => !s.includes('-') && !s.includes('='))
+  const isCryptoScan = scanMode.startsWith('crypto')
+  const isStockScan  = !isCryptoScan && !scanMode.startsWith('etfs') && !scanMode.startsWith('mutualfunds')
+  const stockSyms    = universe.filter(s => !s.includes('-') && !s.includes('='))
 
-  const [quoteResult, socialResult, earningsResult, taResult, macroResult, altDataResult] = await Promise.allSettled([
+  const [quoteResult, socialResult, earningsResult, taResult, macroResult, altDataResult, fngResult] = await Promise.allSettled([
     (async () => {
       const r = await fetch(
         `http://127.0.0.1:${port}/api/quote?symbols=${universe.join(',')}`,
@@ -429,10 +430,12 @@ router.post('/analyze', requireAuth, brainLimit, async (req, res) => {
     fetchTaSnapshot(universe, fwdKeys(req)),
     // FRED macro indicators — gracefully skipped when FRED_API_KEY not set
     getIndicators().catch(() => null),
-    // Alt-data (SEC insider + FINRA short interest) for stock scans only
+    // Alt-data (OpenInsider + FINRA short interest) for stock scans only
     isStockScan && stockSyms.length
       ? Promise.all(stockSyms.slice(0, 5).map(s => getAltDataSnippet(s).catch(() => null)))
       : Promise.resolve(null),
+    // Crypto Fear & Greed Index for crypto scans
+    isCryptoScan ? getCryptoFearGreed().catch(() => null) : Promise.resolve(null),
   ])
 
   if (quoteResult.status === 'fulfilled') {
@@ -459,11 +462,16 @@ router.post('/analyze', requireAuth, brainLimit, async (req, res) => {
     macroSnippet = '\n\nMACRO REGIME (FRED live data — use to anchor macroScore and macroAnalysis):\n' + macroResult.value.macroSummary
   }
 
-  // Alt-data: SEC Form 4 insider filings + FINRA short interest
+  // Alt-data: OpenInsider + FINRA short interest
   let altDataSnippet = ''
   if (altDataResult.status === 'fulfilled' && Array.isArray(altDataResult.value)) {
     const parts = altDataResult.value.filter(Boolean)
     if (parts.length) altDataSnippet = '\n' + parts.join('\n')
+  }
+
+  // Crypto Fear & Greed Index
+  if (fngResult.status === 'fulfilled' && fngResult.value?.snippet) {
+    macroSnippet = (macroSnippet || '\n\nMACRO REGIME:') + '\n  ' + fngResult.value.snippet
   }
 
   // Build earnings catalyst snippet
