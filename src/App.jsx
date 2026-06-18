@@ -191,7 +191,7 @@ function MainApp({ onSignIn }) {
   // ── View registry — one lazy chunk per tab ──
   const views = {
     'dashboard':       () => <DashboardView portfolio={portfolio} onAnalyze={navigateToAnalyze} />,
-    'portfolio':       () => <PortfolioView portfolio={portfolio} />,
+    'portfolio':       () => <PortfolioView portfolio={portfolio} portfolioId={activePortfolioId} authFetch={isAuthenticated ? authFetch : null} />,
     'portfolios':      () => <PortfolioManagerView />,
     'watchlist':       () => <WatchlistView watchlist={watchlist} onAnalyze={navigateToAnalyze} />,
     'analyze':         () => <AnalysisView defaultSymbol={analyzeSymbol} />,
