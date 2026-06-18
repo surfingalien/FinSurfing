@@ -20,6 +20,8 @@ const path                = require('path')
 const { getRouter }       = require('../lib/ai-router')
 const { CircuitOpenError } = require('../lib/circuit-breaker')
 const { getSocialSentiment } = require('../lib/social-sentiment')
+const { getAltDataSnippet }  = require('../lib/alt-data')
+const { getIndicators }      = require('./macro')
 const { requireAuth }     = require('../middleware/auth')
 const { getLearningsBlock } = require('../lib/brain-learnings')
 const { compactTaLine }     = require('../lib/technical-indicators')
@@ -396,13 +398,16 @@ router.post('/analyze', requireAuth, brainLimit, async (req, res) => {
   const generatedAt  = new Date().toISOString()
   const todayLabel   = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
 
-  // ── Sub-agent 1: data fetch — live quotes + social sentiment in parallel ─────
+  // ── Sub-agent 1: data fetch — all sources in parallel ────────────────────────
   let marketSnippet   = ''
   let liveQuotes      = []
   let socialSnippet   = ''
 
   const port = process.env.PORT || 3001
-  const [quoteResult, socialResult, earningsResult, taResult] = await Promise.allSettled([
+  const isStockScan = !scanMode.startsWith('crypto') && !scanMode.startsWith('etfs') && !scanMode.startsWith('mutualfunds')
+  const stockSyms   = universe.filter(s => !s.includes('-') && !s.includes('='))
+
+  const [quoteResult, socialResult, earningsResult, taResult, macroResult, altDataResult] = await Promise.allSettled([
     (async () => {
       const r = await fetch(
         `http://127.0.0.1:${port}/api/quote?symbols=${universe.join(',')}`,
@@ -414,7 +419,6 @@ router.post('/analyze', requireAuth, brainLimit, async (req, res) => {
     getSocialSentiment(universe.slice(0, 5)),
     // Fetch upcoming earnings dates for stock symbols only (not crypto/ETFs)
     (async () => {
-      const stockSyms = universe.filter(s => !s.includes('-') && !s.includes('='))
       if (!stockSyms.length) return null
       const r = await fetch(
         `http://127.0.0.1:${port}/api/earnings/calendar?symbols=${stockSyms.join(',')}`,
@@ -423,6 +427,12 @@ router.post('/analyze', requireAuth, brainLimit, async (req, res) => {
       return r.json()
     })(),
     fetchTaSnapshot(universe, fwdKeys(req)),
+    // FRED macro indicators — gracefully skipped when FRED_API_KEY not set
+    getIndicators().catch(() => null),
+    // Alt-data (SEC insider + FINRA short interest) for stock scans only
+    isStockScan && stockSyms.length
+      ? Promise.all(stockSyms.slice(0, 5).map(s => getAltDataSnippet(s).catch(() => null)))
+      : Promise.resolve(null),
   ])
 
   if (quoteResult.status === 'fulfilled') {
@@ -441,6 +451,19 @@ router.post('/analyze', requireAuth, brainLimit, async (req, res) => {
   if (taResult.status === 'fulfilled' && taResult.value.lines.length) {
     taSnippet = '\n\nCOMPUTED TECHNICALS (server-calculated from daily bars — authoritative; base technicalScore on these, do not invent indicator values):\n'
       + taResult.value.lines.join('\n')
+  }
+
+  // FRED macro regime snapshot
+  let macroSnippet = ''
+  if (macroResult.status === 'fulfilled' && macroResult.value?.macroSummary) {
+    macroSnippet = '\n\nMACRO REGIME (FRED live data — use to anchor macroScore and macroAnalysis):\n' + macroResult.value.macroSummary
+  }
+
+  // Alt-data: SEC Form 4 insider filings + FINRA short interest
+  let altDataSnippet = ''
+  if (altDataResult.status === 'fulfilled' && Array.isArray(altDataResult.value)) {
+    const parts = altDataResult.value.filter(Boolean)
+    if (parts.length) altDataSnippet = '\n' + parts.join('\n')
   }
 
   // Build earnings catalyst snippet
@@ -480,7 +503,7 @@ Analyze this universe for a ${horizonLabel} horizon. Today is ${todayLabel}.
 Universe: ${universe.join(', ')}
 Avoid holdings: ${holdingStr}
 ${scanMode.startsWith('mutualfunds') ? `\nNOTE: This universe contains mutual funds (category: ${scanMode === 'mutualfunds' ? 'Broad All-Category' : scanMode.replace('mutualfunds_','').toUpperCase()}). Score each fund on: (1) Fundamental = portfolio holdings quality, manager tenure & track record, alpha vs benchmark, (2) Technical = NAV trend, momentum, and performance relative to category peers, (3) Sentiment = fund flows, retail/institutional demand, manager commentary, (4) Macro = asset-class fit for current rate/growth/inflation regime, (5) Risk = expense ratio, max drawdown, concentration risk, redemption risk. Price targets refer to NAV zones. Omit stop-loss precision — use downside risk zones only.` : ''}${scanMode.startsWith('etfs_') ? `\nNOTE: This is an ETF sub-category scan (${scanMode.replace('etfs_','').toUpperCase()}). Scoring focus: (1) Fundamental = underlying index quality, holdings composition, expense ratio vs peers, (2) Technical = ETF price trend & momentum, discount/premium to NAV, options flow if available, (3) Sentiment = fund flows, AUM trend, institutional rotation signals, (4) Macro = how well this ETF category fits the current rate/sector/growth regime, (5) Risk = liquidity, tracking error, concentration, leverage if any.` : ''}${scanMode.startsWith('crypto_') ? `\nNOTE: This is a crypto sub-category scan (${scanMode.replace('crypto_','').toUpperCase()}). Scoring focus: (1) Fundamental = protocol TVL, revenue, developer activity, tokenomics, (2) Technical = price trend vs BTC, momentum, on-chain volume signal, (3) Sentiment = social dominance, whale flows, exchange inflows/outflows, (4) Macro = correlation to BTC cycle stage, risk-on/off regime, regulatory climate, (5) Risk = smart contract risk, liquidity depth, centralization risk. Consider current crypto market cycle phase.` : ''}${scanMode.startsWith('stocks_') ? `\nNOTE: This is a stock sector scan (GICS Sector: ${scanMode.replace('stocks_','').replace(/_/g,' ').toUpperCase()}). Scoring focus: (1) Fundamental = earnings growth, margins, valuation vs sector peers, balance sheet quality, (2) Technical = price trend, relative strength vs S&P 500, breakout/breakdown levels, (3) Sentiment = analyst upgrades/downgrades, short interest, insider activity, (4) Macro = sector-specific tailwinds/headwinds in the current rate/growth regime, (5) Risk = concentration risk, regulatory exposure, competitive moat strength.` : ''}
-${marketSnippet}${taSnippet}${earningsSnippet}
+${marketSnippet}${macroSnippet}${taSnippet}${earningsSnippet}${altDataSnippet}
 
 ⚠️ STRICT TOKEN BUDGET — respect every word limit or the response will be truncated.
 
