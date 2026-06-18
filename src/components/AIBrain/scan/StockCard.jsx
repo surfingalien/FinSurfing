@@ -103,6 +103,15 @@ export default function StockCard({ stock, onAnalyze, horizon }) {
                   {stock.ensemble.verdictMatch ? '🤝 Confirmed' : '⚡ Split'}
                 </span>
               )}
+              {stock.daysToEarnings != null && stock.daysToEarnings >= 0 && stock.daysToEarnings <= 21 && (
+                <span className={`text-[9px] font-medium px-1.5 py-0.5 rounded border ${
+                  stock.daysToEarnings <= 7
+                    ? 'bg-orange-500/15 text-orange-300 border-orange-500/30'
+                    : 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20'
+                }`}>
+                  {stock.daysToEarnings <= 7 ? '⚠️' : '📅'} Earnings {stock.daysToEarnings}d
+                </span>
+              )}
               {stock.sector && (
                 <span className="text-[10px] text-slate-500 bg-white/[0.04] px-1.5 py-0.5 rounded">{stock.sector}</span>
               )}
