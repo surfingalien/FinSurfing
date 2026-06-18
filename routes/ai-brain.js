@@ -683,6 +683,20 @@ Rules:
       }
     }
 
+    // Annotate each stock with earnings proximity from already-fetched earnings data
+    if (earningsResult.status === 'fulfilled' && earningsResult.value?.upcoming?.length) {
+      const earningsMap = new Map(
+        earningsResult.value.upcoming.map(e => [
+          e.symbol,
+          Math.round((new Date(e.nextEarningsDate) - Date.now()) / 86400000),
+        ])
+      )
+      for (const stock of data.rankedStocks) {
+        const d = earningsMap.get(stock.symbol)
+        if (d != null) stock.daysToEarnings = d
+      }
+    }
+
     // Log each prediction for win-rate tracking
     for (const stock of data.rankedStocks) {
       logPrediction(stock.symbol, stock, {
