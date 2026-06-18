@@ -613,24 +613,27 @@ function detectTickerQuery(messages) {
 // Run all analysis tools in parallel for a ticker — DeerFlow-style Planner step
 async function runPlannerPrefetch(ticker, req, send) {
   send({ type: 'tool_start', tools: [
-    { name: 'analyze_symbol',       input: { symbol: ticker } },
-    { name: 'get_earnings_catalyst', input: { symbol: ticker } },
-    { name: 'get_options_flow',      input: { symbol: ticker } },
-    { name: 'get_social_sentiment',  input: { symbols: [ticker] } },
+    { name: 'analyze_symbol',         input: { symbol: ticker } },
+    { name: 'get_earnings_catalyst',  input: { symbol: ticker } },
+    { name: 'get_options_flow',       input: { symbol: ticker } },
+    { name: 'get_social_sentiment',   input: { symbols: [ticker] } },
+    { name: 'get_analyst_consensus',  input: { symbol: ticker } },
   ]})
 
-  const [technical, earnings, options, social] = await Promise.allSettled([
+  const [technical, earnings, options, social, analyst] = await Promise.allSettled([
     dispatchTool('analyze_symbol',        { symbol: ticker },       req),
     dispatchTool('get_earnings_catalyst', { symbol: ticker },       req),
     dispatchTool('get_options_flow',      { symbol: ticker },       req),
     dispatchTool('get_social_sentiment',  { symbols: [ticker] },    req),
+    dispatchTool('get_analyst_consensus', { symbol: ticker },       req),
   ])
 
   send({ type: 'tool_results', results: [
-    { tool: 'analyze_symbol',       preview: technical.value?.slice?.(0, 100) },
+    { tool: 'analyze_symbol',        preview: technical.value?.slice?.(0, 100) },
     { tool: 'get_earnings_catalyst', preview: earnings.value?.slice?.(0, 100) },
     { tool: 'get_options_flow',      preview: options.value?.slice?.(0, 100) },
     { tool: 'get_social_sentiment',  preview: social.value?.slice?.(0, 100) },
+    { tool: 'get_analyst_consensus', preview: analyst.value?.slice?.(0, 100) },
   ]})
 
   return {
@@ -638,6 +641,7 @@ async function runPlannerPrefetch(ticker, req, send) {
     earnings:   earnings.status   === 'fulfilled' ? earnings.value   : null,
     options:    options.status    === 'fulfilled' ? options.value    : null,
     social:     social.status     === 'fulfilled' ? social.value     : null,
+    analyst:    analyst.status    === 'fulfilled' ? analyst.value    : null,
   }
 }
 
@@ -661,10 +665,13 @@ Produce a concise structured report using this format:
 [P/C ratio interpretation, ATM IV, any unusual activity and what it implies]
 
 ### Social Sentiment
-[Reddit upvote-weighted signal + Polymarket odds if available]
+[Reddit upvote-weighted signal + Google News headlines + Polymarket odds if available]
+
+### Analyst Consensus
+[Median price target, upside %, consensus rating, forward P/E — flag if AI and analysts diverge significantly]
 
 ### Verdict
-[2-3 sentences: bull case, bear case, risk/reward. Entry zone and stop.]
+[2-3 sentences: bull case, bear case, risk/reward. Entry zone and stop. Note any AI vs analyst divergence.]
 
 ---
 *Not financial advice. All data is live as of analysis time.*`
@@ -837,10 +844,11 @@ router.post('/chat', requireAuth, chatLimit, async (req, res) => {
       const data = await runPlannerPrefetch(plannerTicker, req, send)
       const contextMsg = [
         `LIVE PRE-FETCHED DATA FOR ${plannerTicker} (all tools already executed in parallel):`,
-        data.technical  ? `\n=== TECHNICAL ANALYSIS ===\n${data.technical}`   : '',
-        data.earnings   ? `\n=== EARNINGS CATALYST ===\n${data.earnings}`     : '',
-        data.options    ? `\n=== OPTIONS FLOW ===\n${data.options}`           : '',
-        data.social     ? `\n=== SOCIAL SENTIMENT ===\n${data.social}`        : '',
+        data.technical  ? `\n=== TECHNICAL ANALYSIS ===\n${data.technical}`        : '',
+        data.earnings   ? `\n=== EARNINGS CATALYST ===\n${data.earnings}`          : '',
+        data.options    ? `\n=== OPTIONS FLOW ===\n${data.options}`                : '',
+        data.social     ? `\n=== SOCIAL SENTIMENT ===\n${data.social}`             : '',
+        data.analyst    ? `\n=== ANALYST CONSENSUS ===\n${data.analyst}`           : '',
         `\n\nOriginal user question: ${messages.at(-1)?.content || ''}`,
         '\nSynthesize ALL the above into a structured investment report. Do NOT call any tools.',
       ].join('')
