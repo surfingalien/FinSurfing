@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { useQuery, fetchJson } from '../../../hooks/useQuery'
+import portfolioPnl from '../../../lib/portfolio-pnl.js'
 
 /* ── Sector beta proxies ─────────────────────── */
 const SECTOR_BETA = {
@@ -12,28 +13,26 @@ const SECTOR_BETA = {
 /* ── Portfolio risk analysis ─────────────────── */
 export default function PortfolioRisk({ positions, quotes }) {
   const risk = useMemo(() => {
-    const totalValue = positions.reduce((s, p) => {
-      const q = quotes[p.symbol]
-      return s + (q?.price ?? p.avgCost) * p.shares
-    }, 0)
+    // Position market value comes from the shared lib/portfolio-pnl.js so the
+    // risk weights stay consistent with the headline P&L.
+    const enriched   = positions.map(p => portfolioPnl.enrichPosition(p, quotes[p.symbol]))
+    const totalValue = enriched.reduce((s, e) => s + (e.mktValue ?? e.costBasis), 0)
 
     let portfolioBeta = 0
     const sectorMap   = {}
     const holdings    = []
 
-    positions.forEach(p => {
-      const q     = quotes[p.symbol]
-      const price = q?.price ?? p.avgCost
-      const val   = price * p.shares
-      const w     = totalValue > 0 ? val / totalValue : 0
-      const beta  = SECTOR_BETA[p.sector] ?? 1.05
+    enriched.forEach(e => {
+      const val  = e.mktValue ?? e.costBasis
+      const w    = totalValue > 0 ? val / totalValue : 0
+      const beta = SECTOR_BETA[e.sector] ?? 1.05
 
       portfolioBeta += w * beta
 
-      const sec = p.sector || 'Other'
+      const sec = e.sector || 'Other'
       sectorMap[sec] = (sectorMap[sec] || 0) + val
 
-      holdings.push({ symbol: p.symbol, weight: w * 100, val, sector: p.sector })
+      holdings.push({ symbol: e.symbol, weight: w * 100, val, sector: e.sector })
     })
 
     // Herfindahl-Hirschman Index for concentration
