@@ -9,6 +9,7 @@ import {
   calcATR, detectTrend, findSwingPoints, findKeyLevels,
   detectDivergence, generateAdvisory as baseAdvisory
 } from './research'
+import * as portfolioPnl from '../../lib/portfolio-pnl.js'
 
 /* ── Constants ───────────────────────────────────── */
 export const SIGNAL_TYPES = {
@@ -275,7 +276,7 @@ export function classifySignal({
 
   // Profit booking (portfolio positions with significant gain)
   if (position) {
-    const gainPct = ((price - position.avgCost) / position.avgCost) * 100
+    const gainPct = portfolioPnl.unrealizedPct(price, position.avgCost) ?? 0
     if (gainPct > 20 && (rsi > 68 || techScore < 1)) {
       return { type: 'PROFIT_BOOK', ensemble, gainPct: +gainPct.toFixed(1), raw: { techScore, fundScore, sentimentScore, analystScore, mtfScore } }
     }
@@ -509,7 +510,7 @@ export async function generateAIAdvisory({
     horizons,
     mtf,
     backtest,
-    gainPct: rawSignal.gainPct ?? (position ? +((price - position.avgCost) / position.avgCost * 100).toFixed(2) : null),
+    gainPct: rawSignal.gainPct ?? (position != null ? +(portfolioPnl.unrealizedPct(price, position.avgCost) ?? 0).toFixed(2) : null),
     generatedAt: new Date(),
   }
 }
@@ -522,7 +523,7 @@ export async function scanPortfolio({ positions, quotes, newsMap, fundamentalsMa
     if (!quote) continue
     // We don't have full candles here — use quote data to generate a simplified signal
     const price = quote.price ?? pos.avgCost
-    const gainPct = ((price - pos.avgCost) / pos.avgCost) * 100
+    const gainPct = portfolioPnl.unrealizedPct(price, pos.avgCost) ?? 0
     const changePct = quote.changePct ?? 0
 
     // Quick heuristic signal from quote data alone

@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { fmt } from '../../../services/api'
+import * as portfolioPnl from '../../../../lib/portfolio-pnl.js'
 
 /* ── Heatmap cell ────────────────────────────── */
 function HeatCell({ symbol, price, changePct, unrealizedPct, pctOfPortfolio, stale, onClick }) {
@@ -44,30 +45,27 @@ function HeatCell({ symbol, price, changePct, unrealizedPct, pctOfPortfolio, sta
 /* ── Portfolio heatmap ───────────────────────── */
 export default function PortfolioHeatmap({ positions, quotes, onAnalyze }) {
   const cells = useMemo(() => {
-    const totalValue = positions.reduce((s, p) => {
-      const q = quotes[p.symbol]
-      return s + (q?.price ?? p.avgCost) * p.shares
-    }, 0)
-    return positions.map(p => {
-      const q     = quotes[p.symbol]
-      const price = q?.price ?? null
+    // P&L (mktValue, gainLossPct) comes from the shared lib/portfolio-pnl.js so
+    // this widget can never drift from the hook's numbers. changePct/stale are
+    // day-change display concerns handled here.
+    const enriched   = positions.map(p => portfolioPnl.enrichPosition(p, quotes[p.symbol]))
+    const totalValue = enriched.reduce((s, e) => s + (e.mktValue ?? e.costBasis), 0)
+    return enriched.map(e => {
+      const q     = quotes[e.symbol]
       const stale = !!q?.stale
-      const mktV  = (price ?? p.avgCost) * p.shares
+      const mktV  = e.mktValue ?? e.costBasis
       // A stale (last-known) quote's day-change is from an old session —
       // never color the cell with it; show the price marked stale instead
       let changePct = stale ? null : (q?.changePct ?? null)
       // Derive changePct from prevClose when the API didn't supply it directly
-      if (!stale && changePct == null && price != null && q?.prevClose != null && q.prevClose > 0) {
-        changePct = (price - q.prevClose) / q.prevClose * 100
+      if (!stale && changePct == null && e.price != null && q?.prevClose != null && q.prevClose > 0) {
+        changePct = (e.price - q.prevClose) / q.prevClose * 100
       }
-      const unrealizedPct = (price != null && p.avgCost > 0)
-        ? (price - p.avgCost) / p.avgCost * 100
-        : null
       return {
-        symbol: p.symbol,
-        price,
+        symbol: e.symbol,
+        price:  e.price,
         changePct,
-        unrealizedPct,
+        unrealizedPct:  e.gainLossPct,
         stale,
         mktValue:  mktV,
         pctOfPortfolio: totalValue > 0 ? (mktV / totalValue) * 100 : 0,

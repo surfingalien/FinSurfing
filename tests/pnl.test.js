@@ -1,44 +1,37 @@
 'use strict'
 /**
- * Unit tests for P&L calculation logic extracted from usePortfolio.js.
- * These are pure functions — no HTTP, no DB, no React hooks.
+ * Unit tests for the shared P&L module (lib/portfolio-pnl.js) — the SAME pure
+ * functions src/hooks/usePortfolio.js uses in the browser. No HTTP/DB/React.
+ *
+ * Previously this file tested a hand-copied MIRROR of the hook's inline logic,
+ * so the real code could change and these tests would still pass. Now they
+ * exercise the actual module, so a P&L regression fails CI.
  */
 
-// Mirror of the enrichment logic in src/hooks/usePortfolio.js:283-310
-function enrichPosition(pos, quote) {
-  const q          = quote || {}
-  const price      = q.price ?? null
-  const costBasis  = pos.shares * pos.avgCost
-  const mktValue   = price !== null ? price * pos.shares : null
-  const gainLoss   = mktValue !== null ? mktValue - costBasis : null
-  const gainLossPct = gainLoss !== null && costBasis > 0 ? (gainLoss / costBasis) * 100 : null
+const { enrichPosition, portfolioSummary, costBasis, unrealizedPct } = require('../lib/portfolio-pnl')
 
-  const prevClose  = q.prevClose ?? null
-  const marketTime = q.marketTime ?? null
-  const isToday    = marketTime
-    ? new Date(marketTime * 1000).toDateString() === new Date().toDateString()
-    : false
-  const todayGL    = isToday && price !== null && prevClose !== null
-    ? (price - prevClose) * pos.shares
-    : isToday && q.change != null
-      ? q.change * pos.shares
-      : 0
+describe('P&L atoms — costBasis() / unrealizedPct()', () => {
+  test('costBasis = shares × avgCost', () => {
+    expect(costBasis({ shares: 10, avgCost: 150 })).toBe(1500)
+  })
 
-  return { ...pos, ...q, price, costBasis, mktValue, gainLoss, gainLossPct, todayGL }
-}
+  test('unrealizedPct = (price − avgCost) / avgCost × 100', () => {
+    expect(unrealizedPct(180, 150)).toBeCloseTo(20)
+    expect(unrealizedPct(120, 150)).toBeCloseTo(-20)
+  })
 
-function portfolioSummary(enriched) {
-  const totalCost  = enriched.reduce((s, p) => s + p.costBasis, 0)
-  const totalValue = enriched.reduce((s, p) => s + (p.mktValue ?? p.costBasis), 0)
-  const totalGL    = totalValue - totalCost
-  const totalGLPct = totalCost > 0 ? (totalGL / totalCost) * 100 : 0
-  const todayTotal = enriched.reduce((s, p) => s + (p.todayGL ?? 0), 0)
-  const totalCount   = enriched.length
-  const staleCount   = enriched.filter(p => p.price != null && p.stale).length
-  const unpricedCount= enriched.filter(p => p.price == null).length
-  const pricedCount  = totalCount - staleCount - unpricedCount
-  return { totalCost, totalValue, totalGL, totalGLPct, todayTotal, totalCount, pricedCount, staleCount, unpricedCount }
-}
+  test('unrealizedPct is null for unknown price or non-positive avgCost (no Infinity/NaN)', () => {
+    expect(unrealizedPct(null, 150)).toBeNull()
+    expect(unrealizedPct(100, 0)).toBeNull()
+    expect(unrealizedPct(100, -5)).toBeNull()
+  })
+
+  test('enrichPosition delegates to the atoms (consistent results)', () => {
+    const e = enrichPosition({ shares: 10, avgCost: 150 }, { price: 180 })
+    expect(e.costBasis).toBe(costBasis({ shares: 10, avgCost: 150 }))
+    expect(e.gainLossPct).toBeCloseTo(unrealizedPct(180, 150))
+  })
+})
 
 describe('P&L calculation — enrichPosition()', () => {
   const pos = { symbol: 'AAPL', shares: 10, avgCost: 150 }

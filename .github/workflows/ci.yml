@@ -26,3 +26,9 @@ jobs:
         env:
           NODE_ENV: test
           JWT_SECRET: ci-test-secret-for-jest-only-32chars
+
+      # Production bundle smoke: Jest never runs `vite build`, so import-path /
+      # CommonJS-interop / bundling errors used to slip through CI and only fail
+      # the Railway deploy. This fails the PR instead.
+      - name: Build (vite production bundle)
+        run: npm run build

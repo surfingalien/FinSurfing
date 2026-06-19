@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback } from 'react'
 import { Upload, FileText, CheckCircle, AlertCircle, X } from 'lucide-react'
 import { Dialog, DialogHeader, DialogBody } from '../shared/Dialog'
+import * as portfolioPnl from '../../../lib/portfolio-pnl.js'
 
 // Column aliases — matched case-insensitively
 const SYMBOL_KEYS  = ['symbol', 'ticker', 'stock', 'security', 'sym']
@@ -173,7 +174,7 @@ export default function ImportModal({ portfolioId, authFetch, onImported, onClos
                       <td className="px-3 py-2 text-right font-mono text-white">{h.shares}</td>
                       <td className="px-3 py-2 text-right font-mono text-white">${fmt(h.avgCost)}</td>
                       <td className="px-3 py-2 text-right font-mono text-slate-400 hidden sm:table-cell">
-                        ${(h.shares * h.avgCost).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        ${portfolioPnl.costBasis(h).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </td>
                     </tr>
                   ))}

@@ -42,6 +42,7 @@ const TradeSetupView         = lazy(() => import('./components/Orders/TradeSetup
 const BacktestView           = lazy(() => import('./components/Backtest/BacktestView'))
 const BuySignalsView         = lazy(() => import('./components/Recommendations/BuySignalsView'))
 const AIBrainView            = lazy(() => import('./components/AIBrain/AIBrainView'))
+const BrainActivityView      = lazy(() => import('./components/BrainActivity/BrainActivityView'))
 const MarketFocusView        = lazy(() => import('./components/MarketFocus/MarketFocusView'))
 const AIWatchlistView        = lazy(() => import('./components/AIWatchlist/AIWatchlistView'))
 const AgentHubView           = lazy(() => import('./components/AgentHub/AgentHubView'))
@@ -216,6 +217,7 @@ function MainApp({ onSignIn }) {
     'backtest':       () => <BacktestView />,
     'buy-signals':    () => <BuySignalsView portfolio={portfolio} onAnalyze={navigateToAnalyze} />,
     'ai-brain':       () => <AIBrainView portfolio={portfolio} onAnalyze={navigateToAnalyze} />,
+    'brain-activity': () => <BrainActivityView onAnalyze={navigateToAnalyze} />,
     'market-focus':   () => <MarketFocusView portfolio={portfolio} watchlist={watchlist.symbols} />,
     'ai-watchlist':   () => <AIWatchlistView onAnalyze={navigateToAnalyze} />,
     'tradingview':    () => <TradingViewView />,
