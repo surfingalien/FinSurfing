@@ -37,6 +37,16 @@ describe('buildActivityFeed', () => {
     expect(by).toEqual({ A: 'confirmed', B: 'primary-only', C: null })
   })
 
+  test('passes through ensembleDetail for the split drill-down, defaults to null', () => {
+    const detail = { inSecondModel: true, secondVerdict: 'HOLD', verdictMatch: false, scoreDelta: 12 }
+    const feed = buildActivityFeed([
+      { ...base, symbol: 'D', ensembleConfirmed: false, ensembleDetail: detail },
+      { ...base, symbol: 'N' },
+    ], 10)
+    expect(feed.find(f => f.symbol === 'D').ensembleDetail).toEqual(detail)
+    expect(feed.find(f => f.symbol === 'N').ensembleDetail).toBeNull()
+  })
+
   test('flags baseline agreement: UP agrees, DOWN is contrarian', () => {
     const feed = buildActivityFeed([
       { ...base, symbol: 'UP', baselineDir: 'UP', baselineProb: 0.7 },
