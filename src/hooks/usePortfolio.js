@@ -13,6 +13,9 @@
  */
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { INITIAL_PORTFOLIO } from '../data/portfolio'
+// P&L math lives in one shared, unit-tested module (default import for reliable
+// CommonJS interop under Vite). Single source of truth for the whole app.
+import portfolioPnl from '../../lib/portfolio-pnl.js'
 import { fetchQuotes, subscribeQuotes } from '../services/api'
 
 // ── Guest localStorage helpers ────────────────────────────────────────────────
@@ -332,41 +335,10 @@ export function usePortfolio({ userId, activePortfolioId, authFetch } = {}) {
   }, [apiMode, authFetch, loadFromApi, positions])
 
   // ── Enrich positions with live market data ────────────────────────────────
-  const enriched = positions.map(pos => {
-    const q          = quotes[pos.symbol]
-    const price      = q?.price ?? null
-    const costBasis  = pos.shares * pos.avgCost
-    const mktValue   = price !== null ? price * pos.shares : null
-    const gainLoss   = mktValue !== null ? mktValue - costBasis : null
-    const gainLossPct= gainLoss !== null && costBasis > 0 ? (gainLoss / costBasis) * 100 : null
-
-    const prevClose  = q?.prevClose ?? null
-    const marketTime = q?.marketTime ?? null
-    // No timestamp → treat as stale so daily P&L resets at midnight
-    const isToday    = marketTime
-      ? new Date(marketTime * 1000).toDateString() === new Date().toDateString()
-      : false
-    const todayGL    = isToday && price !== null && prevClose !== null
-      ? (price - prevClose) * pos.shares
-      : isToday && q?.change != null
-        ? q.change * pos.shares
-        : 0
-
-    return { ...pos, ...q, price, costBasis, mktValue, gainLoss, gainLossPct, todayGL }
-  })
-
-  const totalCost  = enriched.reduce((s, p) => s + p.costBasis, 0)
-  // Positions with no price at all (not even a last-known fallback) are
-  // counted at cost — i.e. shown as break-even. unpricedCount exposes how
-  // many holdings that affects so the UI can flag an incomplete P&L.
-  const totalValue = enriched.reduce((s, p) => s + (p.mktValue ?? p.costBasis), 0)
-  const totalGL    = totalValue - totalCost
-  const totalGLPct = totalCost > 0 ? (totalGL / totalCost) * 100 : 0
-  const todayTotal = enriched.reduce((s, p) => s + (p.todayGL ?? 0), 0)
-  const totalCount   = enriched.length
-  const staleCount   = enriched.filter(p => p.price !== null && p.stale).length
-  const unpricedCount= enriched.filter(p => p.price === null).length
-  const pricedCount  = totalCount - staleCount - unpricedCount
+  // P&L math is the single source of truth in lib/portfolio-pnl.js (shared with
+  // the server-side unit tests); this hook just feeds it the latest quotes.
+  const enriched = positions.map(pos => portfolioPnl.enrichPosition(pos, quotes[pos.symbol]))
+  const summary  = portfolioPnl.portfolioSummary(enriched)
 
   return {
     positions: enriched,
@@ -378,6 +350,6 @@ export function usePortfolio({ userId, activePortfolioId, authFetch } = {}) {
     addPosition,
     removePosition,
     updatePosition,
-    summary: { totalCost, totalValue, totalGL, totalGLPct, todayTotal, totalCount, pricedCount, staleCount, unpricedCount },
+    summary,
   }
 }
