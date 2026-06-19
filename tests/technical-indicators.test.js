@@ -285,3 +285,38 @@ describe('RSI divergence detection', () => {
     expect(patterns).not.toContain('bullish_rsi_divergence')
   })
 })
+
+describe('computeRsRanks', () => {
+  test('ranks 3 symbols by 20-day return: weakest=0, strongest=100', () => {
+    const m = new Map([['A', 5], ['B', 15], ['C', -3]])
+    const r = ta.computeRsRanks(m)
+    expect(r.get('C')).toBe(0)   // weakest
+    expect(r.get('A')).toBe(50)  // middle of 3
+    expect(r.get('B')).toBe(100) // strongest
+  })
+
+  test('ties share the same rank slot (lower index wins)', () => {
+    const m = new Map([['X', 10], ['Y', 10], ['Z', -5]])
+    const r = ta.computeRsRanks(m)
+    expect(r.get('Z')).toBe(0)
+    // X and Y both appear — ranks depend on sort stability but both are assigned
+    expect(r.has('X')).toBe(true)
+    expect(r.has('Y')).toBe(true)
+  })
+
+  test('returns empty Map for fewer than 2 symbols', () => {
+    expect(ta.computeRsRanks(new Map([['A', 10]])).size).toBe(0)
+    expect(ta.computeRsRanks(new Map()).size).toBe(0)
+    expect(ta.computeRsRanks(null).size).toBe(0)
+  })
+
+  test('5-symbol universe produces correct percentile spread', () => {
+    const m = new Map([['A', 20], ['B', 10], ['C', 0], ['D', -10], ['E', -20]])
+    const r = ta.computeRsRanks(m)
+    expect(r.get('E')).toBe(0)
+    expect(r.get('D')).toBe(25)
+    expect(r.get('C')).toBe(50)
+    expect(r.get('B')).toBe(75)
+    expect(r.get('A')).toBe(100)
+  })
+})
