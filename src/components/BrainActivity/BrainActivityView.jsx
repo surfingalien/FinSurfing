@@ -12,12 +12,12 @@
  * over data/ai-brain-predictions.jsonl + data/brain-learnings.json.
  */
 
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import {
   Activity, RefreshCw, GitBranch, Scale, AlertTriangle, Target,
   TrendingUp, TrendingDown, Brain, Sparkles, ChevronDown, ChevronUp,
-  Cpu, Layers,
+  Cpu, Layers, TerminalSquare, Radio,
 } from 'lucide-react'
 import { useQuery, fetchJson } from '../../hooks/useQuery'
 import { fmtPct } from '../../services/api'
@@ -212,6 +212,38 @@ function ThoughtRow({ t, idx, calibration, onAnalyze }) {
                     </span>
                   </div>
                 )}
+
+                {/* Model-split drill-down — only when the models actually diverged */}
+                {(t.ensemble === 'primary-only' || t.ensembleDetail?.verdictMatch === false) && (
+                  <div className="rounded bg-amber-500/[0.05] border border-amber-500/15 px-3 py-2 ml-5">
+                    <div className="text-[10px] text-amber-400 uppercase tracking-wide mb-1 flex items-center gap-1">
+                      <GitBranch size={9} /> Why the models split
+                    </div>
+                    <div className="text-[11px] text-slate-400 space-y-0.5">
+                      {t.ensembleDetail?.inSecondModel === false && (
+                        <div>The second model did not surface this symbol at all — this is single-model conviction.</div>
+                      )}
+                      {t.ensembleDetail?.inSecondModel && t.ensembleDetail?.verdictMatch === false && (
+                        <div>
+                          Both models picked it, but disagreed on the call — primary said <b className="text-white">{t.verdict}</b>,
+                          the second model said <b className="text-white">{t.ensembleDetail.secondVerdict ?? 'something else'}</b>.
+                        </div>
+                      )}
+                      {t.ensembleDetail?.scoreDelta != null && (
+                        <div>Composite-score gap between models: <b className="text-white">{t.ensembleDetail.scoreDelta}</b> pts.</div>
+                      )}
+                      {t.baseline && (
+                        <div>
+                          Tie-breaker — the mechanical TA baseline leans <b className="text-white">{t.baseline.dir}</b>,
+                          {t.baseline.agrees ? ' siding with the primary model.' : ' siding against the primary model.'}
+                        </div>
+                      )}
+                      {!t.ensembleDetail && (
+                        <div className="text-slate-500">Detailed split data wasn't logged for this older pick — newer scans capture the second model's verdict.</div>
+                      )}
+                    </div>
+                  </div>
+                )}
                 {t.baseline && (
                   <div className="flex items-start gap-2">
                     <Cpu size={12} className="text-slate-500 mt-0.5 flex-shrink-0" />
@@ -297,14 +329,64 @@ function OutcomeStat({ label, ret, bench }) {
   )
 }
 
+// ── Live terminal mode ──────────────────────────────────────────────────────
+// Renders the same feed as a continuous monospace tail, oldest→newest, that
+// auto-scrolls to the freshest line as polling brings new picks in.
+
+function TerminalLine({ t }) {
+  const ts = new Date(t.generatedAt).toLocaleTimeString('en-US', { hour12: false })
+  const ret = t.outcome ? (t.outcome.ret30d ?? t.outcome.ret7d) : null
+  const verdictClass = VERDICT_COLOR[(t.verdict || '').toUpperCase()] || 'text-slate-400'
+  return (
+    <div className="flex flex-wrap items-center gap-x-2">
+      <span className="text-slate-600">[{ts}]</span>
+      <span className="text-[#00ffcc]">›</span>
+      <span className="text-white font-bold w-14">{t.symbol}</span>
+      <span className={verdictClass}>{t.verdict || '—'}</span>
+      <span className="text-slate-500">comp <b className={scoreColor(t.scores.composite)}>{t.scores.composite ?? '—'}</b></span>
+      {t.ensemble === 'confirmed'    && <span className="text-emerald-400">⑂ both</span>}
+      {t.ensemble === 'primary-only' && <span className="text-amber-400">⑂ split</span>}
+      {t.baseline && !t.baseline.agrees && <span className="text-sky-400">contrarian</span>}
+      {t.conflict && <span className="text-amber-500">⚠ conflict</span>}
+      {ret != null && <span className={ret >= 0 ? 'text-emerald-400' : 'text-red-400'}>{fmtPct(ret)}</span>}
+      {isDisagreement(t) && <span className="text-amber-500/60">◄ review</span>}
+    </div>
+  )
+}
+
+function TerminalStream({ feed }) {
+  const endRef = useRef(null)
+  const lines  = [...feed].reverse() // newest-first feed → oldest-first tail
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+  }, [feed.length])
+
+  return (
+    <div className="rounded-xl border border-[#00ffcc]/15 bg-black/60 font-mono text-[11px] leading-relaxed overflow-hidden">
+      <div className="flex items-center gap-2 px-3 py-1.5 border-b border-white/[0.06] bg-[#0a0f1a]">
+        <Radio size={10} className="text-[#00ffcc] animate-pulse" />
+        <span className="text-[#00ffcc] text-[10px] tracking-wide">brain://activity — live tail · auto-scroll</span>
+      </div>
+      <div className="max-h-[60vh] overflow-y-auto px-3 py-2 space-y-0.5">
+        {lines.map(t => <TerminalLine key={`${t.symbol}-${t.generatedAt}`} t={t} />)}
+        <div ref={endRef} className="flex items-center gap-1.5 text-[#00ffcc] pt-1.5">
+          <span>brain@finsurf:~$</span>
+          <span className="inline-block w-2 h-3.5 bg-[#00ffcc] animate-pulse" />
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Main view ─────────────────────────────────────────────────────────────────
 
 export default function BrainActivityView({ onAnalyze }) {
   const [filter, setFilter] = useState('all') // all | splits | resolved
+  const [live,   setLive]   = useState(false)
   const { data, loading, fetching, error, refetch } = useQuery(
     'ai-brain-activity',
     () => fetchJson('/api/ai-brain/activity?limit=60'),
-    { staleMs: 30_000, refetchMs: 60_000 },
+    { staleMs: 30_000, refetchMs: live ? 20_000 : 60_000 },
   )
 
   const feed = data?.feed ?? []
@@ -333,6 +415,18 @@ export default function BrainActivityView({ onAnalyze }) {
           {data?.totalLogged != null && (
             <span className="text-[10px] text-slate-600">{data.totalLogged} logged</span>
           )}
+          <button
+            onClick={() => setLive(l => !l)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-all ${
+              live
+                ? 'bg-[#00ffcc]/15 border-[#00ffcc]/30 text-[#00ffcc]'
+                : 'bg-transparent border-white/[0.07] text-slate-500 hover:text-white'
+            }`}
+            title={live ? 'Live terminal — auto-scrolling, polling every 20s' : 'Switch to live terminal tail'}
+          >
+            <TerminalSquare size={12} />
+            {live ? 'Live' : 'Terminal'}
+          </button>
           <button
             onClick={refetch}
             disabled={fetching}
@@ -391,19 +485,23 @@ export default function BrainActivityView({ onAnalyze }) {
             })}
           </div>
 
-          <div className="space-y-1.5">
-            <AnimatePresence mode="popLayout">
-              {filtered.map((t, i) => (
-                <ThoughtRow
-                  key={`${t.symbol}-${t.generatedAt}`}
-                  t={t}
-                  idx={i}
-                  calibration={data.calibration}
-                  onAnalyze={onAnalyze}
-                />
-              ))}
-            </AnimatePresence>
-          </div>
+          {live ? (
+            <TerminalStream feed={filtered} />
+          ) : (
+            <div className="space-y-1.5">
+              <AnimatePresence mode="popLayout">
+                {filtered.map((t, i) => (
+                  <ThoughtRow
+                    key={`${t.symbol}-${t.generatedAt}`}
+                    t={t}
+                    idx={i}
+                    calibration={data.calibration}
+                    onAnalyze={onAnalyze}
+                  />
+                ))}
+              </AnimatePresence>
+            </div>
+          )}
 
           {filtered.length === 0 && (
             <div className="text-center py-8 text-slate-600 text-sm">Nothing in this view yet.</div>

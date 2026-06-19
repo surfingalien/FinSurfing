@@ -369,6 +369,15 @@ function logPrediction(symbol, agents, zones, generatedAt, baseline = null, opti
       // true = both models picked it with matching verdict; false = primary-only
       // pick during an ensemble scan; null = no ensemble ran
       ensembleConfirmed: agents.ensemble ? (agents.ensemble.confirmed && agents.ensemble.verdictMatch === true) : null,
+      // Richer cross-model detail for the Brain Activity "why the models split"
+      // drill-down: was the symbol in the second model's list, what did it call,
+      // and how far apart were the composite scores. null for non-ensemble scans.
+      ensembleDetail:    agents.ensemble ? {
+        inSecondModel: !!agents.ensemble.confirmed,
+        secondVerdict: agents.ensemble.secondVerdict ?? null,
+        verdictMatch:  agents.ensemble.verdictMatch ?? null,
+        scoreDelta:    agents.ensemble.scoreDelta ?? null,
+      } : null,
       entryZoneLow:      zones?.entryZoneLow  ?? null,
       entryZoneHigh:     zones?.entryZoneHigh ?? null,
       entryZoneMid:      zones?.entryZoneLow != null ? (zones.entryZoneLow + zones.entryZoneHigh) / 2 : null,
@@ -818,6 +827,8 @@ function buildActivityFeed(records, limit = 40) {
       ensemble: r.ensembleConfirmed === true  ? 'confirmed'
               : r.ensembleConfirmed === false ? 'primary-only'
               : null,
+      // Cross-model drill-down detail (null for older records / non-ensemble scans)
+      ensembleDetail: r.ensembleDetail ?? null,
       // AI picks are implicit buys: baselineDir 'UP' = the mechanical TA model
       // agrees, 'DOWN' = the AI is taking a contrarian-to-momentum stance.
       baseline: r.baselineDir ? {
