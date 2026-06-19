@@ -465,3 +465,17 @@ CREATE TABLE IF NOT EXISTS quantmind_papers (
 
 CREATE INDEX IF NOT EXISTS idx_quantmind_papers_user
   ON quantmind_papers(user_id, extracted_at DESC);
+
+CREATE TABLE IF NOT EXISTS last_quotes (
+  -- Durable last-known quotes: final fallback for /api/quote when every
+  -- provider fails. Persisted here (not the ephemeral disk) so a symbol's last
+  -- real price survives Railway deploys. See lib/last-quotes.js.
+  symbol       TEXT             PRIMARY KEY,
+  short_name   TEXT,
+  price        DOUBLE PRECISION NOT NULL,
+  prev_close   DOUBLE PRECISION,
+  change       DOUBLE PRECISION,
+  change_pct   DOUBLE PRECISION,
+  market_time  BIGINT,
+  saved_at     BIGINT           NOT NULL
+);

@@ -57,6 +57,7 @@ const { seedAdminDB } = require('./db/adminSeed')
 ;(async () => {
   if (!process.env.DATABASE_URL) {
     console.log('[DB] No DATABASE_URL — running in memory mode')
+    require('./lib/last-quotes').hydrate().catch(() => {})   // disk-backed
     return
   }
   try {
@@ -84,6 +85,11 @@ const { seedAdminDB } = require('./db/adminSeed')
     // Seed admin user + Fidelity portfolio holdings (idempotent — skips if already present)
     const { query: q } = require('./db/db')
     await seedAdminDB(q)
+
+    // Hydrate the durable last-known-quote cache from Postgres so Total P&L
+    // doesn't collapse to a partial number after a (cache-wiping) deploy.
+    const n = await require('./lib/last-quotes').hydrate()
+    console.log(`[last-quotes] hydrated ${n} quote(s) from DB`)
   } catch (err) {
     console.error('[DB] Migration failed:', err.message)
   }
