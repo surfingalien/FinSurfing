@@ -348,12 +348,16 @@ async function fetchTaSnapshot(universe, headers) {
 }
 
 // Write a prediction record for future win-rate tracking
-function logPrediction(symbol, agents, zones, generatedAt, baseline = null) {
+function logPrediction(symbol, agents, zones, generatedAt, baseline = null, optionsPcRatio = null) {
   try {
     const dir = path.dirname(PREDICTION_LOG)
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+    const isCrypto = /-USD$/.test(symbol)
+    const assetType = isCrypto ? 'crypto' : (agents.sector ? 'stock' : 'equity')
     const record = JSON.stringify({
       symbol, generatedAt,
+      sector:            agents.sector ?? null,
+      assetType,
       fundamentalScore:  agents.fundamentalScore,
       technicalScore:    agents.technicalScore,
       sentimentScore:    agents.sentimentScore,
@@ -377,6 +381,7 @@ function logPrediction(symbol, agents, zones, generatedAt, baseline = null) {
       volumeSignal:      agents.volumeSignal ?? null,
       daysToEarnings:    agents.daysToEarnings ?? null,
       catalyst:          agents.catalyst ?? null,
+      optionsPcRatio:    optionsPcRatio ?? null,
       // Mechanical ML-baseline 7d direction call from the same bars the scan
       // saw (lib/ml-baseline.js) — lets calibration compare AI vs baseline
       baselineProb:     baseline?.prob ?? null,
@@ -494,10 +499,16 @@ router.post('/analyze', requireAuth, brainLimit, async (req, res) => {
 
   // Options flow: put/call ratio + unusual activity for stocks and ETFs
   let optionsSnippet = ''
+  const optionsPcMap = new Map()
   if (optionsResult?.status === 'fulfilled' && Array.isArray(optionsResult.value)) {
     const parts = optionsResult.value.filter(Boolean)
     if (parts.length) {
       optionsSnippet = '\n\nOPTIONS FLOW (P/C ratio + unusual activity — use to anchor sentimentScore):\n  ' + parts.join('\n  ')
+      for (const line of parts) {
+        const symM = line.match(/^([A-Z0-9.-]+):/)
+        const pcM  = line.match(/P\/C=([0-9.]+)/)
+        if (symM && pcM) optionsPcMap.set(symM[1], parseFloat(pcM[1]))
+      }
     }
   }
 
@@ -737,7 +748,7 @@ Rules:
         entryZoneHigh:  stock.entryZoneHigh,
         targetZoneLow:  stock.targetZoneLow,
         targetZoneHigh: stock.targetZoneHigh,
-      }, generatedAt, taBaselines.get(stock.symbol))
+      }, generatedAt, taBaselines.get(stock.symbol), optionsPcMap.get(stock.symbol) ?? null)
     }
 
     return res.json({
