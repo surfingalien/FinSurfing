@@ -175,3 +175,53 @@ describe('compactTaLine', () => {
     expect(line).toMatch(/BB%B=/)
   })
 })
+
+describe('RSI divergence detection', () => {
+  // For bearish divergence: need price higher high but RSI lower high.
+  // Flat baseline gives RSI=100 (avgLoss=0). A sharp 8-bar rise keeps RSI=100.
+  // A slow steady rise to a HIGHER price ends with RSI ~80 — clearly below 100-3.
+  test('detects bearish divergence: price higher high, RSI lower high', () => {
+    const c = [
+      ...Array.from({ length: 30 }, () => 100),               // flat → RSI=100
+      ...Array.from({ length: 8 },  (_, i) => 100 + (i+1)*10), // 110..180 (sharp rise, RSI=100)
+      ...Array.from({ length: 7 },  (_, i) => 175 - i * 5),   // 175..145 (pullback)
+      ...Array.from({ length: 15 }, (_, i) => 145 + i * (40/14)), // slow rise 145→185 (RSI~80)
+    ]
+    const h = c.map(v => v * 1.005)
+    const l = c.map(v => v * 0.995)
+    const o = c.map((v, i) => i ? c[i - 1] : v)
+    const vol = Array(c.length).fill(1_000_000)
+    const patterns = ta.detectPatterns(o, h, l, c, vol)
+    expect(patterns).toContain('bearish_rsi_divergence')
+  })
+
+  // For bullish divergence: need price lower low but RSI higher low.
+  // Flat baseline gives RSI=100 initially. A sharp 8-bar drop makes RSI=0 (avgGain=0).
+  // A slow steady drop to a LOWER price ends with RSI ~20 — clearly above 0+3.
+  test('detects bullish divergence: price lower low, RSI higher low', () => {
+    const c = [
+      ...Array.from({ length: 30 }, () => 200),                // flat → RSI=100
+      ...Array.from({ length: 8 },  (_, i) => 200 - (i+1)*10), // 190..120 (sharp drop, RSI→0)
+      ...Array.from({ length: 7 },  (_, i) => 125 + i * 5),    // 125..155 (bounce)
+      ...Array.from({ length: 15 }, (_, i) => 155 - i * (40/14)), // slow drop 155→115 (RSI~20)
+    ]
+    const h = c.map(v => v * 1.005)
+    const l = c.map(v => v * 0.995)
+    const o = c.map((v, i) => i ? c[i - 1] : v)
+    const vol = Array(c.length).fill(1_000_000)
+    const patterns = ta.detectPatterns(o, h, l, c, vol)
+    expect(patterns).toContain('bullish_rsi_divergence')
+  })
+
+  test('no divergence for simple steady uptrend', () => {
+    const n = 60
+    const c = Array.from({ length: n }, (_, i) => 100 + i * 2)
+    const h = c.map(v => v * 1.01)
+    const l = c.map(v => v * 0.99)
+    const o = c.map((v, i) => i ? c[i - 1] : v)
+    const vol = Array(n).fill(1_000_000)
+    const patterns = ta.detectPatterns(o, h, l, c, vol)
+    expect(patterns).not.toContain('bearish_rsi_divergence')
+    expect(patterns).not.toContain('bullish_rsi_divergence')
+  })
+})
