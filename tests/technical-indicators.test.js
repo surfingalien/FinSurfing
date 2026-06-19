@@ -169,4 +169,9 @@ describe('compactTaLine', () => {
     const line = ta.compactTaLine('NVDA', opens, highs, lows, closes, volumes)
     expect(line).toMatch(/VWAP%=/)
   })
+
+  test('includes BB%B Bollinger position', () => {
+    const line = ta.compactTaLine('NVDA', opens, highs, lows, closes, volumes)
+    expect(line).toMatch(/BB%B=/)
+  })
 })
