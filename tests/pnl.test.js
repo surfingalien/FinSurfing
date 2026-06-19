@@ -75,22 +75,32 @@ describe('P&L calculation — enrichPosition()', () => {
     expect(e.gainLossPct).toBeNull()
   })
 
-  test('todayGL = (price − prevClose) × shares when marketTime is today', () => {
-    const nowSec = Math.floor(Date.now() / 1000)
-    const e = enrichPosition(pos, { price: 180, prevClose: 175, marketTime: nowSec })
+  test('todayGL = (price − prevClose) × shares for a fresh quote', () => {
+    const e = enrichPosition(pos, { price: 180, prevClose: 175 })
     expect(e.todayGL).toBeCloseTo(50)   // (180 − 175) × 10
   })
 
-  test('todayGL = 0 when marketTime is a past date (stale quote)', () => {
-    const yesterdaySec = Math.floor(Date.now() / 1000) - 86400
-    const e = enrichPosition(pos, { price: 180, prevClose: 175, marketTime: yesterdaySec })
-    expect(e.todayGL).toBe(0)
+  test('todayGL counts the day move even when marketTime is absent', () => {
+    // Most providers omit marketTime; the position must still count toward
+    // Today's P/L (the bug that showed +$115 / "1↑ 0↓" for the whole book).
+    const e = enrichPosition(pos, { price: 180, prevClose: 175 /* no marketTime */ })
+    expect(e.todayGL).toBeCloseTo(50)
   })
 
   test('todayGL falls back to quote.change × shares when prevClose missing', () => {
-    const nowSec = Math.floor(Date.now() / 1000)
-    const e = enrichPosition(pos, { price: 180, change: 3, marketTime: nowSec })
+    const e = enrichPosition(pos, { price: 180, change: 3 })
     expect(e.todayGL).toBeCloseTo(30)   // 3 × 10
+  })
+
+  test('todayGL backs the day move out of changePct when prevClose/change missing', () => {
+    const e = enrichPosition(pos, { price: 110, changePct: 10 })
+    // prevClose = 110 / 1.10 = 100 → (110 − 100) × 10
+    expect(e.todayGL).toBeCloseTo(100)
+  })
+
+  test('todayGL = 0 for a stale last-known quote (no fake today move)', () => {
+    const e = enrichPosition(pos, { price: 180, prevClose: 175, stale: true })
+    expect(e.todayGL).toBe(0)
   })
 })
 
