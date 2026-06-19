@@ -24,7 +24,7 @@ const { getAltDataSnippet }  = require('../lib/alt-data')
 const { getIndicators }      = require('./macro')
 const { requireAuth }     = require('../middleware/auth')
 const { getLearningsBlock } = require('../lib/brain-learnings')
-const { compactTaLine }     = require('../lib/technical-indicators')
+const { compactTaLine, detectPatterns, KEY_PATTERNS } = require('../lib/technical-indicators')
 const { getOptionsFlowCompact } = require('../lib/options-flow-cache')
 const { fetchDailyBars }    = require('../lib/internal-api')
 const { tryParseAiJson }    = require('../lib/ai-json')
@@ -318,8 +318,9 @@ function fmtQuote(q) {
 // each prediction so calibration can compare AI picks against a dumb benchmark).
 // Concurrency-limited so a 20-symbol scan doesn't stampede the data providers.
 async function fetchTaSnapshot(universe, headers) {
-  const bySymbol  = new Map()
-  const baselines = new Map()
+  const bySymbol   = new Map()
+  const baselines  = new Map()
+  const patternMap = new Map()
   const queue = [...universe]
   const workers = Array.from({ length: 5 }, async () => {
     while (queue.length) {
@@ -327,12 +328,16 @@ async function fetchTaSnapshot(universe, headers) {
       // Missing TA for one symbol is non-fatal — fetchDailyBars returns [] on failure
       const bars = await fetchDailyBars(sym, { headers, timeoutMs: 12_000 })
       if (bars.length < 30) continue
-      const line = compactTaLine(
-        sym,
-        bars.map(b => b.o ?? b.c), bars.map(b => b.h ?? b.c),
-        bars.map(b => b.l ?? b.c), bars.map(b => b.c), bars.map(b => b.v),
-      )
+      const o = bars.map(b => b.o ?? b.c)
+      const h = bars.map(b => b.h ?? b.c)
+      const l = bars.map(b => b.l ?? b.c)
+      const c = bars.map(b => b.c)
+      const v = bars.map(b => b.v)
+      const line = compactTaLine(sym, o, h, l, c, v)
       if (line) bySymbol.set(sym, line)
+      // Capture key patterns for prediction calibration logging
+      const pats = detectPatterns(o, h, l, c, v).filter(p => KEY_PATTERNS.includes(p))
+      if (pats.length) patternMap.set(sym, pats)
       const baseline = baselineFromBars(bars)
       if (baseline) baselines.set(sym, baseline)
     }
@@ -344,11 +349,11 @@ async function fetchTaSnapshot(universe, headers) {
     new Promise(resolve => setTimeout(resolve, 20_000)),
   ])
   // Preserve universe order for deterministic prompts
-  return { lines: universe.map(s => bySymbol.get(s)).filter(Boolean), baselines }
+  return { lines: universe.map(s => bySymbol.get(s)).filter(Boolean), baselines, patternMap }
 }
 
 // Write a prediction record for future win-rate tracking
-function logPrediction(symbol, agents, zones, generatedAt, baseline = null, optionsPcRatio = null) {
+function logPrediction(symbol, agents, zones, generatedAt, baseline = null, optionsPcRatio = null, taPatterns = null) {
   try {
     const dir = path.dirname(PREDICTION_LOG)
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
@@ -391,6 +396,7 @@ function logPrediction(symbol, agents, zones, generatedAt, baseline = null, opti
       daysToEarnings:    agents.daysToEarnings ?? null,
       catalyst:          agents.catalyst ?? null,
       optionsPcRatio:    optionsPcRatio ?? null,
+      taPatterns:        taPatterns?.length ? taPatterns : null,
       // Mechanical ML-baseline 7d direction call from the same bars the scan
       // saw (lib/ml-baseline.js) — lets calibration compare AI vs baseline
       baselineProb:     baseline?.prob ?? null,
@@ -487,7 +493,8 @@ router.post('/analyze', requireAuth, brainLimit, async (req, res) => {
 
   // Server-computed technical indicators (RSI/MACD/EMA/S-R/volume per symbol)
   let taSnippet = ''
-  const taBaselines = (taResult.status === 'fulfilled' && taResult.value.baselines) || new Map()
+  const taBaselines  = (taResult.status === 'fulfilled' && taResult.value.baselines)  || new Map()
+  const taPatternMap = (taResult.status === 'fulfilled' && taResult.value.patternMap) || new Map()
   if (taResult.status === 'fulfilled' && taResult.value.lines.length) {
     taSnippet = '\n\nCOMPUTED TECHNICALS (server-calculated from daily bars — authoritative; base technicalScore on these, do not invent indicator values):\n'
       + taResult.value.lines.join('\n')
@@ -757,7 +764,8 @@ Rules:
         entryZoneHigh:  stock.entryZoneHigh,
         targetZoneLow:  stock.targetZoneLow,
         targetZoneHigh: stock.targetZoneHigh,
-      }, generatedAt, taBaselines.get(stock.symbol), optionsPcMap.get(stock.symbol) ?? null)
+      }, generatedAt, taBaselines.get(stock.symbol), optionsPcMap.get(stock.symbol) ?? null,
+         taPatternMap.get(stock.symbol) ?? null)
     }
 
     return res.json({
