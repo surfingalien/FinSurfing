@@ -164,4 +164,9 @@ describe('compactTaLine', () => {
     expect(line).toMatch(/ADX=/)
     expect(line).toMatch(/52w%=/)
   })
+
+  test('includes VWAP% deviation when volumes are provided', () => {
+    const line = ta.compactTaLine('NVDA', opens, highs, lows, closes, volumes)
+    expect(line).toMatch(/VWAP%=/)
+  })
 })
