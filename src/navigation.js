@@ -38,6 +38,7 @@ export const NAV_GROUPS = [
     items: [
       { id: 'market-focus',    label: 'Market Focus',   icon: Radio, tag: 'LIVE' },
       { id: 'ai-brain',        label: 'AI Brain',       icon: Brain },
+      { id: 'brain-activity',  label: 'Brain Activity', icon: Activity },
       { id: 'buy-signals',     label: 'AI Buy Signals', icon: Sparkles },
       { id: 'ai-watchlist',    label: 'AI Watchlist',   icon: Bookmark },
       { id: 'agent-hub',       label: 'Agent Hub',      icon: Network },

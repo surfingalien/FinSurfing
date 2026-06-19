@@ -782,4 +782,91 @@ router.get('/learnings', (req, res) => {
   } catch { res.json({ available: false }) }
 })
 
+// Return % move from the honest "you could have bought here" anchor to a resolved
+// outcome price. Mirrors brain-learnings.returnsFor (kept local to avoid coupling).
+function returnPct(r, priceKey) {
+  const base = r.basePrice ?? r.priceAtPrediction ?? r.entryZoneMid
+  const px   = r[priceKey]
+  if (!base || px == null) return null
+  return +(((px - base) / base) * 100).toFixed(2)
+}
+
+// Shape the append-only prediction log into a human-readable "thought stream".
+// Pure transform of data the scan already logged — surfaces the reasoning that
+// was previously discarded after each scan. Newest first.
+function buildActivityFeed(records, limit = 40) {
+  return [...records]
+    .sort((a, b) => new Date(b.generatedAt) - new Date(a.generatedAt))
+    .slice(0, limit)
+    .map(r => ({
+      symbol:      r.symbol,
+      generatedAt: r.generatedAt,
+      verdict:     r.verdict ?? null,
+      confidence:  r.confidence ?? null,
+      assetType:   r.assetType ?? null,
+      sector:      r.sector ?? null,
+      scores: {
+        composite:   r.compositeScore ?? null,
+        fundamental: r.fundamentalScore ?? null,
+        technical:   r.technicalScore ?? null,
+        sentiment:   r.sentimentScore ?? null,
+        macro:       r.macroScore ?? null,
+        risk:        r.riskScore ?? null,
+      },
+      // Cross-model agreement: 'primary-only' = the second model did NOT confirm
+      // this pick — the genuinely interesting research signal to surface.
+      ensemble: r.ensembleConfirmed === true  ? 'confirmed'
+              : r.ensembleConfirmed === false ? 'primary-only'
+              : null,
+      // AI picks are implicit buys: baselineDir 'UP' = the mechanical TA model
+      // agrees, 'DOWN' = the AI is taking a contrarian-to-momentum stance.
+      baseline: r.baselineDir ? {
+        dir:    r.baselineDir,
+        prob:   r.baselineProb ?? null,
+        agrees: r.baselineDir === 'UP',
+      } : null,
+      conflict:       r.agentConflict?.exists ?? false,
+      thesis:         Array.isArray(r.thesisAssumptions) ? r.thesisAssumptions.slice(0, 3) : [],
+      supervisorNote: r.supervisorNote ?? null,
+      volumeSignal:   r.volumeSignal ?? null,
+      catalyst:       r.catalyst ?? null,
+      // null until the nightly job resolves the +7/+30d outcome
+      outcome: (r.price7d != null || r.price30d != null) ? {
+        entered:     r.entered ?? null,
+        ret7d:       returnPct(r, 'price7d'),
+        ret30d:      returnPct(r, 'price30d'),
+        benchRet7d:  r.benchRet7d ?? null,
+        benchRet30d: r.benchRet30d ?? null,
+      } : null,
+    }))
+}
+
+// GET /api/ai-brain/activity — "Brain Activity" feed: surfaces the per-pick
+// reasoning (scores, ensemble disagreement, baseline delta, resolved outcome)
+// the scan already produces, plus the deterministic calibration stats so the UI
+// can show "you claimed High confidence → High historically won X% vs benchmark".
+// Read-only over server-side data — unauthenticated like /learnings.
+router.get('/activity', (req, res) => {
+  try {
+    const { readPredictions, computeStats } = require('../lib/brain-learnings')
+    const limit   = Math.min(Math.max(parseInt(req.query.limit, 10) || 40, 1), 100)
+    const records = readPredictions()
+    const stats   = computeStats(records)
+    const feed    = buildActivityFeed(records, limit)
+    res.json({
+      available:   feed.length > 0,
+      generatedAt: feed[0]?.generatedAt ?? null,
+      totalLogged: records.length,
+      calibration: stats.calibration ?? null,
+      ensemble:    stats.ensemble ?? null,
+      baseline:    stats.baseline ?? null,
+      feed,
+    })
+  } catch {
+    res.json({ available: false, feed: [] })
+  }
+})
+
 module.exports = router
+// Exported for unit tests
+module.exports.buildActivityFeed = buildActivityFeed
