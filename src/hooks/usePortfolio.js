@@ -13,9 +13,8 @@
  */
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { INITIAL_PORTFOLIO } from '../data/portfolio'
-// P&L math lives in one shared, unit-tested module (default import for reliable
-// CommonJS interop under Vite). Single source of truth for the whole app.
-import portfolioPnl from '../../lib/portfolio-pnl.js'
+// P&L math lives in one shared, unit-tested module. Single source of truth for the whole app.
+import * as portfolioPnl from '../../lib/portfolio-pnl.js'
 import { fetchQuotes, subscribeQuotes } from '../services/api'
 
 // ── Guest localStorage helpers ────────────────────────────────────────────────
