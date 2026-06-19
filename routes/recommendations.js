@@ -25,6 +25,8 @@ const { getUserPrefs, saveUserPref } = require('../db/ai_memory')
 const { PERSONAS }        = require('../lib/investor-personas')
 const { getIndicators }   = require('./macro')
 const { getSocialSentiment } = require('../lib/social-sentiment')
+const { getAltDataSnippet }  = require('../lib/alt-data')
+const { getOptionsFlowCompact } = require('../lib/options-flow-cache')
 
 const recLimit = rateLimit({
   windowMs: 60 * 1000, max: 5,
@@ -139,15 +141,37 @@ router.post('/', requireAuth, recLimit, async (req, res) => {
 
   // ── Step 1: Pre-fetch live prices + catalyst context + macro in parallel ─────
   const symbolsForContext = focusSymbols.length ? focusSymbols : []
-  const [quoteData, { earningsSnippet, sentimentSnippet }, macroData, socialSentimentSnippet] = await Promise.all([
+  // Insider + options flow for focusSymbols (stock/ETF only); fall back to top holdings if no focus
+  const stocksForAltData = (focusSymbols.length
+    ? focusSymbols
+    : holdings
+  ).filter(s => !s.includes('-') && !s.includes('=')).slice(0, 5)
+
+  const [quoteData, { earningsSnippet, sentimentSnippet }, macroData, socialSentimentSnippet, insiderResults, optionsResults] = await Promise.all([
     focusSymbols.length ? fetchLiveQuotes(focusSymbols, fwdHeaders) : Promise.resolve({ priceMap: {}, analystMap: {} }),
     fetchCatalystContext(symbolsForContext, fwdHeaders, port),
     includeMacro ? getIndicators().catch(() => null) : Promise.resolve(null),
     getSocialSentiment(focusSymbols.length ? focusSymbols.slice(0, 5) : holdings.slice(0, 5)),
+    stocksForAltData.length
+      ? Promise.all(stocksForAltData.map(s => getAltDataSnippet(s).catch(() => null)))
+      : Promise.resolve([]),
+    stocksForAltData.length
+      ? Promise.all(stocksForAltData.map(s => getOptionsFlowCompact(s, port, fwdHeaders).catch(() => null)))
+      : Promise.resolve([]),
   ])
 
   const { priceMap: preLivePrices, analystMap } = quoteData
   const macroSnippet = macroData?.macroSummary ?? ''
+
+  // Insider + options flow compact snippets
+  const insiderSnippet = insiderResults.filter(Boolean).length
+    ? '\nINSIDER ACTIVITY & SHORT INTEREST (OpenInsider 90d + FINRA — use to adjust sentimentScore):\n' +
+      insiderResults.filter(Boolean).join('\n')
+    : ''
+  const optionsSnippet = optionsResults.filter(Boolean).length
+    ? '\nOPTIONS FLOW (P/C ratio + unusual activity — bullish signal when P/C<0.70🟢):\n  ' +
+      optionsResults.filter(Boolean).join('\n  ')
+    : ''
 
   const livePriceSnippet = Object.keys(preLivePrices).length
     ? '\nLIVE PRICES (use these exact values for entryPrice — do not guess):\n' +
@@ -193,7 +217,7 @@ router.post('/', requireAuth, recLimit, async (req, res) => {
   const prompt = `${personaBlock}You are a senior portfolio strategist channeling the investment philosophy above. Provide specific actionable buy recommendations for a retail investor.
 
 Current portfolio holdings (avoid overlap): ${holdingStr}${focusInstructions}
-${livePriceSnippet}${analystConsensusSnippet}${macroSnippet}${earningsSnippet}${sentimentSnippet}${socialSentimentSnippet}${historySnippet}
+${livePriceSnippet}${analystConsensusSnippet}${macroSnippet}${earningsSnippet}${sentimentSnippet}${socialSentimentSnippet}${insiderSnippet}${optionsSnippet}${historySnippet}
 
 ${countInstructions}
 ${persona.constraints ? '\n' + persona.constraints : ''}

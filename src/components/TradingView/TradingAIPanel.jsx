@@ -531,9 +531,24 @@ export default function TradingAIPanel({ symbol, interval, price }) {
                       even={false}
                     />
 
+                    {/* ADX */}
+                    <IndicatorRow
+                      even label="ADX (14)"
+                      value={
+                        indicators.adx != null
+                          ? `${indicators.adx} · ${indicators.adx >= 25 ? 'Trending' : indicators.adx < 20 ? 'Ranging' : 'Moderate'}`
+                          : '—'
+                      }
+                      colorClass={
+                        indicators.adx >= 25 ? 'text-emerald-400'
+                          : indicators.adx >= 20 ? 'text-amber-400'
+                          : 'text-slate-400'
+                      }
+                    />
+
                     {/* EMA Trend */}
                     <IndicatorRow
-                      even label="EMA Trend"
+                      label="EMA Trend"
                       value={
                         patterns.includes('strong_uptrend') ? 'Strong Up'
                           : patterns.includes('above_ema50') ? 'Above EMA50'

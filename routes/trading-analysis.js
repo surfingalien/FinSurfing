@@ -15,9 +15,12 @@ const { recallMemory, saveMemory, searchMemory } = require('../db/ai_memory')
 const {
   computeRSI, computeEMA, computeEMAArray, computeMACD, computeBB, computeATR,
   computeStochRSI, computeVWAP, computeOBV, findSR, detectPatterns, volumeAnalysis,
+  computeADX,
 } = require('../lib/technical-indicators')
 
 const { getSocialSentiment } = require('../lib/social-sentiment')
+const { getAltDataSnippet }  = require('../lib/alt-data')
+const { getOptionsFlowCompact } = require('../lib/options-flow-cache')
 
 const aiRouter = getRouter('trading-analysis')
 
@@ -340,6 +343,10 @@ function buildAnalysisPrompt(symbol, interval, price, indicators, patterns, vol,
       }).join('\n') + '\n'
     : ''
 
+  const adxInterp = indicators.adx != null
+    ? `${indicators.adx} — ${indicators.adx >= 25 ? 'strong trend (ADX≥25, follow-trend signals more reliable)' : indicators.adx < 20 ? 'weak/ranging market (ADX<20, mean-reversion setups more reliable)' : 'moderate trend'}`
+    : 'N/A'
+
   const prompt = `You are an expert quantitative trading analyst.${memoryBlock ? '\n' + memoryBlock : ''} Analyze the following technical data for ${symbol} on the ${interval} timeframe and generate a structured trading signal.
 
 MARKET DATA:
@@ -350,6 +357,7 @@ MARKET DATA:
 TECHNICAL INDICATORS:
 - RSI(14): ${rsiInterp}
 - MACD(12,26,9): ${macdInterp}
+- ADX(14): ${adxInterp}
 - EMAs: ${emaInterp || 'N/A'}
 - Bollinger Bands(20,2): ${bbInterp}
 - ATR(14): ${atr != null ? atr : 'N/A'}
@@ -528,19 +536,23 @@ router.post('/analyze', requireAuth, async (req, res) => {
     const sr       = findSR(highs, lows, closes)
     const patterns = detectPatterns(opens, highs, lows, closes, volumes)
     const vol      = volumeAnalysis(volumes)
+    const adx      = computeADX(highs, lows, closes)
 
-    const indicators = { rsi, macd, ema9, ema21, ema50, ema200, bb, atr, stochRsi, vwap, obv, sr, patterns, volume: vol }
+    const indicators = { rsi, macd, ema9, ema21, ema50, ema200, bb, atr, stochRsi, vwap, obv, sr, patterns, volume: vol, adx }
 
-    // Fetch StockTwits + social sentiment + prior memory + earnings in parallel
-    const [sentiment, socialSnippetRaw, priorMemories, earningsData] = await Promise.all([
+    // Fetch StockTwits + social sentiment + prior memory + earnings + insider + options in parallel
+    const isStock = !isCryptoSymbol(sym)
+    const [sentiment, socialSnippetRaw, priorMemories, earningsData, insiderRaw, optionsRaw] = await Promise.all([
       fetchStockTwits(sym).catch(() => null),
       getSocialSentiment([sym]).catch(() => ''),
       recallMemory(req.user?.userId, sym),
-      !isCryptoSymbol(sym)
+      isStock
         ? fetch(`http://127.0.0.1:${port}/api/earnings/date?symbol=${encodeURIComponent(sym)}`,
             { headers: fwdHeaders, signal: AbortSignal.timeout(6000) })
             .then(r => r.json()).catch(() => null)
         : Promise.resolve(null),
+      isStock ? getAltDataSnippet(sym).catch(() => null) : Promise.resolve(null),
+      isStock ? getOptionsFlowCompact(sym, port, fwdHeaders).catch(() => null) : Promise.resolve(null),
     ])
     if (sentiment) console.log(`[trading-analysis] ${sym} StockTwits: ${sentiment.bullish}B ${sentiment.bearish}Be ${sentiment.neutral}N / ${sentiment.total}`)
     if (priorMemories.length) console.log(`[trading-analysis] ${sym} memory: ${priorMemories.length} prior analyses injected`)
@@ -564,7 +576,9 @@ router.post('/analyze', requireAuth, async (req, res) => {
     }
 
     // Build prompt and call Claude
-    const analysisPrompt = buildAnalysisPrompt(sym, interval, price, indicators, patterns, vol, priceLabel, sentiment, priorMemories, socialSnippetRaw, analystSnippet + earningsSnippet)
+    const insiderSnippet  = insiderRaw  ? `\nINSIDER ACTIVITY & SHORT INTEREST (OpenInsider 90d + FINRA):\n${insiderRaw}\n` : ''
+    const optionsSnippet  = optionsRaw  ? `\nOPTIONS FLOW: ${optionsRaw}\n` : ''
+    const analysisPrompt = buildAnalysisPrompt(sym, interval, price, indicators, patterns, vol, priceLabel, sentiment, priorMemories, socialSnippetRaw, analystSnippet + earningsSnippet + insiderSnippet + optionsSnippet)
 
     const { text: rawText } = await aiRouter.call({
       prompt:    analysisPrompt,
