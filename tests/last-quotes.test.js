@@ -9,7 +9,7 @@ const fs   = require('fs')
 const os   = require('os')
 const path = require('path')
 const lastQuotes = require('../lib/last-quotes')
-const { record, recall, size, MAX_ENTRIES, _setFileForTests, _flushForTests } = lastQuotes
+const { record, recall, size, hydrate, MAX_ENTRIES, _setFileForTests, _flushForTests } = lastQuotes
 
 let tmpFile
 
@@ -85,6 +85,15 @@ describe('persistence', () => {
     _setFileForTests(tmpFile)
     expect(recall('AAPL')).toBeNull()
     expect(size()).toBe(0)
+  })
+
+  test('hydrate() loads persisted quotes from disk in no-DB mode', async () => {
+    record([quote(), quote({ symbol: 'NVDA', regularMarketPrice: 950 })])
+    _flushForTests()
+    _setFileForTests(tmpFile)               // reset memory, same file
+    const n = await hydrate()
+    expect(n).toBe(2)
+    expect(recall('AAPL')).toMatchObject({ regularMarketPrice: 187.5, stale: true })
   })
 })
 
