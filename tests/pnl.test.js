@@ -8,7 +8,30 @@
  * exercise the actual module, so a P&L regression fails CI.
  */
 
-const { enrichPosition, portfolioSummary } = require('../lib/portfolio-pnl')
+const { enrichPosition, portfolioSummary, costBasis, unrealizedPct } = require('../lib/portfolio-pnl')
+
+describe('P&L atoms — costBasis() / unrealizedPct()', () => {
+  test('costBasis = shares × avgCost', () => {
+    expect(costBasis({ shares: 10, avgCost: 150 })).toBe(1500)
+  })
+
+  test('unrealizedPct = (price − avgCost) / avgCost × 100', () => {
+    expect(unrealizedPct(180, 150)).toBeCloseTo(20)
+    expect(unrealizedPct(120, 150)).toBeCloseTo(-20)
+  })
+
+  test('unrealizedPct is null for unknown price or non-positive avgCost (no Infinity/NaN)', () => {
+    expect(unrealizedPct(null, 150)).toBeNull()
+    expect(unrealizedPct(100, 0)).toBeNull()
+    expect(unrealizedPct(100, -5)).toBeNull()
+  })
+
+  test('enrichPosition delegates to the atoms (consistent results)', () => {
+    const e = enrichPosition({ shares: 10, avgCost: 150 }, { price: 180 })
+    expect(e.costBasis).toBe(costBasis({ shares: 10, avgCost: 150 }))
+    expect(e.gainLossPct).toBeCloseTo(unrealizedPct(180, 150))
+  })
+})
 
 describe('P&L calculation — enrichPosition()', () => {
   const pos = { symbol: 'AAPL', shares: 10, avgCost: 150 }
