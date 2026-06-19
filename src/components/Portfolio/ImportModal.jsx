@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from 'react'
 import { Upload, FileText, CheckCircle, AlertCircle, X } from 'lucide-react'
 import { Dialog, DialogHeader, DialogBody } from '../shared/Dialog'
-import portfolioPnl from '../../../lib/portfolio-pnl.js'
+import * as portfolioPnl from '../../../lib/portfolio-pnl.js'
 
 // Column aliases — matched case-insensitively
 const SYMBOL_KEYS  = ['symbol', 'ticker', 'stock', 'security', 'sym']

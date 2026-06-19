@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { useQuery, fetchJson } from '../../../hooks/useQuery'
-import portfolioPnl from '../../../../lib/portfolio-pnl.js'
+import * as portfolioPnl from '../../../../lib/portfolio-pnl.js'
 
 /* ── Sector beta proxies ─────────────────────── */
 const SECTOR_BETA = {

@@ -9,7 +9,7 @@ import {
   calcATR, detectTrend, findSwingPoints, findKeyLevels,
   detectDivergence, generateAdvisory as baseAdvisory
 } from './research'
-import portfolioPnl from '../../lib/portfolio-pnl.js'
+import * as portfolioPnl from '../../lib/portfolio-pnl.js'
 
 /* ── Constants ───────────────────────────────────── */
 export const SIGNAL_TYPES = {
