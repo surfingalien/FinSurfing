@@ -174,6 +174,66 @@ describe('compactTaLine', () => {
     const line = ta.compactTaLine('NVDA', opens, highs, lows, closes, volumes)
     expect(line).toMatch(/BB%B=/)
   })
+
+  test('includes OBV trend direction', () => {
+    const line = ta.compactTaLine('NVDA', opens, highs, lows, closes, volumes)
+    expect(line).toMatch(/OBV=(rising|falling)/)
+  })
+})
+
+describe('OBV divergence detection', () => {
+  test('detects obv_bullish_divergence: price falling but big buy volume (accumulation)', () => {
+    // Each 2-bar cycle: price nets -1 (up 0.5, down 1.5), but OBV nets +9.9M (buy 10M, sell 0.1M)
+    const n = 60
+    const c = [], v = []
+    for (let i = 0; i < n; i++) {
+      if (i % 2 === 0) {
+        c.push(i === 0 ? 100 : c[i - 1] + 0.5)
+        v.push(10_000_000)
+      } else {
+        c.push(c[i - 1] - 1.5)
+        v.push(100_000)
+      }
+    }
+    const h = c.map(v => v * 1.005)
+    const l = c.map(v => v * 0.995)
+    const o = c.map((v, i) => i ? c[i - 1] : v)
+    const patterns = ta.detectPatterns(o, h, l, c, v)
+    expect(patterns).toContain('obv_bullish_divergence')
+  })
+
+  test('detects obv_bearish_divergence: price rising but big sell volume (distribution)', () => {
+    // Each 2-bar cycle: price nets +1 (up 1.5, down 0.5), but OBV nets -9.9M (buy 0.1M, sell 10M)
+    const n = 60
+    const c = [], v = []
+    for (let i = 0; i < n; i++) {
+      if (i % 2 === 0) {
+        c.push(i === 0 ? 100 : c[i - 1] + 1.5)
+        v.push(100_000)
+      } else {
+        c.push(c[i - 1] - 0.5)
+        v.push(10_000_000)
+      }
+    }
+    const h = c.map(v => v * 1.005)
+    const l = c.map(v => v * 0.995)
+    const o = c.map((v, i) => i ? c[i - 1] : v)
+    const patterns = ta.detectPatterns(o, h, l, c, v)
+    expect(patterns).toContain('obv_bearish_divergence')
+  })
+
+  test('no OBV divergence when price and OBV trend together', () => {
+    // Clean uptrend: price rises, buy volume dominant → OBV rising, price rising → no divergence
+    const n = 60
+    const c = Array.from({ length: n }, (_, i) => 100 + i * 0.5)
+    const v = Array(n).fill(1_000_000)
+    const h = c.map(v => v * 1.005)
+    const l = c.map(v => v * 0.995)
+    const o = c.map((v, i) => i ? c[i - 1] : v)
+    const patterns = ta.detectPatterns(o, h, l, c, v)
+    expect(patterns).not.toContain('obv_bullish_divergence')
+    expect(patterns).not.toContain('obv_bearish_divergence')
+  })
 })
 
 describe('RSI divergence detection', () => {
@@ -223,5 +283,40 @@ describe('RSI divergence detection', () => {
     const patterns = ta.detectPatterns(o, h, l, c, vol)
     expect(patterns).not.toContain('bearish_rsi_divergence')
     expect(patterns).not.toContain('bullish_rsi_divergence')
+  })
+})
+
+describe('computeRsRanks', () => {
+  test('ranks 3 symbols by 20-day return: weakest=0, strongest=100', () => {
+    const m = new Map([['A', 5], ['B', 15], ['C', -3]])
+    const r = ta.computeRsRanks(m)
+    expect(r.get('C')).toBe(0)   // weakest
+    expect(r.get('A')).toBe(50)  // middle of 3
+    expect(r.get('B')).toBe(100) // strongest
+  })
+
+  test('ties share the same rank slot (lower index wins)', () => {
+    const m = new Map([['X', 10], ['Y', 10], ['Z', -5]])
+    const r = ta.computeRsRanks(m)
+    expect(r.get('Z')).toBe(0)
+    // X and Y both appear — ranks depend on sort stability but both are assigned
+    expect(r.has('X')).toBe(true)
+    expect(r.has('Y')).toBe(true)
+  })
+
+  test('returns empty Map for fewer than 2 symbols', () => {
+    expect(ta.computeRsRanks(new Map([['A', 10]])).size).toBe(0)
+    expect(ta.computeRsRanks(new Map()).size).toBe(0)
+    expect(ta.computeRsRanks(null).size).toBe(0)
+  })
+
+  test('5-symbol universe produces correct percentile spread', () => {
+    const m = new Map([['A', 20], ['B', 10], ['C', 0], ['D', -10], ['E', -20]])
+    const r = ta.computeRsRanks(m)
+    expect(r.get('E')).toBe(0)
+    expect(r.get('D')).toBe(25)
+    expect(r.get('C')).toBe(50)
+    expect(r.get('B')).toBe(75)
+    expect(r.get('A')).toBe(100)
   })
 })

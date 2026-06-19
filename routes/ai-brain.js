@@ -24,7 +24,7 @@ const { getAltDataSnippet }  = require('../lib/alt-data')
 const { getIndicators }      = require('./macro')
 const { requireAuth }     = require('../middleware/auth')
 const { getLearningsBlock } = require('../lib/brain-learnings')
-const { compactTaLine }     = require('../lib/technical-indicators')
+const { compactTaLine, detectPatterns, KEY_PATTERNS, computeRsRanks } = require('../lib/technical-indicators')
 const { getOptionsFlowCompact } = require('../lib/options-flow-cache')
 const { fetchDailyBars }    = require('../lib/internal-api')
 const { tryParseAiJson }    = require('../lib/ai-json')
@@ -318,8 +318,10 @@ function fmtQuote(q) {
 // each prediction so calibration can compare AI picks against a dumb benchmark).
 // Concurrency-limited so a 20-symbol scan doesn't stampede the data providers.
 async function fetchTaSnapshot(universe, headers) {
-  const bySymbol  = new Map()
-  const baselines = new Map()
+  const bySymbol   = new Map()
+  const baselines  = new Map()
+  const patternMap = new Map()
+  const ret20dMap  = new Map() // 20-day return per symbol for intra-universe RS ranking
   const queue = [...universe]
   const workers = Array.from({ length: 5 }, async () => {
     while (queue.length) {
@@ -327,14 +329,21 @@ async function fetchTaSnapshot(universe, headers) {
       // Missing TA for one symbol is non-fatal — fetchDailyBars returns [] on failure
       const bars = await fetchDailyBars(sym, { headers, timeoutMs: 12_000 })
       if (bars.length < 30) continue
-      const line = compactTaLine(
-        sym,
-        bars.map(b => b.o ?? b.c), bars.map(b => b.h ?? b.c),
-        bars.map(b => b.l ?? b.c), bars.map(b => b.c), bars.map(b => b.v),
-      )
+      const o = bars.map(b => b.o ?? b.c)
+      const h = bars.map(b => b.h ?? b.c)
+      const l = bars.map(b => b.l ?? b.c)
+      const c = bars.map(b => b.c)
+      const v = bars.map(b => b.v)
+      const line = compactTaLine(sym, o, h, l, c, v)
       if (line) bySymbol.set(sym, line)
+      // Capture key patterns for prediction calibration logging
+      const pats = detectPatterns(o, h, l, c, v).filter(p => KEY_PATTERNS.includes(p))
+      if (pats.length) patternMap.set(sym, pats)
       const baseline = baselineFromBars(bars)
       if (baseline) baselines.set(sym, baseline)
+      // 20-day return for intra-universe relative strength ranking
+      const n = c.length
+      if (n >= 21 && c[n - 21] > 0) ret20dMap.set(sym, (c[n - 1] - c[n - 21]) / c[n - 21] * 100)
     }
   })
   // Overall time budget: return whatever resolved by 20s rather than letting a
@@ -343,12 +352,20 @@ async function fetchTaSnapshot(universe, headers) {
     Promise.all(workers),
     new Promise(resolve => setTimeout(resolve, 20_000)),
   ])
+
+  // Rank symbols by 20-day return within this universe and append RSRank to TA lines
+  const rsRankMap = computeRsRanks(ret20dMap)
+  for (const [sym, rank] of rsRankMap) {
+    const existing = bySymbol.get(sym)
+    if (existing) bySymbol.set(sym, existing + ` RSRank=${rank}`)
+  }
+
   // Preserve universe order for deterministic prompts
-  return { lines: universe.map(s => bySymbol.get(s)).filter(Boolean), baselines }
+  return { lines: universe.map(s => bySymbol.get(s)).filter(Boolean), baselines, patternMap, rsRankMap }
 }
 
 // Write a prediction record for future win-rate tracking
-function logPrediction(symbol, agents, zones, generatedAt, baseline = null, optionsPcRatio = null) {
+function logPrediction(symbol, agents, zones, generatedAt, baseline = null, optionsPcRatio = null, taPatterns = null, rsRankAtScan = null) {
   try {
     const dir = path.dirname(PREDICTION_LOG)
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
@@ -391,6 +408,8 @@ function logPrediction(symbol, agents, zones, generatedAt, baseline = null, opti
       daysToEarnings:    agents.daysToEarnings ?? null,
       catalyst:          agents.catalyst ?? null,
       optionsPcRatio:    optionsPcRatio ?? null,
+      taPatterns:        taPatterns?.length ? taPatterns : null,
+      rsRankAtScan:      rsRankAtScan ?? null, // 0-100 intra-universe RS percentile at scan time
       // Mechanical ML-baseline 7d direction call from the same bars the scan
       // saw (lib/ml-baseline.js) — lets calibration compare AI vs baseline
       baselineProb:     baseline?.prob ?? null,
@@ -487,7 +506,9 @@ router.post('/analyze', requireAuth, brainLimit, async (req, res) => {
 
   // Server-computed technical indicators (RSI/MACD/EMA/S-R/volume per symbol)
   let taSnippet = ''
-  const taBaselines = (taResult.status === 'fulfilled' && taResult.value.baselines) || new Map()
+  const taBaselines  = (taResult.status === 'fulfilled' && taResult.value.baselines)  || new Map()
+  const taPatternMap = (taResult.status === 'fulfilled' && taResult.value.patternMap) || new Map()
+  const taRsRankMap  = (taResult.status === 'fulfilled' && taResult.value.rsRankMap)  || new Map()
   if (taResult.status === 'fulfilled' && taResult.value.lines.length) {
     taSnippet = '\n\nCOMPUTED TECHNICALS (server-calculated from daily bars — authoritative; base technicalScore on these, do not invent indicator values):\n'
       + taResult.value.lines.join('\n')
@@ -637,6 +658,7 @@ Respond ONLY with valid JSON (no markdown, no text outside the JSON object):
 Rules:
 - Include up to 20 top picks ranked by compositeScore; prefer symbols NOT already in holdings
 - compositeScore = weighted avg (fundamental 25%, technical 20%, sentiment 15%, macro 20%, risk 20%)
+- RSRank in COMPUTED TECHNICALS = intra-universe relative-strength percentile over 20 days (100=top, 0=weakest in this scan). Boost technicalScore +8 when RSRank ≥ 70 with uptrend; cut -8 when RSRank ≤ 30 (chronic underperformer) unless thesis is explicit turnaround
 - All scores 0-100; riskScore: higher = safer
 - fundamentalScore: boost +10 when AnalystTarget from LIVE SNAPSHOT is >15% above current price with ≥5 analysts (shown as "AnalystTarget=$xxx(Nx)"); cut -10 when analyst target is below current price
 - sentimentScore: boost +8 when INSIDER ACTIVITY shows "🟢 net buying"; cut -8 when it shows "🔴 net selling"; boost +5 when Reddit/social sentiment is bullish (>55% bullish posts by upvote weight); cut -5 when FINRA short ratio >15%; additionally boost +6 when OPTIONS FLOW shows P/C<0.70🟢 (smart-money call buying); cut -6 when P/C>1.30🔴 (heavy protective put buying or bearish speculation)
@@ -757,7 +779,8 @@ Rules:
         entryZoneHigh:  stock.entryZoneHigh,
         targetZoneLow:  stock.targetZoneLow,
         targetZoneHigh: stock.targetZoneHigh,
-      }, generatedAt, taBaselines.get(stock.symbol), optionsPcMap.get(stock.symbol) ?? null)
+      }, generatedAt, taBaselines.get(stock.symbol), optionsPcMap.get(stock.symbol) ?? null,
+         taPatternMap.get(stock.symbol) ?? null, taRsRankMap.get(stock.symbol) ?? null)
     }
 
     return res.json({
@@ -839,8 +862,11 @@ function buildActivityFeed(records, limit = 40) {
       conflict:       r.agentConflict?.exists ?? false,
       thesis:         Array.isArray(r.thesisAssumptions) ? r.thesisAssumptions.slice(0, 3) : [],
       supervisorNote: r.supervisorNote ?? null,
-      volumeSignal:   r.volumeSignal ?? null,
-      catalyst:       r.catalyst ?? null,
+      volumeSignal:    r.volumeSignal ?? null,
+      catalyst:        r.catalyst ?? null,
+      daysToEarnings:  r.daysToEarnings ?? null,
+      taPatterns:      r.taPatterns ?? null,
+      rsRankAtScan:    r.rsRankAtScan ?? null,
       // null until the nightly job resolves the +7/+30d outcome
       outcome: (r.price7d != null || r.price30d != null) ? {
         entered:     r.entered ?? null,

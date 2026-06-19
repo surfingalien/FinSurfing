@@ -171,4 +171,30 @@ describe('computeStats', () => {
     const s = computeStats([mkRecord()]) // ensembleConfirmed undefined → null
     expect(s.ensemble).toBe(null)
   })
+
+  test('byPattern computes win rates for patterns appearing ≥5 times', () => {
+    // 6 picks with strong_uptrend: 5 wins, 1 loss → winRate = 5/6
+    const records = [
+      ...Array.from({ length: 5 }, () => mkRecord({ taPatterns: ['strong_uptrend'], price30d: 120, benchRet30d: 2 })),
+      mkRecord({ taPatterns: ['strong_uptrend'], price30d: 90, benchRet30d: 2 }),
+    ]
+    const s = computeStats(records)
+    expect(s.byPattern).not.toBe(null)
+    expect(s.byPattern.strong_uptrend.n).toBe(6)
+    expect(s.byPattern.strong_uptrend.winRate).toBeCloseTo(5 / 6, 2)
+  })
+
+  test('byPattern omits patterns appearing fewer than 5 times', () => {
+    const records = [
+      mkRecord({ taPatterns: ['golden_cross'], price30d: 120 }), // only 1 occurrence
+    ]
+    const s = computeStats(records)
+    expect(s.byPattern).toBe(null) // below threshold
+  })
+
+  test('byPattern is null when no records have taPatterns', () => {
+    const records = [mkRecord(), mkRecord()]
+    const s = computeStats(records)
+    expect(s.byPattern).toBe(null)
+  })
 })
