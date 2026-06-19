@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { fmt } from '../../../services/api'
-import portfolioPnl from '../../../lib/portfolio-pnl.js'
+import portfolioPnl from '../../../../lib/portfolio-pnl.js'
 
 /* ── Heatmap cell ────────────────────────────── */
 function HeatCell({ symbol, price, changePct, unrealizedPct, pctOfPortfolio, stale, onClick }) {
