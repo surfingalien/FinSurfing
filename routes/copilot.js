@@ -363,7 +363,7 @@ async function dispatchTool(name, input, req) {
 
     case 'analyze_symbol': {
       const rawSym  = input.symbol || ''
-      const interval = input.interval || '1d'
+      const interval = input.interval || 'D'
 
       // Pre-fetch live quote so trading-analysis uses current price, not stale bar close
       let livePrice = null
