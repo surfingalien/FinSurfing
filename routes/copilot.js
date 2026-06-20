@@ -560,6 +560,35 @@ async function dispatchTool(name, input, req) {
         const std = stats.byHighConviction['false']
         lines.push(`High-conviction picks: ${pc(hc.alphaWinRate ?? hc.winRate)} alpha (n=${hc.n}) vs standard ${pc(std.alphaWinRate ?? std.winRate)} (n=${std.n})`)
       }
+      if (stats.byRsRank) {
+        const order = ['strong', 'mid', 'weak']
+        const labels = { strong: 'RS 71-100', mid: 'RS 31-70', weak: 'RS 0-30' }
+        const parts = order.filter(k => stats.byRsRank[k]).map(k => `${labels[k]} ${pc(stats.byRsRank[k].alphaWinRate ?? stats.byRsRank[k].winRate)} (n=${stats.byRsRank[k].n})`)
+        if (parts.length) lines.push('RS rank calibration: ' + parts.join(' | '))
+      }
+      if (stats.byVolumeSignal) {
+        const parts = Object.entries(stats.byVolumeSignal).map(([k, c]) => `${k} ${pc(c.alphaWinRate ?? c.winRate)} (n=${c.n})`)
+        if (parts.length) lines.push('Volume signal calibration: ' + parts.join(' | '))
+      }
+      if (stats.earningsWindowImpact) {
+        const order = ['imminent', 'upcoming', 'distant']
+        const labels = { imminent: '≤7d', upcoming: '8-21d', distant: '>21d' }
+        const parts = order.filter(k => stats.earningsWindowImpact[k]).map(k => `earnings ${labels[k]} ${pc(stats.earningsWindowImpact[k].alphaWinRate ?? stats.earningsWindowImpact[k].winRate)} (n=${stats.earningsWindowImpact[k].n})`)
+        if (parts.length) lines.push('Earnings window impact: ' + parts.join(' | '))
+      }
+      if (stats.optionsFlowImpact) {
+        const order = ['bullish', 'neutral', 'bearish']
+        const parts = order.filter(k => stats.optionsFlowImpact[k]).map(k => `P/C ${k} ${pc(stats.optionsFlowImpact[k].alphaWinRate ?? stats.optionsFlowImpact[k].winRate)} (n=${stats.optionsFlowImpact[k].n})`)
+        if (parts.length) lines.push('Options flow impact: ' + parts.join(' | '))
+      }
+      if (stats.conflictImpact?.conflict && stats.conflictImpact?.noConflict) {
+        const c = stats.conflictImpact.conflict, nc = stats.conflictImpact.noConflict
+        lines.push(`Agent conflict impact: no-conflict ${pc(nc.alphaWinRate ?? nc.winRate)} alpha (n=${nc.n}) vs conflict ${pc(c.alphaWinRate ?? c.winRate)} (n=${c.n})`)
+      }
+      if (stats.byPattern) {
+        const sorted = Object.entries(stats.byPattern).sort((a, b) => (b[1].alphaWinRate ?? 0) - (a[1].alphaWinRate ?? 0)).slice(0, 6)
+        if (sorted.length) lines.push('Top TA patterns (alpha win): ' + sorted.map(([k, c]) => `${k} ${pc(c.alphaWinRate ?? c.winRate)} (n=${c.n})`).join(' | '))
+      }
       return lines.join('\n')
     }
 

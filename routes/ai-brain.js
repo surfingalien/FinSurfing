@@ -903,8 +903,14 @@ router.get('/activity', (req, res) => {
       h7:           stats.h7 ?? null,
       h30:          stats.h30 ?? null,
       h90:          stats.h90 ?? null,
-      byCompositeScore: stats.byCompositeScore ?? null,
-      byHighConviction: stats.byHighConviction ?? null,
+      byCompositeScore:    stats.byCompositeScore    ?? null,
+      byHighConviction:    stats.byHighConviction    ?? null,
+      byRsRank:            stats.byRsRank            ?? null,
+      byVolumeSignal:      stats.byVolumeSignal      ?? null,
+      earningsWindowImpact: stats.earningsWindowImpact ?? null,
+      optionsFlowImpact:   stats.optionsFlowImpact   ?? null,
+      conflictImpact:      stats.conflictImpact       ?? null,
+      byPattern:           stats.byPattern            ?? null,
       feed,
     })
   } catch {
