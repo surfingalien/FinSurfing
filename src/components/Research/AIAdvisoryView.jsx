@@ -370,6 +370,7 @@ export default function AIAdvisoryView({ portfolio }) {
                     </div>
 
                     {/* ── Multi-timeframe alignment ── */}
+                    {advisory.mtf && (
                     <div className="glass rounded-xl p-4 space-y-2">
                       <h3 className="font-semibold text-white text-sm flex items-center justify-between">
                         <span className="flex items-center gap-2">⏱ Multi-Timeframe Alignment</span>
@@ -393,6 +394,7 @@ export default function AIAdvisoryView({ portfolio }) {
                         </div>
                       ))}
                     </div>
+                    )}
                   </div>
                 </div>
 
