@@ -98,9 +98,22 @@ describe('P&L calculation — enrichPosition()', () => {
     expect(e.todayGL).toBeCloseTo(100)
   })
 
-  test('todayGL = 0 for a stale last-known quote (no fake today move)', () => {
+  test('todayGL = 0 for a stale quote with no change/changePct data', () => {
+    // prevClose path requires fresh price; without change data there's nothing to use.
     const e = enrichPosition(pos, { price: 180, prevClose: 175, stale: true })
     expect(e.todayGL).toBe(0)
+  })
+
+  test('todayGL uses stored change for stale quotes that have change data', () => {
+    // Provider rate-limit during a refresh: client falls back to localStorage with
+    // stale: true but still has valid change from the earlier successful fetch.
+    const e = enrichPosition(pos, { price: 183, change: 3, stale: true })
+    expect(e.todayGL).toBeCloseTo(30)   // 3 × 10 shares
+  })
+
+  test('todayGL uses changePct for stale quotes that have changePct but no change', () => {
+    const e = enrichPosition(pos, { price: 110, changePct: 10, stale: true })
+    expect(e.todayGL).toBeCloseTo(100)  // (110 − 100) × 10 backed out of changePct
   })
 })
 
@@ -163,14 +176,14 @@ describe('P&L with missing and stale quotes', () => {
     expect(s.pricedCount).toBe(1)
   })
 
-  test('stale last-known quote keeps the real gainLoss but contributes 0 to todayGL', () => {
-    // Last-known fallback: old marketTime, stale flag set by the hook
+  test('stale quote with no change data contributes 0 to todayGL', () => {
+    // Server recall from last-quotes with no change/changePct — no day move calculable.
     const e = enrichPosition(
       { symbol: 'C', shares: 10, avgCost: 100 },
       { price: 40, prevClose: 42, marketTime: yesterdaySec, stale: true },
     )
     expect(e.gainLoss).toBe(-600)       // loss measured at last real price
-    expect(e.todayGL).toBe(0)           // no fake "today" move from stale data
+    expect(e.todayGL).toBe(0)           // no change data available
     const s = portfolioSummary([e])
     expect(s.totalGL).toBe(-600)        // the -2060-style loss is no longer hidden
     expect(s.staleCount).toBe(1)
