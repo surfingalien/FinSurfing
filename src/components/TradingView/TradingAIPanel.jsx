@@ -774,7 +774,7 @@ export default function TradingAIPanel({ symbol, interval, price }) {
                     </button>
                     {reasoningOpen && (
                       <div className="rounded-lg bg-white/[0.03] border border-white/[0.06] p-2.5">
-                        <p className="text-xs text-slate-400 leading-relaxed">{analysis.reasoning}</p>
+                        <p className="text-xs text-slate-400 leading-relaxed">{analysis.summary}</p>
                       </div>
                     )}
                   </div>
