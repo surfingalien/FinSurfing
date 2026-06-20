@@ -96,8 +96,8 @@ export default function AIBrainView({ portfolio, onAnalyze }) {
   const earningsImminentCount  = analysis?.rankedStocks?.filter(s => s.daysToEarnings != null && s.daysToEarnings >= 0 && s.daysToEarnings <= 7).length ?? 0
   const visibleStocks          = !analysis ? [] :
     showConvictionOnly
-      ? analysis.rankedStocks.filter(s => s.highConviction)
-      : analysis.rankedStocks
+      ? (analysis.rankedStocks ?? []).filter(s => s.highConviction)
+      : (analysis.rankedStocks ?? [])
 
   return (
     <div className="space-y-6 animate-fade-in">
