@@ -217,7 +217,7 @@ export default function DividendView({ onAnalyze }) {
                 </div>
 
                 <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 mt-3 text-xs">
-                  <div className="flex justify-between"><span className="text-slate-500">Growth yrs</span><span className="text-slate-300 font-mono">{s.consecutiveGrowthYears ?? '—'}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-500">Growth yrs</span><span className="text-slate-300 font-mono">{s.consecutiveYearsGrowth ?? '—'}</span></div>
                   {s.payoutRatio != null && (
                     <div className="flex justify-between"><span className="text-slate-500">Payout</span><span className="text-slate-300 font-mono">{Number(s.payoutRatio).toFixed(0)}%</span></div>
                   )}
