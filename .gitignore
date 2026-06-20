@@ -5,3 +5,4 @@ dist/
 .DS_Store
 *.log
 .vercel/
+data/memstore-snapshot.json

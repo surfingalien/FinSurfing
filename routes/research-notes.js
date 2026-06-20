@@ -23,7 +23,7 @@ const http            = require('http')
 const Anthropic       = require('@anthropic-ai/sdk')
 const { query }       = require('../db/db')
 const { requireAuth } = require('../middleware/auth')
-const { MEM }         = require('../db/memstore')
+const { MEM, persistMem } = require('../db/memstore')
 
 const router  = express.Router()
 router.use(requireAuth)
@@ -291,6 +291,7 @@ router.post('/', async (req, res) => {
     created_at: now(), updated_at: now(),
   }
   MEM.notes.set(note.id, note)
+  persistMem()
   return res.status(201).json(note)
 })
 
@@ -329,6 +330,7 @@ router.put('/:id', async (req, res) => {
   if (tags       != null) note.tags       = tags
   note.updated_at = now()
   MEM.notes.set(id, note)
+  persistMem()
   return res.json(note)
 })
 
@@ -345,6 +347,7 @@ router.delete('/:id', async (req, res) => {
   const note = MEM.notes.get(id)
   if (!note || note.user_id !== userId) return res.status(404).json({ error: 'not found' })
   MEM.notes.delete(id)
+  persistMem()
   return res.json({ ok: true })
 })
 
@@ -496,6 +499,7 @@ Use EXACTLY this markdown structure:
         created_at: now(), updated_at: now(),
       }
       MEM.notes.set(note.id, note)
+      persistMem()
       return res.json({ note, saved: true })
     }
 
@@ -573,6 +577,7 @@ If relevant, use this structure:
         created_at: now(), updated_at: now(),
       }
       MEM.notes.set(note.id, note)
+      persistMem()
       return res.json({ note, saved: true })
     }
 
@@ -668,6 +673,7 @@ Use EXACTLY this structure:
       created_at: now(), updated_at: now(),
     }
     MEM.notes.set(note.id, note)
+    persistMem()
     return res.json(note)
   } catch (err) {
     console.error('[research-notes/consolidate]', err.message)
@@ -824,6 +830,7 @@ Use EXACTLY this structure for "content":
       created_at: now(), updated_at: now(),
     }
     MEM.notes.set(note.id, note)
+    persistMem()
     return res.json({ ...note, _topNews: topNews })
   } catch (err) {
     console.error('[research-notes/daily-brief]', err.message)
@@ -1117,6 +1124,7 @@ Content structure:
       created_at: now(), updated_at: now(),
     }
     MEM.notes.set(note.id, note)
+    persistMem()
     return res.json(note)
   } catch (err) {
     console.error('[research-notes/weekly-synthesis]', err.message)
@@ -1406,6 +1414,7 @@ Structure:
       created_at: now(), updated_at: now(),
     }
     MEM.notes.set(note.id, note)
+    persistMem()
     return res.json({ note, score: result.score, aligned: result.aligned, misaligned: result.misaligned, recommendation: result.recommendation })
   } catch (err) {
     console.error('[research-notes/goal-align]', err.message)

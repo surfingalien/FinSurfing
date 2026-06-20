@@ -35,7 +35,7 @@ const jwt           = require('jsonwebtoken')
 const crypto        = require('crypto')
 const { query }     = require('../db/db')
 const { requireAuth, SECRET } = require('../middleware/auth')
-const { MEM }       = require('../db/memstore')
+const { MEM, persistMem } = require('../db/memstore')
 const { makeAdminHoldings } = require('../db/adminSeed')
 const { sendEmail } = require('../lib/email')
 
@@ -65,6 +65,11 @@ const cookieOpts = (remember = true) => ({
 // ── Pre-seed admin account in memory (env-var based, private) ─────────
 ;(async () => {
   if (!DB_MODE && ADMIN_EMAIL && ADMIN_PASSWORD) {
+    // Skip seeding if this admin was already restored from the memstore snapshot
+    if (MEM.byEmail.has(ADMIN_EMAIL)) {
+      console.log('[AUTH] Admin account restored from snapshot')
+      return
+    }
     const id       = 'admin-' + crypto.randomBytes(4).toString('hex')
     const hash     = await bcrypt.hash(ADMIN_PASSWORD, BCRYPT_ROUNDS)
     const username = generateUsername(ADMIN_EMAIL)
@@ -307,6 +312,7 @@ router.post('/register', async (req, res) => {
     created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
   })
   MEM.holdings.set(pid, [])
+  persistMem()
 
   const code = otp6()
   MEM.otp.set(lEmail, { code, expiresAt: Date.now() + 10 * 60000, attempts: 0 })
@@ -390,6 +396,7 @@ router.post('/verify-email', async (req, res) => {
 
   MEM.otp.delete(lEmail)
   user.isVerified = true
+  persistMem()
   return respondWithTokens(res, user, req, true)
 })
 
