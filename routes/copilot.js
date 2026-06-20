@@ -416,7 +416,7 @@ async function dispatchTool(name, input, req) {
         signal: AbortSignal.timeout(15_000),
       })
       const data = await r.json()
-      return typeof data === 'string' ? data : (data.summary || JSON.stringify(data))
+      return typeof data === 'string' ? data : (data.macroSummary || JSON.stringify(data))
     }
 
     case 'get_earnings_catalyst': {
@@ -434,7 +434,7 @@ async function dispatchTool(name, input, req) {
 
       const dateData     = dateRes.status === 'fulfilled'     ? dateRes.value     : null
       const surpriseData = surpriseRes.status === 'fulfilled' ? surpriseRes.value : null
-      const surprise     = surpriseData?.results?.[0] || surpriseData?.[0] || null
+      const surprise     = surpriseData?.[0] || null
 
       const daysUntil = dateData?.nextEarningsDate
         ? Math.round((new Date(dateData.nextEarningsDate) - Date.now()) / 86400000)
