@@ -407,6 +407,7 @@ function logPrediction(symbol, agents, zones, generatedAt, baseline = null, opti
       volumeSignal:      agents.volumeSignal ?? null,
       daysToEarnings:    agents.daysToEarnings ?? null,
       catalyst:          agents.catalyst ?? null,
+      highConviction:    agents.highConviction ?? null,
       optionsPcRatio:    optionsPcRatio ?? null,
       taPatterns:        taPatterns?.length ? taPatterns : null,
       rsRankAtScan:      rsRankAtScan ?? null, // 0-100 intra-universe RS percentile at scan time
