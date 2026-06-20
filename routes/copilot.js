@@ -603,45 +603,60 @@ async function dispatchTool(name, input, req) {
       const sym = (input.symbol || '').toUpperCase().replace(/[^A-Z0-9.-]/g, '')
       if (!sym) return 'No symbol provided.'
       try {
-        const r = await fetch(
-          `http://127.0.0.1:${port}/api/quote?symbols=${encodeURIComponent(sym)}`,
-          { headers: fwdHeaders, signal: AbortSignal.timeout(10_000) }
-        )
-        const d = await r.json()
-        const q = d?.quoteResponse?.result?.[0]
-        if (!q) return `No quote data available for ${sym}.`
+        // /api/summary returns FMP fundamentals (PE, margins, DCF target, sector)
+        // /api/quote returns live price
+        const [sumR, qR] = await Promise.all([
+          fetch(`http://127.0.0.1:${port}/api/summary?symbol=${encodeURIComponent(sym)}`,
+            { headers: fwdHeaders, signal: AbortSignal.timeout(12_000) }),
+          fetch(`http://127.0.0.1:${port}/api/quote?symbols=${encodeURIComponent(sym)}`,
+            { headers: fwdHeaders, signal: AbortSignal.timeout(8_000) }),
+        ])
+        const [sumD, qD] = await Promise.all([sumR.json(), qR.json()])
 
-        const target   = q.targetMedianPrice
-        const recMean  = q.recommendationMean
-        const count    = q.numberOfAnalystOpinions
-        const fwdPE    = q.forwardPE
-        const fwdEps   = q.forwardEps
-        const trailPE  = q.trailingPE
-        const price    = q.regularMarketPrice
+        const qs = qD?.quoteResponse?.result?.[0]
+        const price = qs?.regularMarketPrice ?? null
 
-        if (target == null && recMean == null) return `No analyst consensus data available for ${sym} — this is common for crypto, ETFs, and small-caps.`
+        const r0 = sumD?.quoteSummary?.result?.[0]
+        const fd  = r0?.financialData     || {}
+        const sd  = r0?.summaryDetail     || {}
+        const ks  = r0?.defaultKeyStatistics || {}
+        const ap  = r0?.assetProfile      || {}
 
-        const recLabel = recMean == null ? 'N/A'
-          : recMean <= 1.5 ? 'Strong Buy'
-          : recMean <= 2.5 ? 'Buy'
-          : recMean <= 3.5 ? 'Hold'
-          : recMean <= 4.5 ? 'Underperform'
-          : 'Sell'
+        // DCF intrinsic value from FMP (serves as a price target proxy)
+        const dcfTarget   = fd.targetMeanPrice  ?? null
+        const recKey      = fd.recommendationKey ?? null
+        const trailPE     = sd.trailingPE       ?? null
+        const mktCap      = sd.marketCap        ?? null
+        const roe         = fd.returnOnEquity   ?? null
+        const margins     = fd.profitMargins    ?? null
+        const revenueGrow = fd.revenueGrowth    ?? null
+        const trailEps    = ks.trailingEps      ?? null
+        const sector      = ap.sector           ?? null
+        const country     = ap.country          ?? null
 
-        const upside = (target != null && price != null && price > 0)
-          ? ((target - price) / price * 100).toFixed(1)
+        if (!r0) return `No fundamental data available for ${sym} — not covered by FMP (common for crypto, ETFs, non-US equities).`
+
+        const upside = (dcfTarget != null && price != null && price > 0)
+          ? ((dcfTarget - price) / price * 100).toFixed(1)
           : null
 
-        const lines = [`**${sym} — Analyst Consensus** (${count ?? '?'} analysts)`]
-        if (target != null) lines.push(`📊 Median Price Target: $${target.toFixed(2)}${upside != null ? ` (${upside > 0 ? '+' : ''}${upside}% from current $${price?.toFixed(2)})` : ''}`)
-        if (recMean != null) lines.push(`🎯 Consensus: ${recLabel} (${recMean.toFixed(2)}/5 — lower = more bullish)`)
-        if (fwdPE   != null) lines.push(`📈 Forward P/E: ${fwdPE.toFixed(1)}`)
-        if (trailPE != null) lines.push(`📉 Trailing P/E: ${trailPE.toFixed(1)}`)
-        if (fwdEps  != null) lines.push(`💵 Forward EPS (est.): $${fwdEps.toFixed(2)}`)
+        const lines = [`**${sym} — Fundamentals & Valuation**`]
+        if (sector)    lines.push(`Sector: ${sector}${country ? ` · ${country}` : ''}`)
+        if (price)     lines.push(`Price: $${price.toFixed(2)}`)
+        if (dcfTarget != null) lines.push(`📊 DCF Intrinsic Value: $${dcfTarget.toFixed(2)}${upside != null ? ` (${upside > 0 ? '+' : ''}${upside}% vs current)` : ''}`)
+        if (recKey)    lines.push(`🎯 FMP Signal: ${recKey.toUpperCase()} (based on DCF vs market price)`)
+        if (trailPE != null) lines.push(`📈 Trailing P/E: ${trailPE.toFixed(1)}`)
+        if (trailEps != null) lines.push(`💵 Trailing EPS: $${trailEps.toFixed(2)}`)
+        if (mktCap != null)  lines.push(`Market Cap: $${(mktCap / 1e9).toFixed(1)}B`)
+        if (roe != null)     lines.push(`Return on Equity: ${(roe * 100).toFixed(1)}%`)
+        if (margins != null) lines.push(`Net Margin: ${(margins * 100).toFixed(1)}%`)
+        if (revenueGrow != null) lines.push(`Revenue Growth (TTM): ${(revenueGrow * 100).toFixed(1)}%`)
+
         if (upside != null) {
-          if (parseFloat(upside) > 20) lines.push(`\n✅ Analysts see significant upside — strong tailwind for bullish thesis.`)
-          else if (parseFloat(upside) < -5) lines.push(`\n⚠️ Analysts project downside from current price — contrarian headwind.`)
+          if (parseFloat(upside) > 20)  lines.push(`\n✅ Trading below DCF intrinsic value — value upside signal.`)
+          else if (parseFloat(upside) < -10) lines.push(`\n⚠️ Trading above DCF intrinsic value — elevated valuation vs fundamentals.`)
         }
+        lines.push(`\n_Note: Price target derived from FMP DCF model, not sell-side analyst estimates._`)
         return lines.join('\n')
       } catch (e) {
         return `Analyst consensus fetch failed for ${sym}: ${e.message}`
