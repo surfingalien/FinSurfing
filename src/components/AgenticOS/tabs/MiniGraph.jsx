@@ -1,90 +1,118 @@
-import { useEffect, useRef } from 'react'
+import { useMemo } from 'react'
 import { NODE_COLOR } from './shared'
 
-// ── Mini SVG Graph ────────────────────────────────────────────────────────────
-
 export default function MiniGraph({ graph }) {
-  const svgRef = useRef(null)
+  const W = 620, H = 280
 
-  useEffect(() => {
-    if (!graph?.nodes?.length || !svgRef.current) return
-    const svg    = svgRef.current
-    const width  = svg.clientWidth  || 600
-    const height = svg.clientHeight || 280
-    while (svg.firstChild) svg.removeChild(svg.firstChild)
+  const { nodes, edges, counts } = useMemo(() => {
+    if (!graph?.nodes?.length) return { nodes: [], edges: [], counts: {} }
 
     const sample = graph.nodes
       .filter(n => n.type === 'route' || n.type === 'lib' || n.type === 'component')
       .slice(0, 60)
     const sampleIds   = new Set(sample.map(n => n.id))
     const sampleEdges = graph.edges.filter(e => sampleIds.has(e.source) && sampleIds.has(e.target))
-    const nodesCopy   = sample.map(n => ({ ...n }))
     const groups      = { route: [], lib: [], component: [] }
-    for (const n of nodesCopy) { if (groups[n.type]) groups[n.type].push(n) }
+    for (const n of sample) { if (groups[n.type]) groups[n.type].push(n) }
 
-    const cx = width / 2, cy = height / 2
-    const place = (nodes, x, y, r) => nodes.forEach((n, i) => {
-      const a = (i / nodes.length) * 2 * Math.PI
-      n.x = x + r * Math.cos(a); n.y = y + r * Math.sin(a)
+    const cx = W / 2, cy = H / 2
+    const positioned = []
+
+    // Routes → large ellipse at center
+    groups.route.forEach((n, i) => {
+      const a = (i / Math.max(groups.route.length, 1)) * 2 * Math.PI - Math.PI / 2
+      positioned.push({ ...n, x: cx + 130 * Math.cos(a), y: cy - 10 + 105 * Math.sin(a) })
     })
-    place(groups.route,     cx,               cy - 20, Math.min(height * 0.38, 130))
-    place(groups.lib,       cx - width * 0.22, cy + 30, Math.min(height * 0.2,  60))
-    place(groups.component, cx + width * 0.22, cy + 30, Math.min(height * 0.2,  60))
+    // Libs → bottom-left cluster
+    groups.lib.forEach((n, i) => {
+      const a = (i / Math.max(groups.lib.length, 1)) * 2 * Math.PI
+      positioned.push({ ...n, x: cx - W * 0.22 + 52 * Math.cos(a), y: cy + 32 + 44 * Math.sin(a) })
+    })
+    // Components → bottom-right cluster
+    groups.component.forEach((n, i) => {
+      const a = (i / Math.max(groups.component.length, 1)) * 2 * Math.PI
+      positioned.push({ ...n, x: cx + W * 0.22 + 52 * Math.cos(a), y: cy + 32 + 44 * Math.sin(a) })
+    })
 
     const posMap = {}
-    for (const n of nodesCopy) posMap[n.id] = { x: n.x, y: n.y }
+    for (const n of positioned) posMap[n.id] = n
 
-    const g = document.createElementNS('http://www.w3.org/2000/svg', 'g')
-    svg.appendChild(g)
-
-    for (const e of sampleEdges) {
-      const s = posMap[e.source], t = posMap[e.target]
-      if (!s || !t) continue
-      const line = document.createElementNS('http://www.w3.org/2000/svg', 'line')
-      line.setAttribute('x1', s.x); line.setAttribute('y1', s.y)
-      line.setAttribute('x2', t.x); line.setAttribute('y2', t.y)
-      line.setAttribute('stroke', 'rgba(99,102,241,0.18)')
-      line.setAttribute('stroke-width', '1')
-      g.appendChild(line)
+    return {
+      nodes: positioned,
+      edges: sampleEdges.map(e => {
+        const s = posMap[e.source], t = posMap[e.target]
+        return s && t ? { x1: s.x, y1: s.y, x2: t.x, y2: t.y } : null
+      }).filter(Boolean),
+      counts: {
+        routes: groups.route.length,
+        libs:   groups.lib.length,
+        comps:  groups.component.length,
+        edges:  sampleEdges.length,
+      },
     }
-
-    for (const n of nodesCopy) {
-      if (!n.x) continue
-      const col    = NODE_COLOR[n.type] || '#6366f1'
-      const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle')
-      circle.setAttribute('cx', n.x); circle.setAttribute('cy', n.y)
-      circle.setAttribute('r', n.type === 'route' ? 5 : n.type === 'lib' ? 4 : 3.5)
-      circle.setAttribute('fill', col); circle.setAttribute('opacity', '0.85')
-      g.appendChild(circle)
-
-      if (n.type === 'route' && n.label.length < 14) {
-        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text')
-        text.setAttribute('x', n.x); text.setAttribute('y', n.y - 7)
-        text.setAttribute('text-anchor', 'middle'); text.setAttribute('font-size', '7')
-        text.setAttribute('fill', 'rgba(148,163,184,0.7)'); text.setAttribute('font-family', 'monospace')
-        text.textContent = n.label
-        g.appendChild(text)
-      }
-    }
-
-    const leg = [['route', '#6366f1'], ['lib', '#06b6d4'], ['component', '#8b5cf6']]
-    leg.forEach(([label, color], i) => {
-      const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle')
-      circle.setAttribute('cx', 14); circle.setAttribute('cy', height - 28 + i * 12)
-      circle.setAttribute('r', 4); circle.setAttribute('fill', color)
-      svg.appendChild(circle)
-      const text = document.createElementNS('http://www.w3.org/2000/svg', 'text')
-      text.setAttribute('x', 22); text.setAttribute('y', height - 24 + i * 12)
-      text.setAttribute('font-size', '8'); text.setAttribute('fill', 'rgba(148,163,184,0.6)')
-      text.setAttribute('font-family', 'monospace')
-      text.textContent = label
-      svg.appendChild(text)
-    })
   }, [graph])
 
+  if (!nodes.length) return (
+    <div className="h-64 flex items-center justify-center text-slate-600 text-xs">Loading graph data…</div>
+  )
+
   return (
-    graph?.nodes?.length
-      ? <svg ref={svgRef} className="w-full h-64" style={{ background: 'transparent' }} />
-      : <div className="h-64 flex items-center justify-center text-slate-600 text-xs">Loading graph data…</div>
+    <svg className="w-full h-64" viewBox={`0 0 ${W} ${H}`} style={{ background: 'transparent' }}>
+      {/* Soft radial glow at center */}
+      <defs>
+        <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stopColor="#6366f1" stopOpacity="0.06" />
+          <stop offset="100%" stopColor="#6366f1" stopOpacity="0" />
+        </radialGradient>
+      </defs>
+      <ellipse cx={W/2} cy={H/2} rx={160} ry={130} fill="url(#glow)" />
+
+      {/* Edges */}
+      <g>
+        {edges.map((e, i) => (
+          <line key={i} x1={e.x1} y1={e.y1} x2={e.x2} y2={e.y2}
+            stroke="rgba(99,102,241,0.16)" strokeWidth={0.8} />
+        ))}
+      </g>
+
+      {/* Cluster group hint circles */}
+      <circle cx={W/2 - W * 0.22} cy={H/2 + 32} r={56} fill="rgba(6,182,212,0.04)" stroke="rgba(6,182,212,0.08)" strokeWidth={0.8} strokeDasharray="3,3" />
+      <circle cx={W/2 + W * 0.22} cy={H/2 + 32} r={56} fill="rgba(139,92,246,0.04)" stroke="rgba(139,92,246,0.08)" strokeWidth={0.8} strokeDasharray="3,3" />
+
+      {/* Nodes */}
+      <g>
+        {nodes.map(n => {
+          const col = NODE_COLOR[n.type] || '#6366f1'
+          const r   = n.type === 'route' ? 5.5 : n.type === 'lib' ? 4.5 : 4
+          return (
+            <g key={n.id} transform={`translate(${n.x},${n.y})`}>
+              <circle r={r + 3} fill={col} fillOpacity={0.1} />
+              <circle r={r} fill={col} opacity={0.88} />
+              {n.type === 'route' && n.label.length < 13 && (
+                <text x={0} y={-r - 3} fontSize={6.5} fill="rgba(148,163,184,0.65)"
+                  textAnchor="middle" fontFamily="monospace">{n.label}</text>
+              )}
+            </g>
+          )
+        })}
+      </g>
+
+      {/* Cluster labels */}
+      <text x={W/2 - W * 0.22} y={H/2 + 32 + 62} fontSize={7} fill="rgba(6,182,212,0.5)" textAnchor="middle" fontFamily="monospace">lib modules</text>
+      <text x={W/2 + W * 0.22} y={H/2 + 32 + 62} fontSize={7} fill="rgba(139,92,246,0.5)" textAnchor="middle" fontFamily="monospace">components</text>
+
+      {/* Legend */}
+      {[['routes','#6366f1'], ['libs','#06b6d4'], ['components','#8b5cf6']].map(([t, c], i) => (
+        <g key={t} transform={`translate(14,${H - 36 + i * 12})`}>
+          <circle r={3.5} fill={c} opacity={0.8} />
+          <text x={9} y={4} fontSize={7} fill="rgba(148,163,184,0.5)" fontFamily="monospace">{t}</text>
+        </g>
+      ))}
+
+      {/* Stats footer */}
+      <text x={W - 8} y={H - 6} fontSize={7} fill="rgba(100,116,139,0.45)" textAnchor="end" fontFamily="monospace">
+        {counts.routes}R · {counts.libs}L · {counts.comps}C · {counts.edges} edges
+      </text>
+    </svg>
   )
 }
