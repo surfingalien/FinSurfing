@@ -1,11 +1,22 @@
-import { useState, useEffect, useRef } from 'react'
-import { Network, Loader2, Code2, GitBranch, Layers } from 'lucide-react'
+import { useState, useEffect, useRef, useMemo } from 'react'
+import { Network, Loader2, Code2, GitBranch, Layers, Zap, TrendingUp, TrendingDown, Minus } from 'lucide-react'
 import { apiFetch, NODE_COLOR, NODE_ICON } from './shared'
 
 // ── Graphify Tab ──────────────────────────────────────────────────────────────
 
 // Status dot colours for provider nodes
 const STATUS_COLOR = { connected: '#10b981', idle: '#6b7280', disconnected: '#ef4444' }
+
+// Signal colours for the live overlay and Signals view
+function sigColor(verdict) {
+  if (!verdict) return null
+  const u = String(verdict).toUpperCase()
+  if (u.includes('STRONG') && u.includes('BUY'))  return '#10b981'
+  if (u.includes('BUY') || u.includes('ACCUMULATE')) return '#34d399'
+  if (u.includes('STRONG') && u.includes('SELL')) return '#ef4444'
+  if (u.includes('SELL') || u.includes('AVOID') || u.includes('REDUCE')) return '#f87171'
+  return '#f59e0b' // HOLD / NEUTRAL
+}
 
 // Tier colours for data-flow nodes
 const TIER_COLOR = {
@@ -26,8 +37,10 @@ export default function GraphifyTab({ graph, search, selectedNode, onSelectNode 
   const [pan,           setPan]           = useState({ x: 0, y: 0 })
   const [dataFlow,      setDataFlow]      = useState(null)
   const [entities,      setEntities]      = useState(null)
+  const [scanCache,     setScanCache]     = useState(null)
   const [dfLoading,     setDfLoading]     = useState(false)
   const [entLoading,    setEntLoading]    = useState(false)
+  const [hoveredGraphNode, setHoveredGraphNode] = useState(null)
 
   const simRef    = useRef(null)
   const rafRef    = useRef(null)
@@ -49,6 +62,12 @@ export default function GraphifyTab({ graph, search, selectedNode, onSelectNode 
     setEntLoading(true)
     apiFetch('/api/agentic-os/entities').then(d => setEntities(d)).catch(() => {}).finally(() => setEntLoading(false))
   }, [view, entities])
+
+  // Load scan cache for signal overlay (entities + signals views)
+  useEffect(() => {
+    if (view !== 'entities' && view !== 'signals') return
+    apiFetch('/api/scheduler/cache/scan').then(d => setScanCache(d)).catch(() => {})
+  }, [view])
 
   const loadDetail = async (id) => {
     onSelectNode(id)
@@ -255,6 +274,15 @@ export default function GraphifyTab({ graph, search, selectedNode, onSelectNode 
   const { dfNodes, dfEdges } = buildDataFlowLayout(dataFlow)
   const { entNodes, entEdges } = buildEntityLayout(entities)
 
+  // Map symbol → { verdict, compositeScore } from cached AI brain scan
+  const signalMap = useMemo(() => {
+    const map = {}
+    for (const s of (scanCache?.broad?.rankedStocks ?? [])) {
+      if (s.symbol) map[s.symbol] = { verdict: s.agentVerdict, score: s.compositeScore ?? 0 }
+    }
+    return map
+  }, [scanCache])
+
   const [hoveredNode, setHoveredNode] = useState(null)
 
   return (
@@ -274,10 +302,11 @@ export default function GraphifyTab({ graph, search, selectedNode, onSelectNode 
         ))}
         <div className="ml-auto flex items-center gap-1">
           {[
-            { id: 'graph',    label: 'Code Graph',  Icon: Network  },
+            { id: 'graph',    label: 'Code Graph',  Icon: Network   },
             { id: 'dataflow', label: 'Data Flow',   Icon: GitBranch },
             { id: 'entities', label: 'Entity Graph', Icon: Layers   },
-            { id: 'list',     label: 'Node List',   Icon: Code2    },
+            { id: 'signals',  label: 'Signal Net',  Icon: Zap       },
+            { id: 'list',     label: 'Node List',   Icon: Code2     },
           ].map(({ id, label, Icon }) => (
             <button key={id} onClick={() => setView(id)}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-all ${view === id ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/30' : 'text-slate-400 hover:text-white hover:bg-white/[0.04]'}`}>
@@ -307,15 +336,27 @@ export default function GraphifyTab({ graph, search, selectedNode, onSelectNode 
                     <g>{links.map((l, i) => <line key={i} x1={l.x1} y1={l.y1} x2={l.x2} y2={l.y2} stroke="rgba(99,102,241,0.18)" strokeWidth={1} />)}</g>
                     <g>
                       {positions.map(n => {
-                        const col = NODE_COLOR[n.type] || '#6366f1'
-                        const r   = rMap[n.type] || 5
-                        const sel = selectedNode === n.id
+                        const col  = NODE_COLOR[n.type] || '#6366f1'
+                        const r    = rMap[n.type] || 5
+                        const sel  = selectedNode === n.id
+                        const hov  = hoveredGraphNode === n.id
                         return (
                           <g key={n.id} transform={`translate(${n.x},${n.y})`} style={{ cursor: 'pointer' }}
-                            onMouseDown={e => onNodeMouseDown(e, n.id)} onClick={() => loadDetail(n.id)}>
-                            {sel && <circle r={r+4} fill="none" stroke={col} strokeWidth={1.5} opacity={0.5} />}
-                            <circle r={r} fill={col} opacity={0.85} />
-                            {n.type !== 'jsx' && <text x={r+3} y={4} fontSize={7} fill="rgba(148,163,184,0.85)" fontFamily="monospace" style={{ pointerEvents: 'none' }}>{n.label}</text>}
+                            onMouseDown={e => onNodeMouseDown(e, n.id)}
+                            onMouseEnter={() => setHoveredGraphNode(n.id)}
+                            onMouseLeave={() => setHoveredGraphNode(null)}
+                            onClick={() => loadDetail(n.id)}>
+                            {(sel || hov) && <circle r={r+4} fill={col} fillOpacity={0.12} stroke={col} strokeWidth={1.5} opacity={0.7} />}
+                            <circle r={r} fill={col} opacity={hov ? 1 : 0.85} />
+                            {n.type !== 'jsx' && <text x={r+3} y={4} fontSize={7} fill={hov ? 'rgba(255,255,255,0.9)' : 'rgba(148,163,184,0.85)'} fontFamily="monospace" style={{ pointerEvents: 'none' }}>{n.label}</text>}
+                            {/* Inline hover tooltip */}
+                            {hov && (
+                              <g transform={`translate(0,${-r - 6})`} style={{ pointerEvents: 'none' }}>
+                                <rect x={-35} y={-18} width={70} height={16} rx={3} fill="#1e1e2e" stroke={col} strokeWidth={0.5} strokeOpacity={0.6} />
+                                <text x={0} y={-6} fontSize={6.5} fill={col} textAnchor="middle" fontFamily="monospace" fontWeight="600">{n.type}</text>
+                                {n.file && <text x={0} y={3} fontSize={5.5} fill="rgba(148,163,184,0.7)" textAnchor="middle" fontFamily="monospace">{n.file.split('/').pop()}</text>}
+                              </g>
+                            )}
                           </g>
                         )
                       })}
@@ -353,18 +394,30 @@ export default function GraphifyTab({ graph, search, selectedNode, onSelectNode 
                   {[0,1,2,3].map(t => (
                     <text key={t} x={8} y={38 + t * 120} fontSize={8} fill={TIER_COLOR[t]} fontFamily="monospace" opacity={0.7}>{TIER_LABEL[t].toUpperCase()}</text>
                   ))}
-                  {/* Edges */}
+                  {/* Edges + animated flow pulses */}
                   <g>
                     {dfEdges.map((e, i) => {
-                      const mx = (e.x1 + e.x2) / 2
-                      const my = (e.y1 + e.y2) / 2
+                      const mx   = (e.x1 + e.x2) / 2
+                      const my   = (e.y1 + e.y2) / 2
+                      const srcN = dataFlow.nodes.find(n => n.id === e.source)
+                      const col  = TIER_COLOR[srcN?.tier ?? 0]
+                      const isActive = srcN?.status === 'connected' || srcN?.tier === 1
+                      const dur  = 1.8 + (i % 5) * 0.4
                       return (
                         <g key={i}>
                           <line x1={e.x1} y1={e.y1} x2={e.x2} y2={e.y2}
-                            stroke={TIER_COLOR[dataFlow.nodes.find(n => n.id === e.source)?.tier ?? 0]}
-                            strokeWidth={1} strokeOpacity={0.25} strokeDasharray={e.source.includes('cache') ? '3,3' : undefined} />
+                            stroke={col} strokeWidth={hoveredNode && (e.source === hoveredNode || e.target === hoveredNode) ? 1.8 : 1}
+                            strokeOpacity={hoveredNode && (e.source === hoveredNode || e.target === hoveredNode) ? 0.55 : 0.2}
+                            strokeDasharray={e.source.includes('cache') ? '3,3' : undefined} />
+                          {/* Animated dot flowing along the edge */}
+                          {isActive && (
+                            <circle r={2.5} fill={col} fillOpacity={0.7}>
+                              <animateMotion dur={`${dur}s`} repeatCount="indefinite"
+                                path={`M${e.x1},${e.y1} L${e.x2},${e.y2}`} />
+                            </circle>
+                          )}
                           {hoveredNode && (e.source === hoveredNode || e.target === hoveredNode) && (
-                            <text x={mx} y={my - 3} fontSize={7} fill="rgba(203,213,225,0.8)" textAnchor="middle" fontFamily="monospace">{e.dataType}</text>
+                            <text x={mx} y={my - 4} fontSize={7} fill="rgba(203,213,225,0.9)" textAnchor="middle" fontFamily="monospace" fontWeight="500">{e.dataType}</text>
                           )}
                         </g>
                       )
@@ -430,18 +483,25 @@ export default function GraphifyTab({ graph, search, selectedNode, onSelectNode 
                   {/* Nodes */}
                   <g>
                     {entNodes.map(n => {
-                      const isAC  = n.type === 'assetClass'
-                      const isUni = n.type === 'universe'
-                      const r     = isAC ? 14 : isUni ? 9 : 5
-                      const isHov = hoveredNode === n.id
+                      const isAC   = n.type === 'assetClass'
+                      const isUni  = n.type === 'universe'
+                      const isSym  = n.type === 'symbol'
+                      const r      = isAC ? 14 : isUni ? 9 : 5
+                      const isHov  = hoveredNode === n.id
+                      const sig    = isSym ? signalMap[n.label] : null
+                      const sCol   = sig ? sigColor(sig.verdict) : null
+                      const fill   = sCol ?? n.color
                       return (
                         <g key={n.id} transform={`translate(${n.x},${n.y})`} style={{ cursor: 'pointer' }}
                           onMouseEnter={() => setHoveredNode(n.id)}
                           onMouseLeave={() => setHoveredNode(null)}>
-                          <circle r={r} fill={n.color} opacity={isHov ? 0.9 : isAC ? 0.8 : isUni ? 0.65 : 0.45} />
-                          {isHov && <circle r={r+3} fill="none" stroke={n.color} strokeWidth={1} opacity={0.5} />}
-                          <text x={0} y={r + 10} fontSize={isAC ? 9 : isUni ? 7 : 6} fill={isAC ? n.color : 'rgba(148,163,184,0.8)'}
-                            textAnchor="middle" fontFamily="monospace" fontWeight={isAC ? '700' : '400'}>
+                          {/* Signal glow ring for symbols with active AI signals */}
+                          {sCol && <circle r={r + 4} fill={sCol} fillOpacity={0.12} stroke={sCol} strokeWidth={0.8} strokeOpacity={0.5} />}
+                          <circle r={r} fill={fill} opacity={isHov ? 1 : isAC ? 0.85 : isUni ? 0.7 : sCol ? 0.85 : 0.45} />
+                          {isHov && <circle r={r+3} fill="none" stroke={fill} strokeWidth={1} opacity={0.6} />}
+                          <text x={0} y={r + 10} fontSize={isAC ? 9 : isUni ? 7 : 6}
+                            fill={isAC ? n.color : sCol ? 'rgba(255,255,255,0.9)' : 'rgba(148,163,184,0.75)'}
+                            textAnchor="middle" fontFamily="monospace" fontWeight={isAC || sCol ? '700' : '400'}>
                             {n.label}
                           </text>
                           {isUni && n.symbolCount && (
@@ -455,10 +515,113 @@ export default function GraphifyTab({ graph, search, selectedNode, onSelectNode 
                   {[['Asset Classes', '#8b5cf6', 60], ['Scan Universes', '#6366f1', 240], ['Symbols', '#06b6d4', 420]].map(([lbl, col, y]) => (
                     <text key={lbl} x={8} y={y} fontSize={8} fill={col} fontFamily="monospace" opacity={0.6}>{lbl.toUpperCase()}</text>
                   ))}
+                  {/* Signal legend */}
+                  {Object.keys(signalMap).length > 0 && (
+                    <g transform={`translate(12,560)`}>
+                      {[['BUY', '#34d399'], ['STRONG BUY', '#10b981'], ['HOLD', '#f59e0b'], ['SELL', '#f87171']].map(([lbl, col], i) => (
+                        <g key={lbl} transform={`translate(${i * 100},0)`}>
+                          <circle r={4} fill={col} opacity={0.8} />
+                          <text x={8} y={4} fontSize={7} fill="rgba(148,163,184,0.6)" fontFamily="monospace">{lbl}</text>
+                        </g>
+                      ))}
+                      <text x={420} y={4} fontSize={7} fill="rgba(100,116,139,0.5)" fontFamily="monospace">{Object.keys(signalMap).length} live AI signals overlaid</text>
+                    </g>
+                  )}
                 </svg>
               )}
             </div>
           )}
+
+          {/* ── Signal Network ── */}
+          {view === 'signals' && (() => {
+            const stocks   = scanCache?.broad?.rankedStocks ?? []
+            const regime   = scanCache?.broad?.marketRegime ?? null
+            const updAt    = scanCache?.updatedAt
+            if (!stocks.length) return (
+              <div className="rounded-xl border border-white/[0.06] bg-[#12121a] h-64 flex items-center justify-center">
+                <div className="text-center">
+                  <Zap size={20} className="text-slate-600 mx-auto mb-2" />
+                  <div className="text-xs text-slate-600">No scan data — brain fires at :05 each hour during market hours</div>
+                </div>
+              </div>
+            )
+
+            // Group by verdict tier for a radial-ish layout
+            const buys  = stocks.filter(s => sigColor(s.agentVerdict) === '#10b981' || sigColor(s.agentVerdict) === '#34d399')
+            const holds = stocks.filter(s => sigColor(s.agentVerdict) === '#f59e0b')
+            const sells = stocks.filter(s => sigColor(s.agentVerdict) === '#f87171' || sigColor(s.agentVerdict) === '#ef4444')
+
+            const SW = 860, SH = 520
+            const cx = SW / 2, cy = SH / 2
+
+            // Place regime node at center
+            // Place buy nodes top-right arc, hold top-left, sell bottom
+            function arcNodes(arr, startAngle, endAngle, radius) {
+              return arr.map((s, i) => {
+                const a = startAngle + (arr.length > 1 ? (endAngle - startAngle) * i / (arr.length - 1) : (startAngle + endAngle) / 2)
+                return { ...s, nx: cx + radius * Math.cos(a), ny: cy + radius * Math.sin(a) }
+              })
+            }
+
+            const PI = Math.PI
+            const buyNodes  = arcNodes(buys,  -PI * 0.85, -PI * 0.15, 180)
+            const holdNodes = arcNodes(holds, -PI * 0.1,   PI * 0.1,  210)
+            const sellNodes = arcNodes(sells,  PI * 0.15,  PI * 0.85, 180)
+            const allNodes  = [...buyNodes, ...holdNodes, ...sellNodes]
+
+            return (
+              <div className="rounded-xl border border-white/[0.06] bg-[#12121a] overflow-hidden">
+                <div className="px-4 py-2.5 border-b border-white/[0.06] flex items-center gap-2 text-xs text-slate-500">
+                  <Zap size={12} className="text-emerald-400" />
+                  <span>Live AI signal network — brain scan results by verdict</span>
+                  <span className="ml-auto text-[10px]">{stocks.length} signals{updAt ? ` · ${new Date(updAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}</span>
+                </div>
+                <svg width="100%" viewBox={`0 0 ${SW} ${SH}`} style={{ height: 520 }}>
+                  {/* Spokes from center to each node */}
+                  {allNodes.map((s, i) => {
+                    const col = sigColor(s.agentVerdict) ?? '#6b7280'
+                    return <line key={i} x1={cx} y1={cy} x2={s.nx} y2={s.ny} stroke={col} strokeWidth={0.8} strokeOpacity={0.18} />
+                  })}
+                  {/* Score ring backgrounds */}
+                  {[140, 180, 210].map(r => (
+                    <circle key={r} cx={cx} cy={cy} r={r} fill="none" stroke="rgba(99,102,241,0.06)" strokeWidth={1} strokeDasharray="4,4" />
+                  ))}
+                  {/* Signal nodes */}
+                  {allNodes.map((s, i) => {
+                    const col   = sigColor(s.agentVerdict) ?? '#6b7280'
+                    const r     = Math.max(8, Math.min(18, (s.compositeScore ?? 50) / 5))
+                    const isHov = hoveredNode === s.symbol
+                    return (
+                      <g key={s.symbol} transform={`translate(${s.nx},${s.ny})`} style={{ cursor: 'pointer' }}
+                        onMouseEnter={() => setHoveredNode(s.symbol)}
+                        onMouseLeave={() => setHoveredNode(null)}>
+                        <circle r={r + 4} fill={col} fillOpacity={0.1} />
+                        <circle r={r} fill={col} fillOpacity={isHov ? 0.95 : 0.75} />
+                        {isHov && <circle r={r + 6} fill="none" stroke={col} strokeWidth={1} strokeOpacity={0.4} />}
+                        <text x={0} y={4} fontSize={r > 12 ? 8 : 6} fill="white" textAnchor="middle" fontFamily="monospace" fontWeight="700" style={{ pointerEvents: 'none' }}>{s.symbol}</text>
+                        <text x={0} y={r + 11} fontSize={6} fill={col} textAnchor="middle" fontFamily="monospace">{s.compositeScore ?? '—'}</text>
+                      </g>
+                    )
+                  })}
+                  {/* Center regime node */}
+                  <g transform={`translate(${cx},${cy})`}>
+                    <circle r={38} fill="rgba(99,102,241,0.1)" stroke="rgba(99,102,241,0.3)" strokeWidth={1} />
+                    <text x={0} y={-8} fontSize={9} fill="#818cf8" textAnchor="middle" fontFamily="monospace" fontWeight="700">REGIME</text>
+                    <text x={0} y={5} fontSize={8} fill="white" textAnchor="middle" fontFamily="monospace">{regime ?? 'Unknown'}</text>
+                    <text x={0} y={18} fontSize={7} fill="rgba(100,116,139,0.7)" textAnchor="middle" fontFamily="monospace">{stocks.length} picks</text>
+                  </g>
+                  {/* Group labels */}
+                  <text x={cx} y={40} fontSize={8} fill="#34d399" textAnchor="middle" fontFamily="monospace" opacity={0.7}>BUY ZONE ({buys.length})</text>
+                  <text x={SW - 60} y={cy + 4} fontSize={8} fill="#f59e0b" textAnchor="end" fontFamily="monospace" opacity={0.7}>HOLD ({holds.length})</text>
+                  <text x={cx} y={SH - 18} fontSize={8} fill="#f87171" textAnchor="middle" fontFamily="monospace" opacity={0.7}>SELL ZONE ({sells.length})</text>
+                  {/* Score ring labels */}
+                  <text x={cx + 145} y={cy - 2} fontSize={6.5} fill="rgba(99,102,241,0.4)" fontFamily="monospace">score 50</text>
+                  <text x={cx + 185} y={cy - 2} fontSize={6.5} fill="rgba(99,102,241,0.4)" fontFamily="monospace">70</text>
+                  <text x={cx + 215} y={cy - 2} fontSize={6.5} fill="rgba(99,102,241,0.4)" fontFamily="monospace">90+</text>
+                </svg>
+              </div>
+            )
+          })()}
 
           {/* ── Node List ── */}
           {view === 'list' && (
@@ -537,13 +700,23 @@ export default function GraphifyTab({ graph, search, selectedNode, onSelectNode 
                   </div>
                   {children.length > 0 && (
                     <div>
-                      <div className="text-[9px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Contains ({children.length})</div>
+                      <div className="text-[9px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Symbols ({children.length})</div>
                       <div className="flex flex-wrap gap-1">
-                        {children.slice(0, 20).map((c, i) => (
-                          <span key={i} className="text-[9px] px-1.5 py-0.5 rounded font-mono" style={{ background: (c.color || '#6366f1') + '22', color: c.color || '#6366f1' }}>{c.label}</span>
-                        ))}
+                        {children.slice(0, 20).map((c, i) => {
+                          const sig  = signalMap[c.label]
+                          const sCol = sig ? sigColor(sig.verdict) : null
+                          return (
+                            <span key={i} className="text-[9px] px-1.5 py-0.5 rounded font-mono font-semibold"
+                              style={{ background: (sCol ?? c.color ?? '#6366f1') + '22', color: sCol ?? c.color ?? '#6366f1', border: sCol ? `1px solid ${sCol}44` : undefined }}>
+                              {c.label}{sig ? ` ${sig.verdict?.includes('Buy') ? '↑' : sig.verdict?.includes('Sell') ? '↓' : '–'}` : ''}
+                            </span>
+                          )
+                        })}
                         {children.length > 20 && <span className="text-[9px] text-slate-600">+{children.length - 20}</span>}
                       </div>
+                      {Object.keys(signalMap).length > 0 && (
+                        <div className="text-[9px] text-slate-600 mt-1.5">↑/↓/– = AI signal from last brain scan</div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -584,8 +757,35 @@ export default function GraphifyTab({ graph, search, selectedNode, onSelectNode 
               </>
             )}
 
+            {/* Signals view hover detail */}
+            {view === 'signals' && hoveredNode && (() => {
+              const s = (scanCache?.broad?.rankedStocks ?? []).find(x => x.symbol === hoveredNode)
+              if (!s) return null
+              const col = sigColor(s.agentVerdict) ?? '#6b7280'
+              return (
+                <div className="space-y-3">
+                  <div>
+                    <div className="text-sm font-bold font-mono" style={{ color: col }}>{s.symbol}</div>
+                    <div className="text-[10px] mt-0.5 font-semibold" style={{ color: col }}>{s.agentVerdict}</div>
+                    <div className="text-[10px] text-slate-500 mt-0.5">Score: <span className="text-white font-mono">{s.compositeScore ?? '—'}</span></div>
+                  </div>
+                  {s.supervisorSynthesis && <div className="text-[10px] text-slate-400 leading-relaxed">{s.supervisorSynthesis.slice(0, 200)}</div>}
+                  {s.highConviction && <div className="text-[9px] text-amber-400">⭐ High Conviction</div>}
+                  {s.ensembleConfirmed && <div className="text-[9px] text-emerald-400">✓ Ensemble confirmed</div>}
+                  {s.keyDrivers?.length > 0 && (
+                    <div>
+                      <div className="text-[9px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Key Drivers</div>
+                      {s.keyDrivers.slice(0, 3).map((d, i) => (
+                        <div key={i} className="text-[9px] text-slate-400 leading-relaxed">· {d}</div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
+
             {/* Default prompt for non-graph views */}
-            {(view === 'dataflow' || view === 'entities') && !hoveredNode && (
+            {(view === 'dataflow' || view === 'entities' || view === 'signals') && !hoveredNode && (
               <div className="text-xs text-slate-600 text-center py-6">Hover a node to inspect</div>
             )}
           </div>
