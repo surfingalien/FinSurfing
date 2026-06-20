@@ -148,7 +148,7 @@ const TOOLS = [
       properties: {
         scanMode: {
           type: 'string',
-          description: 'Scan universe: broad, stocks, stocks_tech, stocks_finance, stocks_healthcare, stocks_energy, etfs_broad, etfs_sector, etfs_bond, etfs_commodity, etfs_thematic, crypto, crypto_l1, crypto_defi, crypto_ai, mutualfunds',
+          description: 'Scan universe. Stocks: broad | stocks | stocks_tech | stocks_finance | stocks_healthcare | stocks_energy | stocks_consumer_disc | stocks_consumer_stap | stocks_industrials | stocks_materials | stocks_utilities | stocks_realestate | stocks_comms. ETFs: etfs_broad | etfs_sector | etfs_bond | etfs_intl | etfs_commodity | etfs_thematic | etfs_dividend | etfs_bitcoin. Crypto: crypto | crypto_defi | crypto_ai | crypto_meme | crypto_infra | crypto_exchange. Funds: mutualfunds | mutualfunds_index | mutualfunds_growth | mutualfunds_value | mutualfunds_bond | mutualfunds_intl | mutualfunds_balanced.',
           default: 'broad',
         },
         horizon: {
