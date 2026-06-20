@@ -911,6 +911,8 @@ router.get('/activity', (req, res) => {
       optionsFlowImpact:   stats.optionsFlowImpact   ?? null,
       conflictImpact:      stats.conflictImpact       ?? null,
       byPattern:           stats.byPattern            ?? null,
+      bySector:            stats.bySector             ?? null,
+      totalResolved:       stats.totalResolved        ?? null,
       feed,
     })
   } catch {

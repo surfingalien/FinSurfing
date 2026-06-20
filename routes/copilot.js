@@ -589,6 +589,10 @@ async function dispatchTool(name, input, req) {
         const sorted = Object.entries(stats.byPattern).sort((a, b) => (b[1].alphaWinRate ?? 0) - (a[1].alphaWinRate ?? 0)).slice(0, 6)
         if (sorted.length) lines.push('Top TA patterns (alpha win): ' + sorted.map(([k, c]) => `${k} ${pc(c.alphaWinRate ?? c.winRate)} (n=${c.n})`).join(' | '))
       }
+      if (stats.bySector) {
+        const sorted = Object.entries(stats.bySector).sort((a, b) => b[1].n - a[1].n).slice(0, 6)
+        if (sorted.length) lines.push('By sector (top picks): ' + sorted.map(([k, c]) => `${k} ${pc(c.alphaWinRate ?? c.winRate)} alpha (n=${c.n})`).join(' | '))
+      }
       return lines.join('\n')
     }
 
