@@ -386,17 +386,17 @@ async function dispatchTool(name, input, req) {
         getAltData(rawSym),
       ])
       const data = await r.json()
-      if (!data.signal) return `Analysis failed for ${input.symbol}: ${data.error || 'unknown error'}`
-      const displayPrice = livePrice || data.entry
+      const a = data.analysis
+      if (!a?.signal) return `Analysis failed for ${input.symbol}: ${data.error || 'unknown error'}`
+      const displayPrice = livePrice || a.entry || data.price
       return (
-        `**${input.symbol}** [LIVE PRICE: $${displayPrice}] — Signal: **${data.signal}** (${data.confidence}% confidence)\n` +
+        `**${input.symbol}** [LIVE PRICE: $${displayPrice}] — Signal: **${a.signal}** (${a.confidence}% confidence)\n` +
         `Current Price: $${displayPrice} (use THIS price — do not use any other price)\n` +
-        `Trend: ${data.trend} · Risk/Reward: ${data.riskReward?.toFixed(1)}:1\n` +
-        `Entry $${data.entry} (zone $${data.entryZoneLow}–$${data.entryZoneHigh})\n` +
-        `Stop $${data.stopLoss} · Target $${data.takeProfit?.[0]}–$${data.takeProfit?.[1]}\n\n` +
-        `${data.reasoning}\n\n` +
-        (data.contradictions?.length ? `⚠️ Contradictions: ${data.contradictions.join('; ')}\n` : '') +
-        `Risks: ${data.risks?.join(' | ')}` +
+        `Entry $${a.entry} (zone $${a.entryZoneLow}–$${a.entryZoneHigh})\n` +
+        `Stop $${a.stopLoss} · Target $${a.target}\n\n` +
+        `${a.summary}\n\n` +
+        (a.contradictions?.length ? `⚠️ Contradictions: ${a.contradictions.join('; ')}\n` : '') +
+        `Risks: ${a.risks?.join(' | ')}` +
         (altSnippet ? `\n${altSnippet}` : '')
       )
     }
