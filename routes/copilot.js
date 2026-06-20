@@ -342,9 +342,10 @@ async function dispatchTool(name, input, req) {
     }
 
     case 'get_recommendations': {
+      const holdings = Array.isArray(req.body?.portfolio) ? req.body.portfolio : []
       const r = await fetch(`http://127.0.0.1:${port}/api/recommendations`, {
         method: 'POST', headers: fwdHeaders,
-        body: JSON.stringify({ persona: input.persona || 'default', focusSymbols: input.focusSymbols || [] }),
+        body: JSON.stringify({ persona: input.persona || 'default', focusSymbols: input.focusSymbols || [], holdings }),
         signal: AbortSignal.timeout(60_000),
       })
       const data = await r.json()
