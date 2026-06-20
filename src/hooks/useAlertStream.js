@@ -25,7 +25,7 @@ export function useAlertStream(onAnalysis) {
     es.onmessage = (e) => {
       try {
         const event = JSON.parse(e.data)
-        if (event.type === 'analysis' || event.type === 'analysis_error') {
+        if (event.type === 'analysis' || event.type === 'analysis_error' || event.type === 'entry_zone') {
           onAnalysisRef.current?.(event)
         }
       } catch {}
@@ -57,6 +57,18 @@ export function useAlertStream(onAnalysis) {
  * formatAnalysisToast — converts an analysis SSE event to a toast-compatible object
  */
 export function formatAnalysisToast(event) {
+  if (event.type === 'entry_zone') {
+    const fmt = n => n != null ? `$${Number(n).toFixed(2)}` : '—'
+    return {
+      id:      `entry-zone-${Date.now()}`,
+      type:    'signal_performance',
+      title:   `${event.symbol} entered buy zone`,
+      content: `Price ${fmt(event.currentPrice)} is inside AI Brain entry zone ${fmt(event.entryZoneLow)}–${fmt(event.entryZoneHigh)} · ${event.verdict ?? 'Buy'} · score ${event.compositeScore ?? '—'}`,
+      color:   '#00ffcc',
+      data:    event,
+    }
+  }
+
   if (event.type === 'analysis_error') {
     return {
       id:      `alert-${Date.now()}`,

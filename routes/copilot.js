@@ -545,11 +545,21 @@ async function dispatchTool(name, input, req) {
       const hz = (label, h) => h && lines.push(
         `${label}: win ${pc(h.winRate)} | beats benchmark ${pc(h.alphaWinRate)} | avg ${h.avgReturn ?? 'N/A'}% (alpha ${h.avgAlpha ?? 'N/A'}%) | target hit ${pc(h.targetHitRate)} | n=${h.nTradeable} tradeable (${h.neverEntered} never filled)`)
       hz('7d', stats.h7); hz('30d', stats.h30)
+      if (stats.h90) hz('90d', stats.h90)
       const cal = Object.entries(stats.calibration || {})
       if (cal.length) lines.push('Confidence calibration: ' + cal.map(([k, c]) => `${k} ${pc(c.alphaWinRate ?? c.winRate)} (n=${c.n})`).join(' | '))
       if (stats.ensemble) lines.push('Cross-model ensemble: ' + Object.entries(stats.ensemble).map(([k, c]) => `${k} ${pc(c.alphaWinRate ?? c.winRate)} (n=${c.n})`).join(' | '))
       if (stats.baseline) lines.push(
         `Vs mechanical TA baseline (n=${stats.baseline.n}, 7d): AI win ${pc(stats.baseline.aiWinRate7d)} vs baseline accuracy ${pc(stats.baseline.baselineAccuracy7d)}; AI wins ${pc(stats.baseline.aiWinWhenBaselineAgrees)} when baseline agrees, ${pc(stats.baseline.aiWinWhenBaselineDisagrees)} when it disagrees`)
+      if (stats.byCompositeScore) {
+        const bands = { low: '<40', mid: '40-69', high: '70-79', elite: '≥80' }
+        lines.push('Composite score calibration: ' + Object.entries(stats.byCompositeScore).map(([k, c]) => `score ${bands[k] ?? k} → ${pc(c.alphaWinRate ?? c.winRate)} alpha (n=${c.n})`).join(' | '))
+      }
+      if (stats.byHighConviction?.['true'] && stats.byHighConviction?.['false']) {
+        const hc  = stats.byHighConviction['true']
+        const std = stats.byHighConviction['false']
+        lines.push(`High-conviction picks: ${pc(hc.alphaWinRate ?? hc.winRate)} alpha (n=${hc.n}) vs standard ${pc(std.alphaWinRate ?? std.winRate)} (n=${std.n})`)
+      }
       return lines.join('\n')
     }
 

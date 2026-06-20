@@ -399,6 +399,7 @@ function logPrediction(symbol, agents, zones, generatedAt, baseline = null, opti
       entryZoneHigh:     zones?.entryZoneHigh ?? null,
       entryZoneMid:      zones?.entryZoneLow != null ? (zones.entryZoneLow + zones.entryZoneHigh) / 2 : null,
       targetZoneMid:     zones?.targetZoneLow != null ? (zones.targetZoneLow + zones.targetZoneHigh) / 2 : null,
+      targetReturn:      agents.targetReturn ?? null,
       verdict:           agents.agentVerdict,
       thesisAssumptions: agents.thesisAssumptions ?? [],
       agentConflict:     agents.agentConflict ?? null,
