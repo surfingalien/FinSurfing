@@ -10,7 +10,7 @@ const express   = require('express')
 const crypto    = require('crypto')
 const { query } = require('../db/db')
 const { requireAuth } = require('../middleware/auth')
-const { MEM }   = require('../db/memstore')
+const { MEM, persistMem } = require('../db/memstore')
 
 const router = express.Router()
 router.use(requireAuth)
@@ -204,6 +204,7 @@ router.post('/', async (req, res) => {
     }
     MEM.portfolios.set(pid, p)
     MEM.holdings.set(pid, [])
+    persistMem()
     return res.status(201).json(p)
   }
 
@@ -296,6 +297,7 @@ router.patch('/:id', async (req, res) => {
     if (icon !== undefined)        p.icon         = icon
     if (taxStatus !== undefined)   p.tax_status   = taxStatus
     p.updated_at = new Date().toISOString()
+    persistMem()
     return res.json(p)
   }
 
@@ -345,6 +347,7 @@ router.patch('/:id/visibility', async (req, res) => {
     if (visibility !== undefined)        p.visibility         = visibility
     if (copyTradeEnabled !== undefined)  p.copy_trade_enabled = !!copyTradeEnabled
     p.updated_at = new Date().toISOString()
+    persistMem()
     return res.json({ ok: true, portfolio: p })
   }
 
@@ -381,6 +384,7 @@ router.post('/:id/set-default', async (req, res) => {
       if (port.user_id === req.user.userId) port.is_default = false
     }
     p.is_default = true
+    persistMem()
     return res.json({ ok: true })
   }
   try {
@@ -406,6 +410,7 @@ router.delete('/:id', async (req, res) => {
     if (!p || p.user_id !== req.user.userId) return res.status(404).json({ error: 'Portfolio not found' })
     if (p.is_default) return res.status(400).json({ error: 'Cannot delete the default portfolio.' })
     p.is_archived = true
+    persistMem()
     return res.json({ ok: true })
   }
   try {
@@ -583,6 +588,7 @@ router.post('/:id/holdings', async (req, res) => {
     if (idx >= 0) holdings[idx] = holding
     else holdings.push(holding)
     MEM.holdings.set(req.params.id, holdings)
+    persistMem()
     return res.status(201).json({ id: holding.id, symbol: holding.symbol, shares: holding.shares, avgCost: holding.avg_cost_basis, sector: holding.sector })
   }
 
@@ -627,6 +633,7 @@ router.delete('/:id/holdings/:hid', async (req, res) => {
     const idx = holdings.findIndex(h => h.id === req.params.hid)
     if (idx < 0) return res.status(404).json({ error: 'Holding not found' })
     holdings.splice(idx, 1)
+    persistMem()
     return res.json({ ok: true })
   }
 
@@ -674,6 +681,7 @@ router.post('/:id/import', async (req, res) => {
       imported++
     }
     MEM.holdings.set(req.params.id, existing)
+    persistMem()
     return res.json({ ok: true, imported })
   }
 

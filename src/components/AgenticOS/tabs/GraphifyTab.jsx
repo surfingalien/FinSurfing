@@ -1,8 +1,20 @@
 import { useState, useEffect, useRef } from 'react'
-import { Network, Loader2, Code2 } from 'lucide-react'
+import { Network, Loader2, Code2, GitBranch, Layers } from 'lucide-react'
 import { apiFetch, NODE_COLOR, NODE_ICON } from './shared'
 
-// ── Graphify Tab — D3 Force Graph ─────────────────────────────────────────────
+// ── Graphify Tab ──────────────────────────────────────────────────────────────
+
+// Status dot colours for provider nodes
+const STATUS_COLOR = { connected: '#10b981', idle: '#6b7280', disconnected: '#ef4444' }
+
+// Tier colours for data-flow nodes
+const TIER_COLOR = {
+  0: '#f59e0b', // external providers — amber
+  1: '#6366f1', // server routes — indigo
+  2: '#06b6d4', // cache / persistence — cyan
+  3: '#8b5cf6', // frontend components — violet
+}
+const TIER_LABEL = ['External Provider', 'API Route', 'Cache / Lib', 'UI Component']
 
 export default function GraphifyTab({ graph, search, selectedNode, onSelectNode }) {
   const [nodeDetail,    setNodeDetail]    = useState(null)
@@ -12,6 +24,11 @@ export default function GraphifyTab({ graph, search, selectedNode, onSelectNode 
   const [links,         setLinks]         = useState([])
   const [zoom,          setZoom]          = useState(1)
   const [pan,           setPan]           = useState({ x: 0, y: 0 })
+  const [dataFlow,      setDataFlow]      = useState(null)
+  const [entities,      setEntities]      = useState(null)
+  const [dfLoading,     setDfLoading]     = useState(false)
+  const [entLoading,    setEntLoading]    = useState(false)
+
   const simRef    = useRef(null)
   const rafRef    = useRef(null)
   const svgRef    = useRef(null)
@@ -19,8 +36,27 @@ export default function GraphifyTab({ graph, search, selectedNode, onSelectNode 
   const panStart  = useRef(null)
   const W = 860, H = 520
 
+  // Load data-flow on demand
+  useEffect(() => {
+    if (view !== 'dataflow' || dataFlow) return
+    setDfLoading(true)
+    apiFetch('/api/agentic-os/data-flow').then(d => setDataFlow(d)).catch(() => {}).finally(() => setDfLoading(false))
+  }, [view, dataFlow])
+
+  // Load entities on demand
+  useEffect(() => {
+    if (view !== 'entities' || entities) return
+    setEntLoading(true)
+    apiFetch('/api/agentic-os/entities').then(d => setEntities(d)).catch(() => {}).finally(() => setEntLoading(false))
+  }, [view, entities])
+
   const loadDetail = async (id) => {
     onSelectNode(id)
+    // Only fetch /node detail for code-graph nodes (route:/lib:/component:/jsx:)
+    if (!id.startsWith('route:') && !id.startsWith('lib:') && !id.startsWith('component:') && !id.startsWith('jsx:')) {
+      setNodeDetail(null)
+      return
+    }
     setDetailLoading(true)
     try {
       const data = await apiFetch(`/api/agentic-os/node/${encodeURIComponent(id)}`)
@@ -29,7 +65,7 @@ export default function GraphifyTab({ graph, search, selectedNode, onSelectNode 
     finally { setDetailLoading(false) }
   }
 
-  // ── Pure-JS force simulation (no D3/CDN) ──────────────────────────────────
+  // ── Force simulation (code graph) ─────────────────────────────────────────
   useEffect(() => {
     if (view !== 'graph' || !graph?.nodes?.length) return
 
@@ -39,7 +75,6 @@ export default function GraphifyTab({ graph, search, selectedNode, onSelectNode 
     const idSet = new Set(sample.map(n => n.id))
     const edgeList = graph.edges.filter(e => idSet.has(e.source) && idSet.has(e.target))
 
-    // Initialise node positions in a circle
     const nodes = sample.map((n, i) => {
       const angle = (i / sample.length) * 2 * Math.PI
       const r = Math.min(W, H) * 0.35
@@ -47,66 +82,47 @@ export default function GraphifyTab({ graph, search, selectedNode, onSelectNode 
     })
     const idxMap = {}
     nodes.forEach((n, i) => { idxMap[n.id] = i })
-
     const edgesIdx = edgeList.map(e => ({ si: idxMap[e.source], ti: idxMap[e.target], label: e.label }))
       .filter(e => e.si !== undefined && e.ti !== undefined)
 
     simRef.current = { nodes, edgesIdx }
-
-    const LINK_DIST   = 80
-    const REPEL       = -180
-    const CENTER_STR  = 0.04
-    const DAMP        = 0.85
-    const ITER_LIMIT  = 300
+    const LINK_DIST = 80, REPEL = -180, CENTER_STR = 0.04, DAMP = 0.85
     let iter = 0
 
     function tick() {
       const { nodes, edgesIdx } = simRef.current
       const n = nodes.length
-
-      // Repulsion between all pairs (Barnes-Hut approximation: just cap at 50 pairs per node)
       for (let i = 0; i < n; i++) {
         for (let j = i + 1; j < n; j++) {
-          const dx = nodes[j].x - nodes[i].x
-          const dy = nodes[j].y - nodes[i].y
-          const dist2 = dx * dx + dy * dy + 1
-          const dist  = Math.sqrt(dist2)
+          const dx = nodes[j].x - nodes[i].x, dy = nodes[j].y - nodes[i].y
+          const dist2 = dx*dx + dy*dy + 1, dist = Math.sqrt(dist2)
           const force = REPEL / dist2
-          const fx = (dx / dist) * force
-          const fy = (dy / dist) * force
+          const fx = (dx/dist)*force, fy = (dy/dist)*force
           nodes[i].vx -= fx; nodes[i].vy -= fy
           nodes[j].vx += fx; nodes[j].vy += fy
         }
       }
-
-      // Link attraction
       for (const e of edgesIdx) {
         const a = nodes[e.si], b = nodes[e.ti]
         const dx = b.x - a.x, dy = b.y - a.y
-        const dist = Math.sqrt(dx * dx + dy * dy) || 1
+        const dist = Math.sqrt(dx*dx + dy*dy) || 1
         const force = (dist - LINK_DIST) * 0.05
-        const fx = (dx / dist) * force, fy = (dy / dist) * force
+        const fx = (dx/dist)*force, fy = (dy/dist)*force
         if (!a.fx) { a.vx += fx; a.vy += fy }
         if (!b.fx) { b.vx -= fx; b.vy -= fy }
       }
-
-      // Center pull + damping + integrate
       for (const node of nodes) {
         if (node.fx !== null) { node.x = node.fx; node.y = node.fy; node.vx = 0; node.vy = 0; continue }
-        node.vx = (node.vx + (W / 2 - node.x) * CENTER_STR) * DAMP
-        node.vy = (node.vy + (H / 2 - node.y) * CENTER_STR) * DAMP
-        node.x = Math.max(12, Math.min(W - 12, node.x + node.vx))
-        node.y = Math.max(12, Math.min(H - 12, node.y + node.vy))
+        node.vx = (node.vx + (W/2 - node.x)*CENTER_STR)*DAMP
+        node.vy = (node.vy + (H/2 - node.y)*CENTER_STR)*DAMP
+        node.x = Math.max(12, Math.min(W-12, node.x + node.vx))
+        node.y = Math.max(12, Math.min(H-12, node.y + node.vy))
       }
-
       iter++
-      // Snapshot positions for React state
       setPositions(nodes.map(n => ({ id: n.id, x: n.x, y: n.y, type: n.type, label: n.label, file: n.file })))
       setLinks(edgesIdx.map(e => ({ x1: nodes[e.si].x, y1: nodes[e.si].y, x2: nodes[e.ti].x, y2: nodes[e.ti].y })))
-
-      if (iter < ITER_LIMIT) rafRef.current = requestAnimationFrame(tick)
+      if (iter < 300) rafRef.current = requestAnimationFrame(tick)
     }
-
     rafRef.current = requestAnimationFrame(tick)
     return () => { cancelAnimationFrame(rafRef.current) }
   }, [graph, view, search])
@@ -118,7 +134,6 @@ export default function GraphifyTab({ graph, search, selectedNode, onSelectNode 
     if (!simRef.current) return
     const node = simRef.current.nodes.find(n => n.id === id)
     if (node) { node.fx = node.x; node.fy = node.y }
-    // Restart sim
     const { nodes, edgesIdx } = simRef.current
     cancelAnimationFrame(rafRef.current)
     let iter = 0
@@ -127,9 +142,9 @@ export default function GraphifyTab({ graph, search, selectedNode, onSelectNode 
       for (let i = 0; i < n; i++) {
         for (let j = i + 1; j < n; j++) {
           const dx = nodes[j].x - nodes[i].x, dy = nodes[j].y - nodes[i].y
-          const dist2 = dx * dx + dy * dy + 1, dist = Math.sqrt(dist2)
+          const dist2 = dx*dx + dy*dy + 1, dist = Math.sqrt(dist2)
           const force = -180 / dist2
-          const fx = (dx / dist) * force, fy = (dy / dist) * force
+          const fx = (dx/dist)*force, fy = (dy/dist)*force
           nodes[i].vx -= fx; nodes[i].vy -= fy
           nodes[j].vx += fx; nodes[j].vy += fy
         }
@@ -137,18 +152,18 @@ export default function GraphifyTab({ graph, search, selectedNode, onSelectNode 
       for (const e of edgesIdx) {
         const a = nodes[e.si], b = nodes[e.ti]
         const dx = b.x - a.x, dy = b.y - a.y
-        const dist = Math.sqrt(dx * dx + dy * dy) || 1
+        const dist = Math.sqrt(dx*dx + dy*dy) || 1
         const force = (dist - 80) * 0.05
-        const fx = (dx / dist) * force, fy = (dy / dist) * force
+        const fx = (dx/dist)*force, fy = (dy/dist)*force
         if (!a.fx) { a.vx += fx; a.vy += fy }
         if (!b.fx) { b.vx -= fx; b.vy -= fy }
       }
       for (const node of nodes) {
         if (node.fx !== null) { node.x = node.fx; node.y = node.fy; node.vx = 0; node.vy = 0; continue }
-        node.vx = (node.vx + (W / 2 - node.x) * 0.04) * 0.85
-        node.vy = (node.vy + (H / 2 - node.y) * 0.04) * 0.85
-        node.x = Math.max(12, Math.min(W - 12, node.x + node.vx))
-        node.y = Math.max(12, Math.min(H - 12, node.y + node.vy))
+        node.vx = (node.vx + (W/2 - node.x)*0.04)*0.85
+        node.vy = (node.vy + (H/2 - node.y)*0.04)*0.85
+        node.x = Math.max(12, Math.min(W-12, node.x + node.vx))
+        node.y = Math.max(12, Math.min(H-12, node.y + node.vy))
       }
       iter++
       setPositions(nodes.map(n => ({ id: n.id, x: n.x, y: n.y, type: n.type, label: n.label, file: n.file })))
@@ -172,8 +187,7 @@ export default function GraphifyTab({ graph, search, selectedNode, onSelectNode 
       setPan({ x: panStart.current.panX + dx, y: panStart.current.panY + dy })
     }
   }
-
-  const onSvgMouseUp = (e) => {
+  const onSvgMouseUp = () => {
     if (dragging.current && simRef.current) {
       const node = simRef.current.nodes.find(n => n.id === dragging.current)
       if (node) { node.fx = null; node.fy = null }
@@ -181,52 +195,103 @@ export default function GraphifyTab({ graph, search, selectedNode, onSelectNode 
     dragging.current = null
     panStart.current = null
   }
-
   const onSvgMouseDown = (e) => {
-    if (!dragging.current) {
-      panStart.current = { x: e.clientX, y: e.clientY, panX: pan.x, panY: pan.y }
-    }
+    if (!dragging.current) panStart.current = { x: e.clientX, y: e.clientY, panX: pan.x, panY: pan.y }
   }
-
   const onWheel = (e) => {
     e.preventDefault()
     setZoom(z => Math.max(0.3, Math.min(3, z * (e.deltaY < 0 ? 1.1 : 0.9))))
   }
 
   const rMap = { route: 8, lib: 6, component: 7, jsx: 4 }
-
   const filtered = graph?.nodes?.filter(n =>
     !search || n.label.toLowerCase().includes(search.toLowerCase()) || n.type.includes(search.toLowerCase())
   ) || []
 
+  // ── Data-flow tier layout ─────────────────────────────────────────────────
+  function buildDataFlowLayout(df) {
+    if (!df?.nodes) return { dfNodes: [], dfEdges: [] }
+    const tierGroups = [0, 1, 2, 3].map(t => df.nodes.filter(n => n.tier === t))
+    const dfNodes = df.nodes.map(n => {
+      const group = tierGroups[n.tier] || []
+      const idx   = group.findIndex(g => g.id === n.id)
+      const cols  = group.length
+      const tW    = W - 80
+      const x     = 40 + (cols > 1 ? (idx / (cols - 1)) * tW : tW / 2)
+      const y     = 60 + n.tier * 120
+      return { ...n, x, y }
+    })
+    const nodeMap = new Map(dfNodes.map(n => [n.id, n]))
+    const dfEdges = (df.edges || []).map(e => {
+      const s = nodeMap.get(e.source), t = nodeMap.get(e.target)
+      if (!s || !t) return null
+      return { ...e, x1: s.x, y1: s.y, x2: t.x, y2: t.y }
+    }).filter(Boolean)
+    return { dfNodes, dfEdges }
+  }
+
+  // ── Entity hierarchy layout ───────────────────────────────────────────────
+  function buildEntityLayout(ent) {
+    if (!ent?.nodes) return { entNodes: [], entEdges: [] }
+    const tierGroups = [0, 1, 2].map(t => ent.nodes.filter(n => n.tier === t))
+    const entNodes = ent.nodes.map(n => {
+      const group = tierGroups[n.tier] || []
+      const idx   = group.findIndex(g => g.id === n.id)
+      const cols  = group.length
+      const tW    = W - 80
+      const x     = 40 + (cols > 1 ? (idx / (cols - 1)) * tW : tW / 2)
+      const y     = 60 + n.tier * 180
+      return { ...n, x, y }
+    })
+    const nodeMap  = new Map(entNodes.map(n => [n.id, n]))
+    const entEdges = (ent.edges || []).map(e => {
+      const s = nodeMap.get(e.source), t = nodeMap.get(e.target)
+      if (!s || !t) return null
+      return { ...e, x1: s.x, y1: s.y, x2: t.x, y2: t.y }
+    }).filter(Boolean)
+    return { entNodes, entEdges }
+  }
+
+  const { dfNodes, dfEdges } = buildDataFlowLayout(dataFlow)
+  const { entNodes, entEdges } = buildEntityLayout(entities)
+
+  const [hoveredNode, setHoveredNode] = useState(null)
+
   return (
     <div className="space-y-4">
-      {/* Stats bar */}
+      {/* Stats bar + view switcher */}
       <div className="flex items-center gap-6 p-4 rounded-xl border border-white/[0.06] bg-[#12121a]">
         {[
-          { label: 'Nodes',         value: graph?.nodes?.length ?? '—', color: 'text-indigo-400'  },
-          { label: 'Edges',         value: graph?.edges?.length ?? '—', color: 'text-purple-400'  },
-          { label: 'Showing',       value: positions.length || '—',     color: 'text-cyan-400'    },
-          { label: 'Token Savings', value: '71.5×',                     color: 'text-emerald-400' },
+          { label: 'Nodes',         value: graph?.nodes?.length ?? '—',  color: 'text-indigo-400'  },
+          { label: 'Edges',         value: graph?.edges?.length ?? '—',  color: 'text-purple-400'  },
+          { label: 'Providers',     value: dataFlow ? dataFlow.nodes.filter(n => n.tier === 0).length : '—', color: 'text-amber-400' },
+          { label: 'Token Savings', value: '71.5×',                      color: 'text-emerald-400' },
         ].map((s, i) => (
           <div key={i} className="text-center">
             <div className={`text-xl font-bold font-mono ${s.color}`}>{s.value}</div>
             <div className="text-[10px] text-slate-500 mt-0.5">{s.label}</div>
           </div>
         ))}
-        <div className="ml-auto flex items-center gap-2">
-          <button onClick={() => setView('graph')} className={`px-3 py-1.5 rounded-lg text-xs transition-all ${view === 'graph' ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/30' : 'text-slate-400 hover:text-white hover:bg-white/[0.04]'}`}>
-            Force Graph
-          </button>
-          <button onClick={() => setView('list')} className={`px-3 py-1.5 rounded-lg text-xs transition-all ${view === 'list' ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/30' : 'text-slate-400 hover:text-white hover:bg-white/[0.04]'}`}>
-            Node List
-          </button>
+        <div className="ml-auto flex items-center gap-1">
+          {[
+            { id: 'graph',    label: 'Code Graph',  Icon: Network  },
+            { id: 'dataflow', label: 'Data Flow',   Icon: GitBranch },
+            { id: 'entities', label: 'Entity Graph', Icon: Layers   },
+            { id: 'list',     label: 'Node List',   Icon: Code2    },
+          ].map(({ id, label, Icon }) => (
+            <button key={id} onClick={() => setView(id)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-all ${view === id ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/30' : 'text-slate-400 hover:text-white hover:bg-white/[0.04]'}`}>
+              <Icon size={11} />{label}
+            </button>
+          ))}
         </div>
       </div>
 
       <div className="grid grid-cols-4 gap-4">
         <div className="col-span-3">
-          {view === 'graph' ? (
+
+          {/* ── Code Graph ── */}
+          {view === 'graph' && (
             <div className="rounded-xl border border-white/[0.06] bg-[#12121a] overflow-hidden">
               <div className="px-4 py-2.5 border-b border-white/[0.06] flex items-center gap-2 text-xs text-slate-500">
                 <Network size={12} className="text-indigo-400" />
@@ -234,52 +299,30 @@ export default function GraphifyTab({ graph, search, selectedNode, onSelectNode 
                 <span className="ml-auto">{positions.length} nodes</span>
               </div>
               {graph?.nodes?.length ? (
-                <svg
-                  ref={svgRef}
-                  width="100%" viewBox={`0 0 ${W} ${H}`}
+                <svg ref={svgRef} width="100%" viewBox={`0 0 ${W} ${H}`}
                   style={{ height: 520, cursor: dragging.current ? 'grabbing' : 'grab', userSelect: 'none' }}
-                  onMouseMove={onSvgMouseMove}
-                  onMouseUp={onSvgMouseUp}
-                  onMouseLeave={onSvgMouseUp}
-                  onMouseDown={onSvgMouseDown}
-                  onWheel={onWheel}
-                >
+                  onMouseMove={onSvgMouseMove} onMouseUp={onSvgMouseUp}
+                  onMouseLeave={onSvgMouseUp} onMouseDown={onSvgMouseDown} onWheel={onWheel}>
                   <g transform={`translate(${pan.x},${pan.y}) scale(${zoom})`}>
-                    {/* Edges */}
-                    <g>
-                      {links.map((l, i) => (
-                        <line key={i} x1={l.x1} y1={l.y1} x2={l.x2} y2={l.y2}
-                          stroke="rgba(99,102,241,0.18)" strokeWidth={1} />
-                      ))}
-                    </g>
-                    {/* Nodes */}
+                    <g>{links.map((l, i) => <line key={i} x1={l.x1} y1={l.y1} x2={l.x2} y2={l.y2} stroke="rgba(99,102,241,0.18)" strokeWidth={1} />)}</g>
                     <g>
                       {positions.map(n => {
                         const col = NODE_COLOR[n.type] || '#6366f1'
                         const r   = rMap[n.type] || 5
-                        const isSelected = selectedNode === n.id
+                        const sel = selectedNode === n.id
                         return (
-                          <g key={n.id} transform={`translate(${n.x},${n.y})`}
-                            style={{ cursor: 'pointer' }}
-                            onMouseDown={e => onNodeMouseDown(e, n.id)}
-                            onClick={() => loadDetail(n.id)}>
-                            {isSelected && <circle r={r + 4} fill="none" stroke={col} strokeWidth={1.5} opacity={0.5} />}
+                          <g key={n.id} transform={`translate(${n.x},${n.y})`} style={{ cursor: 'pointer' }}
+                            onMouseDown={e => onNodeMouseDown(e, n.id)} onClick={() => loadDetail(n.id)}>
+                            {sel && <circle r={r+4} fill="none" stroke={col} strokeWidth={1.5} opacity={0.5} />}
                             <circle r={r} fill={col} opacity={0.85} />
-                            {n.type !== 'jsx' && (
-                              <text x={r + 3} y={4} fontSize={7} fill="rgba(148,163,184,0.85)"
-                                fontFamily="monospace" style={{ pointerEvents: 'none' }}>
-                                {n.label}
-                              </text>
-                            )}
+                            {n.type !== 'jsx' && <text x={r+3} y={4} fontSize={7} fill="rgba(148,163,184,0.85)" fontFamily="monospace" style={{ pointerEvents: 'none' }}>{n.label}</text>}
                           </g>
                         )
                       })}
                     </g>
-                    {/* Legend */}
                     {[['route','#6366f1'],['lib','#06b6d4'],['component','#8b5cf6'],['jsx','#a78bfa']].map(([t,c],i) => (
                       <g key={t} transform={`translate(12,${H - 52 + i * 13})`}>
-                        <circle r={4} fill={c} />
-                        <text x={9} y={4} fontSize={8} fill="rgba(148,163,184,0.6)" fontFamily="monospace">{t}</text>
+                        <circle r={4} fill={c} /><text x={9} y={4} fontSize={8} fill="rgba(148,163,184,0.6)" fontFamily="monospace">{t}</text>
                       </g>
                     ))}
                   </g>
@@ -288,7 +331,137 @@ export default function GraphifyTab({ graph, search, selectedNode, onSelectNode 
                 <div className="h-64 flex items-center justify-center text-slate-600 text-xs">Loading graph data…</div>
               )}
             </div>
-          ) : (
+          )}
+
+          {/* ── Data Flow ── */}
+          {view === 'dataflow' && (
+            <div className="rounded-xl border border-white/[0.06] bg-[#12121a] overflow-hidden">
+              <div className="px-4 py-2.5 border-b border-white/[0.06] flex items-center gap-2 text-xs text-slate-500">
+                <GitBranch size={12} className="text-amber-400" />
+                <span>Real-time data pipeline — sources to UI</span>
+                {dataFlow && <span className="ml-auto text-[10px]">{dataFlow.nodes.length} nodes · {dataFlow.edges.length} flows</span>}
+              </div>
+              {dfLoading && <div className="h-64 flex items-center justify-center"><Loader2 size={16} className="text-amber-400 animate-spin" /></div>}
+              {!dfLoading && dataFlow && (
+                <svg width="100%" viewBox={`0 0 ${W} ${H + 60}`} style={{ height: 580 }}>
+                  {/* Tier lane backgrounds */}
+                  {[0,1,2,3].map(t => (
+                    <rect key={t} x={0} y={20 + t * 120} width={W} height={110}
+                      fill={TIER_COLOR[t]} fillOpacity={0.04} rx={0} />
+                  ))}
+                  {/* Tier labels */}
+                  {[0,1,2,3].map(t => (
+                    <text key={t} x={8} y={38 + t * 120} fontSize={8} fill={TIER_COLOR[t]} fontFamily="monospace" opacity={0.7}>{TIER_LABEL[t].toUpperCase()}</text>
+                  ))}
+                  {/* Edges */}
+                  <g>
+                    {dfEdges.map((e, i) => {
+                      const mx = (e.x1 + e.x2) / 2
+                      const my = (e.y1 + e.y2) / 2
+                      return (
+                        <g key={i}>
+                          <line x1={e.x1} y1={e.y1} x2={e.x2} y2={e.y2}
+                            stroke={TIER_COLOR[dataFlow.nodes.find(n => n.id === e.source)?.tier ?? 0]}
+                            strokeWidth={1} strokeOpacity={0.25} strokeDasharray={e.source.includes('cache') ? '3,3' : undefined} />
+                          {hoveredNode && (e.source === hoveredNode || e.target === hoveredNode) && (
+                            <text x={mx} y={my - 3} fontSize={7} fill="rgba(203,213,225,0.8)" textAnchor="middle" fontFamily="monospace">{e.dataType}</text>
+                          )}
+                        </g>
+                      )
+                    })}
+                  </g>
+                  {/* Nodes */}
+                  <g>
+                    {dfNodes.map(n => {
+                      const col  = TIER_COLOR[n.tier]
+                      const sc   = STATUS_COLOR[n.status] || '#6b7280'
+                      const isHov = hoveredNode === n.id
+                      return (
+                        <g key={n.id} transform={`translate(${n.x},${n.y})`} style={{ cursor: 'pointer' }}
+                          onMouseEnter={() => setHoveredNode(n.id)}
+                          onMouseLeave={() => setHoveredNode(null)}
+                          onClick={() => loadDetail(n.id)}>
+                          <rect x={-28} y={-12} width={56} height={22} rx={4} fill={col} fillOpacity={isHov ? 0.25 : 0.12} stroke={col} strokeOpacity={isHov ? 0.6 : 0.25} strokeWidth={1} />
+                          <text x={0} y={3} fontSize={7} fill={col} textAnchor="middle" fontFamily="monospace" fontWeight="500">{n.label}</text>
+                          {/* Status dot (tier 0 only) */}
+                          {n.tier === 0 && <circle cx={22} cy={-8} r={3} fill={sc} />}
+                          {/* Transport badge (tier 0 WSS) */}
+                          {n.transport === 'WSS' && <text x={0} y={16} fontSize={6} fill={col} textAnchor="middle" fontFamily="monospace" opacity={0.6}>WSS</text>}
+                        </g>
+                      )
+                    })}
+                  </g>
+                  {/* Legend */}
+                  <g transform={`translate(12,${H + 30})`}>
+                    {Object.entries(STATUS_COLOR).map(([s, c], i) => (
+                      <g key={s} transform={`translate(${i * 90},0)`}>
+                        <circle r={4} fill={c} /><text x={8} y={4} fontSize={8} fill="rgba(148,163,184,0.6)" fontFamily="monospace">{s}</text>
+                      </g>
+                    ))}
+                    <text x={290} y={4} fontSize={8} fill="rgba(148,163,184,0.4)" fontFamily="monospace">hover node to see data types on edges</text>
+                  </g>
+                </svg>
+              )}
+            </div>
+          )}
+
+          {/* ── Entity Graph ── */}
+          {view === 'entities' && (
+            <div className="rounded-xl border border-white/[0.06] bg-[#12121a] overflow-hidden">
+              <div className="px-4 py-2.5 border-b border-white/[0.06] flex items-center gap-2 text-xs text-slate-500">
+                <Layers size={12} className="text-violet-400" />
+                <span>Financial universe hierarchy — asset class → universe → symbol</span>
+                {entities && <span className="ml-auto text-[10px]">{entities.symbolCount} symbols · {entities.universeCount} universes</span>}
+              </div>
+              {entLoading && <div className="h-64 flex items-center justify-center"><Loader2 size={16} className="text-violet-400 animate-spin" /></div>}
+              {!entLoading && entities && (
+                <svg width="100%" viewBox={`0 0 ${W} 580`} style={{ height: 580 }}>
+                  {/* Edges */}
+                  <g>
+                    {entEdges.map((e, i) => {
+                      const sn = entities.nodes.find(n => n.id === e.source)
+                      return (
+                        <line key={i} x1={e.x1} y1={e.y1} x2={e.x2} y2={e.y2}
+                          stroke={sn?.color || '#6366f1'} strokeWidth={e.label === 'contains' ? 1.5 : 0.8}
+                          strokeOpacity={e.label === 'contains' ? 0.3 : 0.15} />
+                      )
+                    })}
+                  </g>
+                  {/* Nodes */}
+                  <g>
+                    {entNodes.map(n => {
+                      const isAC  = n.type === 'assetClass'
+                      const isUni = n.type === 'universe'
+                      const r     = isAC ? 14 : isUni ? 9 : 5
+                      const isHov = hoveredNode === n.id
+                      return (
+                        <g key={n.id} transform={`translate(${n.x},${n.y})`} style={{ cursor: 'pointer' }}
+                          onMouseEnter={() => setHoveredNode(n.id)}
+                          onMouseLeave={() => setHoveredNode(null)}>
+                          <circle r={r} fill={n.color} opacity={isHov ? 0.9 : isAC ? 0.8 : isUni ? 0.65 : 0.45} />
+                          {isHov && <circle r={r+3} fill="none" stroke={n.color} strokeWidth={1} opacity={0.5} />}
+                          <text x={0} y={r + 10} fontSize={isAC ? 9 : isUni ? 7 : 6} fill={isAC ? n.color : 'rgba(148,163,184,0.8)'}
+                            textAnchor="middle" fontFamily="monospace" fontWeight={isAC ? '700' : '400'}>
+                            {n.label}
+                          </text>
+                          {isUni && n.symbolCount && (
+                            <text x={0} y={r + 18} fontSize={6} fill="rgba(100,116,139,0.7)" textAnchor="middle" fontFamily="monospace">{n.symbolCount} symbols</text>
+                          )}
+                        </g>
+                      )
+                    })}
+                  </g>
+                  {/* Tier labels */}
+                  {[['Asset Classes', '#8b5cf6', 60], ['Scan Universes', '#6366f1', 240], ['Symbols', '#06b6d4', 420]].map(([lbl, col, y]) => (
+                    <text key={lbl} x={8} y={y} fontSize={8} fill={col} fontFamily="monospace" opacity={0.6}>{lbl.toUpperCase()}</text>
+                  ))}
+                </svg>
+              )}
+            </div>
+          )}
+
+          {/* ── Node List ── */}
+          {view === 'list' && (
             <div className="space-y-4">
               {['route', 'lib', 'component', 'jsx'].map(type => {
                 const nodes = filtered.filter(n => n.type === type)
@@ -317,9 +490,7 @@ export default function GraphifyTab({ graph, search, selectedNode, onSelectNode 
                   </div>
                 )
               })}
-              {!filtered.length && (
-                <div className="flex items-center justify-center h-40 text-slate-600 text-sm">No nodes match "{search}"</div>
-              )}
+              {!filtered.length && <div className="flex items-center justify-center h-40 text-slate-600 text-sm">No nodes match "{search}"</div>}
             </div>
           )}
         </div>
@@ -331,33 +502,91 @@ export default function GraphifyTab({ graph, search, selectedNode, onSelectNode 
             <div className="text-[10px] text-slate-500">Click a node to inspect</div>
           </div>
           <div className="p-4">
-            {detailLoading && <Loader2 size={16} className="text-indigo-400 animate-spin mx-auto" />}
-            {!detailLoading && !nodeDetail && <div className="text-xs text-slate-600 text-center py-6">Select a node</div>}
-            {!detailLoading && nodeDetail && (
-              <div className="space-y-3">
-                <div>
-                  <div className="text-xs font-semibold text-white">{nodeDetail.node.label}</div>
-                  <div className="text-[10px] text-slate-500 font-mono mt-0.5">{nodeDetail.node.id}</div>
-                  {nodeDetail.node.description && <div className="text-[10px] text-slate-400 mt-1">{nodeDetail.node.description}</div>}
-                  {nodeDetail.node.file && <div className="text-[10px] text-indigo-400 font-mono mt-1">{nodeDetail.node.file}</div>}
-                  {nodeDetail.node.lineCount && <div className="text-[10px] text-slate-600 mt-0.5">{nodeDetail.node.lineCount} lines</div>}
-                </div>
-                {nodeDetail.neighbours.length > 0 && (
+            {/* Data Flow hover tooltip */}
+            {view === 'dataflow' && hoveredNode && (() => {
+              const n = dfNodes.find(x => x.id === hoveredNode)
+              if (!n) return null
+              const flowsIn  = dfEdges.filter(e => e.target === hoveredNode)
+              const flowsOut = dfEdges.filter(e => e.source === hoveredNode)
+              return (
+                <div className="space-y-3">
                   <div>
-                    <div className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Connections ({nodeDetail.neighbours.length})</div>
-                    <div className="space-y-1 max-h-64 overflow-y-auto">
-                      {nodeDetail.neighbours.map((nb, i) => (
-                        <div key={i} className="flex items-center gap-2 text-[10px]">
-                          <span className={`text-[9px] px-1.5 py-0.5 rounded font-mono ${nb.direction === 'out' ? 'bg-indigo-500/15 text-indigo-400' : 'bg-purple-500/15 text-purple-400'}`}>
-                            {nb.direction === 'out' ? '→' : '←'} {nb.relation}
-                          </span>
-                          <span className="text-slate-300 truncate">{nb.label}</span>
-                        </div>
-                      ))}
+                    <div className="text-xs font-semibold" style={{ color: TIER_COLOR[n.tier] }}>{n.label}</div>
+                    <div className="text-[10px] text-slate-500 mt-0.5">{TIER_LABEL[n.tier]}</div>
+                    {n.status && <div className="flex items-center gap-1.5 mt-1"><div className="w-2 h-2 rounded-full" style={{ background: STATUS_COLOR[n.status] }} /><span className="text-[10px]" style={{ color: STATUS_COLOR[n.status] }}>{n.status}</span>{n.transport && <span className="text-[10px] text-slate-500">· {n.transport}</span>}</div>}
+                    {n.description && <div className="text-[10px] text-slate-400 mt-1.5">{n.description}</div>}
+                    {n.dataTypes && <div className="text-[10px] text-slate-500 mt-1">Provides: {n.dataTypes.join(' · ')}</div>}
+                  </div>
+                  {flowsIn.length > 0 && <div><div className="text-[9px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Receives ({flowsIn.length})</div>{flowsIn.map((e, i) => <div key={i} className="text-[10px] text-purple-300">← {dfNodes.find(x => x.id === e.source)?.label}: <span className="text-slate-500">{e.dataType}</span></div>)}</div>}
+                  {flowsOut.length > 0 && <div><div className="text-[9px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Sends ({flowsOut.length})</div>{flowsOut.map((e, i) => <div key={i} className="text-[10px] text-indigo-300">→ {dfNodes.find(x => x.id === e.target)?.label}: <span className="text-slate-500">{e.dataType}</span></div>)}</div>}
+                </div>
+              )
+            })()}
+
+            {/* Entity hover tooltip */}
+            {view === 'entities' && hoveredNode && (() => {
+              const n = entNodes.find(x => x.id === hoveredNode)
+              if (!n) return null
+              const children = entEdges.filter(e => e.source === hoveredNode).map(e => entNodes.find(x => x.id === e.target)).filter(Boolean)
+              return (
+                <div className="space-y-3">
+                  <div>
+                    <div className="text-xs font-semibold" style={{ color: n.color }}>{n.label}</div>
+                    <div className="text-[10px] text-slate-500 mt-0.5 capitalize">{n.type}{n.assetClass ? ` · ${n.assetClass}` : ''}</div>
+                    {n.symbolCount && <div className="text-[10px] text-slate-400 mt-0.5">{n.symbolCount} symbols</div>}
+                  </div>
+                  {children.length > 0 && (
+                    <div>
+                      <div className="text-[9px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Contains ({children.length})</div>
+                      <div className="flex flex-wrap gap-1">
+                        {children.slice(0, 20).map((c, i) => (
+                          <span key={i} className="text-[9px] px-1.5 py-0.5 rounded font-mono" style={{ background: (c.color || '#6366f1') + '22', color: c.color || '#6366f1' }}>{c.label}</span>
+                        ))}
+                        {children.length > 20 && <span className="text-[9px] text-slate-600">+{children.length - 20}</span>}
+                      </div>
                     </div>
+                  )}
+                </div>
+              )
+            })()}
+
+            {/* Code graph node detail */}
+            {(view === 'graph' || view === 'list') && (
+              <>
+                {detailLoading && <Loader2 size={16} className="text-indigo-400 animate-spin mx-auto" />}
+                {!detailLoading && !nodeDetail && <div className="text-xs text-slate-600 text-center py-6">Select a node</div>}
+                {!detailLoading && nodeDetail && (
+                  <div className="space-y-3">
+                    <div>
+                      <div className="text-xs font-semibold text-white">{nodeDetail.node.label}</div>
+                      <div className="text-[10px] text-slate-500 font-mono mt-0.5">{nodeDetail.node.id}</div>
+                      {nodeDetail.node.description && <div className="text-[10px] text-slate-400 mt-1">{nodeDetail.node.description}</div>}
+                      {nodeDetail.node.file && <div className="text-[10px] text-indigo-400 font-mono mt-1">{nodeDetail.node.file}</div>}
+                      {nodeDetail.node.lineCount && <div className="text-[10px] text-slate-600 mt-0.5">{nodeDetail.node.lineCount} lines</div>}
+                    </div>
+                    {nodeDetail.neighbours.length > 0 && (
+                      <div>
+                        <div className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Connections ({nodeDetail.neighbours.length})</div>
+                        <div className="space-y-1 max-h-64 overflow-y-auto">
+                          {nodeDetail.neighbours.map((nb, i) => (
+                            <div key={i} className="flex items-center gap-2 text-[10px]">
+                              <span className={`text-[9px] px-1.5 py-0.5 rounded font-mono ${nb.direction === 'out' ? 'bg-indigo-500/15 text-indigo-400' : 'bg-purple-500/15 text-purple-400'}`}>
+                                {nb.direction === 'out' ? '→' : '←'} {nb.relation}
+                              </span>
+                              <span className="text-slate-300 truncate">{nb.label}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
-              </div>
+              </>
+            )}
+
+            {/* Default prompt for non-graph views */}
+            {(view === 'dataflow' || view === 'entities') && !hoveredNode && (
+              <div className="text-xs text-slate-600 text-center py-6">Hover a node to inspect</div>
             )}
           </div>
         </div>
