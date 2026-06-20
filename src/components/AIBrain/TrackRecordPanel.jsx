@@ -89,8 +89,10 @@ export default function TrackRecordPanel() {
   const hasEarn    = !!stats.earningsWindowImpact
   const hasOpts    = !!stats.optionsFlowImpact
   const hasConfl   = !!stats.conflictImpact
+  const hasPat     = !!stats.byPattern && Object.keys(stats.byPattern).length > 0
+  const hasSector  = !!stats.bySector  && Object.keys(stats.bySector).length  > 0
 
-  const hasPredictive = hasScore || hasHC || hasRS || hasVol
+  const hasPredictive = hasScore || hasHC || hasRS || hasVol || hasPat
   const hasRisk       = hasEarn  || hasOpts || hasConfl
 
   return (
@@ -189,11 +191,32 @@ export default function TrackRecordPanel() {
               {hasVol && stats.byVolumeSignal.Weak && (
                 <BucketRow label="Volume: Weak/Diverging" bucket={stats.byVolumeSignal.Weak} accent="text-slate-300" />
               )}
+              {hasPat && Object.entries(stats.byPattern)
+                .sort((a, b) => (b[1].alphaWinRate ?? 0) - (a[1].alphaWinRate ?? 0))
+                .slice(0, 4)
+                .map(([pat, c]) => (
+                  <BucketRow key={pat} label={`Pattern: ${pat}`} bucket={c} accent={pctColor(c.alphaWinRate)} />
+                ))
+              }
               {data.bestCompositeThreshold != null && (
                 <p className="text-[10px] text-slate-500 mt-1.5">
                   Best score threshold from history: <span className="text-mint-400 font-mono">{data.bestCompositeThreshold}/100</span>
                 </p>
               )}
+            </div>
+          )}
+
+          {/* By sector */}
+          {hasSector && (
+            <div>
+              <SectionHeader icon={TrendingUp} label="By sector (alpha win, top picks)" />
+              {Object.entries(stats.bySector)
+                .sort((a, b) => b[1].n - a[1].n)
+                .slice(0, 6)
+                .map(([sector, c]) => (
+                  <BucketRow key={sector} label={sector} bucket={c} accent={pctColor(c.alphaWinRate)} />
+                ))
+              }
             </div>
           )}
 
