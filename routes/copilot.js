@@ -324,7 +324,7 @@ async function dispatchTool(name, input, req) {
       const r = await fetch(`http://127.0.0.1:${port}/api/ai-brain/analyze`, {
         method: 'POST', headers: fwdHeaders,
         body: JSON.stringify({ scanMode: input.scanMode || 'broad', horizon: input.horizon || '6m' }),
-        signal: AbortSignal.timeout(90_000),
+        signal: AbortSignal.timeout(120_000),
       })
       const data = await r.json()
       if (!data.rankedStocks) return `Scan failed: ${data.error || 'unknown error'}`
