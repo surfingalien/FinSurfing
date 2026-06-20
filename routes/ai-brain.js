@@ -892,12 +892,17 @@ router.get('/activity', (req, res) => {
     const stats   = computeStats(records)
     const feed    = buildActivityFeed(records, limit)
     res.json({
-      available:   feed.length > 0,
-      generatedAt: feed[0]?.generatedAt ?? null,
-      totalLogged: records.length,
-      calibration: stats.calibration ?? null,
-      ensemble:    stats.ensemble ?? null,
-      baseline:    stats.baseline ?? null,
+      available:    feed.length > 0,
+      generatedAt:  feed[0]?.generatedAt ?? null,
+      totalLogged:  records.length,
+      calibration:  stats.calibration ?? null,
+      ensemble:     stats.ensemble ?? null,
+      baseline:     stats.baseline ?? null,
+      h7:           stats.h7 ?? null,
+      h30:          stats.h30 ?? null,
+      h90:          stats.h90 ?? null,
+      byCompositeScore: stats.byCompositeScore ?? null,
+      byHighConviction: stats.byHighConviction ?? null,
       feed,
     })
   } catch {

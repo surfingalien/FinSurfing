@@ -12,6 +12,7 @@
 
 import { useState, useCallback } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
+import { useQuery, fetchJson } from '../../hooks/useQuery'
 import {
   Brain, TrendingUp, RefreshCw, AlertTriangle,
   Zap, Activity, Clock, Download,
@@ -41,6 +42,13 @@ export default function AIBrainView({ portfolio, onAnalyze }) {
   const [showConvictionOnly, setShowConvictionOnly] = useState(false)
 
   const holdings = portfolio?.positions?.map(p => p.symbol) ?? []
+
+  const { data: activityData } = useQuery(
+    'ai-brain-activity-calibration',
+    () => fetchJson('/api/ai-brain/activity?limit=1'),
+    { staleMs: 60 * 60_000 },
+  )
+  const byCompositeScore = activityData?.byCompositeScore ?? null
 
   const parseSymbols = (str) =>
     str.split(/[,\s]+/)
@@ -423,7 +431,7 @@ export default function AIBrainView({ portfolio, onAnalyze }) {
             )}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {visibleStocks.map((stock, i) => (
-                <StockCard key={`${stock.symbol}-${i}`} stock={stock} onAnalyze={onAnalyze} horizon={horizon} />
+                <StockCard key={`${stock.symbol}-${i}`} stock={stock} onAnalyze={onAnalyze} horizon={horizon} byCompositeScore={byCompositeScore} />
               ))}
             </div>
           </div>

@@ -9,7 +9,18 @@ import { AGENTS, VERDICT_CONFIG, CONFIDENCE_CONFIG, VOLUME_SIGNAL } from './cons
 import { ScoreBar, CompositeRing, ConflictBanner, PriceZones, ThesisAssumptions } from './StockCardParts'
 
 /* ── StockCard ─────────────────────────────────────────────── */
-export default function StockCard({ stock, onAnalyze, horizon }) {
+function compositeScoreBand(score) {
+  if (score == null) return null
+  if (score >= 80) return 'elite'
+  if (score >= 70) return 'high'
+  if (score >= 40) return 'mid'
+  return 'low'
+}
+
+const BAND_LABEL = { elite: 'Elite', high: 'High', mid: 'Mid', low: 'Low' }
+const BAND_COLOR = { elite: 'text-emerald-400', high: 'text-mint-400', mid: 'text-amber-400', low: 'text-red-400' }
+
+export default function StockCard({ stock, onAnalyze, horizon, byCompositeScore }) {
   const [expanded, setExpanded] = useState(false)
   const { addStock, removeStock, hasSymbol } = useAIWatchlist()
   const verdict    = VERDICT_CONFIG[stock.agentVerdict]   || VERDICT_CONFIG['Buy']
@@ -17,6 +28,10 @@ export default function StockCard({ stock, onAnalyze, horizon }) {
   const volSig     = VOLUME_SIGNAL[stock.volumeSignal]    || VOLUME_SIGNAL['Unknown']
   const inWatchlist = hasSymbol(stock.symbol)
   const conflictAgents = stock.agentConflict?.exists ? (stock.agentConflict.agents || []) : []
+
+  const band     = compositeScoreBand(stock.compositeScore)
+  const bandCalib = band && byCompositeScore?.[band]
+  const alphaWin  = bandCalib?.alphaWinRate ?? bandCalib?.winRate ?? null
 
   const toggleWatchlist = () => {
     if (inWatchlist) {
@@ -56,6 +71,11 @@ export default function StockCard({ stock, onAnalyze, horizon }) {
           <div className="flex flex-col items-center gap-1 shrink-0">
             <span className="text-[10px] text-slate-600 font-mono">#{stock.rank}</span>
             <CompositeRing score={stock.compositeScore} />
+            {alphaWin != null && (
+              <span className={`text-[9px] font-mono font-semibold ${BAND_COLOR[band]}`} title={`Historical alpha win rate for ${BAND_LABEL[band]} score band (${bandCalib.n} predictions)`}>
+                {Math.round(alphaWin * 100)}% α
+              </span>
+            )}
           </div>
 
           <div className="flex-1 min-w-0">
