@@ -197,4 +197,120 @@ describe('computeStats', () => {
     const s = computeStats(records)
     expect(s.byPattern).toBe(null)
   })
+
+  test('byRsRank separates weak/mid/strong RS rank buckets', () => {
+    const records = [
+      mkRecord({ rsRankAtScan: 20, price30d: 90,  benchRet30d: 2 }), // weak, loss
+      mkRecord({ rsRankAtScan: 50, price30d: 112, benchRet30d: 2 }), // mid, win
+      mkRecord({ rsRankAtScan: 85, price30d: 120, benchRet30d: 2 }), // strong, win
+      mkRecord({ rsRankAtScan: 90, price30d: 118, benchRet30d: 2 }), // strong, win
+    ]
+    const s = computeStats(records)
+    expect(s.byRsRank.weak.n).toBe(1)
+    expect(s.byRsRank.weak.alphaWinRate).toBe(0)
+    expect(s.byRsRank.strong.n).toBe(2)
+    expect(s.byRsRank.strong.alphaWinRate).toBe(1)
+  })
+
+  test('byRsRank is null when no records have rsRankAtScan', () => {
+    const s = computeStats([mkRecord()])
+    expect(s.byRsRank).toBe(null)
+  })
+
+  test('byVolumeSignal separates Confirming vs Weak picks', () => {
+    const records = [
+      mkRecord({ volumeSignal: 'Confirming', price30d: 120, benchRet30d: 2 }), // win
+      mkRecord({ volumeSignal: 'Confirming', price30d: 90,  benchRet30d: 2 }), // loss
+      mkRecord({ volumeSignal: 'Weak',       price30d: 90,  benchRet30d: 2 }), // loss
+    ]
+    const s = computeStats(records)
+    expect(s.byVolumeSignal.Confirming.n).toBe(2)
+    expect(s.byVolumeSignal.Confirming.alphaWinRate).toBe(0.5)
+    expect(s.byVolumeSignal.Weak.n).toBe(1)
+    expect(s.byVolumeSignal.Weak.alphaWinRate).toBe(0)
+  })
+
+  test('earningsWindowImpact separates imminent/upcoming/distant windows', () => {
+    const records = [
+      mkRecord({ daysToEarnings: 3,    price30d: 90,  benchRet30d: 2 }), // imminent, loss
+      mkRecord({ daysToEarnings: 15,   price30d: 120, benchRet30d: 2 }), // upcoming, win
+      mkRecord({ daysToEarnings: null, price30d: 120, benchRet30d: 2 }), // distant, win
+    ]
+    const s = computeStats(records)
+    expect(s.earningsWindowImpact.imminent.alphaWinRate).toBe(0)
+    expect(s.earningsWindowImpact.upcoming.alphaWinRate).toBe(1)
+    expect(s.earningsWindowImpact.distant.alphaWinRate).toBe(1)
+  })
+
+  test('optionsFlowImpact separates bullish/neutral/bearish P/C buckets', () => {
+    const records = [
+      mkRecord({ optionsPcRatio: 0.50, price30d: 120, benchRet30d: 2 }), // bullish, win
+      mkRecord({ optionsPcRatio: 0.90, price30d: 90,  benchRet30d: 2 }), // neutral, loss
+      mkRecord({ optionsPcRatio: 1.50, price30d: 85,  benchRet30d: 2 }), // bearish, loss
+    ]
+    const s = computeStats(records)
+    expect(s.optionsFlowImpact.bullish.n).toBe(1)
+    expect(s.optionsFlowImpact.bullish.alphaWinRate).toBe(1)
+    expect(s.optionsFlowImpact.bearish.alphaWinRate).toBe(0)
+  })
+
+  test('conflictImpact measures whether agent disagreement predicted worse outcomes', () => {
+    const records = [
+      mkRecord({ agentConflict: { exists: true  }, price30d: 90,  benchRet30d: 2 }), // conflict, loss
+      mkRecord({ agentConflict: { exists: false }, price30d: 120, benchRet30d: 2 }), // no conflict, win
+    ]
+    const s = computeStats(records)
+    expect(s.conflictImpact.conflict.alphaWinRate).toBe(0)
+    expect(s.conflictImpact.noConflict.alphaWinRate).toBe(1)
+  })
+
+  test('h90 is computed when price90d is available', () => {
+    const records = [
+      mkRecord({ price7d: null, benchRet7d: null, price30d: null, benchRet30d: null, price90d: 130, benchRet90d: 5 }), // +30% vs +5% bench → alpha win
+      mkRecord({ price7d: null, benchRet7d: null, price30d: null, benchRet30d: null, price90d: 95,  benchRet90d: 5 }), // -5% vs +5% bench → alpha loss
+    ]
+    const s = computeStats(records)
+    expect(s.h90).not.toBe(null)
+    expect(s.h90.n).toBe(2)
+    expect(s.h90.winRate).toBe(0.5)
+    expect(s.h90.alphaWinRate).toBe(0.5)
+  })
+
+  test('byCompositeScore separates low/mid/high/elite score buckets', () => {
+    const records = [
+      mkRecord({ compositeScore: 30, price30d: 90,  benchRet30d: 2 }), // low, alpha loss
+      mkRecord({ compositeScore: 55, price30d: 112, benchRet30d: 2 }), // mid, alpha win
+      mkRecord({ compositeScore: 75, price30d: 120, benchRet30d: 2 }), // high, alpha win
+      mkRecord({ compositeScore: 85, price30d: 118, benchRet30d: 2 }), // elite, alpha win
+    ]
+    const s = computeStats(records)
+    expect(s.byCompositeScore.low.n).toBe(1)
+    expect(s.byCompositeScore.low.alphaWinRate).toBe(0)
+    expect(s.byCompositeScore.mid.n).toBe(1)
+    expect(s.byCompositeScore.elite.n).toBe(1)
+    expect(s.byCompositeScore.elite.alphaWinRate).toBe(1)
+  })
+
+  test('byCompositeScore is null when no records have compositeScore', () => {
+    const s = computeStats([mkRecord()])
+    expect(s.byCompositeScore).toBe(null)
+  })
+
+  test('byHighConviction separates highConviction picks from standard picks', () => {
+    const records = [
+      mkRecord({ highConviction: true,  price30d: 120, benchRet30d: 2 }), // hc, alpha win
+      mkRecord({ highConviction: true,  price30d: 95,  benchRet30d: 2 }), // hc, alpha loss
+      mkRecord({ highConviction: false, price30d: 90,  benchRet30d: 2 }), // standard, loss
+    ]
+    const s = computeStats(records)
+    expect(s.byHighConviction.true.n).toBe(2)
+    expect(s.byHighConviction.true.alphaWinRate).toBe(0.5)
+    expect(s.byHighConviction.false.n).toBe(1)
+    expect(s.byHighConviction.false.alphaWinRate).toBe(0)
+  })
+
+  test('byHighConviction is null when no records have highConviction', () => {
+    const s = computeStats([mkRecord()])
+    expect(s.byHighConviction).toBe(null)
+  })
 })

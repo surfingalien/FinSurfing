@@ -37,6 +37,7 @@ const backtestQueueRoutes   = require('./routes/backtest-queue')
 const agenticOsRoutes       = require('./routes/agentic-os')
 const optionsFlowRoutes     = require('./routes/options-flow')
 const symbolRoutes          = require('./routes/symbols')
+const symbolDb              = require('./lib/symbol-db')
 // MCP endpoint depends on @modelcontextprotocol/sdk — a load failure here
 // (runtime/version mismatch) must degrade to a 503 on /api/mcp, never crash
 // the server: a boot crash fails Railway's healthcheck and silently pins
@@ -602,7 +603,7 @@ async function getFinnhubSearch(q, keys = {}) {
   try {
     const d = await apiFetch(fhUrl(`/search?q=${encodeURIComponent(q)}`, key), 8000)
     if (!d?.result?.length) return null
-    const typeMap = { 'Common Stock':'EQUITY', 'ETP':'ETF', 'Index':'INDEX', 'ADR':'EQUITY' }
+    const typeMap = { 'Common Stock':'EQUITY', 'ETP':'ETF', 'Index':'INDEX', 'ADR':'EQUITY', 'Mutual Fund':'FUND', 'ETF':'ETF' }
     return { quotes: d.result.slice(0, 10).map(r => ({
       symbol: r.symbol, shortname: r.description, longname: r.description,
       quoteType: typeMap[r.type] || 'EQUITY', exchange: r.displaySymbol,
@@ -2215,7 +2216,7 @@ async function getTwelveDataSearch(query, keys = {}) {
         symbol:    s.symbol,
         shortname: s.instrument_name,
         longname:  s.instrument_name,
-        quoteType: s.instrument_type?.toUpperCase() || 'EQUITY',
+        quoteType: ({ 'Common Stock':'EQUITY', 'ETF':'ETF', 'Index':'INDEX', 'Mutual Fund':'FUND', 'Preferred Stock':'EQUITY', 'Cryptocurrency':'EQUITY' })[s.instrument_type] || (s.instrument_type?.toUpperCase() || 'EQUITY'),
         exchange:  s.exchange,
       }))
     }
@@ -2251,6 +2252,19 @@ app.get('/api/search', async (req, res) => {
 
     const av = await getAVSearch(q, keys)
     if (av?.quotes?.length) return res.json({ quotes: rankSearchQuotes(av.quotes, q) })
+
+    // Final fallback: local FinanceDatabase index (no network, fast, 300k+ symbols)
+    const dbResults = symbolDb.search(q, 8)
+    if (dbResults.length) {
+      const classMap = { equity: 'EQUITY', etf: 'ETF', fund: 'FUND', crypto: 'EQUITY' }
+      return res.json({ quotes: rankSearchQuotes(dbResults.map(r => ({
+        symbol:    r.symbol,
+        shortname: r.name,
+        longname:  r.name,
+        quoteType: classMap[r.assetClass] || 'EQUITY',
+        exchange:  'US',
+      })), q) })
+    }
 
     res.json({ quotes: [] })
   } catch (e) {

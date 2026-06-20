@@ -157,7 +157,7 @@ export async function searchSymbol(q) {
   if (!q.trim()) return []
   const data = await apiFetch(`/api/search?q=${encodeURIComponent(q)}`)
   return (data?.quotes || [])
-    .filter(q => ['EQUITY','ETF','INDEX'].includes(q.quoteType))
+    .filter(q => ['EQUITY','ETF','INDEX','FUND','ETP'].includes(q.quoteType))
     .slice(0, 8)
     .map(q => ({ symbol: q.symbol, name: q.shortname || q.longname || q.symbol, exchange: q.exchange || '', type: q.quoteType }))
 }

@@ -410,6 +410,7 @@ function logPrediction(symbol, agents, zones, generatedAt, baseline = null, opti
       optionsPcRatio:    optionsPcRatio ?? null,
       taPatterns:        taPatterns?.length ? taPatterns : null,
       rsRankAtScan:      rsRankAtScan ?? null, // 0-100 intra-universe RS percentile at scan time
+      highConviction:    agents.highConviction ?? null,
       // Mechanical ML-baseline 7d direction call from the same bars the scan
       // saw (lib/ml-baseline.js) — lets calibration compare AI vs baseline
       baselineProb:     baseline?.prob ?? null,
