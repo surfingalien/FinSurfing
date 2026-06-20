@@ -4,7 +4,7 @@
  * Pure functions only — no HTTP, no Anthropic calls, no file I/O.
  */
 
-const { computeStats, nearestClose, zoneTouched, benchmarkFor } = require('../lib/brain-learnings')
+const { computeStats, nearestClose, zoneTouched, benchmarkFor, checkEntryZones } = require('../lib/brain-learnings')
 
 const DAY = 86400 * 1000
 
@@ -312,5 +312,50 @@ describe('computeStats', () => {
   test('byHighConviction is null when no records have highConviction', () => {
     const s = computeStats([mkRecord()])
     expect(s.byHighConviction).toBe(null)
+  })
+})
+
+describe('checkEntryZones', () => {
+  const recent = () => new Date(Date.now() - 5 * DAY).toISOString()
+
+  function mkPred(overrides) {
+    return { symbol: 'AAPL', generatedAt: recent(), entryZoneLow: 100, entryZoneHigh: 110, verdict: 'Buy', compositeScore: 80, ...overrides }
+  }
+
+  test('returns hit when price is inside entry zone', () => {
+    const hits = checkEntryZones({ AAPL: 105 }, [mkPred()])
+    expect(hits).toHaveLength(1)
+    expect(hits[0].symbol).toBe('AAPL')
+    expect(hits[0].currentPrice).toBe(105)
+  })
+
+  test('returns empty when price is below entry zone', () => {
+    expect(checkEntryZones({ AAPL: 95 }, [mkPred()])).toHaveLength(0)
+  })
+
+  test('returns empty when price is above entry zone', () => {
+    expect(checkEntryZones({ AAPL: 115 }, [mkPred()])).toHaveLength(0)
+  })
+
+  test('skips already-alerted predictions', () => {
+    const hits = checkEntryZones({ AAPL: 105 }, [mkPred({ entryAlertedAt: new Date().toISOString() })])
+    expect(hits).toHaveLength(0)
+  })
+
+  test('skips predictions older than 90 days', () => {
+    const old = new Date(Date.now() - 91 * DAY).toISOString()
+    expect(checkEntryZones({ AAPL: 105 }, [mkPred({ generatedAt: old })])).toHaveLength(0)
+  })
+
+  test('skips predictions with no entry zone', () => {
+    expect(checkEntryZones({ AAPL: 105 }, [mkPred({ entryZoneLow: null, entryZoneHigh: null })])).toHaveLength(0)
+  })
+
+  test('skips already-resolved predictions', () => {
+    expect(checkEntryZones({ AAPL: 105 }, [mkPred({ price7d: 108, price30d: 115 })])).toHaveLength(0)
+  })
+
+  test('returns empty when priceMap is empty', () => {
+    expect(checkEntryZones({}, [mkPred()])).toHaveLength(0)
   })
 })

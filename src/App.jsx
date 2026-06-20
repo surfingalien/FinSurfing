@@ -180,7 +180,8 @@ function MainApp({ onSignIn }) {
   const { fire: fireToast } = useToast() || {}
   useAlertStream((event) => {
     const toast = formatAnalysisToast(event)
-    fireToast?.(toast.type, toast.content)
+    const msg = toast.title ? `${toast.title} · ${toast.content}` : toast.content
+    fireToast?.(toast.type, msg)
   })
 
   const navigateTo = useCallback((tab, symbol) => {

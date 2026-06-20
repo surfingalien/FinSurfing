@@ -25,7 +25,7 @@ export function useAlertStream(onAnalysis) {
     es.onmessage = (e) => {
       try {
         const event = JSON.parse(e.data)
-        if (event.type === 'analysis' || event.type === 'analysis_error' || event.type === 'entry_zone') {
+        if (event.type === 'analysis' || event.type === 'analysis_error' || event.type === 'entry_zone' || event.type === 'signal-flip') {
           onAnalysisRef.current?.(event)
         }
       } catch {}
@@ -57,6 +57,19 @@ export function useAlertStream(onAnalysis) {
  * formatAnalysisToast — converts an analysis SSE event to a toast-compatible object
  */
 export function formatAnalysisToast(event) {
+  if (event.type === 'signal-flip') {
+    const icon = event.severity === 'high' ? '⚡' : '↔'
+    const dir  = event.source === 'watchlist-analysis' ? 'Watchlist' : 'AI Brain'
+    return {
+      id:      `flip-${event.symbol}-${Date.now()}`,
+      type:    'signal_performance',
+      title:   `${icon} ${event.symbol} signal flipped`,
+      content: `${dir}: ${event.from} → ${event.to}${event.severity === 'high' ? ' (bull/bear cross)' : ''}`,
+      color:   event.severity === 'high' ? '#f59e0b' : '#94a3b8',
+      data:    event,
+    }
+  }
+
   if (event.type === 'entry_zone') {
     const fmt = n => n != null ? `$${Number(n).toFixed(2)}` : '—'
     return {
