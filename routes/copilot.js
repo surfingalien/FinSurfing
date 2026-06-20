@@ -363,7 +363,9 @@ async function dispatchTool(name, input, req) {
 
     case 'analyze_symbol': {
       const rawSym  = input.symbol || ''
-      const interval = input.interval || 'D'
+      // Convert schema-friendly names to TradingView interval keys
+      const TV_INTERVAL = { '1h': '60', '4h': '240', '1d': 'D', '1wk': 'W', 'D': 'D', 'W': 'W' }
+      const interval = TV_INTERVAL[input.interval] || 'D'
 
       // Pre-fetch live quote so trading-analysis uses current price, not stale bar close
       let livePrice = null
