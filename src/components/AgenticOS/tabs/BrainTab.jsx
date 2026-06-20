@@ -203,7 +203,7 @@ export default function BrainTab({ jobs, stats, mcps, onRefresh }) {
 
   useEffect(() => {
     apiFetch('/api/scheduler/cache/scan').then(setScanCache).catch(() => {})
-    apiFetch('/api/ai-brain/calibration').then(d => { if (d && !d.error) setCalibration(d) }).catch(() => {})
+    apiFetch('/api/ai-brain/activity').then(d => { if (d && !d.error) setCalibration(d) }).catch(() => {})
   }, [])
 
   const runningJobs   = jobs.filter(j => j.result?.status === 'running')
