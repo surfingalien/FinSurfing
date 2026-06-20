@@ -396,7 +396,7 @@ async function dispatchTool(name, input, req) {
         `Stop $${a.stopLoss} · Target $${a.target}\n\n` +
         `${a.summary}\n\n` +
         (a.contradictions?.length ? `⚠️ Contradictions: ${a.contradictions.join('; ')}\n` : '') +
-        `Risks: ${a.risks?.join(' | ')}` +
+        (a.risks?.length ? `Risks: ${a.risks.join(' | ')}` : '') +
         (altSnippet ? `\n${altSnippet}` : '')
       )
     }
