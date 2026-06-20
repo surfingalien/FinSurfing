@@ -306,6 +306,12 @@ Respond ONLY with a JSON object — no markdown, no explanation, just the JSON:
     if (pricesAnchored > 0)
       console.log(`[recommendations] re-anchored prices for ${pricesAnchored}/${recSymbols.length} symbols`)
 
+    // Strip any holdings the AI recommended despite the instruction — last-resort guard
+    if (holdings.length) {
+      const heldSet = new Set(holdings.map(s => String(s).toUpperCase()))
+      data.recommendations = data.recommendations.filter(r => !heldSet.has(String(r.symbol).toUpperCase()))
+    }
+
     // Save what was recommended so future calls avoid repeating symbols/sectors
     if (userId) {
       const sectors = [...new Set(data.recommendations.map(r => r.sector).filter(Boolean))].slice(0, 5)
