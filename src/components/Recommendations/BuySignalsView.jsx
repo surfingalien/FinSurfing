@@ -76,7 +76,8 @@ export default function BuySignalsView({ portfolio, onAnalyze }) {
 
       // Fetch live market prices for all recommended symbols
       try {
-        const syms = data.recommendations.map(r => r.symbol).join(',')
+        const syms = (data.recommendations ?? []).map(r => r.symbol).join(',')
+        if (!syms) return
         const qRes = await fetch(`/api/quote?symbols=${syms}`, { headers: getApiKeyHeaders() })
         const qData = await qRes.json()
         const qMap = {}
