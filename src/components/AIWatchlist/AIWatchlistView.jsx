@@ -167,17 +167,22 @@ function WatchlistItem({ item, onRemove, onAnalyze }) {
           </div>
 
           {/* Price targets row */}
-          {(item.entryPrice != null || item.takeProfitPrice != null || item.stopLossPrice != null) && (
+          {(item.entryPrice != null || item.entryZoneLow != null || item.takeProfitPrice != null || item.targetZoneLow != null || item.stopLossPrice != null || item.stopZoneLow != null) && (
             <div className="flex flex-wrap gap-3 mt-3 pt-3 border-t border-white/[0.05]">
-              {item.entryPrice != null && (
+              {item.entryPrice != null ? (
                 <div className="flex flex-col">
                   <span className="text-[9px] text-slate-600 uppercase tracking-wider mb-0.5">Entry</span>
+                  <span className="text-xs font-mono text-slate-300 font-semibold">{fmtPrice(item.entryPrice)}</span>
+                </div>
+              ) : item.entryZoneLow != null ? (
+                <div className="flex flex-col">
+                  <span className="text-[9px] text-slate-600 uppercase tracking-wider mb-0.5">Entry Zone</span>
                   <span className="text-xs font-mono text-slate-300 font-semibold">
-                    {fmtPrice(item.entryPrice)}
+                    {fmtPrice(item.entryZoneLow)}{item.entryZoneHigh != null ? ` – ${fmtPrice(item.entryZoneHigh)}` : ''}
                   </span>
                 </div>
-              )}
-              {item.takeProfitPrice != null && (
+              ) : null}
+              {item.takeProfitPrice != null ? (
                 <div className="flex flex-col">
                   <span className="text-[9px] text-slate-600 uppercase tracking-wider mb-0.5 flex items-center gap-0.5">
                     <Target className="w-2 h-2" /> Target
@@ -189,8 +194,20 @@ function WatchlistItem({ item, onRemove, onAnalyze }) {
                     )}
                   </span>
                 </div>
-              )}
-              {item.stopLossPrice != null && (
+              ) : item.targetZoneLow != null ? (
+                <div className="flex flex-col">
+                  <span className="text-[9px] text-slate-600 uppercase tracking-wider mb-0.5 flex items-center gap-0.5">
+                    <Target className="w-2 h-2" /> Target Zone
+                  </span>
+                  <span className="text-xs font-mono text-emerald-400 font-semibold">
+                    {fmtPrice(item.targetZoneLow)}{item.targetZoneHigh != null ? ` – ${fmtPrice(item.targetZoneHigh)}` : ''}
+                    {item.targetReturn != null && (
+                      <span className="text-[10px] ml-1 opacity-80">(+{item.targetReturn}%)</span>
+                    )}
+                  </span>
+                </div>
+              ) : null}
+              {item.stopLossPrice != null ? (
                 <div className="flex flex-col">
                   <span className="text-[9px] text-slate-600 uppercase tracking-wider mb-0.5 flex items-center gap-0.5">
                     <Shield className="w-2 h-2" /> Stop
@@ -202,7 +219,16 @@ function WatchlistItem({ item, onRemove, onAnalyze }) {
                     )}
                   </span>
                 </div>
-              )}
+              ) : item.stopZoneLow != null ? (
+                <div className="flex flex-col">
+                  <span className="text-[9px] text-slate-600 uppercase tracking-wider mb-0.5 flex items-center gap-0.5">
+                    <Shield className="w-2 h-2" /> Stop Zone
+                  </span>
+                  <span className="text-xs font-mono text-red-400 font-semibold">
+                    {fmtPrice(item.stopZoneLow)}{item.stopZoneHigh != null ? ` – ${fmtPrice(item.stopZoneHigh)}` : ''}
+                  </span>
+                </div>
+              ) : null}
 
               {/* Target/stop pct only (buy-signals style — no absolute prices) */}
               {item.entryPrice == null && item.takeProfitPrice == null && item.targetReturn != null && (
