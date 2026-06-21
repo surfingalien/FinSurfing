@@ -7,7 +7,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import {
-  Activity, BarChart3, PieChart, AlertTriangle, RefreshCw, Info, Plus, X,
+  Activity, BarChart3, PieChart, AlertTriangle, RefreshCw, Info, Plus, X, ShieldCheck,
 } from 'lucide-react'
 
 // ── API key headers from localStorage ────────────────────────────────────────
@@ -376,6 +376,48 @@ export default function PortfolioAnalyticsView({ portfolio }) {
               </div>
             </div>
           </div>
+
+          {/* Risk metrics: portfolio vs SPY benchmark */}
+          {data.riskMetrics?.portfolio && (
+            <div className="bg-white/[0.02] border border-white/[0.06] rounded-2xl p-5">
+              <div className="flex items-center gap-2 mb-4">
+                <ShieldCheck className="w-4 h-4 text-mint-400" />
+                <span className="text-sm font-semibold text-white">Risk Metrics</span>
+                <span className="text-[10px] text-slate-600 ml-1">1-year daily returns · portfolio vs SPY</span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="text-[10px] text-slate-600 uppercase tracking-widest border-b border-white/[0.05]">
+                      <th className="text-left py-1.5 pr-4 font-medium">Metric</th>
+                      <th className="text-right py-1.5 px-3 font-medium">Portfolio</th>
+                      <th className="text-right py-1.5 pl-3 font-medium">SPY</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/[0.04]">
+                    {[
+                      { label: 'Sharpe Ratio',     port: data.riskMetrics.portfolio.sharpe,      bench: data.riskMetrics.benchmark?.sharpe,      fmt: v => v?.toFixed(2) ?? '—',    good: v => v > 1,   bad: v => v < 0 },
+                      { label: 'Sortino Ratio',    port: data.riskMetrics.portfolio.sortino,     bench: data.riskMetrics.benchmark?.sortino,     fmt: v => v?.toFixed(2) ?? '—',    good: v => v > 1.5, bad: v => v < 0 },
+                      { label: 'Max Drawdown',     port: data.riskMetrics.portfolio.maxDrawdown, bench: data.riskMetrics.benchmark?.maxDrawdown, fmt: v => v != null ? `-${v}%` : '—', good: () => false, bad: v => v > 30 },
+                      { label: 'Volatility (ann)', port: data.riskMetrics.portfolio.volatility,  bench: data.riskMetrics.benchmark?.volatility,  fmt: v => v != null ? `${v}%` : '—',  good: v => v < 15,  bad: v => v > 35 },
+                      { label: 'VaR 95% (daily)', port: data.riskMetrics.portfolio.var95,       bench: data.riskMetrics.benchmark?.var95,       fmt: v => v != null ? `-${v}%` : '—', good: () => false, bad: v => v > 4 },
+                      { label: 'CVaR 95% (daily)',port: data.riskMetrics.portfolio.cvar95,      bench: data.riskMetrics.benchmark?.cvar95,      fmt: v => v != null ? `-${v}%` : '—', good: () => false, bad: v => v > 6 },
+                    ].map(({ label, port, bench, fmt, good, bad }) => (
+                      <tr key={label}>
+                        <td className="py-2 pr-4 text-slate-400">{label}</td>
+                        <td className={`py-2 px-3 text-right font-mono font-semibold ${good(port) ? 'text-emerald-400' : bad(port) ? 'text-red-400' : 'text-white'}`}>
+                          {fmt(port)}
+                        </td>
+                        <td className="py-2 pl-3 text-right font-mono text-slate-500">
+                          {fmt(bench)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
           {/* Correlation heatmap */}
           {data.symbols.length >= 2 && (
