@@ -23,7 +23,7 @@ const { getSocialSentiment, getCryptoFearGreed, getBtcDominance } = require('../
 const { getAltDataSnippet, getGeopoliticalRiskSnippet } = require('../lib/alt-data')
 const { getIndicators }      = require('./macro')
 const { requireAuth }     = require('../middleware/auth')
-const { getLearningsBlock } = require('../lib/brain-learnings')
+const { getLearningsBlock, getAutoTunedThreshold } = require('../lib/brain-learnings')
 const { compactTaLine, detectPatterns, KEY_PATTERNS, computeRsRanks } = require('../lib/technical-indicators')
 const { getOptionsFlowCompact } = require('../lib/options-flow-cache')
 const { fetchDailyBars }    = require('../lib/internal-api')
@@ -790,7 +790,8 @@ Rules:
       }
     }
 
-    // Log each prediction for win-rate tracking
+    // Log each prediction for win-rate tracking (log ALL picks before threshold filter
+    // so calibration data covers the full score distribution, not just filtered picks)
     for (const stock of data.rankedStocks) {
       logPrediction(stock.symbol, stock, {
         entryZoneLow:   stock.entryZoneLow,
@@ -799,6 +800,22 @@ Rules:
         targetZoneHigh: stock.targetZoneHigh,
       }, generatedAt, taBaselines.get(stock.symbol), optionsPcMap.get(stock.symbol) ?? null,
          taPatternMap.get(stock.symbol) ?? null, taRsRankMap.get(stock.symbol) ?? null)
+    }
+
+    // Apply auto-tuned composite score threshold (derived from historical alpha win rates).
+    // Only active when the nightly meta-analysis has produced a threshold from ≥5 resolved picks.
+    // Always keep at least 3 picks so the UI is never blank.
+    const autoThreshold = getAutoTunedThreshold()
+    let thresholdApplied = null
+    if (autoThreshold != null) {
+      const filtered = data.rankedStocks.filter(s => (s.compositeScore ?? 0) >= autoThreshold)
+      if (filtered.length >= 3) {
+        const before = data.rankedStocks.length
+        data.rankedStocks = filtered
+        thresholdApplied = autoThreshold
+        if (filtered.length !== before)
+          console.log(`[ai-brain] auto-threshold ${autoThreshold}: ${before} → ${filtered.length} picks`)
+      }
     }
 
     return res.json({
@@ -812,6 +829,7 @@ Rules:
       llmUsed,
       modelUsed: llmUsed === 'claude' ? 'claude-sonnet-4-6' : 'llama-3.3-70b-versatile',
       ensemble,
+      thresholdApplied,
       agentsUsed: ['Fundamental Analyst','Technical Analyst','Sentiment Agent','Macro Economist','Risk Manager','Supervisor'],
     })
   } catch (err) {
