@@ -18,6 +18,44 @@ router.use(optionalAuth)
 
 const DB_MODE = !!process.env.DATABASE_URL
 
+// ── Market enrichment — adds market_value, weight_pct, change_pct to holdings ──
+// Cost basis is intentionally NOT exposed; unrealized P/L is therefore omitted.
+async function enrichHoldingsWithMarket(holdings) {
+  if (!holdings.length) return holdings
+  const port = process.env.PORT || 3001
+  const symbols = [...new Set(holdings.map(h => h.symbol))]
+  try {
+    const r = await fetch(
+      `http://127.0.0.1:${port}/api/quote?symbols=${symbols.map(encodeURIComponent).join(',')}`,
+      { signal: AbortSignal.timeout(8_000) }
+    )
+    if (!r.ok) return holdings
+    const data = await r.json()
+    const qmap = {}
+    for (const q of (data.quoteResponse?.result ?? [])) {
+      if (q?.symbol) qmap[q.symbol] = q
+    }
+    const enriched = holdings.map(h => {
+      const q = qmap[h.symbol]
+      if (!q) return h
+      const price       = q.regularMarketPrice ?? null
+      const market_value = price != null ? +(price * h.shares).toFixed(2) : null
+      const change_pct   = q.regularMarketChangePercent ?? null
+      return { ...h, price, market_value, change_pct }
+    })
+    // compute weight_pct once we have total value
+    const total = enriched.reduce((s, h) => s + (h.market_value ?? 0), 0)
+    return enriched.map(h => ({
+      ...h,
+      weight_pct: total > 0 && h.market_value != null
+        ? +(h.market_value / total * 100).toFixed(2)
+        : null,
+    }))
+  } catch {
+    return holdings
+  }
+}
+
 // ── Async access logger ────────────────────────────
 function logAccess(actorUserId, portfolioId, action, req, meta = {}) {
   if (!DB_MODE) return
@@ -144,10 +182,12 @@ router.get('/portfolios/:id', async (req, res) => {
     if (!canView) return res.status(403).json({ error: 'This portfolio is private' })
 
     const owner    = MEM.users.get(p.user_id) || {}
-    const holdings = MEM.holdings.get(p.id) || []
+    const rawHoldings = (MEM.holdings.get(p.id) || []).map(sanitizeHolding)
+    const holdings = await enrichHoldingsWithMarket(rawHoldings)
+    const totalValue = holdings.reduce((s, h) => s + (h.market_value ?? 0), 0)
     return res.json({
-      portfolio: sanitizePortfolio(p),
-      holdings:  holdings.map(sanitizeHolding),
+      portfolio: { ...sanitizePortfolio(p), total_value: totalValue > 0 ? +totalValue.toFixed(2) : null },
+      holdings,
       owner:     { username: owner.username, displayName: owner.displayName },
       disclaimer: 'Cost basis and private details are hidden.',
     })
@@ -184,12 +224,16 @@ router.get('/portfolios/:id', async (req, res) => {
 
     logAccess(viewerId, p.id, 'view_public', req)
 
+    const rawHoldings = hRes.rows.map(h => sanitizeHolding({
+      id: h.id, symbol: h.symbol, name: h.name,
+      shares: parseFloat(h.shares), sector: h.sector, assetClass: h.asset_class,
+    }))
+    const holdings = await enrichHoldingsWithMarket(rawHoldings)
+    const totalValue = holdings.reduce((s, h) => s + (h.market_value ?? 0), 0)
+
     return res.json({
-      portfolio: sanitizePortfolio({ ...p, cashBalance: undefined }),
-      holdings:  hRes.rows.map(h => sanitizeHolding({
-        id: h.id, symbol: h.symbol, name: h.name,
-        shares: parseFloat(h.shares), sector: h.sector, assetClass: h.asset_class,
-      })),
+      portfolio: { ...sanitizePortfolio({ ...p, cashBalance: undefined }), total_value: totalValue > 0 ? +totalValue.toFixed(2) : null },
+      holdings,
       owner:     { username: p.username, displayName: p.display_name },
       disclaimer: 'Cost basis and private details are hidden.',
     })
@@ -221,10 +265,12 @@ router.get('/users/:username/portfolio', async (req, res) => {
     }
     if (!publicPortfolio) return res.status(404).json({ error: 'No public portfolio found for this user' })
 
-    const holdings = MEM.holdings.get(publicPortfolio.id) || []
+    const rawHoldings2 = (MEM.holdings.get(publicPortfolio.id) || []).map(sanitizeHolding)
+    const holdings2 = await enrichHoldingsWithMarket(rawHoldings2)
+    const totalValue2 = holdings2.reduce((s, h) => s + (h.market_value ?? 0), 0)
     return res.json({
-      portfolio: sanitizePortfolio(publicPortfolio),
-      holdings:  holdings.map(sanitizeHolding),
+      portfolio: { ...sanitizePortfolio(publicPortfolio), total_value: totalValue2 > 0 ? +totalValue2.toFixed(2) : null },
+      holdings: holdings2,
       owner:     { username: owner.username, displayName: owner.displayName },
       disclaimer: 'Cost basis and private details are hidden.',
     })
@@ -256,12 +302,16 @@ router.get('/users/:username/portfolio', async (req, res) => {
 
     logAccess(viewerId, p.id, 'view_public', req, { via: 'username' })
 
+    const rawHoldings3 = hRes.rows.map(h => sanitizeHolding({
+      id: h.id, symbol: h.symbol, name: h.name,
+      shares: parseFloat(h.shares), sector: h.sector, assetClass: h.asset_class,
+    }))
+    const holdings3 = await enrichHoldingsWithMarket(rawHoldings3)
+    const totalValue3 = holdings3.reduce((s, h) => s + (h.market_value ?? 0), 0)
+
     return res.json({
-      portfolio: sanitizePortfolio(p),
-      holdings:  hRes.rows.map(h => sanitizeHolding({
-        id: h.id, symbol: h.symbol, name: h.name,
-        shares: parseFloat(h.shares), sector: h.sector, assetClass: h.asset_class,
-      })),
+      portfolio: { ...sanitizePortfolio(p), total_value: totalValue3 > 0 ? +totalValue3.toFixed(2) : null },
+      holdings: holdings3,
       owner:     { username: owner.username, displayName: owner.display_name },
       disclaimer: 'Cost basis and private details are hidden.',
     })

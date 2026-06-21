@@ -522,6 +522,16 @@ router.post('/analyze', requireAuth, brainLimit, async (req, res) => {
     macroSnippet = '\n\nMACRO REGIME (FRED live data — use to anchor macroScore and macroAnalysis):\n' + macroResult.value.macroSummary
   }
 
+  // Economic calendar — inject upcoming high-impact events
+  try {
+    const port = process.env.PORT || 3001
+    const calR = await fetch(`http://127.0.0.1:${port}/api/calendar/summary`, { signal: AbortSignal.timeout(3_000) })
+    if (calR.ok) {
+      const { summary } = await calR.json()
+      if (summary) macroSnippet += '\n\nECONOMIC CALENDAR: ' + summary
+    }
+  } catch {}
+
   // Alt-data: OpenInsider + FINRA short interest
   let altDataSnippet = ''
   if (altDataResult.status === 'fulfilled' && Array.isArray(altDataResult.value)) {

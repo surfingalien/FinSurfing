@@ -12,7 +12,7 @@ import {
   ShieldCheck, Activity, FlaskConical, BarChart3, Sparkles,
   Brain, Bookmark, Monitor, BookOpen, Globe, Target,
   Network, Clock, Radio, BrainCircuit, FolderOpen,
-  Search, DollarSign,
+  Search, DollarSign, LayoutGrid, CalendarDays,
 } from 'lucide-react'
 
 // ── Sidebar nav groups ────────────────────────────────────────────────────────
@@ -29,8 +29,10 @@ export const NAV_GROUPS = [
   {
     label: 'Markets',
     items: [
-      { id: 'analyze',     label: 'Analyze',     icon: LineChart },
-      { id: 'tradingview', label: 'TradingView', icon: Monitor },
+      { id: 'analyze',     label: 'Analyze',     icon: LineChart    },
+      { id: 'tradingview', label: 'TradingView', icon: Monitor      },
+      { id: 'heatmap',     label: 'Heatmap',     icon: LayoutGrid   },
+      { id: 'calendar',    label: 'Econ Calendar', icon: CalendarDays },
     ],
   },
   {

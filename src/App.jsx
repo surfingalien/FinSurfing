@@ -55,6 +55,8 @@ const AgenticOSView          = lazy(() => import('./components/AgenticOS/Agentic
 const DCFView                = lazy(() => import('./components/DCF/DCFView'))
 const PatternFinderView      = lazy(() => import('./components/PatternFinder/PatternFinderView'))
 const DividendView           = lazy(() => import('./components/Dividend/DividendView'))
+const HeatmapView            = lazy(() => import('./components/Heatmap/HeatmapView'))
+const EconCalendarView       = lazy(() => import('./components/EconCalendar/EconCalendarView'))
 
 // ── Shared loading spinner ────────────────────────────────────────────────────
 function LoadingScreen({ label = 'Loading…', fullScreen = false }) {
@@ -231,6 +233,8 @@ function MainApp({ onSignIn }) {
     'dcf-valuation':  () => <DCFView onAnalyze={navigateToAnalyze} />,
     'pattern-finder': () => <PatternFinderView onAnalyze={navigateToAnalyze} />,
     'dividend-screen': () => <DividendView onAnalyze={navigateToAnalyze} />,
+    'heatmap':         () => <HeatmapView />,
+    'calendar':        () => <EconCalendarView />,
     'admin':          () => <AdminDashboard />,
   }
 
