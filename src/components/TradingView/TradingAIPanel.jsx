@@ -959,7 +959,7 @@ export default function TradingAIPanel({ symbol, interval, price }) {
                     <div className="flex items-center gap-1.5">
                       <Mic className="w-3.5 h-3.5 text-violet-400" />
                       <span className="text-xs font-semibold text-white">
-                        Q{earnings.quarter} {earnings.year} Earnings Call
+                        {earnings.quarter} Earnings Call
                       </span>
                     </div>
                     <button
