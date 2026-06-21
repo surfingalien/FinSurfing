@@ -38,6 +38,9 @@ const agenticOsRoutes       = require('./routes/agentic-os')
 const optionsFlowRoutes     = require('./routes/options-flow')
 const symbolRoutes          = require('./routes/symbols')
 const forecastRoutes        = require('./routes/forecast')
+const calendarRoutes        = require('./routes/calendar')
+const heatmapRoutes         = require('./routes/heatmap')
+const adanosRoutes          = require('./routes/sentiment-adanos')
 const symbolDb              = require('./lib/symbol-db')
 // MCP endpoint depends on @modelcontextprotocol/sdk — a load failure here
 // (runtime/version mismatch) must degrade to a 503 on /api/mcp, never crash
@@ -230,7 +233,10 @@ else app.use('/api/mcp', (_req, res) => res.status(503).json({ error: 'MCP endpo
 app.use('/api/dcf',      dcfRoutes)
 app.use('/api/patterns', patternFinderRoutes)
 app.use('/api/dividend', dividendRoutes)
-app.use('/api/forecast', forecastRoutes)
+app.use('/api/forecast',          forecastRoutes)
+app.use('/api/calendar',          calendarRoutes)
+app.use('/api/heatmap',           heatmapRoutes)
+app.use('/api/sentiment/adanos',  adanosRoutes)
 
 // ── OpenBB sidecar proxy (optional — set OPENBB_URL env var to enable) ────────
 const OPENBB_URL = process.env.OPENBB_URL
