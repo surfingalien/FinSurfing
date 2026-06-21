@@ -16,7 +16,7 @@ const OPTIONS = [
 ]
 
 export default function PortfolioVisibilityToggle({ portfolio, onUpdated }) {
-  const { authFetch }      = useAuth()
+  const { authFetch, user } = useAuth()
   const { fetchPortfolios } = usePortfolioContext()
 
   const [vis,       setVis]       = useState(portfolio.visibility || 'private')
@@ -109,12 +109,12 @@ export default function PortfolioVisibilityToggle({ portfolio, onUpdated }) {
       )}
 
       {/* Public portfolio link */}
-      {vis === 'public' && portfolio.ownerUsername && (
+      {vis === 'public' && user?.username && (
         <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[#00ffcc]/5 border border-[#00ffcc]/15">
           <Globe size={11} className="text-[#00ffcc] shrink-0" />
           <span className="text-[10px] text-slate-400 flex-1 truncate">
             Public URL: <span className="text-[#00ffcc] font-mono">
-              /user/{portfolio.ownerUsername}/portfolio
+              /user/{user.username}/portfolio
             </span>
           </span>
         </div>
