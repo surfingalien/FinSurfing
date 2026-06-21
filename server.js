@@ -1528,8 +1528,7 @@ function _connectFhWs() {
     for (const sym of _fhSubscribed) _fhSend({ type: 'subscribe', symbol: sym })
   })
 
-  _fhWs.on('message', raw => {
-    try {
+  _fhWs.on('message', raw => {    try {
       const msg = JSON.parse(raw)
       if (msg.type !== 'trade' || !Array.isArray(msg.data)) return
       if (!_isUsRegularSession()) return  // ignore after-hours/pre-market ticks
@@ -1557,14 +1556,37 @@ function _connectFhWs() {
   })
 
   _fhWs.on('close', () => {
-    console.warn('[Finnhub WS] closed — reconnect in', _fhWsDelay, 'ms')
+    // _fhWsPlannedClose flag means we initiated the close (hourly refresh) — reset delay immediately
+    if (_fhWsPlannedClose) {
+      _fhWsPlannedClose = false
+      _fhWsDelay = 1000
+      console.log('[Finnhub WS] hourly refresh — reconnecting with latest key')
+    } else {
+      console.warn('[Finnhub WS] closed — reconnect in', _fhWsDelay, 'ms')
+    }
     setTimeout(() => { _fhWsDelay = Math.min(_fhWsDelay * 2, 8_000); _connectFhWs() }, _fhWsDelay)
   })
 
   _fhWs.on('error', e => console.warn('[Finnhub WS] error:', e.message))
 }
 
+// Planned close flag — set before calling .close() so the 'close' handler knows
+// it was intentional and should reset backoff rather than treat it as an error.
+let _fhWsPlannedClose = false
+
+function _fhWsRefresh() {
+  if (_fhWs?.readyState === WebSocket.OPEN) {
+    _fhWsPlannedClose = true
+    _fhWs.close()   // triggers 'close' → _connectFhWs() with fresh FH_KEY()
+  } else if (!_fhWs || _fhWs.readyState === WebSocket.CLOSED) {
+    // Not connected at all — try to connect now (key may have been set since startup)
+    _connectFhWs()
+  }
+}
+
 setTimeout(() => { if (FH_KEY()) _connectFhWs() }, 1000)
+// Hourly WS refresh — re-reads FH_KEY() so a rotated key takes effect without a restart
+setInterval(_fhWsRefresh, 60 * 60_000)
 
 // ── Binance WebSocket — real-time crypto trade stream ─────────────────────────
 // Covers BTC-USD, ETH-USD, SOL-USD etc. (Finnhub WS doesn't understand these)
