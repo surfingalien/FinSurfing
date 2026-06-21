@@ -427,6 +427,11 @@ export default function AIBrainView({ portfolio, onAnalyze }) {
                     ⚠️ {earningsImminentCount} earnings ≤7d
                   </span>
                 )}
+                {analysis?.thresholdApplied != null && (
+                  <span className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-500/10 border border-slate-500/20 text-slate-400">
+                    🎯 auto-filtered · score ≥ {analysis.thresholdApplied}
+                  </span>
+                )}
               </div>
             )}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
