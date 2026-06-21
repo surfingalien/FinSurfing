@@ -29,14 +29,17 @@ export function RecCard({ rec, onAnalyze, liveQuote }) {
       removeStock(rec.symbol)
     } else {
       addStock({
-        symbol:       rec.symbol,
-        name:         rec.name,
-        sector:       rec.sector,
-        addedFrom:    rec.type === 'Fund' ? 'mutual-fund' : 'buy-signals',
-        targetReturn: rec.targetReturn,
-        stopLoss:     rec.stopLoss,
-        horizon:      rec.period,
-        verdict:      rec.risk + ' Risk',
+        symbol:          rec.symbol,
+        name:            rec.name,
+        sector:          rec.sector,
+        addedFrom:       rec.type === 'Fund' ? 'mutual-fund' : 'buy-signals',
+        entryPrice:      rec.entryPrice      ?? null,
+        takeProfitPrice: rec.takeProfitPrice ?? null,
+        stopLossPrice:   rec.stopLossPrice   ?? null,
+        targetReturn:    rec.targetReturn,
+        stopLoss:        rec.stopLoss,
+        horizon:         rec.period,
+        verdict:         rec.risk + ' Risk',
       })
     }
   }
