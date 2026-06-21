@@ -69,10 +69,20 @@ router.get('/', async (req, res) => {
       headers: { 'Accept': 'application/json', 'X-API-Key': apiKey },
       signal:  AbortSignal.timeout(10_000),
     })
-    if (!r2.ok) return res.status(502).json({ enabled: true, provider: 'adanos', error: `Adanos HTTP ${r2.status}`, stocks: [] })
+    if (!r2.ok) {
+      const errBody = await r2.json().catch(() => ({}))
+      const errMsg  = errBody.error || errBody.message || `Adanos HTTP ${r2.status}`
+      return res.status(502).json({ enabled: true, provider: 'adanos', error: errMsg, stocks: [] })
+    }
 
     const payload = await r2.json()
     const rows    = Array.isArray(payload) ? payload : (payload.stocks || payload.data || payload.results || [])
+
+    // Adanos sometimes returns 200 OK with an error field and no data
+    if (!rows.length && payload?.error) {
+      return res.status(502).json({ enabled: true, provider: 'adanos', error: payload.error, stocks: [] })
+    }
+
     const stocks  = rows.map(row => normalizeRecord(row, source)).filter(Boolean)
 
     const data = { enabled: true, provider: 'adanos', source, days, tickers: rawSyms, stocks }
