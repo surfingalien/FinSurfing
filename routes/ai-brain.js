@@ -20,7 +20,7 @@ const path                = require('path')
 const { getRouter }       = require('../lib/ai-router')
 const { CircuitOpenError } = require('../lib/circuit-breaker')
 const { getSocialSentiment, getCryptoFearGreed, getBtcDominance } = require('../lib/social-sentiment')
-const { getAltDataSnippet }  = require('../lib/alt-data')
+const { getAltDataSnippet, getGeopoliticalRiskSnippet } = require('../lib/alt-data')
 const { getIndicators }      = require('./macro')
 const { requireAuth }     = require('../middleware/auth')
 const { getLearningsBlock, getAutoTunedThreshold } = require('../lib/brain-learnings')
@@ -522,12 +522,28 @@ router.post('/analyze', requireAuth, brainLimit, async (req, res) => {
     macroSnippet = '\n\nMACRO REGIME (FRED live data — use to anchor macroScore and macroAnalysis):\n' + macroResult.value.macroSummary
   }
 
+  // Economic calendar — inject upcoming high-impact events
+  try {
+    const port = process.env.PORT || 3001
+    const calR = await fetch(`http://127.0.0.1:${port}/api/calendar/summary`, { signal: AbortSignal.timeout(3_000) })
+    if (calR.ok) {
+      const { summary } = await calR.json()
+      if (summary) macroSnippet += '\n\nECONOMIC CALENDAR: ' + summary
+    }
+  } catch {}
+
   // Alt-data: OpenInsider + FINRA short interest
   let altDataSnippet = ''
   if (altDataResult.status === 'fulfilled' && Array.isArray(altDataResult.value)) {
     const parts = altDataResult.value.filter(Boolean)
     if (parts.length) altDataSnippet = '\n' + parts.join('\n')
   }
+
+  // Geopolitical risk — scored headline scan from Finnhub general news
+  try {
+    const geoSnippet = await getGeopoliticalRiskSnippet(process.env.FINNHUB_API_KEY || null)
+    if (geoSnippet) macroSnippet += '\n\n' + geoSnippet
+  } catch {}
 
   // Options flow: put/call ratio + unusual activity for stocks and ETFs
   let optionsSnippet = ''

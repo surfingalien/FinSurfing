@@ -38,6 +38,9 @@ const agenticOsRoutes       = require('./routes/agentic-os')
 const optionsFlowRoutes     = require('./routes/options-flow')
 const symbolRoutes          = require('./routes/symbols')
 const forecastRoutes        = require('./routes/forecast')
+const calendarRoutes        = require('./routes/calendar')
+const heatmapRoutes         = require('./routes/heatmap')
+const adanosRoutes          = require('./routes/sentiment-adanos')
 const symbolDb              = require('./lib/symbol-db')
 // MCP endpoint depends on @modelcontextprotocol/sdk — a load failure here
 // (runtime/version mismatch) must degrade to a 503 on /api/mcp, never crash
@@ -230,7 +233,10 @@ else app.use('/api/mcp', (_req, res) => res.status(503).json({ error: 'MCP endpo
 app.use('/api/dcf',      dcfRoutes)
 app.use('/api/patterns', patternFinderRoutes)
 app.use('/api/dividend', dividendRoutes)
-app.use('/api/forecast', forecastRoutes)
+app.use('/api/forecast',          forecastRoutes)
+app.use('/api/calendar',          calendarRoutes)
+app.use('/api/heatmap',           heatmapRoutes)
+app.use('/api/sentiment/adanos',  adanosRoutes)
 
 // ── OpenBB sidecar proxy (optional — set OPENBB_URL env var to enable) ────────
 const OPENBB_URL = process.env.OPENBB_URL
@@ -1522,8 +1528,7 @@ function _connectFhWs() {
     for (const sym of _fhSubscribed) _fhSend({ type: 'subscribe', symbol: sym })
   })
 
-  _fhWs.on('message', raw => {
-    try {
+  _fhWs.on('message', raw => {    try {
       const msg = JSON.parse(raw)
       if (msg.type !== 'trade' || !Array.isArray(msg.data)) return
       if (!_isUsRegularSession()) return  // ignore after-hours/pre-market ticks
@@ -1551,19 +1556,45 @@ function _connectFhWs() {
   })
 
   _fhWs.on('close', () => {
-    console.warn('[Finnhub WS] closed — reconnect in', _fhWsDelay, 'ms')
+    // _fhWsPlannedClose flag means we initiated the close (hourly refresh) — reset delay immediately
+    if (_fhWsPlannedClose) {
+      _fhWsPlannedClose = false
+      _fhWsDelay = 1000
+      console.log('[Finnhub WS] hourly refresh — reconnecting with latest key')
+    } else {
+      console.warn('[Finnhub WS] closed — reconnect in', _fhWsDelay, 'ms')
+    }
     setTimeout(() => { _fhWsDelay = Math.min(_fhWsDelay * 2, 8_000); _connectFhWs() }, _fhWsDelay)
   })
 
   _fhWs.on('error', e => console.warn('[Finnhub WS] error:', e.message))
 }
 
+// Planned close flag — set before calling .close() so the 'close' handler knows
+// it was intentional and should reset backoff rather than treat it as an error.
+let _fhWsPlannedClose = false
+
+function _fhWsRefresh() {
+  if (_fhWs?.readyState === WebSocket.OPEN) {
+    _fhWsPlannedClose = true
+    _fhWs.close()   // triggers 'close' → _connectFhWs() with fresh FH_KEY()
+  } else if (!_fhWs || _fhWs.readyState === WebSocket.CLOSED) {
+    // Not connected at all — try to connect now (key may have been set since startup)
+    _connectFhWs()
+  }
+}
+
 setTimeout(() => { if (FH_KEY()) _connectFhWs() }, 1000)
+// Hourly WS refresh — re-reads FH_KEY() so a rotated key takes effect without a restart
+setInterval(_fhWsRefresh, 60 * 60_000)
 
 // ── Binance WebSocket — real-time crypto trade stream ─────────────────────────
 // Covers BTC-USD, ETH-USD, SOL-USD etc. (Finnhub WS doesn't understand these)
 let   _binWs          = null
 let   _binWsDelay     = 1000
+let   _bin451Count    = 0             // consecutive 451 geo-block errors
+const _BIN_451_MAX    = 3             // give up after this many; crypto falls back to polling
+const _BIN_451_DELAY  = 10 * 60_000  // 10-min retry window after geo-block
 const _binSubscribed  = new Set()      // lowercase stream names e.g. "btcusdt@trade"
 const _binToOriginal  = new Map()      // BTCUSDT → Set<'BTC-USD', ...>
 
@@ -1633,11 +1664,21 @@ function _connectBinWs() {
   })
 
   _binWs.on('close', () => {
+    if (_bin451Count >= _BIN_451_MAX) {
+      console.warn(`[Binance WS] geo-blocked (HTTP 451) — suspended; crypto quotes will use polling fallback. Retrying in ${_BIN_451_DELAY / 60_000} min`)
+      setTimeout(() => { _bin451Count = 0; _binWsDelay = 1000; _connectBinWs() }, _BIN_451_DELAY)
+      return
+    }
     console.warn('[Binance WS] closed — reconnect in', _binWsDelay, 'ms')
-    setTimeout(() => { _binWsDelay = Math.min(_binWsDelay * 2, 8_000); _connectBinWs() }, _binWsDelay)
+    setTimeout(() => { _binWsDelay = Math.min(_binWsDelay * 2, 30_000); _connectBinWs() }, _binWsDelay)
   })
 
-  _binWs.on('error', e => console.warn('[Binance WS] error:', e.message))
+  _binWs.on('error', e => {
+    const is451 = e.message?.includes('451')
+    if (is451) _bin451Count++
+    else _bin451Count = 0
+    if (!is451 || _bin451Count <= 1) console.warn('[Binance WS] error:', e.message)
+  })
 }
 
 setTimeout(() => _connectBinWs(), 1000)

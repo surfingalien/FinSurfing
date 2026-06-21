@@ -217,12 +217,12 @@ export default function DividendView({ onAnalyze }) {
                 </div>
 
                 <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 mt-3 text-xs">
-                  <div className="flex justify-between"><span className="text-slate-500">Growth yrs</span><span className="text-slate-300 font-mono">{s.consecutiveYearsGrowth ?? '—'}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-500">Growth yrs</span><span className="text-slate-300 font-mono">{(s.consecutiveGrowthYears ?? s.consecutiveYearsGrowth) ?? '—'}</span></div>
                   {s.payoutRatio != null && (
                     <div className="flex justify-between"><span className="text-slate-500">Payout</span><span className="text-slate-300 font-mono">{Number(s.payoutRatio).toFixed(0)}%</span></div>
                   )}
                   <div className="flex justify-between"><span className="text-slate-500">5yr growth</span><span className="text-slate-300 font-mono">{(s.dividendGrowthRate5yr ?? s.dividendGrowth5yr) != null ? Number(s.dividendGrowthRate5yr ?? s.dividendGrowth5yr).toFixed(1) + '%' : '—'}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-500">Inc / $1k</span><span className="text-slate-300 font-mono">{s.incomePer1000 != null ? '$' + Number(s.incomePer1000).toFixed(0) : '—'}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-500">Inc / $1k</span><span className="text-slate-300 font-mono">{s.currentYield != null ? '$' + (s.currentYield / 100 * 1000).toFixed(0) : s.incomePer1000 != null ? '$' + Number(s.incomePer1000).toFixed(0) : '—'}</span></div>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2 mt-3">
