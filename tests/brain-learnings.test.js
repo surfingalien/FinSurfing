@@ -313,6 +313,39 @@ describe('computeStats', () => {
     const s = computeStats([mkRecord()])
     expect(s.byHighConviction).toBe(null)
   })
+
+  test('autoTunedThreshold is null when fewer than 5 benchmark-matched picks at any threshold', () => {
+    // Only 4 records with compositeScore — always below the 5-pick minimum
+    const records = Array.from({ length: 4 }, () =>
+      mkRecord({ compositeScore: 60, price30d: 115, benchRet30d: 2 }))
+    const s = computeStats(records)
+    expect(s.autoTunedThreshold).toBe(null)
+    expect(s.autoTunedThresholdAlphaWinRate).toBe(null)
+  })
+
+  test('autoTunedThreshold selects the cutoff that maximises alpha win rate', () => {
+    // compositeScore=38 picks all lose to benchmark → drag alpha down when t≤35
+    // compositeScore=60 picks all beat benchmark → t=40 sees only the winners
+    // t=35: 10 picks, 5 alpha wins → 0.5; t=40..60: 5 picks, 5 wins → 1.0
+    const records = [
+      ...Array.from({ length: 5 }, () => mkRecord({ compositeScore: 38, price30d: 90,  benchRet30d: 2 })),
+      ...Array.from({ length: 5 }, () => mkRecord({ compositeScore: 60, price30d: 115, benchRet30d: 2 })),
+    ]
+    const s = computeStats(records)
+    expect(s.autoTunedThreshold).toBe(40)
+    expect(s.autoTunedThresholdAlphaWinRate).toBe(1)
+  })
+
+  test('autoTunedThreshold prefers the lowest threshold when multiple thresholds tie', () => {
+    // 5 picks at compositeScore=50: included at t=35..50, excluded at t=55+
+    // All are alpha wins → alpha win rate is 1.0 at t=35,40,45,50
+    // Strict > comparison means the first (lowest) threshold wins on ties
+    const records = Array.from({ length: 5 }, () =>
+      mkRecord({ compositeScore: 50, price30d: 115, benchRet30d: 2 }))
+    const s = computeStats(records)
+    expect(s.autoTunedThreshold).toBe(35)
+    expect(s.autoTunedThresholdAlphaWinRate).toBe(1)
+  })
 })
 
 describe('checkEntryZones', () => {

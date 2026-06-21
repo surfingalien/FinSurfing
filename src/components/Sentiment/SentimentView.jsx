@@ -57,7 +57,7 @@ function Skeleton() {
 }
 
 export default function SentimentView() {
-  const { watchlist } = useWatchlist()
+  const { symbols: watchlist } = useWatchlist()
   const [customSymbols, setCustomSymbols] = useState('')
   const [source, setSource] = useState('reddit')
   const [days, setDays] = useState(7)

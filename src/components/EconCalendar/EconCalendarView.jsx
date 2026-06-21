@@ -131,7 +131,7 @@ export default function EconCalendarView() {
 
       {error && !loading && (
         <div className="glass rounded-xl p-6 text-center text-slate-500 text-sm">
-          Failed to load calendar — {error}
+          Failed to load calendar — {error.message}
         </div>
       )}
 
