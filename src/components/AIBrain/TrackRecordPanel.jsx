@@ -291,6 +291,35 @@ export default function TrackRecordPanel() {
               </ul>
             </div>
           )}
+
+          {/* Post-mortems */}
+          {data.postMortems?.length > 0 && (
+            <div className="sm:col-span-2">
+              <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest text-slate-500 mb-2">
+                <AlertTriangle className="w-3 h-3" /> Trade post-mortems — notable failures
+              </div>
+              <div className="space-y-2">
+                {data.postMortems.map((pm, i) => (
+                  <div key={i} className="rounded-xl border border-red-500/10 bg-red-500/[0.04] px-3 py-2.5 space-y-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm font-semibold text-white">{pm.symbol}</span>
+                      <div className="flex items-center gap-2 text-xs font-mono">
+                        <span className="text-slate-500">{pm.date}</span>
+                        {pm.actualReturn30d != null && (
+                          <span className="text-red-400">{pm.actualReturn30d > 0 ? '+' : ''}{pm.actualReturn30d.toFixed(1)}%</span>
+                        )}
+                        {pm.benchmarkReturn30d != null && (
+                          <span className="text-slate-500">vs {pm.benchmarkReturn30d > 0 ? '+' : ''}{pm.benchmarkReturn30d.toFixed(1)}% bench</span>
+                        )}
+                      </div>
+                    </div>
+                    <p className="text-xs text-red-300/80"><span className="text-red-400/60 font-medium">Root cause: </span>{pm.rootCause}</p>
+                    <p className="text-xs text-slate-400"><span className="text-slate-500 font-medium">Lesson: </span>{pm.lessonLearned}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
