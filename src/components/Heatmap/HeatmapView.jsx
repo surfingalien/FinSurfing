@@ -87,7 +87,7 @@ export default function HeatmapView() {
 
       {error && !loading && (
         <div className="glass rounded-xl p-6 text-center text-slate-500 text-sm">
-          Failed to load {market} heatmap — {error}
+          Failed to load {market} heatmap — {error.message}
         </div>
       )}
 
