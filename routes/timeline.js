@@ -94,10 +94,16 @@ router.get('/', (req, res) => {
   }
 
   res.json({
-    events: page.map(p => ({
-      ...p,
-      verdictColor: VERDICT_COLOR[p.verdict] || '#94a3b8',
-    })),
+    events: page.map(p => {
+      const entryMid  = p.entryZoneMid  ?? (p.entryZoneLow  != null && p.entryZoneHigh  != null ? (p.entryZoneLow  + p.entryZoneHigh)  / 2 : null)
+      const targetMid = p.targetZoneMid ?? (p.targetZoneLow != null && p.targetZoneHigh != null ? (p.targetZoneLow + p.targetZoneHigh) / 2 : null)
+      return {
+        ...p,
+        verdictColor:  VERDICT_COLOR[p.verdict] || '#94a3b8',
+        entryZoneMid:  entryMid,
+        targetZoneMid: targetMid,
+      }
+    }),
     total:   filtered.length,
     offset:  off,
     limit:   lim,

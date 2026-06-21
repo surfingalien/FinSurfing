@@ -96,8 +96,8 @@ export default function AIBrainView({ portfolio, onAnalyze }) {
   const earningsImminentCount  = analysis?.rankedStocks?.filter(s => s.daysToEarnings != null && s.daysToEarnings >= 0 && s.daysToEarnings <= 7).length ?? 0
   const visibleStocks          = !analysis ? [] :
     showConvictionOnly
-      ? analysis.rankedStocks.filter(s => s.highConviction)
-      : analysis.rankedStocks
+      ? (analysis.rankedStocks ?? []).filter(s => s.highConviction)
+      : (analysis.rankedStocks ?? [])
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -401,7 +401,7 @@ export default function AIBrainView({ portfolio, onAnalyze }) {
                 <span className="text-xs text-slate-500 flex items-center gap-2">
                   <Layers className="w-3 h-3" /> Zones · Assumptions · Conflicts
                   <span className="text-slate-600">·</span>
-                  {visibleStocks.length} of {analysis.rankedStocks.length}
+                  {visibleStocks.length} of {analysis.rankedStocks?.length ?? 0}
                 </span>
               </div>
             </div>

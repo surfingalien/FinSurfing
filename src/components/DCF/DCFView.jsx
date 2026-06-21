@@ -75,7 +75,11 @@ export default function DCFView({ onAnalyze }) {
     }
   }, [symbol])
 
-  const currentPrice = data?.currentPrice ?? 0
+  const currentPrice     = data?.currentPrice ?? 0
+  const perpetuityUpside    = currentPrice > 0 && data?.dcfValuePerpetual != null
+    ? (data.dcfValuePerpetual - currentPrice) / currentPrice * 100 : null
+  const exitMultipleUpside  = currentPrice > 0 && data?.dcfValueExitMultiple != null
+    ? (data.dcfValueExitMultiple - currentPrice) / currentPrice * 100 : null
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -134,7 +138,7 @@ export default function DCFView({ onAnalyze }) {
                 </div>
                 <div>
                   <div className="text-xs text-slate-500">Blended Fair Value</div>
-                  <div className="font-mono font-bold text-mint-400 text-lg">{fmtMoney(data.blendedValue ?? data.fairValue)}</div>
+                  <div className="font-mono font-bold text-mint-400 text-lg">{fmtMoney(data.dcfValueBlended ?? data.blendedValue ?? data.fairValue)}</div>
                 </div>
                 <div>
                   <div className="text-xs text-slate-500">Upside</div>
@@ -225,25 +229,31 @@ export default function DCFView({ onAnalyze }) {
               <div className="flex items-center justify-between text-sm py-2 border-b border-white/[0.04]">
                 <span className="text-slate-400">Perpetuity Method</span>
                 <span className="flex items-center gap-2">
-                  <span className="font-mono font-bold text-white">{fmtMoney(data.perpetuityValue)}</span>
-                  <span className={`font-mono text-xs ${pctClass(data.perpetuityUpside)}`}>({fmtPct(data.perpetuityUpside)})</span>
+                  <span className="font-mono font-bold text-white">{fmtMoney(data.dcfValuePerpetual)}</span>
+                  <span className={`font-mono text-xs ${pctClass(perpetuityUpside)}`}>({fmtPct(perpetuityUpside)})</span>
                 </span>
               </div>
               <div className="flex items-center justify-between text-sm py-2 border-b border-white/[0.04]">
                 <span className="text-slate-400">Exit Multiple Method</span>
                 <span className="flex items-center gap-2">
-                  <span className="font-mono font-bold text-white">{fmtMoney(data.exitMultipleValue)}</span>
-                  <span className={`font-mono text-xs ${pctClass(data.exitMultipleUpside)}`}>({fmtPct(data.exitMultipleUpside)})</span>
+                  <span className="font-mono font-bold text-white">{fmtMoney(data.dcfValueExitMultiple)}</span>
+                  <span className={`font-mono text-xs ${pctClass(exitMultipleUpside)}`}>({fmtPct(exitMultipleUpside)})</span>
                 </span>
               </div>
               <div className="flex items-center justify-between py-2">
                 <span className="text-sm font-semibold text-white">Blended Fair Value</span>
-                <span className="font-mono font-bold text-mint-400 text-2xl">{fmtMoney(data.blendedValue ?? data.fairValue)}</span>
+                <span className="font-mono font-bold text-mint-400 text-2xl">{fmtMoney(data.dcfValueBlended ?? data.blendedValue ?? data.fairValue)}</span>
               </div>
             </div>
           </div>
 
-          {Array.isArray(data.sensitivity) && data.sensitivity.length > 0 && (
+          {Array.isArray(data.sensitivityTable) && data.sensitivityTable.length > 0 && (() => {
+            const flat = data.sensitivityTable
+            const drs  = [...new Set(flat.map(r => r.discountRate))].sort((a, b) => a - b)
+            const tgs  = [...new Set(flat.map(r => r.terminalGrowth))].sort((a, b) => a - b)
+            const lut  = {}
+            flat.forEach(r => { lut[`${r.discountRate}_${r.terminalGrowth}`] = r.fairValue })
+            return (
             <div className="glass rounded-2xl p-4 border border-white/[0.06]">
               <h2 className="text-sm font-semibold text-white mb-1">Sensitivity Table</h2>
               <p className="text-xs text-slate-500 mb-3">Fair value by discount rate (rows) vs terminal growth (columns)</p>
@@ -252,17 +262,17 @@ export default function DCFView({ onAnalyze }) {
                   <thead>
                     <tr className="text-xs text-slate-500">
                       <th className="py-2 pr-3 font-medium text-left">Disc / Term</th>
-                      {(data.sensitivity[0]?.cells || []).map((c, i) => (
-                        <th key={i} className="py-2 px-3 font-medium text-center font-mono">{c.terminalGrowth}%</th>
+                      {tgs.map((tg, i) => (
+                        <th key={i} className="py-2 px-3 font-medium text-center font-mono">{tg}%</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {data.sensitivity.map((row, i) => (
+                    {drs.map((dr, i) => (
                       <tr key={i}>
-                        <td className="py-2 pr-3 text-slate-400 font-mono text-xs">{row.discountRate}%</td>
-                        {(row.cells || []).map((cell, j) => {
-                          const fv = cell.fairValue
+                        <td className="py-2 pr-3 text-slate-400 font-mono text-xs">{dr}%</td>
+                        {tgs.map((tg, j) => {
+                          const fv  = lut[`${dr}_${tg}`]
                           const cls = fv > currentPrice * 1.2
                             ? 'bg-emerald-500/15 text-emerald-400'
                             : fv > currentPrice
@@ -280,7 +290,8 @@ export default function DCFView({ onAnalyze }) {
                 </table>
               </div>
             </div>
-          )}
+            )
+          })()}
 
           {(data.bearCase != null || data.bullCase != null) && (
             <div className="glass rounded-2xl p-4 border border-white/[0.06]">
@@ -288,7 +299,7 @@ export default function DCFView({ onAnalyze }) {
               {(() => {
                 const bear = Number(data.bearCase ?? 0)
                 const bull = Number(data.bullCase ?? 0)
-                const fair = Number(data.blendedValue ?? data.fairValue ?? 0)
+                const fair = Number(data.dcfValueBlended ?? data.blendedValue ?? data.fairValue ?? 0)
                 const span = bull - bear || 1
                 const pos = (v) => Math.max(0, Math.min(100, ((v - bear) / span) * 100))
                 return (

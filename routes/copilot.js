@@ -148,7 +148,7 @@ const TOOLS = [
       properties: {
         scanMode: {
           type: 'string',
-          description: 'Scan universe: broad, stocks, stocks_tech, stocks_finance, stocks_healthcare, stocks_energy, etfs_broad, etfs_sector, etfs_bond, etfs_commodity, etfs_thematic, crypto, crypto_l1, crypto_defi, crypto_ai, mutualfunds',
+          description: 'Scan universe. Stocks: broad | stocks | stocks_tech | stocks_finance | stocks_healthcare | stocks_energy | stocks_consumer_disc | stocks_consumer_stap | stocks_industrials | stocks_materials | stocks_utilities | stocks_realestate | stocks_comms. ETFs: etfs_broad | etfs_sector | etfs_bond | etfs_intl | etfs_commodity | etfs_thematic | etfs_dividend | etfs_bitcoin. Crypto: crypto | crypto_defi | crypto_ai | crypto_meme | crypto_infra | crypto_exchange. Funds: mutualfunds | mutualfunds_index | mutualfunds_growth | mutualfunds_value | mutualfunds_bond | mutualfunds_intl | mutualfunds_balanced.',
           default: 'broad',
         },
         horizon: {
@@ -324,7 +324,7 @@ async function dispatchTool(name, input, req) {
       const r = await fetch(`http://127.0.0.1:${port}/api/ai-brain/analyze`, {
         method: 'POST', headers: fwdHeaders,
         body: JSON.stringify({ scanMode: input.scanMode || 'broad', horizon: input.horizon || '6m' }),
-        signal: AbortSignal.timeout(90_000),
+        signal: AbortSignal.timeout(120_000),
       })
       const data = await r.json()
       if (!data.rankedStocks) return `Scan failed: ${data.error || 'unknown error'}`
@@ -342,9 +342,10 @@ async function dispatchTool(name, input, req) {
     }
 
     case 'get_recommendations': {
+      const holdings = Array.isArray(req.body?.portfolio) ? req.body.portfolio : []
       const r = await fetch(`http://127.0.0.1:${port}/api/recommendations`, {
         method: 'POST', headers: fwdHeaders,
-        body: JSON.stringify({ persona: input.persona || 'default', focusSymbols: input.focusSymbols || [] }),
+        body: JSON.stringify({ persona: input.persona || 'default', focusSymbols: input.focusSymbols || [], holdings }),
         signal: AbortSignal.timeout(60_000),
       })
       const data = await r.json()
@@ -363,7 +364,9 @@ async function dispatchTool(name, input, req) {
 
     case 'analyze_symbol': {
       const rawSym  = input.symbol || ''
-      const interval = input.interval || '1d'
+      // Convert schema-friendly names to TradingView interval keys
+      const TV_INTERVAL = { '1h': '60', '4h': '240', '1d': 'D', '1wk': 'W', 'D': 'D', 'W': 'W' }
+      const interval = TV_INTERVAL[input.interval] || 'D'
 
       // Pre-fetch live quote so trading-analysis uses current price, not stale bar close
       let livePrice = null
@@ -386,17 +389,17 @@ async function dispatchTool(name, input, req) {
         getAltData(rawSym),
       ])
       const data = await r.json()
-      if (!data.signal) return `Analysis failed for ${input.symbol}: ${data.error || 'unknown error'}`
-      const displayPrice = livePrice || data.entry
+      const a = data.analysis
+      if (!a?.signal) return `Analysis failed for ${input.symbol}: ${data.error || 'unknown error'}`
+      const displayPrice = livePrice || a.entry || data.price
       return (
-        `**${input.symbol}** [LIVE PRICE: $${displayPrice}] — Signal: **${data.signal}** (${data.confidence}% confidence)\n` +
+        `**${input.symbol}** [LIVE PRICE: $${displayPrice}] — Signal: **${a.signal}** (${a.confidence}% confidence)\n` +
         `Current Price: $${displayPrice} (use THIS price — do not use any other price)\n` +
-        `Trend: ${data.trend} · Risk/Reward: ${data.riskReward?.toFixed(1)}:1\n` +
-        `Entry $${data.entry} (zone $${data.entryZoneLow}–$${data.entryZoneHigh})\n` +
-        `Stop $${data.stopLoss} · Target $${data.takeProfit?.[0]}–$${data.takeProfit?.[1]}\n\n` +
-        `${data.reasoning}\n\n` +
-        (data.contradictions?.length ? `⚠️ Contradictions: ${data.contradictions.join('; ')}\n` : '') +
-        `Risks: ${data.risks?.join(' | ')}` +
+        `Entry $${a.entry} (zone $${a.entryZoneLow}–$${a.entryZoneHigh})\n` +
+        `Stop $${a.stopLoss} · Target $${a.target}\n\n` +
+        `${a.summary}\n\n` +
+        (a.contradictions?.length ? `⚠️ Contradictions: ${a.contradictions.join('; ')}\n` : '') +
+        (a.risks?.length ? `Risks: ${a.risks.join(' | ')}` : '') +
         (altSnippet ? `\n${altSnippet}` : '')
       )
     }
@@ -413,7 +416,7 @@ async function dispatchTool(name, input, req) {
         signal: AbortSignal.timeout(15_000),
       })
       const data = await r.json()
-      return typeof data === 'string' ? data : (data.summary || JSON.stringify(data))
+      return typeof data === 'string' ? data : (data.macroSummary || JSON.stringify(data))
     }
 
     case 'get_earnings_catalyst': {
@@ -431,7 +434,7 @@ async function dispatchTool(name, input, req) {
 
       const dateData     = dateRes.status === 'fulfilled'     ? dateRes.value     : null
       const surpriseData = surpriseRes.status === 'fulfilled' ? surpriseRes.value : null
-      const surprise     = surpriseData?.results?.[0] || surpriseData?.[0] || null
+      const surprise     = surpriseData?.[0] || null
 
       const daysUntil = dateData?.nextEarningsDate
         ? Math.round((new Date(dateData.nextEarningsDate) - Date.now()) / 86400000)
@@ -600,45 +603,60 @@ async function dispatchTool(name, input, req) {
       const sym = (input.symbol || '').toUpperCase().replace(/[^A-Z0-9.-]/g, '')
       if (!sym) return 'No symbol provided.'
       try {
-        const r = await fetch(
-          `http://127.0.0.1:${port}/api/quote?symbols=${encodeURIComponent(sym)}`,
-          { headers: fwdHeaders, signal: AbortSignal.timeout(10_000) }
-        )
-        const d = await r.json()
-        const q = d?.quoteResponse?.result?.[0]
-        if (!q) return `No quote data available for ${sym}.`
+        // /api/summary returns FMP fundamentals (PE, margins, DCF target, sector)
+        // /api/quote returns live price
+        const [sumR, qR] = await Promise.all([
+          fetch(`http://127.0.0.1:${port}/api/summary?symbol=${encodeURIComponent(sym)}`,
+            { headers: fwdHeaders, signal: AbortSignal.timeout(12_000) }),
+          fetch(`http://127.0.0.1:${port}/api/quote?symbols=${encodeURIComponent(sym)}`,
+            { headers: fwdHeaders, signal: AbortSignal.timeout(8_000) }),
+        ])
+        const [sumD, qD] = await Promise.all([sumR.json(), qR.json()])
 
-        const target   = q.targetMedianPrice
-        const recMean  = q.recommendationMean
-        const count    = q.numberOfAnalystOpinions
-        const fwdPE    = q.forwardPE
-        const fwdEps   = q.forwardEps
-        const trailPE  = q.trailingPE
-        const price    = q.regularMarketPrice
+        const qs = qD?.quoteResponse?.result?.[0]
+        const price = qs?.regularMarketPrice ?? null
 
-        if (target == null && recMean == null) return `No analyst consensus data available for ${sym} — this is common for crypto, ETFs, and small-caps.`
+        const r0 = sumD?.quoteSummary?.result?.[0]
+        const fd  = r0?.financialData     || {}
+        const sd  = r0?.summaryDetail     || {}
+        const ks  = r0?.defaultKeyStatistics || {}
+        const ap  = r0?.assetProfile      || {}
 
-        const recLabel = recMean == null ? 'N/A'
-          : recMean <= 1.5 ? 'Strong Buy'
-          : recMean <= 2.5 ? 'Buy'
-          : recMean <= 3.5 ? 'Hold'
-          : recMean <= 4.5 ? 'Underperform'
-          : 'Sell'
+        // DCF intrinsic value from FMP (serves as a price target proxy)
+        const dcfTarget   = fd.targetMeanPrice  ?? null
+        const recKey      = fd.recommendationKey ?? null
+        const trailPE     = sd.trailingPE       ?? null
+        const mktCap      = sd.marketCap        ?? null
+        const roe         = fd.returnOnEquity   ?? null
+        const margins     = fd.profitMargins    ?? null
+        const revenueGrow = fd.revenueGrowth    ?? null
+        const trailEps    = ks.trailingEps      ?? null
+        const sector      = ap.sector           ?? null
+        const country     = ap.country          ?? null
 
-        const upside = (target != null && price != null && price > 0)
-          ? ((target - price) / price * 100).toFixed(1)
+        if (!r0) return `No fundamental data available for ${sym} — not covered by FMP (common for crypto, ETFs, non-US equities).`
+
+        const upside = (dcfTarget != null && price != null && price > 0)
+          ? ((dcfTarget - price) / price * 100).toFixed(1)
           : null
 
-        const lines = [`**${sym} — Analyst Consensus** (${count ?? '?'} analysts)`]
-        if (target != null) lines.push(`📊 Median Price Target: $${target.toFixed(2)}${upside != null ? ` (${upside > 0 ? '+' : ''}${upside}% from current $${price?.toFixed(2)})` : ''}`)
-        if (recMean != null) lines.push(`🎯 Consensus: ${recLabel} (${recMean.toFixed(2)}/5 — lower = more bullish)`)
-        if (fwdPE   != null) lines.push(`📈 Forward P/E: ${fwdPE.toFixed(1)}`)
-        if (trailPE != null) lines.push(`📉 Trailing P/E: ${trailPE.toFixed(1)}`)
-        if (fwdEps  != null) lines.push(`💵 Forward EPS (est.): $${fwdEps.toFixed(2)}`)
+        const lines = [`**${sym} — Fundamentals & Valuation**`]
+        if (sector)    lines.push(`Sector: ${sector}${country ? ` · ${country}` : ''}`)
+        if (price)     lines.push(`Price: $${price.toFixed(2)}`)
+        if (dcfTarget != null) lines.push(`📊 DCF Intrinsic Value: $${dcfTarget.toFixed(2)}${upside != null ? ` (${upside > 0 ? '+' : ''}${upside}% vs current)` : ''}`)
+        if (recKey)    lines.push(`🎯 FMP Signal: ${recKey.toUpperCase()} (based on DCF vs market price)`)
+        if (trailPE != null) lines.push(`📈 Trailing P/E: ${trailPE.toFixed(1)}`)
+        if (trailEps != null) lines.push(`💵 Trailing EPS: $${trailEps.toFixed(2)}`)
+        if (mktCap != null)  lines.push(`Market Cap: $${(mktCap / 1e9).toFixed(1)}B`)
+        if (roe != null)     lines.push(`Return on Equity: ${(roe * 100).toFixed(1)}%`)
+        if (margins != null) lines.push(`Net Margin: ${(margins * 100).toFixed(1)}%`)
+        if (revenueGrow != null) lines.push(`Revenue Growth (TTM): ${(revenueGrow * 100).toFixed(1)}%`)
+
         if (upside != null) {
-          if (parseFloat(upside) > 20) lines.push(`\n✅ Analysts see significant upside — strong tailwind for bullish thesis.`)
-          else if (parseFloat(upside) < -5) lines.push(`\n⚠️ Analysts project downside from current price — contrarian headwind.`)
+          if (parseFloat(upside) > 20)  lines.push(`\n✅ Trading below DCF intrinsic value — value upside signal.`)
+          else if (parseFloat(upside) < -10) lines.push(`\n⚠️ Trading above DCF intrinsic value — elevated valuation vs fundamentals.`)
         }
+        lines.push(`\n_Note: Price target derived from FMP DCF model, not sell-side analyst estimates._`)
         return lines.join('\n')
       } catch (e) {
         return `Analyst consensus fetch failed for ${sym}: ${e.message}`

@@ -180,21 +180,21 @@ export default function PatternFinderView({ onAnalyze }) {
                 })}
               </div>
               <div className="flex flex-wrap gap-4 mt-4">
-                {Array.isArray(data.bestMonths) && data.bestMonths.length > 0 && (
+                {Array.isArray(data.seasonalPatterns?.bestMonths) && data.seasonalPatterns.bestMonths.length > 0 && (
                   <div>
                     <div className="text-xs text-slate-500 mb-1.5">Best Months</div>
                     <div className="flex flex-wrap gap-1.5">
-                      {data.bestMonths.map((m, i) => (
+                      {data.seasonalPatterns.bestMonths.map((m, i) => (
                         <span key={i} className="px-2.5 py-1 rounded-lg text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">{m}</span>
                       ))}
                     </div>
                   </div>
                 )}
-                {Array.isArray(data.worstMonths) && data.worstMonths.length > 0 && (
+                {Array.isArray(data.seasonalPatterns?.worstMonths) && data.seasonalPatterns.worstMonths.length > 0 && (
                   <div>
                     <div className="text-xs text-slate-500 mb-1.5">Worst Months</div>
                     <div className="flex flex-wrap gap-1.5">
-                      {data.worstMonths.map((m, i) => (
+                      {data.seasonalPatterns.worstMonths.map((m, i) => (
                         <span key={i} className="px-2.5 py-1 rounded-lg text-xs font-medium bg-red-500/10 text-red-400 border border-red-500/20">{m}</span>
                       ))}
                     </div>

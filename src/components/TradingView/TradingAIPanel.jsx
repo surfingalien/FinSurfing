@@ -429,7 +429,7 @@ export default function TradingAIPanel({ symbol, interval, price }) {
                     <div className="bg-emerald-500/10 rounded-lg p-1.5">
                       <div className="text-emerald-400/70 text-[9px] mb-0.5">Target 1</div>
                       <div className="text-white font-mono">
-                        {analysis.takeProfit?.[0] != null ? `$${analysis.takeProfit[0].toFixed(2)}` : '—'}
+                        {analysis.target != null ? `$${analysis.target.toFixed(2)}` : '—'}
                       </div>
                     </div>
                   </div>
@@ -439,19 +439,23 @@ export default function TradingAIPanel({ symbol, interval, price }) {
                     <span className="text-slate-500">
                       R/R{' '}
                       <span className="text-white font-mono">
-                        {analysis.riskReward != null ? `${analysis.riskReward.toFixed(1)}:1` : '—'}
+                        {analysis.target != null && analysis.entry != null && analysis.stopLoss != null && analysis.entry !== analysis.stopLoss
+                          ? `${(Math.abs(analysis.target - analysis.entry) / Math.abs(analysis.entry - analysis.stopLoss)).toFixed(1)}:1`
+                          : '—'}
                       </span>
                     </span>
                     <span className={`px-1.5 py-0.5 rounded text-[9px] font-medium ${
-                      analysis.trend === 'BULLISH'
+                      (analysis.signal === 'BUY' || analysis.signal === 'Strong Buy')
                         ? 'text-emerald-400 bg-emerald-500/10'
-                        : analysis.trend === 'BEARISH'
+                        : (analysis.signal === 'SELL' || analysis.signal === 'Strong Sell')
                         ? 'text-red-400 bg-red-500/10'
                         : 'text-amber-400 bg-amber-500/10'
                     }`}>
-                      {analysis.trend ?? 'NEUTRAL'}
+                      {analysis.signal === 'BUY' || analysis.signal === 'Strong Buy' ? 'BULLISH'
+                        : analysis.signal === 'SELL' || analysis.signal === 'Strong Sell' ? 'BEARISH'
+                        : 'NEUTRAL'}
                     </span>
-                    <span className="text-slate-500">{analysis.timeHorizon ?? ''}</span>
+                    <span className="text-slate-500">{analysis.sentimentAlignment ?? ''}</span>
                   </div>
                 </div>
 
@@ -770,7 +774,7 @@ export default function TradingAIPanel({ symbol, interval, price }) {
                     </button>
                     {reasoningOpen && (
                       <div className="rounded-lg bg-white/[0.03] border border-white/[0.06] p-2.5">
-                        <p className="text-xs text-slate-400 leading-relaxed">{analysis.reasoning}</p>
+                        <p className="text-xs text-slate-400 leading-relaxed">{analysis.summary}</p>
                       </div>
                     )}
                   </div>
@@ -955,7 +959,7 @@ export default function TradingAIPanel({ symbol, interval, price }) {
                     <div className="flex items-center gap-1.5">
                       <Mic className="w-3.5 h-3.5 text-violet-400" />
                       <span className="text-xs font-semibold text-white">
-                        Q{earnings.quarter} {earnings.year} Earnings Call
+                        {earnings.quarter} Earnings Call
                       </span>
                     </div>
                     <button

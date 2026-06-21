@@ -104,10 +104,10 @@ export default function QueuePanel() {
               </div>
               {r.status === 'done' && r.result && (
                 <div className="flex gap-4 text-slate-400">
-                  <span>Return: <span className={r.result.totalReturnPct >= 0 ? 'text-emerald-400' : 'text-red-400'}>{r.result.totalReturnPct?.toFixed(1)}%</span></span>
-                  <span>Trades: {r.result.totalTrades}</span>
-                  <span>Win: {r.result.winRate?.toFixed(0)}%</span>
-                  <span>MaxDD: {r.result.maxDrawdownPct?.toFixed(1)}%</span>
+                  <span>Return: <span className={r.result.metrics?.totalReturn >= 0 ? 'text-emerald-400' : 'text-red-400'}>{r.result.metrics?.totalReturn?.toFixed(1)}%</span></span>
+                  <span>Trades: {r.result.metrics?.totalTrades}</span>
+                  <span>Win: {r.result.metrics?.winRate?.toFixed(0)}%</span>
+                  <span>MaxDD: {r.result.metrics?.maxDrawdown?.toFixed(1)}%</span>
                 </div>
               )}
               {r.status === 'failed' && <p className="text-red-400">{r.error}</p>}

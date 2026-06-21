@@ -46,6 +46,8 @@ export default function StockCard({ stock, onAnalyze, horizon, byCompositeScore 
         entryZoneHigh:   stock.entryZoneHigh,
         targetZoneLow:   stock.targetZoneLow,
         targetZoneHigh:  stock.targetZoneHigh,
+        stopZoneLow:     stock.stopZoneLow,
+        stopZoneHigh:    stock.stopZoneHigh,
         targetReturn:    stock.targetReturn,
         stopLoss:        stock.stopLoss,
         horizon:         horizon || stock.horizon || '6m',

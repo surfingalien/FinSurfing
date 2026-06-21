@@ -70,10 +70,13 @@ function fmtZone(low, high) {
 }
 
 function fmtStopLoss(stock) {
-  // Stop loss price = currentPrice × (1 – stopLoss%)
+  // Prefer AI Brain stop zone (absolute dollar levels)
+  if (stock.stopZoneLow != null || stock.stopZoneHigh != null)
+    return fmtZone(stock.stopZoneLow, stock.stopZoneHigh)
+  // Fallback: calculate from percentage + current price
   const pct   = stock.stopLoss
   const price = stock.currentPrice
-  if (pct != null && price != null && price > 0) {
+  if (pct != null && pct > 0 && price != null && price > 0) {
     const slPrice = price * (1 - pct / 100)
     return `$${slPrice.toFixed(2)}<br/><span style="font-size:10px;color:#ef4444;">–${pct}%</span>`
   }

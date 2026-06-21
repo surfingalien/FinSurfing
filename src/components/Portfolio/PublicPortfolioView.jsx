@@ -61,7 +61,9 @@ function StatPill({ label, value, accent = '#00ffcc', up }) {
 }
 
 function HoldingRow({ h, rank }) {
-  const up = (h.unrealized_gain_pct ?? h.change_pct ?? 0) >= 0
+  const hasPL = h.unrealized_gain_pct != null || h.change_pct != null
+  const plVal = h.unrealized_gain_pct ?? h.change_pct
+  const up    = hasPL && plVal >= 0
   return (
     <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.02] border border-white/[0.04]
                     hover:border-white/[0.08] hover:bg-white/[0.04] transition-all">
@@ -74,6 +76,7 @@ function HoldingRow({ h, rank }) {
       </div>
       <div className="flex-1 min-w-0">
         <div className="text-xs text-slate-400 truncate">{h.name || h.symbol}</div>
+        {h.sector && <div className="text-[10px] text-slate-600 truncate">{h.sector}</div>}
       </div>
 
       {/* Shares */}
@@ -89,13 +92,17 @@ function HoldingRow({ h, rank }) {
         )}
       </div>
 
-      {/* P/L % */}
+      {/* P/L % — only shown when data is available */}
       <div className="text-right shrink-0 w-20">
-        <div className={`text-xs font-semibold flex items-center justify-end gap-0.5
-          ${up ? 'text-emerald-400' : 'text-red-400'}`}>
-          {up ? <TrendingUp size={11} /> : <TrendingDown size={11} />}
-          {fmtPct(h.unrealized_gain_pct ?? h.change_pct)}
-        </div>
+        {hasPL ? (
+          <div className={`text-xs font-semibold flex items-center justify-end gap-0.5
+            ${up ? 'text-emerald-400' : 'text-red-400'}`}>
+            {up ? <TrendingUp size={11} /> : <TrendingDown size={11} />}
+            {fmtPct(plVal)}
+          </div>
+        ) : (
+          <div className="text-xs text-slate-700">—</div>
+        )}
       </div>
     </div>
   )
@@ -103,16 +110,45 @@ function HoldingRow({ h, rank }) {
 
 function WeightBar({ holdings }) {
   if (!holdings?.length) return null
-  // Use top 8 by weight
-  const sorted = [...holdings].sort((a, b) => (b.weight_pct || 0) - (a.weight_pct || 0)).slice(0, 8)
+  const hasWeights = holdings.some(h => h.weight_pct != null)
   const COLORS = ['#00ffcc', '#6366f1', '#f59e0b', '#10b981', '#ec4899', '#3b82f6', '#8b5cf6', '#f97316']
+
+  if (!hasWeights) {
+    // Show equal-weight placeholder by sector/asset class
+    const slices = holdings.slice(0, 8)
+    const pct    = (100 / holdings.length).toFixed(1)
+    return (
+      <div className="space-y-2">
+        <div className="flex h-3 rounded-full overflow-hidden gap-px">
+          {slices.map((h, i) => (
+            <div
+              key={h.symbol}
+              style={{ width: `${100 / holdings.length}%`, background: COLORS[i % COLORS.length] }}
+              title={`${h.symbol}`}
+            />
+          ))}
+        </div>
+        <div className="flex flex-wrap gap-x-4 gap-y-1">
+          {slices.map((h, i) => (
+            <span key={h.symbol} className="flex items-center gap-1 text-[10px] text-slate-400">
+              <span className="w-2 h-2 rounded-full shrink-0" style={{ background: COLORS[i % COLORS.length] }} />
+              {h.symbol} ~{pct}%
+            </span>
+          ))}
+        </div>
+        <p className="text-[10px] text-slate-600">Equal-weight estimate · actual allocation hidden</p>
+      </div>
+    )
+  }
+
+  const sorted = [...holdings].sort((a, b) => (b.weight_pct || 0) - (a.weight_pct || 0)).slice(0, 8)
   return (
     <div className="space-y-2">
       <div className="flex h-3 rounded-full overflow-hidden gap-px">
         {sorted.map((h, i) => (
           <div
             key={h.symbol}
-            style={{ width: `${Math.max(h.weight_pct || 0, 1)}%`, background: COLORS[i] }}
+            style={{ width: `${Math.max(h.weight_pct || 0, 1)}%`, background: COLORS[i % COLORS.length] }}
             title={`${h.symbol}: ${fmt(h.weight_pct, 1)}%`}
           />
         ))}
@@ -120,7 +156,7 @@ function WeightBar({ holdings }) {
       <div className="flex flex-wrap gap-x-4 gap-y-1">
         {sorted.map((h, i) => (
           <span key={h.symbol} className="flex items-center gap-1 text-[10px] text-slate-400">
-            <span className="w-2 h-2 rounded-full shrink-0" style={{ background: COLORS[i] }} />
+            <span className="w-2 h-2 rounded-full shrink-0" style={{ background: COLORS[i % COLORS.length] }} />
             {h.symbol} {fmt(h.weight_pct, 1)}%
           </span>
         ))}
@@ -224,11 +260,12 @@ export default function PublicPortfolioView({ portfolioId, username, onClose }) 
 
   if (!data) return null
 
-  const { portfolio, holdings = [], disclaimer } = data
-  const totalValue  = holdings.reduce((s, h) => s + (h.market_value || 0), 0)
-  const gainers     = holdings.filter(h => (h.unrealized_gain_pct ?? h.change_pct ?? 0) > 0).length
-  const losers      = holdings.length - gainers
-  const portfolioUp = (portfolio.total_gain_pct ?? 0) >= 0
+  const { portfolio, holdings = [], disclaimer, owner } = data
+  const totalValue   = holdings.reduce((s, h) => s + (h.market_value || 0), 0)
+  const hasPLData    = holdings.some(h => h.unrealized_gain_pct != null || h.change_pct != null)
+  const gainers      = hasPLData ? holdings.filter(h => (h.unrealized_gain_pct ?? h.change_pct ?? 0) > 0).length : null
+  const losers       = hasPLData ? holdings.length - gainers : null
+  const portfolioUp  = portfolio.total_gain_pct != null ? portfolio.total_gain_pct >= 0 : null
 
   return (
     <div className="space-y-6">
@@ -246,9 +283,9 @@ export default function PublicPortfolioView({ portfolioId, username, onClose }) 
               </span>
             )}
           </div>
-          {portfolio.owner_username && (
+          {owner?.username && (
             <p className="text-xs text-slate-500 mt-1">
-              by <span className="text-slate-400 font-medium">@{portfolio.owner_username}</span>
+              by <span className="text-slate-400 font-medium">@{owner.username}</span>
             </p>
           )}
           {portfolio.description && (
@@ -298,7 +335,7 @@ export default function PublicPortfolioView({ portfolioId, username, onClose }) 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <StatPill
           label="Portfolio Value"
-          value={fmtK(portfolio.total_value ?? totalValue)}
+          value={portfolio.total_value != null ? fmtK(portfolio.total_value) : totalValue > 0 ? fmtK(totalValue) : '—'}
         />
         <StatPill
           label="Total Return"
@@ -307,8 +344,8 @@ export default function PublicPortfolioView({ portfolioId, username, onClose }) 
         />
         <StatPill label="Holdings"   value={holdings.length}  accent="#8b5cf6" />
         <StatPill label="Gainers / Losers"
-          value={`${gainers} / ${losers}`}
-          accent={gainers >= losers ? '#10b981' : '#ef4444'}
+          value={gainers != null ? `${gainers} / ${losers}` : '—'}
+          accent={gainers != null ? (gainers >= losers ? '#10b981' : '#ef4444') : '#64748b'}
         />
       </div>
 

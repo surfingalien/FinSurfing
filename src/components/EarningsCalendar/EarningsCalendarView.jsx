@@ -125,14 +125,6 @@ function PositioningPanel({ symbol, onNavigate, authFetch, getHeaders }) {
                 <div className="text-[9px] text-slate-500 uppercase tracking-wider">Avg EPS Surprise</div>
               </div>
             )}
-            {data.avg_price_move_pct != null && (
-              <div className="text-center">
-                <div className={`text-sm font-black font-mono ${data.avg_price_move_pct >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                  {data.avg_price_move_pct >= 0 ? '+' : ''}{data.avg_price_move_pct.toFixed(1)}%
-                </div>
-                <div className="text-[9px] text-slate-500 uppercase tracking-wider">Avg Price Move</div>
-              </div>
-            )}
           </div>
 
           {/* Last 4 quarters table */}

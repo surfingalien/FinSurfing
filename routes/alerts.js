@@ -72,22 +72,22 @@ async function _runAnalysis({ symbol, alertType, threshold, price }, req) {
     }
 
     const r = await fetch(
-      `${BASE_URL()}/api/trading-analysis/analyze?symbol=${encodeURIComponent(sym)}&interval=1d`,
-      { method: 'POST', headers: fwdHeaders, body: JSON.stringify({}), signal: AbortSignal.timeout(30_000) }
+      `${BASE_URL()}/api/trading-analysis/analyze`,
+      { method: 'POST', headers: fwdHeaders, body: JSON.stringify({ symbol: sym, interval: 'D' }), signal: AbortSignal.timeout(30_000) }
     )
     const data = await r.json()
+    const a = data.analysis
 
     broadcaster.broadcast({
       type:        'analysis',
       symbol:      sym,
-      signal:      data.signal,
-      confidence:  data.confidence,
-      trend:       data.trend,
-      entry:       data.entry,
-      stopLoss:    data.stopLoss,
-      takeProfit:  data.takeProfit,
-      reasoning:   (data.reasoning || '').slice(0, 300),
-      risks:       data.risks || [],
+      signal:      a?.signal,
+      confidence:  a?.confidence,
+      entry:       a?.entry,
+      stopLoss:    a?.stopLoss,
+      takeProfit:  a?.target,
+      reasoning:   (a?.summary || '').slice(0, 300),
+      risks:       a?.risks || [],
       triggeredBy: { type: alertType, threshold, price },
       analyzedAt:  new Date().toISOString(),
     })
