@@ -1564,6 +1564,9 @@ setTimeout(() => { if (FH_KEY()) _connectFhWs() }, 1000)
 // Covers BTC-USD, ETH-USD, SOL-USD etc. (Finnhub WS doesn't understand these)
 let   _binWs          = null
 let   _binWsDelay     = 1000
+let   _bin451Count    = 0             // consecutive 451 geo-block errors
+const _BIN_451_MAX    = 3             // give up after this many; crypto falls back to polling
+const _BIN_451_DELAY  = 10 * 60_000  // 10-min retry window after geo-block
 const _binSubscribed  = new Set()      // lowercase stream names e.g. "btcusdt@trade"
 const _binToOriginal  = new Map()      // BTCUSDT → Set<'BTC-USD', ...>
 
@@ -1633,11 +1636,21 @@ function _connectBinWs() {
   })
 
   _binWs.on('close', () => {
+    if (_bin451Count >= _BIN_451_MAX) {
+      console.warn(`[Binance WS] geo-blocked (HTTP 451) — suspended; crypto quotes will use polling fallback. Retrying in ${_BIN_451_DELAY / 60_000} min`)
+      setTimeout(() => { _bin451Count = 0; _binWsDelay = 1000; _connectBinWs() }, _BIN_451_DELAY)
+      return
+    }
     console.warn('[Binance WS] closed — reconnect in', _binWsDelay, 'ms')
-    setTimeout(() => { _binWsDelay = Math.min(_binWsDelay * 2, 8_000); _connectBinWs() }, _binWsDelay)
+    setTimeout(() => { _binWsDelay = Math.min(_binWsDelay * 2, 30_000); _connectBinWs() }, _binWsDelay)
   })
 
-  _binWs.on('error', e => console.warn('[Binance WS] error:', e.message))
+  _binWs.on('error', e => {
+    const is451 = e.message?.includes('451')
+    if (is451) _bin451Count++
+    else _bin451Count = 0
+    if (!is451 || _bin451Count <= 1) console.warn('[Binance WS] error:', e.message)
+  })
 }
 
 setTimeout(() => _connectBinWs(), 1000)
