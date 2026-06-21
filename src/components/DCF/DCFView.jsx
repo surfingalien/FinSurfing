@@ -170,7 +170,7 @@ export default function DCFView({ onAnalyze }) {
                         <td className="py-2 pr-4 text-slate-300">{row.year}</td>
                         <td className="py-2 pr-4 text-right font-mono text-white">{fmtMoney(row.revenue)}</td>
                         <td className="py-2 pr-4 text-right font-mono text-white">{fmtMoney(row.fcf)}</td>
-                        <td className="py-2 text-right font-mono text-slate-300">{fmtPct(row.fcfMargin)}</td>
+                        <td className="py-2 text-right font-mono text-slate-300">{fmtPct(row.margin ?? row.fcfMargin)}</td>
                       </tr>
                     ))}
                   </tbody>

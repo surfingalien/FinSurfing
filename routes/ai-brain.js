@@ -20,7 +20,7 @@ const path                = require('path')
 const { getRouter }       = require('../lib/ai-router')
 const { CircuitOpenError } = require('../lib/circuit-breaker')
 const { getSocialSentiment, getCryptoFearGreed, getBtcDominance } = require('../lib/social-sentiment')
-const { getAltDataSnippet }  = require('../lib/alt-data')
+const { getAltDataSnippet, getGeopoliticalRiskSnippet } = require('../lib/alt-data')
 const { getIndicators }      = require('./macro')
 const { requireAuth }     = require('../middleware/auth')
 const { getLearningsBlock } = require('../lib/brain-learnings')
@@ -538,6 +538,12 @@ router.post('/analyze', requireAuth, brainLimit, async (req, res) => {
     const parts = altDataResult.value.filter(Boolean)
     if (parts.length) altDataSnippet = '\n' + parts.join('\n')
   }
+
+  // Geopolitical risk — scored headline scan from Finnhub general news
+  try {
+    const geoSnippet = await getGeopoliticalRiskSnippet(process.env.FINNHUB_API_KEY || null)
+    if (geoSnippet) macroSnippet += '\n\n' + geoSnippet
+  } catch {}
 
   // Options flow: put/call ratio + unusual activity for stocks and ETFs
   let optionsSnippet = ''
