@@ -1,6 +1,5 @@
 import { useState } from 'react'
-import useQuery from '../../hooks/useQuery'
-import { fetchJson } from '../../services/api'
+import { useQuery, fetchJson } from '../../hooks/useQuery'
 
 const IMP_COLOR = { high: '#ef4444', medium: '#f59e0b', low: '#64748b' }
 const IMP_LABEL = { high: 'HIGH', medium: 'MED', low: 'LOW' }
