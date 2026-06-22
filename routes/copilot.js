@@ -854,14 +854,19 @@ async function dispatchTool(name, input, req) {
         const [symData, spyData] = await Promise.all([symR.json(), spyR.json()])
 
         function normBars(data) {
-          const bars = data?.chart ?? (Array.isArray(data) ? data : [])
-          return bars.map(b => {
-            const close = b.c ?? b.close ?? b.adjClose
-            const ts = b.t
-              ? (b.t > 1e10 ? b.t : b.t * 1000)
-              : (b.date ? new Date(b.date).getTime() : null)
-            return { ts, close, high: b.h ?? b.high, low: b.l ?? b.low }
-          }).filter(b => b.ts && b.close != null)
+          const result = data?.chart?.result?.[0]
+          if (!result) return []
+          const timestamps = result.timestamp || []
+          const quote  = result.indicators?.quote?.[0] || {}
+          const closes = quote.close || []
+          const highs  = quote.high  || []
+          const lows   = quote.low   || []
+          return timestamps.map((t, i) => ({
+            ts:    t * 1000,
+            close: closes[i] ?? null,
+            high:  highs[i]  ?? null,
+            low:   lows[i]   ?? null,
+          })).filter(b => b.ts && b.close != null)
         }
 
         const symBars = normBars(symData)
