@@ -127,8 +127,8 @@ export default function DashboardView({ portfolio, onAnalyze }) {
             ${totals.totalValue.toLocaleString('en-US', { maximumFractionDigits: 0 })}
           </div>
           <div className={`text-xs font-mono font-semibold mt-0.5 ${glColor}`}>
-            {totals.totalGL >= 0 ? '+' : ''}${Math.abs(totals.totalGL).toFixed(0)}{' '}
-            ({totals.totalGLPct >= 0 ? '+' : ''}{totals.totalGLPct.toFixed(2)}%) all-time
+            {totals.totalGL >= 0 ? '+' : '-'}${Math.abs(totals.totalGL).toFixed(0)}{' '}
+            ({totals.totalGLPct >= 0 ? '+' : '-'}{Math.abs(totals.totalGLPct).toFixed(2)}%) all-time
           </div>
           {(totals.unpricedCount > 0 || totals.staleCount > 0) && (
             <div className="text-[10px] text-amber-500 mt-0.5">
@@ -144,7 +144,7 @@ export default function DashboardView({ portfolio, onAnalyze }) {
           transition={{ duration: 0.3, delay: 0.07, ease: 'easeOut' }}>
           <div className="text-xs text-slate-500 mb-1">Today's P/L</div>
           <div className={`text-2xl font-black font-mono ${todayColor}`}>
-            {totals.todayGL >= 0 ? '+' : ''}${Math.abs(totals.todayGL).toFixed(0)}
+            {totals.todayGL >= 0 ? '+' : '-'}${Math.abs(totals.todayGL).toFixed(0)}
           </div>
           <div className="text-[10px] text-slate-600 mt-0.5">
             {totals.upCount}↑ {totals.dnCount}↓ vs. prior close
