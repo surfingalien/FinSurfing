@@ -25,6 +25,7 @@ function createApp() {
   app.use('/api/trading-analysis', require('../../routes/trading-analysis'))
   app.use('/api/research-notes', require('../../routes/research-notes'))
   app.use('/api/mcp',       require('../../routes/mcp'))
+  app.use('/api/fundamentals', require('../../routes/fundamentals'))
 
   return app
 }
