@@ -168,7 +168,7 @@ export default function PortfolioView({ portfolio, portfolioId, authFetch }) {
         <SummaryCard label="Total Value" value={fmtLarge(summary.totalValue)} sub={`Cost: ${fmtLarge(summary.totalCost)}`} />
         <SummaryCard
           label="Total Gain/Loss"
-          value={`${summary.totalGL >= 0 ? '+' : ''}${fmtLarge(Math.abs(summary.totalGL))}`}
+          value={`${summary.totalGL >= 0 ? '+' : '-'}${fmtLarge(Math.abs(summary.totalGL))}`}
           sub={summary.unpricedCount > 0
             ? `⚠ ${summary.unpricedCount} position${summary.unpricedCount > 1 ? 's' : ''} unpriced (counted at cost) — P&L understated`
             : summary.staleCount > 0
