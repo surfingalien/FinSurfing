@@ -70,9 +70,13 @@ Your mission: deliver timely, verified, and structured financial intelligence th
 - sector_universe: List top US equities in a GICS sector by market cap
 - portfolio_risk: Sharpe, Sortino, VaR/CVaR, max drawdown, beta for the user's portfolio
 - get_calibration: AI Brain track record — win rates, alpha, confidence calibration, vs mechanical TA baseline
+- get_fundamentals: Investment-grade fundamentals — 4-quarter income statement, balance sheet, cash flow, valuation ratios (P/E, P/S, PEG, EV/EBITDA, FCF yield, ROE, ROIC), analyst buy/hold/sell distribution, EPS beat/miss history. US equities only (requires FMP key)
+- get_price_performance: Price return vs S&P 500 over 1M, 3M, 6M, 1Y, YTD + 52-week high/low
+- compare_stocks: Side-by-side fundamental comparison table for 2–5 stocks (margins, valuation, FCF, debt, ROE)
 
 ## Tool Routing Rules
 - User asks about a specific ticker → call analyze_symbol first; ALWAYS add get_earnings_catalyst (imminent catalyst check); add get_analyst_consensus (institutional view); add get_options_flow for directional conviction; add get_insider_activity for US stocks (insider buy/sell signal); add get_social_sentiment if sentiment relevant
+- User asks for institutional/fundamental analysis, forensic audit, "full report", or "analyze like a professional" → call get_fundamentals + analyze_symbol + get_earnings_catalyst + get_analyst_consensus + get_insider_activity + get_price_performance
 - User asks "top picks", "what to buy", "scan the market" → call scan_market
 - User asks for strategy recommendations by persona → call get_recommendations
 - User asks about macro, rates, inflation, VIX, regime → call get_macro
@@ -83,7 +87,29 @@ Your mission: deliver timely, verified, and structured financial intelligence th
 - User asks about options, IV, put/call ratio → call get_options_flow
 - User asks about portfolio risk, Sharpe, drawdown → call portfolio_risk
 - User asks how reliable the AI is / track record → call get_calibration
+- User asks about fundamentals, margins, FCF, balance sheet, valuation multiples → call get_fundamentals
+- User asks about relative performance, "how has X done vs S&P", historical returns → call get_price_performance
+- User asks to compare 2+ stocks side by side → call compare_stocks
 - Combine tools freely — a full stock analysis warrants analyze_symbol + get_earnings_catalyst + get_analyst_consensus + get_options_flow
+
+## Institutional Research Modes
+When a user asks for a "full institutional report", "deep dive", "forensic audit", or "compare these stocks", follow these structured frameworks:
+
+**Equity Intelligence Report** (triggered by: "institutional analysis", "full report", "analyze like a hedge fund"):
+Call: get_fundamentals + analyze_symbol + get_earnings_catalyst + get_analyst_consensus + get_insider_activity + get_price_performance
+Format: Business Overview → Revenue Architecture → Core Financials (table) → Equity Performance vs S&P → Analyst Sentiment → Technical Picture → Risks
+
+**Financial Forensic Audit** (triggered by: "forensic audit", "balance sheet deep dive", "financial health check"):
+Call: get_fundamentals
+Format: Income Statement Diagnostics (4Q revenue, margins, margin trajectory) → Balance Sheet Strength (liquidity, debt, goodwill) → Cash Flow Validation (OCF, capex, FCF trend, capital allocation) → Risk Indicators (flag if: revenue growth diverges from FCF, debt growing faster than revenue, goodwill >30%)
+
+**Earnings Intelligence** (triggered by: "earnings analysis", "decode the earnings", "earnings quality"):
+Call: get_fundamentals + get_earnings_catalyst
+Format: EPS Beat/Miss History → Trend Assessment → Guidance Context → Quality of earnings (structural vs cosmetic based on FCF vs GAAP earnings)
+
+**Sector Comparison** (triggered by: "compare X vs Y", "sector matrix", "which is better"):
+Call: compare_stocks + get_price_performance for each
+Format: Quantitative table → Margin leaders → Valuation leaders → Strongest balance sheet → Overall ranking with justification
 
 ## Output Formats — Use These Templates
 
@@ -121,7 +147,7 @@ When evaluating strategies, always classify: risk level (Low/Medium/High/Very Hi
 - Bridge TA with fundamentals: breakout + earnings catalyst = higher conviction
 
 ## Source & Data Transparency
-Tools provide live data from: internal AI Brain (5 agents), Reddit APIs, FRED macro series, Yahoo/Finnhub/FMP market data, OpenInsider (insider transactions), and FINRA (short interest). SEC 13F filings, satellite data, and real-time options tape are not available — state this clearly rather than speculating.
+Tools provide live data from: internal AI Brain (5 agents), Reddit APIs, FRED macro series, Yahoo/Finnhub/FMP market data, FMP financial statements (income/balance/cash flow, 4 quarters), OpenInsider (insider transactions), and FINRA (short interest). SEC 13F institutional holdings, satellite data, and real-time options tape are not available — state this clearly rather than speculating.
 
 ## Guardrails (Non-Negotiable)
 - Never provide personalized investment advice or tell users what to buy/sell
@@ -303,6 +329,43 @@ const TOOLS = [
       required: ['symbol'],
       properties: {
         symbol: { type: 'string', description: 'US stock ticker (e.g. AAPL, NVDA). Not applicable to crypto or ETFs.' },
+      },
+    },
+  },
+  {
+    name: 'get_fundamentals',
+    description: 'Investment-grade fundamentals for a US equity: 4-quarter income statement (revenue, gross/operating/net margins, EPS), balance sheet health (current ratio, quick ratio, debt/equity, goodwill %), TTM cash flow (OCF, capex, FCF, FCF margin, buybacks), valuation ratios (P/E, P/S, PEG, EV/EBITDA, FCF yield, ROE, ROIC), analyst buy/hold/sell distribution, and EPS beat/miss history. Use for institutional-quality analysis or when a user asks about fundamentals, financial statements, valuation, or earnings history.',
+    input_schema: {
+      type: 'object',
+      required: ['symbol'],
+      properties: {
+        symbol: { type: 'string', description: 'US stock ticker (e.g. AAPL, NVDA, MSFT). Not available for crypto or most ETFs.' },
+      },
+    },
+  },
+  {
+    name: 'get_price_performance',
+    description: 'Price performance of a symbol vs the S&P 500 (SPY) over 1M, 3M, 6M, 1Y, and YTD — plus 52-week high/low. Use when asked about relative performance, "how has X done vs S&P", or historical returns.',
+    input_schema: {
+      type: 'object',
+      required: ['symbol'],
+      properties: {
+        symbol: { type: 'string', description: 'Ticker symbol (e.g. AAPL, TSLA, BTC-USD)' },
+      },
+    },
+  },
+  {
+    name: 'compare_stocks',
+    description: 'Side-by-side fundamental comparison table for 2–5 stocks: market cap, TTM revenue, YoY growth, gross/net margins, P/E, P/S, PEG, EV/EBITDA, FCF margin, debt/equity, current ratio, ROE. Use when asked to compare companies or build a competitive landscape.',
+    input_schema: {
+      type: 'object',
+      required: ['symbols'],
+      properties: {
+        symbols: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'List of 2–5 ticker symbols to compare (e.g. ["AAPL","MSFT","GOOGL"])',
+        },
       },
     },
   },
@@ -673,6 +736,244 @@ async function dispatchTool(name, input, req) {
         return snippet
       } catch (e) {
         return `Insider activity fetch failed for ${sym}: ${e.message}`
+      }
+    }
+
+    case 'get_fundamentals': {
+      const sym = (input.symbol || '').toUpperCase().replace(/[^A-Z0-9.-]/g, '')
+      if (!sym) return 'No symbol provided.'
+      try {
+        const r = await fetch(`http://127.0.0.1:${port}/api/fundamentals/${sym}`, {
+          headers: fwdHeaders, signal: AbortSignal.timeout(20_000),
+        })
+        if (!r.ok) {
+          const e = await r.json().catch(() => ({}))
+          return e.error || `Fundamentals unavailable for ${sym} (HTTP ${r.status})`
+        }
+        const d = await r.json()
+
+        const lines = []
+        if (d.company) {
+          lines.push(`**${d.company.name || sym} (${sym}) — Investment-Grade Fundamentals**`)
+          const meta = [d.company.sector, d.company.industry, d.company.country].filter(Boolean).join(' · ')
+          if (meta) lines.push(meta)
+          if (d.company.mkt_cap_fmt) lines.push(`Market Cap: ${d.company.mkt_cap_fmt}${d.company.beta != null ? ` · Beta: ${d.company.beta.toFixed(2)}` : ''}`)
+          if (d.company.description) lines.push(`\n${d.company.description}`)
+        } else {
+          lines.push(`**${sym} — Investment-Grade Fundamentals**`)
+        }
+
+        if (d.quarters?.length) {
+          lines.push('\n**📊 Revenue & Margins (last 4 quarters)**')
+          lines.push('| Quarter | Revenue | Gross % | Oper % | Net % | EPS (dil) |')
+          lines.push('|---------|---------|---------|--------|-------|-----------|')
+          for (const q of d.quarters) {
+            lines.push(`| ${q.date?.slice(0, 7) || q.period || '—'} | ${q.revenue_fmt || '—'} | ${q.gross_margin != null ? q.gross_margin + '%' : '—'} | ${q.operating_margin != null ? q.operating_margin + '%' : '—'} | ${q.net_margin != null ? q.net_margin + '%' : '—'} | ${q.eps_diluted != null ? '$' + q.eps_diluted.toFixed(2) : '—'} |`)
+          }
+          lines.push(`**TTM Revenue: ${d.ttm_revenue_fmt || '—'}**${d.yoy_rev_growth != null ? ` · YoY: ${d.yoy_rev_growth > 0 ? '+' : ''}${d.yoy_rev_growth}%` : ''}`)
+          const latQ = d.quarters[0]
+          if (latQ?.rd_pct_rev != null) lines.push(`R&D as % of revenue (latest Q): ${latQ.rd_pct_rev}%`)
+        }
+
+        if (d.balance?.date) {
+          lines.push('\n**🏦 Balance Sheet**')
+          const b = d.balance
+          const liquidCash = (b.cash ?? 0) + (b.short_term_inv ?? 0)
+          if (liquidCash) lines.push(`Cash + ST Investments: ${ ((v) => v >= 1e9 ? `$${(v/1e9).toFixed(1)}B` : `$${(v/1e6).toFixed(0)}M`)(liquidCash) }`)
+          if (b.total_debt != null) lines.push(`Total Debt: ${ ((v) => v >= 1e9 ? `$${(v/1e9).toFixed(1)}B` : `$${(v/1e6).toFixed(0)}M`)(b.total_debt) }`)
+          if (b.current_ratio != null) lines.push(`Current Ratio: ${b.current_ratio}x${b.quick_ratio != null ? ` · Quick Ratio: ${b.quick_ratio}x` : ''}`)
+          if (b.debt_to_equity != null) lines.push(`Debt/Equity: ${b.debt_to_equity}x`)
+          if (b.goodwill_pct != null) {
+            const flag = b.goodwill_pct > 30 ? ' ⚠️ >30% — review for impairment risk' : ''
+            lines.push(`Goodwill: ${b.goodwill_pct}% of total assets${flag}`)
+          }
+        }
+
+        if (d.cashflow) {
+          lines.push('\n**💵 Cash Flow (TTM)**')
+          const c = d.cashflow
+          const fmtB = v => v == null ? '—' : (v >= 1e9 ? `$${(v/1e9).toFixed(1)}B` : `$${(v/1e6).toFixed(0)}M`)
+          if (c.ttm_operating_cf != null) lines.push(`Operating CF: ${fmtB(c.ttm_operating_cf)}`)
+          if (c.ttm_capex != null) lines.push(`CapEx: ${fmtB(c.ttm_capex)}`)
+          if (c.ttm_fcf != null) lines.push(`Free Cash Flow: ${fmtB(c.ttm_fcf)}${c.fcf_margin != null ? ` (FCF margin: ${c.fcf_margin}%)` : ''}`)
+          const alloc = []
+          if (c.ttm_buybacks) alloc.push(`Buybacks: ${fmtB(c.ttm_buybacks)}`)
+          if (c.ttm_dividends) alloc.push(`Dividends: ${fmtB(c.ttm_dividends)}`)
+          if (alloc.length) lines.push(`Capital Allocation: ${alloc.join(' · ')}`)
+        }
+
+        if (d.valuation) {
+          lines.push('\n**📈 Valuation (TTM)**')
+          const v = d.valuation
+          const parts = []
+          if (v.pe_ttm   != null) parts.push(`P/E: ${v.pe_ttm.toFixed(1)}x`)
+          if (v.ps_ttm   != null) parts.push(`P/S: ${v.ps_ttm.toFixed(1)}x`)
+          if (v.pb_ttm   != null) parts.push(`P/B: ${v.pb_ttm.toFixed(1)}x`)
+          if (v.peg_ttm  != null) parts.push(`PEG: ${v.peg_ttm.toFixed(2)}`)
+          if (v.ev_ebitda != null) parts.push(`EV/EBITDA: ${v.ev_ebitda.toFixed(1)}x`)
+          if (v.fcf_yield != null) parts.push(`FCF Yield: ${v.fcf_yield}%`)
+          if (v.roe != null)  parts.push(`ROE: ${v.roe}%`)
+          if (v.roic != null) parts.push(`ROIC: ${v.roic}%`)
+          if (parts.length) lines.push(parts.join(' · '))
+        }
+
+        if (d.analyst_dist?.total) {
+          lines.push('\n**🎯 Analyst Distribution**')
+          const a = d.analyst_dist
+          lines.push(`${a.total} analysts — Buy: ${a.buy_pct ?? '?'}% · Hold: ${a.hold_pct ?? '?'}% · Sell: ${a.sell_pct ?? '?'}%`)
+        }
+
+        if (d.eps_surprises?.length) {
+          lines.push('\n**📅 EPS Beat/Miss History**')
+          lines.push('| Period | Estimate | Actual | Surprise |')
+          lines.push('|--------|----------|--------|----------|')
+          for (const s of d.eps_surprises) {
+            const surStr = s.surprise_pct != null ? `${s.surprise_pct > 0 ? '+' : ''}${s.surprise_pct}%` : '—'
+            lines.push(`| ${s.date?.slice(0, 7) || '—'} | ${s.estimate != null ? '$' + s.estimate.toFixed(2) : '—'} | ${s.actual != null ? '$' + s.actual.toFixed(2) : '—'} | ${surStr} |`)
+          }
+        }
+
+        lines.push(`\n_Source: FMP · ${d.generated_at?.slice(0, 10)} · Not financial advice_`)
+        return lines.join('\n')
+      } catch (e) {
+        return `Fundamentals fetch failed for ${sym}: ${e.message}`
+      }
+    }
+
+    case 'get_price_performance': {
+      const sym = (input.symbol || '').toUpperCase().replace(/[^A-Z0-9.-]/g, '')
+      if (!sym) return 'No symbol provided.'
+      try {
+        const [symR, spyR] = await Promise.all([
+          fetch(`http://127.0.0.1:${port}/api/chart?symbol=${encodeURIComponent(sym)}&interval=1d&range=1y`,
+            { headers: fwdHeaders, signal: AbortSignal.timeout(15_000) }),
+          fetch(`http://127.0.0.1:${port}/api/chart?symbol=SPY&interval=1d&range=1y`,
+            { headers: fwdHeaders, signal: AbortSignal.timeout(15_000) }),
+        ])
+        if (!symR.ok) return `Price history unavailable for ${sym}`
+        const [symData, spyData] = await Promise.all([symR.json(), spyR.json()])
+
+        function normBars(data) {
+          const bars = data?.chart ?? (Array.isArray(data) ? data : [])
+          return bars.map(b => {
+            const close = b.c ?? b.close ?? b.adjClose
+            const ts = b.t
+              ? (b.t > 1e10 ? b.t : b.t * 1000)
+              : (b.date ? new Date(b.date).getTime() : null)
+            return { ts, close, high: b.h ?? b.high, low: b.l ?? b.low }
+          }).filter(b => b.ts && b.close != null)
+        }
+
+        const symBars = normBars(symData)
+        const spyBars = normBars(spyData)
+        if (!symBars.length) return `No price history found for ${sym}`
+
+        function retAt(bars, daysAgo) {
+          const cutoff = Date.now() - daysAgo * 86400000
+          const base = bars.find(b => b.ts >= cutoff)
+          const last = bars[bars.length - 1]
+          if (!base?.close || !last?.close) return null
+          return parseFloat(((last.close - base.close) / base.close * 100).toFixed(2))
+        }
+
+        function ytdRet(bars) {
+          const jan1 = new Date(new Date().getFullYear(), 0, 1).getTime()
+          const base = bars.find(b => b.ts >= jan1)
+          const last = bars[bars.length - 1]
+          if (!base?.close || !last?.close) return null
+          return parseFloat(((last.close - base.close) / base.close * 100).toFixed(2))
+        }
+
+        const lastPrice  = symBars[symBars.length - 1]?.close
+        const last52High = Math.max(...symBars.map(b => b.high ?? b.close))
+        const last52Low  = Math.min(...symBars.map(b => b.low  ?? b.close))
+        const fmtR = r => r == null ? '—' : `${r > 0 ? '+' : ''}${r}%`
+
+        const lines = [`**${sym} Price Performance vs S&P 500**`]
+        if (lastPrice) lines.push(`Current: $${lastPrice.toFixed(2)} · 52W High: $${last52High.toFixed(2)} · 52W Low: $${last52Low.toFixed(2)}`)
+
+        lines.push('\n| Period | ' + sym + ' | SPY | vs S&P 500 |')
+        lines.push('|--------|' + '-'.repeat(sym.length + 2) + '|-----|------------|')
+
+        for (const [label, days] of [['1M', 30], ['3M', 90], ['6M', 182], ['1Y', 365]]) {
+          const sr  = retAt(symBars, days)
+          const br  = spyBars.length ? retAt(spyBars, days) : null
+          const rel = (sr != null && br != null) ? parseFloat((sr - br).toFixed(2)) : null
+          lines.push(`| ${label} | ${fmtR(sr)} | ${fmtR(br)} | ${rel == null ? '—' : fmtR(rel)} |`)
+        }
+
+        const ytdS = ytdRet(symBars)
+        const ytdB = spyBars.length ? ytdRet(spyBars) : null
+        const ytdRel = (ytdS != null && ytdB != null) ? parseFloat((ytdS - ytdB).toFixed(2)) : null
+        lines.push(`| YTD | ${fmtR(ytdS)} | ${fmtR(ytdB)} | ${fmtR(ytdRel)} |`)
+
+        lines.push('\n_Source: FMP historical prices_')
+        return lines.join('\n')
+      } catch (e) {
+        return `Price performance fetch failed for ${sym}: ${e.message}`
+      }
+    }
+
+    case 'compare_stocks': {
+      const rawSyms = Array.isArray(input.symbols) ? input.symbols : String(input.symbols || '').split(',')
+      const syms = rawSyms.map(s => String(s).toUpperCase().replace(/[^A-Z0-9.-]/g, '')).filter(Boolean).slice(0, 5)
+      if (syms.length < 2) return 'Provide at least 2 symbols to compare (max 5).'
+      try {
+        const results = await Promise.all(syms.map(sym =>
+          fetch(`http://127.0.0.1:${port}/api/fundamentals/${sym}`, {
+            headers: fwdHeaders, signal: AbortSignal.timeout(20_000),
+          }).then(r => r.json()).catch(() => null)
+        ))
+
+        const valid = results.filter(d => d && !d.error && d.quarters?.length)
+        if (!valid.length) return `No fundamental data available for: ${syms.join(', ')} — FMP coverage required (US equities only)`
+
+        const lines = [`**Competitive Comparison: ${syms.join(' vs ')}**`]
+        const sectors = [...new Set(results.map(d => d?.company?.sector).filter(Boolean))]
+        if (sectors.length) lines.push(`Sector: ${sectors.join(' / ')}`)
+
+        const header = `| Metric | ${syms.join(' | ')} |`
+        const divider = `|--------|${syms.map(() => '------').join('|')}|`
+        lines.push('', header, divider)
+
+        function row(label, fn) {
+          const vals = results.map(d => {
+            if (!d || d.error) return 'N/A'
+            try { return fn(d) ?? '—' } catch { return '—' }
+          })
+          lines.push(`| ${label} | ${vals.join(' | ')} |`)
+        }
+
+        const fmtB = v => v == null ? null : (v >= 1e9 ? `$${(v/1e9).toFixed(1)}B` : `$${(v/1e6).toFixed(0)}M`)
+
+        row('Market Cap',     d => d.company?.mkt_cap_fmt)
+        row('TTM Revenue',    d => d.ttm_revenue_fmt)
+        row('Rev YoY',        d => d.yoy_rev_growth != null ? `${d.yoy_rev_growth > 0 ? '+' : ''}${d.yoy_rev_growth}%` : null)
+        row('Gross Margin',   d => d.quarters?.[0]?.gross_margin != null ? `${d.quarters[0].gross_margin}%` : null)
+        row('Oper Margin',    d => d.quarters?.[0]?.operating_margin != null ? `${d.quarters[0].operating_margin}%` : null)
+        row('Net Margin',     d => d.quarters?.[0]?.net_margin != null ? `${d.quarters[0].net_margin}%` : null)
+        row('P/E (TTM)',      d => d.valuation?.pe_ttm != null ? `${d.valuation.pe_ttm.toFixed(1)}x` : null)
+        row('P/S (TTM)',      d => d.valuation?.ps_ttm != null ? `${d.valuation.ps_ttm.toFixed(1)}x` : null)
+        row('PEG',            d => d.valuation?.peg_ttm != null ? d.valuation.peg_ttm.toFixed(2) : null)
+        row('EV/EBITDA',      d => d.valuation?.ev_ebitda != null ? `${d.valuation.ev_ebitda.toFixed(1)}x` : null)
+        row('FCF Margin',     d => d.cashflow?.fcf_margin != null ? `${d.cashflow.fcf_margin}%` : null)
+        row('FCF (TTM)',      d => fmtB(d.cashflow?.ttm_fcf))
+        row('Debt/Equity',    d => d.balance?.debt_to_equity != null ? `${d.balance.debt_to_equity}x` : null)
+        row('Current Ratio',  d => d.balance?.current_ratio != null ? `${d.balance.current_ratio}x` : null)
+        row('ROE',            d => d.valuation?.roe != null ? `${d.valuation.roe}%` : null)
+        row('ROIC',           d => d.valuation?.roic != null ? `${d.valuation.roic}%` : null)
+
+        // Analyst sentiment row
+        row('Analyst Mix',    d => {
+          const a = d.analyst_dist
+          if (!a?.total) return null
+          return `${a.buy_pct ?? '?'}% Buy`
+        })
+
+        lines.push('\n_Source: FMP · Not financial advice_')
+        return lines.join('\n')
+      } catch (e) {
+        return `Comparison failed: ${e.message}`
       }
     }
 
