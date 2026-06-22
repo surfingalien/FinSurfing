@@ -264,6 +264,7 @@ describe('computeStats', () => {
     expect(s.conflictImpact.noConflict.alphaWinRate).toBe(1)
   })
 
+
   test('h90 is computed when price90d is available', () => {
     const records = [
       mkRecord({ price7d: null, benchRet7d: null, price30d: null, benchRet30d: null, price90d: 130, benchRet90d: 5 }), // +30% vs +5% bench → alpha win
