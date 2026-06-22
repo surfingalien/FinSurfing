@@ -756,17 +756,31 @@ Rules:
           const m = secMap.get(stock.symbol)
           if (m) {
             overlap++
+            const delta = (m.compositeScore != null && stock.compositeScore != null)
+              ? Math.abs(m.compositeScore - stock.compositeScore) : null
             stock.ensemble = {
               confirmed:     true,
               secondVerdict: m.agentVerdict ?? null,
-              verdictMatch:  !!m.agentVerdict && m.agentVerdict === stock.agentVerdict,
-              scoreDelta:    (m.compositeScore != null && stock.compositeScore != null)
-                               ? Math.abs(m.compositeScore - stock.compositeScore) : null,
+              // verdictMatch requires same verdict AND score within 20 points — wide divergence is not real agreement
+              verdictMatch:  !!m.agentVerdict && m.agentVerdict === stock.agentVerdict && (delta == null || delta <= 20),
+              scoreDelta:    delta,
               secondRank:    m.rank ?? null,
             }
           } else {
             stock.ensemble = { confirmed: false }
           }
+        }
+
+        // Post-hoc highConviction upgrade: the LLM can't know ensemble outcome when it responds,
+        // so compute it here from backend-observable signals and upgrade when ≥3 confirm.
+        for (const stock of data.rankedStocks) {
+          if (stock.highConviction) continue // LLM already flagged it
+          let signals = 0
+          if (stock.ensemble?.confirmed && stock.ensemble?.verdictMatch) signals++ // ensemble agrees
+          if ((stock.compositeScore ?? 0) >= 80)                                   signals++ // elite score
+          if (stock.volumeSignal === 'Confirming')                                 signals++ // volume confirms
+          if ((stock.macroScore ?? 0) >= 75)                                       signals++ // macro tailwind
+          if (signals >= 3) stock.highConviction = true
         }
         ensemble = {
           secondModel:  'llama-3.3-70b-versatile',
