@@ -3,9 +3,22 @@ import { BarChart2, RefreshCw } from 'lucide-react'
 // ── Tool call indicator ───────────────────────────────────────────────────────
 
 const TOOL_META = {
-  get_technical_analysis: { icon: '📊', label: 'Technical Analysis', color: 'mint' },
-  get_fundamentals:       { icon: '📋', label: 'Fundamentals + Sentiment', color: 'indigo' },
-  compare_stocks:         { icon: '⚖️', label: 'Stock Comparison', color: 'amber' },
+  scan_market:            { icon: '🧠', label: 'AI Brain Scan',         color: 'mint'   },
+  get_recommendations:    { icon: '🎯', label: 'AI Recommendations',     color: 'mint'   },
+  analyze_symbol:         { icon: '📊', label: 'Technical Analysis',     color: 'mint'   },
+  get_fundamentals:       { icon: '📋', label: 'Fundamentals',           color: 'indigo' },
+  get_price_performance:  { icon: '📈', label: 'Price Performance',      color: 'indigo' },
+  compare_stocks:         { icon: '⚖️', label: 'Stock Comparison',       color: 'amber'  },
+  get_social_sentiment:   { icon: '💬', label: 'Social Sentiment',       color: 'amber'  },
+  get_macro:              { icon: '🌍', label: 'Macro Indicators',       color: 'mint'   },
+  get_earnings_catalyst:  { icon: '📅', label: 'Earnings Catalyst',      color: 'amber'  },
+  get_options_flow:       { icon: '🔀', label: 'Options Flow',           color: 'amber'  },
+  get_analyst_consensus:  { icon: '🏦', label: 'Analyst Consensus',      color: 'indigo' },
+  get_insider_activity:   { icon: '🔍', label: 'Insider Activity',       color: 'indigo' },
+  classify_symbol:        { icon: '🏷️', label: 'Symbol Classifier',      color: 'mint'   },
+  sector_universe:        { icon: '🗂️', label: 'Sector Universe',        color: 'mint'   },
+  portfolio_risk:         { icon: '⚠️', label: 'Portfolio Risk',         color: 'amber'  },
+  get_calibration:        { icon: '🎓', label: 'AI Track Record',        color: 'mint'   },
 }
 
 export function ToolCallBadge({ name, input, done }) {
