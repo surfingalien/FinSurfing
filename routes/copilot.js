@@ -344,6 +344,18 @@ const TOOLS = [
     },
   },
   {
+    name: 'analyze_filing',
+    description: "AI summary of a US company's latest SEC filing narrative (10-K, 10-Q, or 8-K) pulled directly from EDGAR: plain-English summary, notable changes vs prior periods, material risk factors, management tone, red flags, and an analyst takeaway grounded in the filing text. Distinct from get_fundamentals (the numbers) and earnings calls (the transcript) — this reads the MD&A and Risk Factors sections of the filing itself. Use when asked about a company's 10-K/10-Q/8-K, risk factors, MD&A, regulatory disclosures, or what a recent filing said.",
+    input_schema: {
+      type: 'object',
+      required: ['symbol'],
+      properties: {
+        symbol: { type: 'string', description: 'US stock ticker (e.g. AAPL, NVDA). EDGAR covers US-listed companies only; not crypto.' },
+        form: { type: 'string', enum: ['10-K', '10-Q', '8-K'], description: 'Optional specific form type. Omit to use the most recent of any of these.' },
+      },
+    },
+  },
+  {
     name: 'get_price_performance',
     description: 'Price performance of a symbol vs the S&P 500 (SPY) over 1M, 3M, 6M, 1Y, and YTD — plus 52-week high/low. Use when asked about relative performance, "how has X done vs S&P", or historical returns.',
     input_schema: {
@@ -837,6 +849,33 @@ async function dispatchTool(name, input, req) {
         return lines.join('\n')
       } catch (e) {
         return `Fundamentals fetch failed for ${sym}: ${e.message}`
+      }
+    }
+
+    case 'analyze_filing': {
+      const sym = (input.symbol || '').toUpperCase().replace(/[^A-Z0-9.-]/g, '')
+      if (!sym) return 'No symbol provided.'
+      const qs = input.form ? `?form=${encodeURIComponent(input.form)}` : ''
+      try {
+        const r = await fetch(`http://127.0.0.1:${port}/api/filings/${sym}${qs}`, {
+          headers: fwdHeaders, signal: AbortSignal.timeout(45_000),
+        })
+        if (!r.ok) {
+          const e = await r.json().catch(() => ({}))
+          return e.error || `Filing analysis unavailable for ${sym} (HTTP ${r.status})`
+        }
+        const d = await r.json()
+        const lines = [`**${d.company || sym} (${sym}) — SEC ${d.form} (filed ${d.filingDate || '—'})**`]
+        if (d.summary) lines.push(`\n${d.summary}`)
+        if (d.managementTone) lines.push(`\n**Management tone:** ${d.managementTone}`)
+        if (d.keyChanges?.length) lines.push('\n**Notable changes**\n' + d.keyChanges.map(x => `- ${x}`).join('\n'))
+        if (d.riskFactors?.length) lines.push('\n**Material risks**\n' + d.riskFactors.map(x => `- ${x}`).join('\n'))
+        if (d.redFlags?.length) lines.push('\n**🚩 Red flags**\n' + d.redFlags.map(x => `- ${x}`).join('\n'))
+        if (d.analystTakeaway) lines.push(`\n**Takeaway:** ${d.analystTakeaway}`)
+        lines.push(`\n_Source: SEC EDGAR ${d.form} · ${d.source || ''} · Not financial advice_`)
+        return lines.join('\n')
+      } catch (e) {
+        return `Filing analysis failed for ${sym}: ${e.message}`
       }
     }
 
