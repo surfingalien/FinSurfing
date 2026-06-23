@@ -38,6 +38,7 @@ React18+Vite SPA → Express API proxy. Dev: Vite proxies `/api/*` → :3001. Pr
 
 ## API Keys
 `extractKeys(req)` in server.js: headers `x-aisa-key` `x-finnhub-key` `x-fmp-key` `x-td-key` `x-av-key` → env fallback. Client inject via `src/services/api.js` (30s cache).
+**Finnhub key pool** (`lib/finnhub-keys.js`): set `FINNHUB_API_KEYS` (comma-separated) to round-robin across several keys and stay under the ~60/min per-key rate limit; `FH_KEY()` draws from the pool and the quote/chart paths cool a key for 60s on 429/403. Single `FINNHUB_API_KEY` still works (folded into the pool → identical to prior behaviour). Server-side, in-memory — no redeploy, no UI involvement. A user's browser `x-finnhub-key` still overrides the pool.
 
 ## AI Brain Scan Universes (`routes/ai-brain.js` → `SCAN_UNIVERSES`)
 `broad` | `stocks` + 11 GICS (`stocks_tech` … `stocks_real_estate`) | 8 ETF (`etfs_broad` `etfs_sector` `etfs_bond` `etfs_commodity` `etfs_intl` `etfs_leveraged` `etfs_thematic` `etfs_real_estate`) | 8 crypto (`crypto_l1` `crypto_l2` `crypto_defi` `crypto_ai` `crypto_meme` `crypto_infra` `crypto_exchange` `crypto_stable`) | 8 mutual fund (`mutualfunds` `mutualfunds_index` `mutualfunds_bond` …)
