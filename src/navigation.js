@@ -12,7 +12,7 @@ import {
   ShieldCheck, Activity, FlaskConical, BarChart3, Sparkles,
   Brain, Bookmark, Monitor, BookOpen, Globe, Target,
   Network, Clock, Radio, BrainCircuit, FolderOpen,
-  Search, DollarSign, LayoutGrid, CalendarDays, Zap,
+  Search, DollarSign, LayoutGrid, CalendarDays, Zap, FileText,
 } from 'lucide-react'
 
 // ── Sidebar nav groups ────────────────────────────────────────────────────────
@@ -51,6 +51,7 @@ export const NAV_GROUPS = [
       { id: 'second-brain',    label: 'Second Brain',   icon: BookOpen },
       { id: 'quantmind',       label: 'QuantMind',      icon: FlaskConical },
       { id: 'recommendations', label: 'Advisory',       icon: Lightbulb },
+      { id: 'filings',         label: 'Filing Research', icon: FileText },
       { id: 'macro',           label: 'Macro',          icon: Globe },
       { id: 'polymarket',      label: 'Polymarket',     icon: TrendingUp },
       { id: 'dcf-valuation',   label: 'DCF Valuation',  icon: TrendingUp },
