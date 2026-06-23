@@ -336,7 +336,18 @@ export function usePortfolio({ userId, activePortfolioId, authFetch } = {}) {
   // ── Enrich positions with live market data ────────────────────────────────
   // P&L math is the single source of truth in lib/portfolio-pnl.js (shared with
   // the server-side unit tests); this hook just feeds it the latest quotes.
-  const enriched = positions.map(pos => portfolioPnl.enrichPosition(pos, quotes[pos.symbol]))
+  //
+  // Quotes are keyed by the symbol the PROVIDER returns (api.js sets
+  // `symbol: q.symbol`), which can differ from the stored holding's symbol in
+  // case (e.g. "btc-usd") or whitespace. A direct quotes[pos.symbol] miss would
+  // leave the holding unpriced and hide its P&L, so match case-insensitively.
+  const quotesByUpper = {}
+  for (const k in quotes) quotesByUpper[k.toUpperCase()] = quotes[k]
+  const quoteFor = (sym) => {
+    if (!sym) return undefined
+    return quotes[sym] ?? quotesByUpper[sym.toUpperCase()]
+  }
+  const enriched = positions.map(pos => portfolioPnl.enrichPosition(pos, quoteFor(pos.symbol)))
   const summary  = portfolioPnl.portfolioSummary(enriched)
 
   return {
