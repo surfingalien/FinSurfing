@@ -526,11 +526,15 @@ async function getAISAQuotes(symbols, keys = {}) {
 }
 
 // ── Finnhub helpers ───────────────────────────────────────────────────────────
+// Key pool: round-robin across FINNHUB_API_KEYS (+ FINNHUB_API_KEY) with a
+// cooldown on any key that returns 429/403, to stay inside the per-key rate
+// limit. Single-key configs behave exactly as before.
+const finnhubKeys = require('./lib/finnhub-keys')
 function fhUrl(path, key = FH_KEY()) {
   const sep = path.includes('?') ? '&' : '?'
   return `https://finnhub.io/api/v1${path}${sep}token=${key}`
 }
-const FH_KEY = () => process.env.FINNHUB_API_KEY
+const FH_KEY = () => finnhubKeys.next()
 
 // Quote (per-symbol, parallel)
 async function getFinnhubQuotes(symbols, keys = {}) {
@@ -569,7 +573,11 @@ async function getFinnhubQuotes(symbols, keys = {}) {
         // change/changePct even after the 30 s quote cache expires.
         if (d.pc) cacheSet(`pc:${sym}`, d.pc)
         return q
-      } catch { return { symbol: sym, regularMarketPrice: null } }
+      } catch (e) {
+        // Cool this key down so the next batch routes to another pool key.
+        if (finnhubKeys.isRateLimitError(e)) finnhubKeys.penalize(key)
+        return { symbol: sym, regularMarketPrice: null }
+      }
     })
     return results
   } catch { return null }
@@ -605,7 +613,10 @@ async function getFinnhubChart(symbol, interval = '1d', range = '1y', keys = {})
         },
       }], error: null }
     }
-  } catch (e) { console.warn('[Finnhub] chart error:', e.message); return null }
+  } catch (e) {
+    if (finnhubKeys.isRateLimitError(e)) finnhubKeys.penalize(key)
+    console.warn('[Finnhub] chart error:', e.message); return null
+  }
 }
 
 // Symbol search
