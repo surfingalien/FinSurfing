@@ -170,7 +170,7 @@ export default function PortfolioView({ portfolio, portfolioId, authFetch }) {
           label="Total Gain/Loss"
           value={`${summary.totalGL >= 0 ? '+' : '-'}${fmtLarge(Math.abs(summary.totalGL))}`}
           sub={summary.unpricedCount > 0
-            ? `⚠ ${summary.unpricedCount} position${summary.unpricedCount > 1 ? 's' : ''} unpriced (counted at cost) — P&L understated`
+            ? `⚠ excludes ${summary.unpricedCount} unpriced position${summary.unpricedCount > 1 ? 's' : ''} (${fmtLarge(summary.unpricedCost)} at cost)`
             : summary.staleCount > 0
               ? `${fmtPct(summary.totalGLPct)} · ${summary.staleCount} stale price${summary.staleCount > 1 ? 's' : ''}`
               : fmtPct(summary.totalGLPct)}

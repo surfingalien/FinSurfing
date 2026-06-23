@@ -127,13 +127,16 @@ describe('P&L calculation — portfolioSummary()', () => {
     expect(s.totalCost).toBe(3000)
   })
 
-  test('totalValue sums mktValue, falling back to costBasis when null', () => {
+  test('totalValue counts only priced positions; unpriced is excluded and exposed via unpricedCost', () => {
     const enriched = [
-      { costBasis: 1000, mktValue: 1200, todayGL: 0 },
-      { costBasis: 500,  mktValue: null,  todayGL: 0 },  // no live price
+      { costBasis: 1000, mktValue: 1200, todayGL: 0, price: 12 },
+      { costBasis: 500,  mktValue: null, todayGL: 0, price: null },  // no live/last price
     ]
     const s = portfolioSummary(enriched)
-    expect(s.totalValue).toBe(1700)  // 1200 + 500
+    expect(s.totalValue).toBe(1200)   // priced only — NOT diluted by counting the unpriced at cost
+    expect(s.totalCost).toBe(1000)    // priced cost only, so totalGL = totalValue − totalCost holds
+    expect(s.unpricedCount).toBe(1)
+    expect(s.unpricedCost).toBe(500)
   })
 
   test('totalGL = totalValue − totalCost', () => {
@@ -162,17 +165,21 @@ describe('P&L calculation — portfolioSummary()', () => {
 // ── Regression: missing/stale quotes must not silently hide losses ───────────
 // Bug: holdings with no quote were counted at cost basis (break-even), so the
 // headline Total P&L understated losses (reported $-399 vs actual $-2060).
+// Now unpriced holdings are EXCLUDED from the headline (not counted at cost) so
+// priced losses are never diluted, with the held-but-unpriced amount surfaced
+// separately via unpricedCount / unpricedCost.
 describe('P&L with missing and stale quotes', () => {
   const yesterdaySec = Math.floor(Date.now() / 1000) - 86400
 
-  test('unpriced holding hides its loss in totalGL but is exposed via unpricedCount', () => {
+  test('unpriced holding is excluded from totalGL (not counted at cost) and exposed via unpricedCount/Cost', () => {
     const enriched = [
       enrichPosition({ symbol: 'A', shares: 10, avgCost: 100 }, { price: 60 }),   // −400 priced
-      enrichPosition({ symbol: 'B', shares: 10, avgCost: 200 }, null),            // real loss unknown
+      enrichPosition({ symbol: 'B', shares: 10, avgCost: 200 }, null),            // real value unknown → excluded
     ]
     const s = portfolioSummary(enriched)
-    expect(s.totalGL).toBe(-400)        // unpriced B counted at break-even...
-    expect(s.unpricedCount).toBe(1)     // ...but the gap is now visible
+    expect(s.totalGL).toBe(-400)        // priced A's loss, undiluted by B
+    expect(s.unpricedCount).toBe(1)     // B is surfaced, not silently absorbed at cost
+    expect(s.unpricedCost).toBe(2000)   // 10 × 200 — shown separately so the user sees it
     expect(s.pricedCount).toBe(1)
   })
 
