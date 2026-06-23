@@ -91,6 +91,26 @@ async function fetchCatalystContext(symbols, fwdHeaders, port) {
   return { earningsSnippet, sentimentSnippet }
 }
 
+// Compact one-line filing summary for a symbol, pulled from the internal
+// /api/filings route (SEC EDGAR 10-K/10-Q/8-K narrative, AI-summarised, 6h
+// cached). Returns null on any failure — filings are supplementary context.
+async function getFilingCompact(symbol, port, fwdHeaders) {
+  try {
+    const r = await fetch(`http://127.0.0.1:${port}/api/filings/${encodeURIComponent(symbol)}`,
+      { headers: fwdHeaders, signal: AbortSignal.timeout(30_000) })
+    if (!r.ok) return null
+    const d = await r.json()
+    if (!d?.form) return null
+    const parts = [`${symbol} [${d.form} ${d.filingDate || ''}]`]
+    if (d.managementTone) parts.push(`tone: ${d.managementTone}`)
+    if (Array.isArray(d.riskFactors) && d.riskFactors.length) parts.push(`risks: ${d.riskFactors.slice(0, 2).join('; ')}`)
+    if (Array.isArray(d.redFlags) && d.redFlags.length) parts.push(`🚩 ${d.redFlags.slice(0, 2).join('; ')}`)
+    return parts.join(' — ')
+  } catch {
+    return null
+  }
+}
+
 // Fetch live quotes from the internal /api/quote endpoint
 async function fetchLiveQuotes(symbols, fwdHeaders) {
   if (!symbols.length) return { priceMap: {}, analystMap: {} }
@@ -124,7 +144,7 @@ router.post('/', requireAuth, recLimit, async (req, res) => {
   if (process.env.AI_RECOMMENDATIONS_DISABLED === 'true')
     return res.status(503).json({ error: 'AI Buy Signals are temporarily disabled (kill switch active)', killSwitch: true })
 
-  const { holdings = [], focusSymbols = [], persona: personaId = 'default', includeMacro = true, includeFunds = false } = req.body
+  const { holdings = [], focusSymbols = [], persona: personaId = 'default', includeMacro = true, includeFunds = false, includeFilings = false } = req.body
   const persona    = PERSONAS[personaId] ?? PERSONAS.default
   const holdingStr = holdings.length    ? holdings.join(', ') : 'none'
   const focusStr   = focusSymbols.length ? focusSymbols.join(', ') : ''
@@ -147,7 +167,7 @@ router.post('/', requireAuth, recLimit, async (req, res) => {
     : holdings
   ).filter(s => !s.includes('-') && !s.includes('=')).slice(0, 5)
 
-  const [quoteData, { earningsSnippet, sentimentSnippet }, macroData, socialSentimentSnippet, insiderResults, optionsResults] = await Promise.all([
+  const [quoteData, { earningsSnippet, sentimentSnippet }, macroData, socialSentimentSnippet, insiderResults, optionsResults, filingsResults] = await Promise.all([
     focusSymbols.length ? fetchLiveQuotes(focusSymbols, fwdHeaders) : Promise.resolve({ priceMap: {}, analystMap: {} }),
     fetchCatalystContext(symbolsForContext, fwdHeaders, port),
     includeMacro ? getIndicators().catch(() => null) : Promise.resolve(null),
@@ -157,6 +177,9 @@ router.post('/', requireAuth, recLimit, async (req, res) => {
       : Promise.resolve([]),
     stocksForAltData.length
       ? Promise.all(stocksForAltData.map(s => getOptionsFlowCompact(s, port, fwdHeaders).catch(() => null)))
+      : Promise.resolve([]),
+    includeFilings && stocksForAltData.length
+      ? Promise.all(stocksForAltData.map(s => getFilingCompact(s, port, fwdHeaders)))
       : Promise.resolve([]),
   ])
 
@@ -171,6 +194,10 @@ router.post('/', requireAuth, recLimit, async (req, res) => {
   const optionsSnippet = optionsResults.filter(Boolean).length
     ? '\nOPTIONS FLOW (P/C ratio + unusual activity — bullish signal when P/C<0.70🟢):\n  ' +
       optionsResults.filter(Boolean).join('\n  ')
+    : ''
+  const filingsSnippet = filingsResults.filter(Boolean).length
+    ? '\nSEC FILING NARRATIVE (latest 10-K/10-Q/8-K — tone, risk factors, red flags):\n  ' +
+      filingsResults.filter(Boolean).join('\n  ')
     : ''
 
   const livePriceSnippet = Object.keys(preLivePrices).length
@@ -217,7 +244,7 @@ router.post('/', requireAuth, recLimit, async (req, res) => {
   const prompt = `${personaBlock}You are a senior portfolio strategist channeling the investment philosophy above. Provide specific actionable buy recommendations for a retail investor.
 
 Current portfolio holdings (avoid overlap): ${holdingStr}${focusInstructions}
-${livePriceSnippet}${analystConsensusSnippet}${macroSnippet}${earningsSnippet}${sentimentSnippet}${socialSentimentSnippet}${insiderSnippet}${optionsSnippet}${historySnippet}
+${livePriceSnippet}${analystConsensusSnippet}${macroSnippet}${earningsSnippet}${sentimentSnippet}${socialSentimentSnippet}${insiderSnippet}${optionsSnippet}${filingsSnippet}${historySnippet}
 
 ${countInstructions}
 ${persona.constraints ? '\n' + persona.constraints : ''}
