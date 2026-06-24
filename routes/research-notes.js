@@ -126,6 +126,7 @@ function fetchUrlContent(targetUrl, maxRedirects = 3) {
 }
 
 function aiClient() {
+  if (require('../lib/ai-pause').claudePaused()) throw require('../lib/ai-pause').pausedError()
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) throw new Error('AI service not configured')
   return new Anthropic({ apiKey })

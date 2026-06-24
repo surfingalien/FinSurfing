@@ -250,6 +250,7 @@ Scoring guide:
 
 If a symbol has no news, return score 5 and sentiment "neutral".`
 
+  if (require('../lib/ai-pause').claudePaused()) throw require('../lib/ai-pause').pausedError()
   const client = new Anthropic({ apiKey })
   const msg    = await client.messages.create({
     model: 'claude-sonnet-4-6', max_tokens: 2048,

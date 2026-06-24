@@ -17,8 +17,10 @@ const { requireAuth } = require('../middleware/auth')
 const router = express.Router()
 router.use(requireAuth)
 
+const { claudePaused, pausedError } = require('../lib/ai-pause')
 let _client = null
 function getClient() {
+  if (claudePaused()) throw pausedError()
   if (_client) return _client
   if (!process.env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY not set')
   const Anthropic = require('@anthropic-ai/sdk')
