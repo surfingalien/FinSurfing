@@ -34,6 +34,7 @@ const { getChatHistory, saveChatSummary } = require('../db/ai_memory')
 // ── Lazy-load Anthropic SDK ───────────────────────────────────────────────────
 let _client = null
 function getClient() {
+  if (require('../lib/ai-pause').claudePaused()) throw require('../lib/ai-pause').pausedError()
   if (_client) return _client
   if (!process.env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY is not set')
   const Anthropic = require('@anthropic-ai/sdk')

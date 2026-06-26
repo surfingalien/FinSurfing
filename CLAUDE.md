@@ -74,3 +74,6 @@ Pure TA math (RSI, EMA, MACD, BB, ATR, StochRSI, VWAP, OBV, pivot S/R, patterns,
 
 ## Deploy
 Railway auto-deploy `main` (`railway.toml` + `Procfile`).
+
+## Pausing Claude (`lib/ai-pause.js`)
+Set `CLAUDE_PAUSE_UNTIL` to an ISO date (e.g. `2026-07-01`) to stop all Anthropic/Claude usage until that date — e.g. to preserve quota until a limit resets. While paused, `claudePaused()` is true: `lib/ai-router.js` routes its features to Groq (works only if `GROQ_API_KEY` set), the copilot's default Claude provider is transparently served by Groq, and direct Claude callers (`quantmind` `rebalancer` `sentiment` `agent` `research-notes` `brain-learnings` nightly) skip the call and 503/no-op. Auto-resumes after the date — no redeploy. Unset/blank/invalid → never paused.

@@ -224,6 +224,7 @@ router.post('/paper', paperLimit, async (req, res) => {
 
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) return res.status(503).json({ error: 'ANTHROPIC_API_KEY not configured' })
+  if (require('../lib/ai-pause').claudePaused()) return res.status(503).json({ error: require('../lib/ai-pause').pauseMessage(), claudePaused: true })
 
   try {
     const fetched = await fetchArxivMeta(cleanId)
@@ -268,6 +269,7 @@ router.post('/batch', batchLimit, async (req, res) => {
 
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) return res.status(503).json({ error: 'ANTHROPIC_API_KEY not configured' })
+  if (require('../lib/ai-pause').claudePaused()) return res.status(503).json({ error: require('../lib/ai-pause').pauseMessage(), claudePaused: true })
 
   const client  = new Anthropic({ apiKey })
   const userId  = req.user?.userId
@@ -321,6 +323,7 @@ router.post('/ask', askLimit, async (req, res) => {
 
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) return res.status(503).json({ error: 'ANTHROPIC_API_KEY not configured' })
+  if (require('../lib/ai-pause').claudePaused()) return res.status(503).json({ error: require('../lib/ai-pause').pauseMessage(), claudePaused: true })
 
   const userId        = req.user?.userId
   const personaPrompt = PERSONAS[persona] || PERSONAS.quant_analyst

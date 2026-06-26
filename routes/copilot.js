@@ -33,6 +33,7 @@ const { getSocialSentiment } = require('../lib/social-sentiment')
 const { getAltDataSnippet }  = require('../lib/alt-data')
 const symbolDb = require('../lib/symbol-db')
 const { computeStats, readPredictions } = require('../lib/brain-learnings')
+const { claudePaused, pauseMessage } = require('../lib/ai-pause')
 
 // Use warm cache from scheduled-jobs if available, fall back to live fetch
 async function getAltData(symbol) {
@@ -1260,6 +1261,24 @@ router.post('/chat', requireAuth, chatLimit, async (req, res) => {
     // baseUrl is always taken from server-side PROVIDER_DEFAULTS — never from the
     // client-supplied providerState, which would allow SSRF and API key theft.
     const baseUrl = defaults.baseUrl
+
+    // Claude paused for quota preservation: transparently serve the default
+    // Claude provider via Groq so chat keeps working. Falls back to a clear
+    // message only if Groq isn't configured. Explicit groq/codex pass through.
+    if (claudePaused() && providerKey !== 'groq' && providerKey !== 'codex') {
+      if (!process.env.GROQ_API_KEY) {
+        send({ type: 'error', message: pauseMessage() })
+        res.end(); return
+      }
+      const g = PROVIDER_DEFAULTS.groq
+      await runOpenAITurn({
+        model: g.model, baseUrl: g.baseUrl, apiKey: process.env.GROQ_API_KEY, system: systemPrompt,
+        messages: messages.map(m => ({ role: m.role, content: m.content })),
+        tools: TOOLS, send, dispatchFn: dispatchTool, req, maxIter: 5,
+      })
+      send({ type: 'done' })
+      res.end(); return
+    }
 
     if (providerKey === 'groq' || providerKey === 'codex') {
       const apiKey = providerKey === 'groq' ? process.env.GROQ_API_KEY : process.env.OPENAI_API_KEY
