@@ -1126,16 +1126,6 @@ const PROVIDER_DEFAULTS = {
   claude: { model: 'claude-sonnet-4-6' },
   groq:   { model: 'llama-3.3-70b-versatile', baseUrl: 'https://api.groq.com/openai/v1' },
   codex:  { model: 'gpt-4o',                  baseUrl: 'https://api.openai.com/v1' },
-  zai:    { model: process.env.ZAI_MODEL  || 'glm-4.6',   baseUrl: 'https://api.z.ai/api/paas/v4' },
-  qwen:   { model: process.env.QWEN_MODEL || 'qwen-plus', baseUrl: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1' },
-}
-
-// Which server-side env var holds each OpenAI-compatible provider's key.
-const OPENAI_COMPAT_KEY = {
-  groq:  'GROQ_API_KEY',
-  codex: 'OPENAI_API_KEY',
-  zai:   'ZAI_API_KEY',
-  qwen:  'QWEN_API_KEY',
 }
 
 // Convert Anthropic tool format → OpenAI function calling format
@@ -1274,9 +1264,8 @@ router.post('/chat', requireAuth, chatLimit, async (req, res) => {
 
     // Claude paused for quota preservation: transparently serve the default
     // Claude provider via Groq so chat keeps working. Falls back to a clear
-    // message only if Groq isn't configured. OpenAI-compatible providers
-    // (groq/codex/zai/qwen) are not Claude, so they pass straight through.
-    if (claudePaused() && !OPENAI_COMPAT_KEY[providerKey]) {
+    // message only if Groq isn't configured. Explicit groq/codex pass through.
+    if (claudePaused() && providerKey !== 'groq' && providerKey !== 'codex') {
       if (!process.env.GROQ_API_KEY) {
         send({ type: 'error', message: pauseMessage() })
         res.end(); return
@@ -1291,10 +1280,10 @@ router.post('/chat', requireAuth, chatLimit, async (req, res) => {
       res.end(); return
     }
 
-    if (OPENAI_COMPAT_KEY[providerKey]) {
-      const apiKey = process.env[OPENAI_COMPAT_KEY[providerKey]]
+    if (providerKey === 'groq' || providerKey === 'codex') {
+      const apiKey = providerKey === 'groq' ? process.env.GROQ_API_KEY : process.env.OPENAI_API_KEY
       if (!apiKey) {
-        send({ type: 'error', message: `${providerKey} API key not configured on server (${OPENAI_COMPAT_KEY[providerKey]})` })
+        send({ type: 'error', message: `${providerKey} API key not configured on server` })
         res.end(); return
       }
       await runOpenAITurn({
