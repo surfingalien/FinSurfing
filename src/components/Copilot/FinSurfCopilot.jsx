@@ -83,6 +83,8 @@ const PROVIDERS = [
   { id: 'claude', label: 'Claude',  color: '#00ffcc', description: 'claude-sonnet-4-6' },
   { id: 'groq',   label: 'Groq',    color: '#f472b6', description: 'llama-3.3-70b' },
   { id: 'codex',  label: 'Codex',   color: '#60a5fa', description: 'gpt-4o' },
+  { id: 'zai',    label: 'GLM',     color: '#a78bfa', description: 'Z.ai glm-4.6' },
+  { id: 'qwen',   label: 'Qwen',    color: '#fbbf24', description: 'qwen-plus' },
 ]
 
 export default function FinSurfCopilot({ portfolio = [], watchlist = [] }) {
