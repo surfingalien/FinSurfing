@@ -15,6 +15,7 @@ const express   = require('express')
 const rateLimit = require('express-rate-limit')
 const { getRouter } = require('../lib/ai-router')
 const { CircuitOpenError } = require('../lib/circuit-breaker')
+const { compactProse } = require('../lib/compress')
 
 const router    = express.Router()
 const aiRouter  = getRouter('earnings-call')
@@ -87,7 +88,7 @@ router.get('/', earningsLimit, async (req, res) => {
 
     const latest   = transcripts[0]
     const content  = latest.content || ''
-    const excerpt  = content.slice(0, 6000)  // ~1500 tokens, well within context
+    const excerpt  = compactProse(content).slice(0, 6000)  // compacted → more signal per token
 
     if (!excerpt.trim().length) {
       return res.status(404).json({ error: `Transcript found but content is empty for ${symbol}` })
