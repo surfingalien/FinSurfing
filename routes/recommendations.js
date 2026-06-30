@@ -29,6 +29,7 @@ const { getAltDataSnippet }  = require('../lib/alt-data')
 const { getOptionsFlowCompact } = require('../lib/options-flow-cache')
 const kelly = require('../lib/kelly')
 const { computeStats, readPredictions } = require('../lib/brain-learnings')
+const recJournal = require('../lib/rec-journal')
 
 const recLimit = rateLimit({
   windowMs: 60 * 1000, max: 5,
@@ -371,6 +372,16 @@ Respond ONLY with a JSON object — no markdown, no explanation, just the JSON:
       )
     }
 
+    // Journal this run as a versioned, diffable "commit" (rationale = market
+    // outlook). Best-effort; appendEntry never throws to the caller.
+    recJournal.appendEntry(recJournal.buildEntry({
+      recommendations: data.recommendations,
+      rationale: data.marketOutlook || '',
+      persona:   persona.id,
+      params:    { includeMacro, includeFilings, includeFunds, focus: focusStr || null },
+      userId,
+    }))
+
     return res.json({
       ...data,
       generatedAt: new Date().toISOString(),
@@ -382,6 +393,15 @@ Respond ONLY with a JSON object — no markdown, no explanation, just the JSON:
     console.error('[recommendations]', err.message)
     return res.status(500).json({ error: 'Recommendation service error: ' + err.message })
   }
+})
+
+// GET /api/recommendations/journal — versioned, diffable history of this user's
+// recommendation runs ("decisions as commits"). Each entry carries a diff vs the
+// previous run (added / removed / changed picks). requireAuth — user-scoped.
+router.get('/journal', requireAuth, (req, res) => {
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 100)
+  const entries = recJournal.readJournalWithDiffs({ userId: req.user?.userId, limit })
+  res.json({ count: entries.length, entries })
 })
 
 // GET /api/recommendations/personas — list available personas for the UI
