@@ -27,6 +27,8 @@ const { getIndicators }   = require('./macro')
 const { getSocialSentiment } = require('../lib/social-sentiment')
 const { getAltDataSnippet }  = require('../lib/alt-data')
 const { getOptionsFlowCompact } = require('../lib/options-flow-cache')
+const kelly = require('../lib/kelly')
+const { computeStats, readPredictions } = require('../lib/brain-learnings')
 
 const recLimit = rateLimit({
   windowMs: 60 * 1000, max: 5,
@@ -332,6 +334,24 @@ Respond ONLY with a JSON object — no markdown, no explanation, just the JSON:
 
     if (pricesAnchored > 0)
       console.log(`[recommendations] re-anchored prices for ${pricesAnchored}/${recSymbols.length} symbols`)
+
+    // ── Kelly position sizing (advisory) ─────────────────────────────────────
+    // Suggested size = fractional Kelly capped at maxFraction, using the pick's
+    // own reward/risk (targetReturn/stopLoss) and an EMPIRICAL win probability
+    // from resolved-prediction calibration (NOT a heuristic confidence score).
+    // Recs carry `risk`, not a calibrated confidence bucket, so we use the
+    // overall historical win rate; falls back to a conservative default until
+    // enough predictions have resolved.
+    let kellyStats = null
+    try { kellyStats = computeStats(readPredictions()) } catch { /* calibration optional */ }
+    const { p: winProb, source: winProbSource } = kelly.winProbFromStats(kellyStats, { fallback: 0.5 })
+    data.recommendations = data.recommendations.map(rec => {
+      const W = (rec.targetReturn || 0) / 100
+      const L = (rec.stopLoss     || 0) / 100
+      if (!(W > 0) || !(L > 0)) return rec
+      const sizing = kelly.suggestedSize({ winProb, winFrac: W, lossFrac: L, fraction: 0.5, maxFraction: 0.2 })
+      return { ...rec, sizing: { ...sizing, winProbSource } }
+    })
 
     // Strip any holdings the AI recommended despite the instruction — last-resort guard
     if (holdings.length) {

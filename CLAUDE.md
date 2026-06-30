@@ -75,6 +75,9 @@ Pure TA math (RSI, EMA, MACD, BB, ATR, StochRSI, VWAP, OBV, pivot S/R, patterns,
 ## Deploy
 Railway auto-deploy `main` (`railway.toml` + `Procfile`).
 
+## Kelly position sizing (`lib/kelly.js`)
+Advisory position sizing (suggests, never executes). `fullKelly(p,W,L)` = asymmetric-payoff Kelly `(pW−qL)/(WL)` clamped ≥0; `suggestedSize({winProb,winFrac,lossFrac,fraction=0.5,maxFraction=0.2})` applies fractional Kelly + a hard cap (full Kelly can exceed 100% leverage under a tight stop). Win-probability comes from EMPIRICAL calibration via `winProbFromStats(computeStats(...))` — the resolved-pick win rate (per-confidence bucket when available, else overall, else conservative default) — NOT a raw confidence score. Wired into `routes/recommendations.js`: each pick gets a `sizing` field (suggestedPct/fullKellyPct/edgePerUnit/winProbSource) from its targetReturn/stopLoss. Pure, tested (`tests/kelly.test.js`).
+
 ## Prompt token compaction (`lib/compress.js`)
 `compactProse(text)` strips non-informative structure (whitespace runs, separator/page-number lines, repeated lines, ToC/boilerplate) from prose-heavy context BEFORE it's sliced into a prompt — fewer tokens, same meaning, so the same char budget carries more signal. NEVER alters numbers/tickers/currency/% (financial precision preserved). `compactWhitespace(text)` is the whitespace-only, line-preserving variant. Pure, tested (`tests/compress.test.js`). Applied at the heavy injection points: SEC filing narrative (`lib/filings.js` → before `extractSections`) and earnings-call transcript (`routes/earnings-call.js` → before the 6k slice). Typical ~30-50% shrink on filing/transcript boilerplate.
 
