@@ -27,6 +27,25 @@ describe('hashEntry', () => {
     expect(j.hashEntry([{ ...recs[0], targetReturn: 30 }, recs[1]], 'bull market')).not.toBe(base)
     expect(j.hashEntry(recs, 'bear market')).not.toBe(base)
   })
+
+  test('reflects a change in citation sources (evidence is part of the record)', () => {
+    const a = j.hashEntry([{ ...recs[0], sources: ['RSI 28 — oversold'] }, recs[1]], 'r')
+    const b = j.hashEntry([{ ...recs[0], sources: ['analyst target $210'] }, recs[1]], 'r')
+    expect(a).not.toBe(b)
+  })
+})
+
+describe('citations / sources', () => {
+  test('normalizePick preserves sources as a string array (defaults to [])', () => {
+    expect(j.normalizePick({ symbol: 'nvda', sources: ['RSI 28', 'macro VIX spike'] }).sources)
+      .toEqual(['RSI 28', 'macro VIX spike'])
+    expect(j.normalizePick({ symbol: 'nvda' }).sources).toEqual([])
+  })
+
+  test('buildEntry carries sources through to the stored pick', () => {
+    const e = j.buildEntry({ recommendations: [{ symbol: 'NVDA', sources: ['10-K risk eased'] }], rationale: 'r' })
+    expect(e.picks[0].sources).toEqual(['10-K risk eased'])
+  })
 })
 
 describe('buildEntry', () => {

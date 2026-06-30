@@ -260,6 +260,7 @@ Rules:
 - entryPrice: use the LIVE PRICE above if provided, otherwise your best estimate of current market price
 - takeProfitPrice: entryPrice × (1 + targetReturn/100)
 - stopLossPrice: entryPrice × (1 - stopLoss/100)
+- sources: ground each pick in the SPECIFIC evidence shown above — live prices, analyst consensus, macro, earnings, sentiment, insider/options flow, SEC filings, technicals. Cite only data actually present above; NEVER invent figures or sources. Use [] when no specific data supports the pick.
 
 Respond ONLY with a JSON object — no markdown, no explanation, just the JSON:
 {
@@ -280,7 +281,8 @@ Respond ONLY with a JSON object — no markdown, no explanation, just the JSON:
       "catalyst": "Primary near-term catalyst",
       "technicalSignal": "Brief technical setup note",
       "bearCase": "Primary downside risk in ≤10 words",
-      "thesisBreaker": "Specific event that invalidates this pick in ≤8 words"
+      "thesisBreaker": "Specific event that invalidates this pick in ≤8 words",
+      "sources": ["≤12 words each — specific evidence from the data above (e.g. 'RSI 28 — oversold', 'analyst target $210 (12×)', '10-K risk factors eased'); max 4; [] if none"]
     }
   ],
   "marketOutlook": "2-sentence overall market view",
@@ -347,11 +349,14 @@ Respond ONLY with a JSON object — no markdown, no explanation, just the JSON:
     try { kellyStats = computeStats(readPredictions()) } catch { /* calibration optional */ }
     const { p: winProb, source: winProbSource } = kelly.winProbFromStats(kellyStats, { fallback: 0.5 })
     data.recommendations = data.recommendations.map(rec => {
+      // Citations: keep only non-empty string sources, max 4 (defensive against
+      // the model omitting/malforming the field). Always present as an array.
+      const sources = Array.isArray(rec.sources) ? rec.sources.filter(s => typeof s === 'string' && s.trim()).slice(0, 4) : []
       const W = (rec.targetReturn || 0) / 100
       const L = (rec.stopLoss     || 0) / 100
-      if (!(W > 0) || !(L > 0)) return rec
+      if (!(W > 0) || !(L > 0)) return { ...rec, sources }
       const sizing = kelly.suggestedSize({ winProb, winFrac: W, lossFrac: L, fraction: 0.5, maxFraction: 0.2 })
-      return { ...rec, sizing: { ...sizing, winProbSource } }
+      return { ...rec, sources, sizing: { ...sizing, winProbSource } }
     })
 
     // Strip any holdings the AI recommended despite the instruction — last-resort guard
