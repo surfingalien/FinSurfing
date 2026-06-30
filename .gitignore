@@ -6,3 +6,4 @@ dist/
 *.log
 .vercel/
 data/memstore-snapshot.json
+data/rec-journal.jsonl
