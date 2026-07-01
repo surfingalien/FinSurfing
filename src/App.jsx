@@ -59,6 +59,7 @@ const HeatmapView            = lazy(() => import('./components/Heatmap/HeatmapVi
 const EconCalendarView       = lazy(() => import('./components/EconCalendar/EconCalendarView'))
 const SentimentView          = lazy(() => import('./components/Sentiment/SentimentView'))
 const FilingsView            = lazy(() => import('./components/Filings/FilingsView'))
+const ProbabilityLatticeView = lazy(() => import('./components/Lattice/ProbabilityLatticeView'))
 
 // ── Shared loading spinner ────────────────────────────────────────────────────
 function LoadingScreen({ label = 'Loading…', fullScreen = false }) {
@@ -239,6 +240,7 @@ function MainApp({ onSignIn }) {
     'calendar':        () => <EconCalendarView />,
     'sentiment':       () => <SentimentView />,
     'filings':         () => <FilingsView defaultSymbol={analyzeSymbol} />,
+    'probability-lattice': () => <ProbabilityLatticeView />,
     'admin':          () => <AdminDashboard />,
   }
 
