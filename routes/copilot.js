@@ -382,6 +382,17 @@ const TOOLS = [
       },
     },
   },
+  {
+    name: 'read_url',
+    description: "Fetch and read a SPECIFIC web page the user provides — e.g. an investor-relations page, press release, regulatory notice, or a news/analyst article not covered by the other tools — and return its main content as clean text for analysis. Use ONLY when the user gives (or clearly points at) a particular URL. This is NOT a web search and NOT for crawling — one page the user named.",
+    input_schema: {
+      type: 'object',
+      required: ['url'],
+      properties: {
+        url: { type: 'string', description: 'The full http(s) URL of the page to read.' },
+      },
+    },
+  },
 ]
 
 // ── Internal tool dispatcher ──────────────────────────────────────────────────
@@ -1019,6 +1030,36 @@ async function dispatchTool(name, input, req) {
         return lines.join('\n')
       } catch (e) {
         return `Comparison failed: ${e.message}`
+      }
+    }
+
+    case 'read_url': {
+      const url = String(input.url || '').trim()
+      if (!/^https?:\/\/.+/i.test(url)) return 'Please provide a valid http(s) URL to read.'
+      if (!process.env.FIRECRAWL_API_KEY) return 'Web-page reading is not configured on the server (FIRECRAWL_API_KEY missing).'
+      try {
+        // Firecrawl fetches the page server-side (SSRF stays on their infra, not
+        // ours) and returns clean markdown; we compact it to keep tokens down.
+        const r = await fetch('https://api.firecrawl.dev/v1/scrape', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.FIRECRAWL_API_KEY}` },
+          body: JSON.stringify({ url, formats: ['markdown'], onlyMainContent: true }),
+          signal: AbortSignal.timeout(45_000),
+        })
+        if (!r.ok) {
+          const e = await r.json().catch(() => ({}))
+          return `Could not read ${url}: ${e.error || `Firecrawl HTTP ${r.status}`}`
+        }
+        const d  = await r.json()
+        const md = d?.data?.markdown || d?.markdown || ''
+        if (!md.trim()) return `No readable content could be extracted from ${url}.`
+        const { compactProse } = require('../lib/compress')
+        const clean = compactProse(md)
+        const body  = clean.slice(0, 12000)
+        const title = d?.data?.metadata?.title || d?.metadata?.title || url
+        return `**${title}**\n${url}\n\n${body}${clean.length > 12000 ? '\n\n…(truncated)' : ''}\n\n_Source: ${url} · not financial advice_`
+      } catch (e) {
+        return `Failed to read ${url}: ${e.message}`
       }
     }
 
