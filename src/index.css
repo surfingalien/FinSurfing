@@ -137,6 +137,97 @@
   .ai-panel-in  { animation: none; }
 }
 
+/* ── Apple Mode — light, minimal, Apple-inspired aesthetic ───────────────────
+   Additive theme toggled by adding `apple-mode` to <html> (AppleModeContext,
+   mirrors pro-mode). Overrides the shared component classes plus the most
+   common dark-theme utility classes so existing views read correctly on a
+   light surface without touching any component. Pilot — refine per-view
+   after visual review. */
+html.apple-mode body {
+  background-image: none !important;
+  background-color: #f5f5f7 !important;
+  color: #1d1d1f;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Inter, system-ui, sans-serif;
+}
+
+/* Cards: white, soft shadow, no glass borders */
+html.apple-mode .glass {
+  background: #ffffff !important;
+  border-color: rgba(0, 0, 0, 0.06) !important;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+  backdrop-filter: none;
+  border-radius: 18px !important;
+}
+html.apple-mode .glass-card:hover {
+  background: #ffffff !important;
+  border-color: rgba(0, 0, 0, 0.1) !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.09);
+}
+
+/* Text: dark ink replaces the dark theme's light text scale */
+html.apple-mode .text-white  { color: #1d1d1f; }
+html.apple-mode .text-slate-100,
+html.apple-mode .text-slate-200,
+html.apple-mode .text-slate-300 { color: #424245; }
+html.apple-mode .text-slate-400 { color: #6e6e73; }
+html.apple-mode .text-slate-500 { color: #86868b; }
+html.apple-mode .text-slate-600,
+html.apple-mode .text-slate-700 { color: #a1a1a6; }
+
+/* Accent: neon mint → Apple blue */
+html.apple-mode .text-mint-300,
+html.apple-mode .text-mint-400,
+html.apple-mode .text-mint-500,
+html.apple-mode .text-cyan-300,
+html.apple-mode .text-cyan-400  { color: #0071e3; }
+
+/* Buttons & inputs */
+html.apple-mode .btn-primary {
+  background: #0071e3 !important;
+  color: #ffffff !important;
+  border-color: transparent !important;
+  border-radius: 980px;
+}
+html.apple-mode .btn-primary:hover { background: #0077ed !important; }
+html.apple-mode .btn-ghost { color: #6e6e73; }
+html.apple-mode .btn-ghost:hover { color: #1d1d1f; background: rgba(0, 0, 0, 0.05); }
+html.apple-mode .input {
+  background: #ffffff !important;
+  border-color: rgba(0, 0, 0, 0.15) !important;
+  color: #1d1d1f !important;
+}
+html.apple-mode .input::placeholder { color: #86868b; }
+html.apple-mode .tab-active { color: #1d1d1f; background: rgba(0, 0, 0, 0.05); border-bottom-color: #0071e3; }
+
+/* Hard-coded dark surfaces (sidebar, header, tables, modals) */
+html.apple-mode .bg-\[\#060810\],
+html.apple-mode .bg-\[\#070b14\],
+html.apple-mode .bg-\[\#0a0e1a\],
+html.apple-mode .bg-\[\#0a0f1a\],
+html.apple-mode .bg-\[\#0d1120\],
+html.apple-mode .bg-\[\#0d1421\],
+html.apple-mode .bg-\[\#0e1120\],
+html.apple-mode .bg-\[\#0f1117\],
+html.apple-mode .bg-\[\#111827\],
+html.apple-mode .bg-\[\#12121a\],
+html.apple-mode .bg-\[\#1e2a3a\] { background-color: #ffffff !important; }
+html.apple-mode .bg-surface-400,
+html.apple-mode .bg-surface-300,
+html.apple-mode .bg-surface-200 { background-color: #f5f5f7 !important; }
+
+/* Subtle fills/borders that were tuned for dark surfaces */
+html.apple-mode .divider { border-color: rgba(0, 0, 0, 0.08); }
+html.apple-mode ::-webkit-scrollbar-track { background: #f5f5f7; }
+html.apple-mode ::-webkit-scrollbar-thumb { background: #c7c7cc; }
+html.apple-mode ::-webkit-scrollbar-thumb:hover { background: #aeaeb2; }
+
+/* Chart tooltips on light */
+html.apple-mode .recharts-default-tooltip {
+  background: rgba(255, 255, 255, 0.97) !important;
+  border: 1px solid rgba(0, 0, 0, 0.1) !important;
+  color: #1d1d1f !important;
+}
+
 /* ── Pro Mode — industrial terminal aesthetic ──────────── */
 html.pro-mode body {
   background-image: none !important;

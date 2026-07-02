@@ -56,7 +56,7 @@ Express (:3001 prod / :3001 dev)
 | Boundary | Trust level | Notes |
 |---|---|---|
 | Browser → Express | Untrusted | All user input validated server-side |
-| Express → Postgres | Trusted (same Railway project) | Parameterized queries only |
+| Express → Postgres | Trusted (same Railway project) | Parameterized queries only; TLS cert pinned when `DATABASE_CA_CERT` is set (else encrypted-but-unverified + startup warning) |
 | Express → External APIs | Semi-trusted (HTTPS) | API keys from env vars |
 | Express → Claude/Groq | Semi-trusted | User-controlled content reaches LLM prompts |
 | Internal loopback calls (auth bypass) | Trusted by loopback socket address **AND** a per-process secret | `requireAuth` bypass (`lib/internal-secret.js`) requires BOTH `req.socket.remoteAddress` on loopback AND `x-internal-secret` matching a secret generated fresh at boot — a forged header alone (or a topology where remoteAddress is unexpectedly loopback) can no longer bypass auth |
