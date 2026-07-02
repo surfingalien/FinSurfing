@@ -14,6 +14,7 @@
 
 const express = require('express')
 const router  = express.Router()
+const { buildRegimePlaybook } = require('../lib/macro-playbook')
 
 const FRED_BASE  = 'https://api.stlouisfed.org/fred/series/observations'
 const CACHE_TTL  = 60 * 60 * 1000   // 1 hour
@@ -177,7 +178,10 @@ function assessRegime(indicators) {
 }
 
 // ── Build concise macro summary string for AI prompt injection ────────────────
-function buildMacroSummary(indicators, regime) {
+// `playbook` (lib/macro-playbook.js) appends deterministic regime→strategy
+// tilts so every consumer of macroSummary gets actionable direction, not
+// just raw indicator context.
+function buildMacroSummary(indicators, regime, playbook) {
   const get    = (id, dec = 2) => { const v = indicators.find(i => i.id === id)?.value; return v != null ? v.toFixed(dec) : 'N/A' }
   const getDate = id           => indicators.find(i => i.id === id)?.date ?? ''
 
@@ -190,7 +194,7 @@ Unemployment: ${get('UNRATE')}% | VIX: ${get('VIXCLS', 1)}
 HY Credit Spread: ${get('BAMLH0A0HYM2')}% | USD Index: ${get('DTWEXBGS', 1)}
 Consumer Sentiment: ${get('UMCSENT', 1)} | 30Y Mortgage: ${get('MORTGAGE30US')}%
 Key regime signals: ${regime.signals.map(s => s.text).join('; ')}
-
+${playbook?.text || ''}
 Use this macro context to inform your recommendations — factor in rate environment, inflation, and credit conditions.`
 }
 
@@ -205,11 +209,13 @@ async function getIndicators() {
 
   const indicators = await fetchAllFred(apiKey)
   const regime     = assessRegime(indicators)
-  const macroSummary = buildMacroSummary(indicators, regime)
+  const playbook   = buildRegimePlaybook(indicators)
+  const macroSummary = buildMacroSummary(indicators, regime, playbook)
 
   const data = {
     indicators,
     regime,
+    playbook,
     macroSummary,
     fetchedAt: new Date().toISOString(),
     source: 'FRED (Federal Reserve Bank of St. Louis)',
@@ -236,7 +242,7 @@ router.get('/summary', async (req, res) => {
   try {
     const data = await getIndicators()
     if (data.error) return res.status(503).json(data)
-    return res.json({ macroSummary: data.macroSummary, regime: data.regime, fetchedAt: data.fetchedAt })
+    return res.json({ macroSummary: data.macroSummary, regime: data.regime, playbook: data.playbook, fetchedAt: data.fetchedAt })
   } catch (err) {
     console.error('[macro] summary error:', err.message)
     return res.status(500).json({ error: err.message })
