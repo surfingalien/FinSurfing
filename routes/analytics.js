@@ -2,7 +2,10 @@
 /**
  * routes/analytics.js
  *
- * GET  /api/analytics/portfolio   — beta, correlation matrix, sector concentration
+ * GET  /api/analytics/portfolio           — beta, correlation matrix, sector concentration
+ * POST /api/analytics/portfolio/critique  — (requireAuth) LLM risk critique grounded in
+ *                                           the measured metrics above (lib/risk-critique.js);
+ *                                           body: { symbols?: string[] } to critique an ad-hoc list
  *
  * All calculations are server-side using SPY as the market benchmark.
  * Requires auth; uses the active portfolio's holdings.
@@ -252,6 +255,68 @@ router.get('/portfolio', async (req, res) => {
     if (_respCache.size > 200) _respCache.delete(_respCache.keys().next().value)
   }
   return res.json(payload)
+})
+
+// ── LLM risk critique over the measured metrics ───────────────────────────────
+// The model only ever sees (and may only cite) figures computed above from
+// real price history — it suggests risk reductions / return enhancers, it
+// never computes a metric. Advisory only, nothing is executed.
+const { getRouter }        = require('../lib/ai-router')
+const { CircuitOpenError } = require('../lib/circuit-breaker')
+const { INTERNAL_SECRET }  = require('../lib/internal-secret')
+const { buildRiskReport, buildCritiquePrompt, parseCritique } = require('../lib/risk-critique')
+
+const critiqueRouter = getRouter('risk-critique')
+
+router.post('/portfolio/critique', requireAuth, async (req, res) => {
+  const symbols = Array.isArray(req.body?.symbols)
+    ? req.body.symbols.slice(0, 20).map(s => String(s).toUpperCase().replace(/[^A-Z0-9.-]/g, '')).filter(Boolean)
+    : []
+
+  // Reuse the measured-analytics endpoint via loopback (same pattern as
+  // copilot dispatchTool) so critique and dashboard always agree on numbers.
+  const fwdHeaders = { 'x-internal': '1', 'x-internal-secret': INTERNAL_SECRET }
+  if (req.headers.authorization) fwdHeaders.authorization = req.headers.authorization
+  for (const h of ['x-aisa-key', 'x-finnhub-key', 'x-fmp-key', 'x-td-key', 'x-av-key']) {
+    if (req.headers[h]) fwdHeaders[h] = req.headers[h]
+  }
+
+  let payload
+  try {
+    const port = process.env.PORT || 3001
+    const qs   = symbols.length ? `?symbols=${symbols.join(',')}` : ''
+    const r    = await fetch(`http://127.0.0.1:${port}/api/analytics/portfolio${qs}`, {
+      headers: fwdHeaders, signal: AbortSignal.timeout(60_000),
+    })
+    payload = await r.json()
+  } catch (err) {
+    return res.status(504).json({ error: 'Portfolio analytics unavailable: ' + err.message })
+  }
+
+  const report = buildRiskReport(payload)
+  if (!report) {
+    return res.status(422).json({ error: 'Not enough portfolio data to critique — need ≥1 holding with 20+ trading days of history (or pass symbols[])' })
+  }
+
+  let raw = '', llmUsed = 'claude'
+  try {
+    const result = await critiqueRouter.call({ prompt: buildCritiquePrompt(report), maxTokens: 1500, symbols: payload.symbols })
+    raw     = result.text
+    llmUsed = result.llmUsed
+  } catch (err) {
+    if (err instanceof CircuitOpenError) return res.status(503).json({ error: err.message, circuitOpen: true })
+    if (err.status === 503)             return res.status(503).json({ error: err.message })
+    console.error('[analytics/critique]', err.message)
+    return res.status(500).json({ error: 'Risk critique failed: ' + err.message })
+  }
+
+  const critique = parseCritique(raw)
+  if (!critique) {
+    console.error('[analytics/critique] Unusable AI response:', raw.slice(0, 200))
+    return res.status(502).json({ error: 'AI returned no usable critique — please try again' })
+  }
+
+  return res.json({ symbols: payload.symbols, report, critique, llmUsed })
 })
 
 module.exports = router
