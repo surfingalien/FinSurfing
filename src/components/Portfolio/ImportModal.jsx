@@ -21,12 +21,65 @@ function findCol(headers, aliases) {
   return -1
 }
 
+// Minimal RFC4180 CSV parser — handles quoted fields, embedded commas/quotes,
+// CRLF/LF. No dependency needed for a format this simple.
+function parseCsv(text) {
+  const rows = []
+  let row = [], field = '', inQuotes = false
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i]
+    if (inQuotes) {
+      if (c === '"') {
+        if (text[i + 1] === '"') { field += '"'; i++ }
+        else inQuotes = false
+      } else field += c
+    } else if (c === '"') {
+      inQuotes = true
+    } else if (c === ',') {
+      row.push(field); field = ''
+    } else if (c === '\n' || c === '\r') {
+      if (c === '\r' && text[i + 1] === '\n') i++
+      row.push(field); field = ''
+      rows.push(row); row = []
+    } else {
+      field += c
+    }
+  }
+  if (field.length || row.length) { row.push(field); rows.push(row) }
+  return rows.filter(r => r.length > 1 || r[0] !== '')
+}
+
+// Flatten an exceljs cell value (string | number | Date | formula | rich text) to a string.
+function cellToString(v) {
+  if (v == null) return ''
+  if (v instanceof Date) return v.toISOString()
+  if (typeof v === 'object') {
+    if (Array.isArray(v.richText)) return v.richText.map(t => t.text).join('')
+    if ('result' in v) return v.result == null ? '' : String(v.result)
+    if ('text' in v) return v.text
+  }
+  return v
+}
+
+async function parseXlsx(file) {
+  const ExcelJS = (await import('exceljs')).default
+  const buf = await file.arrayBuffer()
+  const wb  = new ExcelJS.Workbook()
+  await wb.xlsx.load(buf)
+  const ws = wb.worksheets[0]
+  if (!ws) throw new Error('No worksheet found in file')
+  const rows = []
+  ws.eachRow({ includeEmpty: false }, sheetRow => {
+    rows.push(sheetRow.values.slice(1).map(cellToString))
+  })
+  return rows
+}
+
 async function parseFile(file) {
-  const { read, utils } = await import('xlsx')
-  const buf  = await file.arrayBuffer()
-  const wb   = read(buf, { type: 'array' })
-  const ws   = wb.Sheets[wb.SheetNames[0]]
-  const rows = utils.sheet_to_json(ws, { header: 1, defval: '' })
+  const ext = file.name.split('.').pop().toLowerCase()
+  const rows = ext === 'csv'
+    ? parseCsv(await file.text())
+    : await parseXlsx(file)
   if (rows.length < 2) throw new Error('File is empty or has no data rows')
 
   const headers = rows[0].map(h => String(h).trim())
@@ -70,8 +123,10 @@ export default function ImportModal({ portfolioId, authFetch, onImported, onClos
   const processFile = useCallback(async (file) => {
     if (!file) return
     const ext = file.name.split('.').pop().toLowerCase()
-    if (!['csv', 'xlsx', 'xls'].includes(ext)) {
-      setError('Only .csv, .xlsx, and .xls files are supported')
+    if (!['csv', 'xlsx'].includes(ext)) {
+      setError(ext === 'xls'
+        ? 'Legacy .xls files are no longer supported — re-save as .xlsx or .csv and re-upload'
+        : 'Only .csv and .xlsx files are supported')
       return
     }
     setError(null)
@@ -133,8 +188,8 @@ export default function ImportModal({ portfolioId, authFetch, onImported, onClos
             >
               <Upload className="w-8 h-8 mx-auto text-slate-500 mb-3" />
               <p className="text-sm text-slate-300 font-medium">Drop a file here or click to browse</p>
-              <p className="text-xs text-slate-500 mt-1">CSV · XLSX · XLS — exported from any brokerage</p>
-              <input ref={inputRef} type="file" accept=".csv,.xlsx,.xls" className="hidden"
+              <p className="text-xs text-slate-500 mt-1">CSV · XLSX — exported from any brokerage</p>
+              <input ref={inputRef} type="file" accept=".csv,.xlsx" className="hidden"
                 onChange={e => processFile(e.target.files[0])} />
             </div>
 

@@ -72,8 +72,21 @@ function renderMarkdown(text) {
   return elements
 }
 
+// Escape HTML special chars BEFORE the markdown-lite regexes run, so text
+// from AI/tool output (which may echo untrusted external content, e.g. a
+// page read via the copilot's read_url tool) can never inject markup —
+// only the fixed set of tags these regexes construct can ever appear.
+function escapeHtml(str) {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
 function formatInline(text) {
-  return text
+  return escapeHtml(text)
     // **bold**
     .replace(/\*\*(.+?)\*\*/g, '<strong class="text-white font-semibold">$1</strong>')
     // *italic*

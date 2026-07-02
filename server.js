@@ -103,6 +103,10 @@ const { seedAdminDB } = require('./db/adminSeed')
 })()
 
 const app      = express()
+// Railway terminates TLS at a single edge hop before forwarding to this
+// container — trust exactly that one hop's X-Forwarded-For so req.ip (rate
+// limiters, auth/access logs) reflects the real client, not the edge's IP.
+app.set('trust proxy', 1)
 const PORT     = parseInt(process.env.PORT, 10) || 3001
 const PROD     = process.env.NODE_ENV === 'production'
 const BOOT_AT  = new Date().toISOString()

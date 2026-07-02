@@ -10,6 +10,7 @@
  */
 
 const request = require('supertest')
+const jwt     = require('jsonwebtoken')
 
 // jest.mock factories may only reference vars prefixed with `mock`.
 const mockGetLatestFiling = jest.fn()
@@ -49,9 +50,15 @@ const SAMPLE_AI_JSON = JSON.stringify({
   analystTakeaway: 'Durable franchise; watch hardware demand.',
 })
 
-let app
+let app, token
 
-beforeAll(() => { app = createApp() })
+beforeAll(() => {
+  app = createApp()
+  token = jwt.sign(
+    { sub: 'test-user', email: 'filings@test.dev', role: 'user' },
+    process.env.JWT_SECRET, { algorithm: 'HS256', expiresIn: '5m' },
+  )
+})
 
 beforeEach(() => {
   mockGetLatestFiling.mockReset()
@@ -61,15 +68,21 @@ beforeEach(() => {
 })
 
 describe('GET /api/filings/:symbol', () => {
+  test('requires auth — no token returns 401 and never reaches EDGAR/AI', async () => {
+    const res = await request(app).get('/api/filings/AAPL')
+    expect(res.status).toBe(401)
+    expect(mockGetLatestFiling).not.toHaveBeenCalled()
+  })
+
   test('invalid symbol (sanitizes to empty) returns 400', async () => {
-    const res = await request(app).get('/api/filings/%40%40%40') // "@@@"
+    const res = await request(app).get('/api/filings/%40%40%40').set('Authorization', `Bearer ${token}`) // "@@@"
     expect(res.status).toBe(400)
     expect(res.body.error).toMatch(/symbol/i)
     expect(mockGetLatestFiling).not.toHaveBeenCalled()
   })
 
   test('happy path returns the assembled research card', async () => {
-    const res = await request(app).get('/api/filings/AAPL')
+    const res = await request(app).get('/api/filings/AAPL').set('Authorization', `Bearer ${token}`)
     expect(res.status).toBe(200)
     expect(res.body.summary).toMatch(/Apple/)
     expect(res.body.form).toBe('10-K')
@@ -81,19 +94,19 @@ describe('GET /api/filings/:symbol', () => {
   })
 
   test('passes a restricted form filter through to getLatestFiling', async () => {
-    await request(app).get('/api/filings/MSFT?form=10-Q')
+    await request(app).get('/api/filings/MSFT?form=10-Q').set('Authorization', `Bearer ${token}`)
     expect(mockGetLatestFiling).toHaveBeenCalledWith('MSFT', expect.objectContaining({ forms: ['10-Q'] }))
   })
 
   test('ignores an unknown form value and falls back to all narrative forms', async () => {
-    await request(app).get('/api/filings/MSFT?form=S-1')
+    await request(app).get('/api/filings/MSFT?form=S-1').set('Authorization', `Bearer ${token}`)
     expect(mockGetLatestFiling).toHaveBeenCalledWith('MSFT', expect.objectContaining({ forms: ['10-K', '10-Q', '8-K'] }))
   })
 
   test('second identical request is served from cache (no re-fetch, no re-AI)', async () => {
-    const first = await request(app).get('/api/filings/TSLA')
+    const first = await request(app).get('/api/filings/TSLA').set('Authorization', `Bearer ${token}`)
     expect(first.status).toBe(200)
-    const second = await request(app).get('/api/filings/TSLA')
+    const second = await request(app).get('/api/filings/TSLA').set('Authorization', `Bearer ${token}`)
     expect(second.status).toBe(200)
     expect(second.body.cached).toBe(true)
     expect(mockGetLatestFiling).toHaveBeenCalledTimes(1)
@@ -104,14 +117,14 @@ describe('GET /api/filings/:symbol', () => {
     const err = new Error('No SEC CIK found for ZZZZ')
     err.status = 404
     mockGetLatestFiling.mockRejectedValueOnce(err)
-    const res = await request(app).get('/api/filings/ZZZZ')
+    const res = await request(app).get('/api/filings/ZZZZ').set('Authorization', `Bearer ${token}`)
     expect(res.status).toBe(404)
     expect(res.body.error).toMatch(/ZZZZ/)
   })
 
   test('unparseable AI output returns 500', async () => {
     mockCall.mockResolvedValueOnce({ text: 'not json at all', llmUsed: 'claude' })
-    const res = await request(app).get('/api/filings/NFLX')
+    const res = await request(app).get('/api/filings/NFLX').set('Authorization', `Bearer ${token}`)
     expect(res.status).toBe(500)
     expect(res.body.error).toMatch(/JSON/i)
   })

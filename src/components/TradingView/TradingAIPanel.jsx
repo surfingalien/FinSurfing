@@ -280,7 +280,7 @@ export default function TradingAIPanel({ symbol, interval, price }) {
     setEarningsError(null)
     try {
       const res = await fetch(`/api/earnings-call?symbol=${encodeURIComponent(ticker)}`, {
-        headers: getApiKeyHeaders(),
+        headers: { ...getApiKeyHeaders(), ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}) },
         signal: AbortSignal.timeout(30000),
       })
       const data = await res.json()
@@ -291,7 +291,7 @@ export default function TradingAIPanel({ symbol, interval, price }) {
       setEarningsError(e.message)
     }
     setEarningsLoading(false)
-  }, [symbol, ticker])
+  }, [symbol, ticker, accessToken])
 
   // ── Tabs bar ───────────────────────────────────────────────────────────────
   const TABS = [

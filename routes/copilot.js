@@ -34,6 +34,7 @@ const { getAltDataSnippet }  = require('../lib/alt-data')
 const symbolDb = require('../lib/symbol-db')
 const { computeStats, readPredictions } = require('../lib/brain-learnings')
 const { claudePaused, pauseMessage } = require('../lib/ai-pause')
+const { INTERNAL_SECRET } = require('../lib/internal-secret')
 
 // Use warm cache from scheduled-jobs if available, fall back to live fetch
 async function getAltData(symbol) {
@@ -399,7 +400,7 @@ const TOOLS = [
 
 async function dispatchTool(name, input, req) {
   const port = process.env.PORT || 3001
-  const fwdHeaders = { 'Content-Type': 'application/json', 'x-internal': '1' }
+  const fwdHeaders = { 'Content-Type': 'application/json', 'x-internal': '1', 'x-internal-secret': INTERNAL_SECRET }
   // Forward auth token so internal loopback calls to protected routes pass requireAuth
   if (req.headers.authorization) fwdHeaders['authorization'] = req.headers.authorization
   for (const k of ['x-aisa-key', 'x-finnhub-key', 'x-fmp-key', 'x-td-key', 'x-av-key']) {

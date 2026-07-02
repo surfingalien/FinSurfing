@@ -12,7 +12,7 @@ import {
   ShieldCheck, Activity, FlaskConical, BarChart3, Sparkles,
   Brain, Bookmark, Monitor, BookOpen, Globe, Target,
   Network, Clock, Radio, BrainCircuit, FolderOpen,
-  Search, DollarSign, LayoutGrid, CalendarDays, Zap, FileText, Boxes,
+  Search, DollarSign, LayoutGrid, CalendarDays, Zap, FileText, Boxes, Mountain,
 } from 'lucide-react'
 
 // ── Sidebar nav groups ────────────────────────────────────────────────────────
@@ -43,6 +43,7 @@ export const NAV_GROUPS = [
       { id: 'ai-brain',        label: 'AI Brain',       icon: Brain },
       { id: 'brain-activity',  label: 'Brain Activity', icon: Activity },
       { id: 'probability-lattice', label: 'Probability Lattice', icon: Boxes },
+      { id: 'tail-ridge',      label: 'Tail Probability Ridge', icon: Mountain },
       { id: 'buy-signals',     label: 'AI Buy Signals', icon: Sparkles },
       { id: 'ai-watchlist',    label: 'AI Watchlist',   icon: Bookmark },
       { id: 'agent-hub',       label: 'Agent Hub',      icon: Network },

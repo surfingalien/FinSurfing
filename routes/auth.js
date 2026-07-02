@@ -335,7 +335,7 @@ router.post('/verify-email', async (req, res) => {
   if (DB_MODE) {
     try {
       const userRes = await query('SELECT id, role FROM users WHERE email = $1', [lEmail])
-      if (!userRes.rows[0]) return res.status(404).json({ error: 'Account not found' })
+      if (!userRes.rows[0]) return res.status(400).json({ error: 'Invalid or expired code. Request a new one.' })
       const userId = userRes.rows[0].id
       const role   = userRes.rows[0].role || 'user'
 
@@ -383,7 +383,7 @@ router.post('/verify-email', async (req, res) => {
   // ── In-memory mode ────────────────────────────
   const uid  = MEM.byEmail.get(lEmail)
   const user = uid ? MEM.users.get(uid) : null
-  if (!user) return res.status(404).json({ error: 'Account not found' })
+  if (!user) return res.status(400).json({ error: 'Invalid or expired code. Request a new one.' })
 
   const otp = MEM.otp.get(lEmail)
   if (!otp || otp.expiresAt < Date.now())
@@ -692,7 +692,7 @@ router.post('/forgot-password', async (req, res) => {
     const link = `${process.env.APP_URL || 'http://localhost:5173'}/reset-password?token=${token}`
     const html = `<p>Reset your FinSurf password: <a href="${link}">${link}</a></p><p>Expires in 1 hour.</p>`
     const sent = await sendEmail({ to: lEmail, subject: 'FinSurf — Password reset', html })
-    if (!sent) console.log(`[AUTH] Password reset link: ${link}`)
+    if (!sent) console.log(`[AUTH] Password reset email not sent (no SMTP); token issued for user ${uid}`)
     return res.json(ok)
   }
 

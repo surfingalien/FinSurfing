@@ -1,5 +1,6 @@
 'use strict'
 const jwt = require('jsonwebtoken')
+const { isInternalRequest } = require('../lib/internal-secret')
 
 if (!process.env.JWT_SECRET && process.env.NODE_ENV === 'production') {
   console.error('[auth] FATAL: JWT_SECRET env var is not set in production. Exiting.')
@@ -12,11 +13,11 @@ const SECRET = process.env.JWT_SECRET || 'finsurf-dev-only-secret-not-for-produc
  * Returns 401 on any failure — never leaks token details.
  */
 function requireAuth(req, res, next) {
-  // Internal server-to-server calls from loopback bypass JWT check
-  if (req.headers['x-internal'] === '1') {
-    const addr = req.socket?.remoteAddress || ''
-    if (addr === '127.0.0.1' || addr === '::1' || addr === '::ffff:127.0.0.1') return next()
-  }
+  // Internal server-to-server calls bypass JWT check — requires BOTH a loopback
+  // socket AND a per-process secret (regenerated each boot), so a forged
+  // header alone can never grant access even if the loopback assumption
+  // about the deployment topology ever changes.
+  if (isInternalRequest(req)) return next()
 
   const header = req.headers.authorization || ''
   if (!header.startsWith('Bearer ')) {

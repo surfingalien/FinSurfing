@@ -221,6 +221,14 @@ router.get('/portfolio', async (req, res) => {
         cvar95:       conditionalVaR(spyRet) != null ? +(conditionalVaR(spyRet) * 100).toFixed(2) : null,
       }
       riskMetrics.holdings = holdingRisk
+
+      // Raw daily-return series (%) for tail-distribution visualization —
+      // real historical returns, not simulated. Capped to the trailing 1y
+      // already fetched; small enough (~252 floats × 2) to inline.
+      riskMetrics.returnSeries = {
+        portfolio: portReturns.map(r => +(r * 100).toFixed(4)),
+        benchmark: spyRet.map(r => +(r * 100).toFixed(4)),
+      }
     }
   } catch (e) {
     console.warn('[analytics] risk metrics error:', e.message)

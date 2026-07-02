@@ -11,6 +11,7 @@
  */
 
 const express = require('express')
+const { INTERNAL_SECRET } = require('../lib/internal-secret')
 const router  = express.Router()
 
 // ── 1. Polygon.io options chain ───────────────────────────────────────────────
@@ -234,7 +235,7 @@ router.get('/flow', async (req, res) => {
   const polygonKey = process.env.POLYGON_API_KEY || process.env.MASSIVE_API_KEY || null
   const fmpKey     = (req.headers['x-fmp-key'] || '').trim() || process.env.FMP_API_KEY || null
   const port       = process.env.PORT || 3001
-  const fwdHdrs    = { 'Content-Type': 'application/json', 'x-internal': '1' }
+  const fwdHdrs    = { 'Content-Type': 'application/json', 'x-internal': '1', 'x-internal-secret': INTERNAL_SECRET }
   if (req.headers['x-fmp-key'])      fwdHdrs['x-fmp-key']      = req.headers['x-fmp-key']
   if (req.headers['x-finnhub-key'])  fwdHdrs['x-finnhub-key']  = req.headers['x-finnhub-key']
 

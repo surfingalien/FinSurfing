@@ -16,6 +16,7 @@ const rateLimit = require('express-rate-limit')
 const { getRouter } = require('../lib/ai-router')
 const { CircuitOpenError } = require('../lib/circuit-breaker')
 const { compactProse } = require('../lib/compress')
+const { requireAuth } = require('../middleware/auth')
 
 const router    = express.Router()
 const aiRouter  = getRouter('earnings-call')
@@ -68,7 +69,7 @@ Respond ONLY with valid JSON — no markdown, no text outside the JSON:
 }
 
 // ── GET /api/earnings-call ────────────────────────────────────────────────────
-router.get('/', earningsLimit, async (req, res) => {
+router.get('/', requireAuth, earningsLimit, async (req, res) => {
   const symbol = (req.query.symbol || '').trim().toUpperCase().replace(/[^A-Z0-9.-]/g, '')
   if (!symbol) return res.status(400).json({ error: 'symbol is required' })
 
