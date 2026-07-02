@@ -67,8 +67,7 @@ const RelationshipGraphView  = lazy(() => import('./components/Graph/Relationshi
 // ── Shared loading spinner ────────────────────────────────────────────────────
 function LoadingScreen({ label = 'Loading…', fullScreen = false }) {
   return (
-    <div className={`flex items-center justify-center ${fullScreen ? 'min-h-screen' : 'py-24'}`}
-         style={fullScreen ? { background: '#060810' } : undefined}>
+    <div className={`flex items-center justify-center ${fullScreen ? 'min-h-screen app-shell' : 'py-24'}`}>
       <div className="flex flex-col items-center gap-4">
         <div className="w-8 h-8 border-2 border-[#00ffcc]/30 border-t-[#00ffcc] rounded-full animate-spin" />
         <span className="text-xs text-slate-600">{label}</span>
@@ -265,7 +264,7 @@ function MainApp({ onSignIn }) {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden" style={{ background: '#060810' }}>
+    <div className="app-shell flex h-screen overflow-hidden">
       {/* ── Sidebar ── */}
       <Sidebar
         activeTab={activeTab}
