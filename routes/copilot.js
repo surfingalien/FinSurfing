@@ -1362,7 +1362,17 @@ router.post('/chat', requireAuth, chatLimit, async (req, res) => {
   res.setHeader('X-Accel-Buffering', 'no')
   res.flushHeaders?.()
 
+  // Heartbeat: SSE comment every 15s so mobile browsers (iOS Safari shows
+  // "Load failed") and edge proxies don't drop the connection during long
+  // silent windows — tool executions like propose_strategies or scan_market
+  // can run 60–120s without emitting a byte otherwise. The client parser
+  // only consumes "data: " lines, so comment frames are ignored.
+  const heartbeat = setInterval(() => {
+    if (!res.writableEnded) { try { res.write(': hb\n\n') } catch {} }
+  }, 15_000)
+
   const send = (payload) => {
+    if (res.writableEnded) return
     res.write(`data: ${JSON.stringify(payload)}\n\n`)
   }
 
@@ -1527,6 +1537,7 @@ router.post('/chat', requireAuth, chatLimit, async (req, res) => {
     console.error('[copilot]', err.message)
     send({ type: 'error', message: err.message })
   } finally {
+    clearInterval(heartbeat)
     res.end()
   }
 })
