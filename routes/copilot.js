@@ -384,6 +384,18 @@ const TOOLS = [
     },
   },
   {
+    name: 'propose_strategies',
+    description: 'Strategy Lab: propose rule-based trading strategies (SMA crossover, RSI threshold, MACD signal, Bollinger reversion) tailored to a symbol\'s computed technicals — each proposal is then VALIDATED by a real backtest over historical daily bars. Returns per-proposal verified metrics (total return, Sharpe, max drawdown, win rate, alpha vs buy & hold) and a validated/mixed/rejected verdict. All numbers come from the backtest engine, never the AI. Use when asked for a trading strategy, system, or rules for a symbol.',
+    input_schema: {
+      type: 'object',
+      required: ['symbol'],
+      properties: {
+        symbol: { type: 'string', description: 'Ticker symbol (e.g. AAPL, BTC-USD, SPY)' },
+        range:  { type: 'string', enum: ['1y', '2y', '5y'], description: 'Historical range to design for and validate against (default 2y)' },
+      },
+    },
+  },
+  {
     name: 'read_url',
     description: "Fetch and read a SPECIFIC web page the user provides — e.g. an investor-relations page, press release, regulatory notice, or a news/analyst article not covered by the other tools — and return its main content as clean text for analysis. Use ONLY when the user gives (or clearly points at) a particular URL. This is NOT a web search and NOT for crawling — one page the user named.",
     input_schema: {
@@ -1032,6 +1044,31 @@ async function dispatchTool(name, input, req) {
       } catch (e) {
         return `Comparison failed: ${e.message}`
       }
+    }
+
+    case 'propose_strategies': {
+      const r = await fetch(`http://127.0.0.1:${port}/api/strategy-lab/propose`, {
+        method: 'POST', headers: fwdHeaders,
+        body: JSON.stringify({ symbol: input.symbol, range: input.range || '2y' }),
+        signal: AbortSignal.timeout(90_000),
+      })
+      const data = await r.json()
+      if (!data.proposals) return `Strategy Lab failed: ${data.error || 'unknown error'}`
+      const VERDICT_ICON = { validated: '✅', mixed: '🟡', insufficient_trades: '⚪', rejected: '❌' }
+      return (
+        `**Strategy Lab — ${data.symbol}** (${data.range}, ${data.dataPoints} daily bars, backtest-verified)\n` +
+        (data.taLine ? `Technicals: ${data.taLine}\n` : '') + '\n' +
+        data.proposals.map((p, i) => {
+          const m = p.metrics
+          return (
+            `${i + 1}. ${VERDICT_ICON[p.verdict] || ''} **${p.name}** — ${p.strategy} ${JSON.stringify(p.params)} · verdict: ${p.verdict}\n` +
+            (m ? `   Return ${m.totalReturn}% vs buy&hold ${m.buyHoldReturn}% (alpha ${m.alpha}%) · Sharpe ${m.sharpeRatio} · MaxDD ${m.maxDrawdown}% · ${m.totalTrades} trades, ${m.winRate}% win\n` : '') +
+            (p.recent ? `   Recent window: return ${p.recent.totalReturn}% (alpha ${p.recent.alpha}%), ${p.recent.totalTrades} trades\n` : '') +
+            `   ${p.rationale}${p.marketFit ? `\n   Best in: ${p.marketFit}` : ''}`
+          )
+        }).join('\n\n') +
+        '\n\n_All metrics computed by the backtest engine on real historical bars — the AI only proposed the rules. Past performance ≠ future results._'
+      )
     }
 
     case 'read_url': {
