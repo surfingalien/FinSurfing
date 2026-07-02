@@ -21,6 +21,7 @@ const { getLatestFiling, NARRATIVE_FORMS } = require('../lib/filings')
 const { getRouter } = require('../lib/ai-router')
 const { tryParseAiJson } = require('../lib/ai-json')
 const { CircuitOpenError } = require('../lib/circuit-breaker')
+const { requireAuth } = require('../middleware/auth')
 
 const router   = express.Router()
 const aiRouter = getRouter('filings')
@@ -53,7 +54,7 @@ Respond ONLY with valid JSON — no markdown, no text outside the JSON:
 }
 
 // ── GET /api/filings/:symbol ──────────────────────────────────────────────────
-router.get('/:symbol', filingsLimit, async (req, res) => {
+router.get('/:symbol', requireAuth, filingsLimit, async (req, res) => {
   const symbol = (req.params.symbol || '').trim().toUpperCase().replace(/[^A-Z0-9.-]/g, '')
   if (!symbol) return res.status(400).json({ error: 'symbol is required' })
 

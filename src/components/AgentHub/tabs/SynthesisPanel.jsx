@@ -1,5 +1,17 @@
 import { AlertTriangle, Zap } from 'lucide-react'
 
+// Escape HTML special chars BEFORE the markdown-lite regexes run — this text
+// is AI-synthesized from multiple agent outputs, which can include untrusted
+// external content, so only the fixed set of tags below can ever appear.
+function escapeHtml(str) {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
 export default function SynthesisPanel({ text, llmUsed, error }) {
   if (error) return (
     <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
@@ -8,7 +20,7 @@ export default function SynthesisPanel({ text, llmUsed, error }) {
   )
   if (!text) return null
 
-  const html = text
+  const html = escapeHtml(text)
     .replace(/^##\s+(.+)$/gm, '<div class="text-sm font-bold text-white mt-3 mb-1">$1</div>')
     .replace(/\*\*(.+?)\*\*/g, '<strong class="text-white">$1</strong>')
     .replace(/\n/g, '<br />')

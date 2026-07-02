@@ -16,6 +16,7 @@ const { requireAuth } = require('../middleware/auth')
 const { getRouter } = require('../lib/ai-router')
 const { getSocialSentiment } = require('../lib/social-sentiment')
 const { getOptionsFlowCompact } = require('../lib/options-flow-cache')
+const { INTERNAL_SECRET } = require('../lib/internal-secret')
 
 const aiRouter = getRouter('market-focus')
 
@@ -75,7 +76,7 @@ async function fetchLiveQuotes(symbols) {
   try {
     const r = await fetch(
       `${BASE_URL()}/api/quote?symbols=${symbols.join(',')}`,
-      { headers: { 'x-internal': '1' }, signal: AbortSignal.timeout(15_000) }
+      { headers: { 'x-internal': '1', 'x-internal-secret': INTERNAL_SECRET }, signal: AbortSignal.timeout(15_000) }
     )
     const d = await r.json()
     return d?.quoteResponse?.result ?? []
@@ -85,7 +86,7 @@ async function fetchLiveQuotes(symbols) {
 async function fetchMacroSummary() {
   try {
     const r = await fetch(`${BASE_URL()}/api/macro/summary`, {
-      headers: { 'x-internal': '1' }, signal: AbortSignal.timeout(10_000)
+      headers: { 'x-internal': '1', 'x-internal-secret': INTERNAL_SECRET }, signal: AbortSignal.timeout(10_000)
     })
     const d = await r.json()
     return typeof d === 'string' ? d : d?.summary ?? ''

@@ -119,7 +119,7 @@ Authorization-bearing flows only. Flows that don't touch permissions, data integ
 | Step | Auth check | Notes |
 |---|---|---|
 | Tick every 60s | — | Job due check via `isDue()` |
-| `internalPost` loopback to `/api/...` | `x-internal: '1'` header | Header is forgeable externally |
+| `internalPost` loopback to `/api/...` | `x-internal: '1'` + `x-internal-secret` (loopback socket + per-process secret, `lib/internal-secret.js`) | Header alone is no longer sufficient — see `architecture.md` trust boundaries |
 | External API calls (FRED, Claude, FMP) | Server-side API keys | Paid usage |
 | Email send (morning brief) | `MORNING_BRIEF_EMAIL` env var | Silent skip if missing |
 

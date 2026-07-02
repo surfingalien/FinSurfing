@@ -13,6 +13,7 @@ import {
   ShieldAlert, Lightbulb, ExternalLink,
 } from 'lucide-react'
 import { useQuery, fetchJson } from '../../hooks/useQuery'
+import { useAuth } from '../../contexts/AuthContext'
 
 const FORMS = ['Latest', '10-K', '10-Q', '8-K']
 
@@ -24,11 +25,14 @@ const TONE_STYLE = {
 }
 
 function Card({ symbol, form }) {
+  const { accessToken } = useAuth()
   const formQs = form && form !== 'Latest' ? `?form=${encodeURIComponent(form)}` : ''
   const key = `filings:${symbol}:${form || 'Latest'}`
   const { data, error, loading, refetch } = useQuery(
     key,
-    () => fetchJson(`/api/filings/${encodeURIComponent(symbol)}${formQs}`),
+    () => fetchJson(`/api/filings/${encodeURIComponent(symbol)}${formQs}`, {
+      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+    }),
     { staleMs: 6 * 60 * 60_000 },   // matches the route's 6h server cache
   )
 

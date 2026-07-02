@@ -19,6 +19,7 @@
 const express     = require('express')
 const rateLimit   = require('express-rate-limit')
 const broadcaster = require('../lib/alert-broadcaster')
+const { INTERNAL_SECRET } = require('../lib/internal-secret')
 
 const router = express.Router()
 
@@ -66,7 +67,7 @@ async function _runAnalysis({ symbol, alertType, threshold, price }, req) {
   const sym = symbol.toUpperCase()
   try {
     // Forward user API keys if present
-    const fwdHeaders = { 'Content-Type': 'application/json', 'x-internal': '1' }
+    const fwdHeaders = { 'Content-Type': 'application/json', 'x-internal': '1', 'x-internal-secret': INTERNAL_SECRET }
     for (const k of ['x-aisa-key', 'x-finnhub-key', 'x-fmp-key', 'x-td-key', 'x-av-key']) {
       if (req?.headers?.[k]) fwdHeaders[k] = req.headers[k]
     }

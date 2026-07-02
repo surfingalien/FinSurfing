@@ -59,7 +59,8 @@ Express (:3001 prod / :3001 dev)
 | Express → Postgres | Trusted (same Railway project) | Parameterized queries only |
 | Express → External APIs | Semi-trusted (HTTPS) | API keys from env vars |
 | Express → Claude/Groq | Semi-trusted | User-controlled content reaches LLM prompts |
-| Internal loopback calls | Trusted by loopback socket address (127.0.0.1 / ::1) | Rate limit skip checks `req.socket.remoteAddress`, not a forgeable header |
+| Internal loopback calls (auth bypass) | Trusted by loopback socket address **AND** a per-process secret | `requireAuth` bypass (`lib/internal-secret.js`) requires BOTH `req.socket.remoteAddress` on loopback AND `x-internal-secret` matching a secret generated fresh at boot — a forged header alone (or a topology where remoteAddress is unexpectedly loopback) can no longer bypass auth |
+| Internal loopback calls (rate-limit skip) | Trusted by loopback socket address (127.0.0.1 / ::1) | AI Brain rate limiter skip checks `req.socket.remoteAddress` only — lower stakes than an auth bypass, so no secret required |
 | Scheduler → Internal API | Trusted | Same process loopback; write routes require admin auth |
 
 ## Market Data Pipeline
@@ -86,6 +87,15 @@ Cache TTLs: quotes 5 s (market hours) / 10 min (off-hours); charts 15 min; prev-
 - ~~JWT fallback secret~~ → `process.exit(1)` if `JWT_SECRET` unset in production
 - ~~SSRF via `providerState.baseUrl`~~ → `baseUrl` always taken from `PROVIDER_DEFAULTS`
 - ~~Demo mode OTP returned in production~~ → suppressed when `NODE_ENV=production`
+
+*Previously documented risks now fixed (as of July 2026):*
+- ~~Loopback-IP-only auth bypass~~ → `lib/internal-secret.js` requires loopback **and** a per-process secret (defense-in-depth against a topology change ever making external traffic appear to originate from 127.0.0.1)
+- ~~`GET /api/filings/:symbol` and `GET /api/earnings-call` unauthenticated~~ → both now `requireAuth`; every other AI route already was
+- ~~AI-generated/tool-fetched text rendered via `dangerouslySetInnerHTML` without escaping~~ → `MessageBubble.jsx` and `SynthesisPanel.jsx` now HTML-escape before the markdown-lite regexes run, closing an XSS path via the `read_url` copilot tool
+- ~~Password-reset link (with token) logged to console when SMTP unset~~ → logs only that a reset was issued, never the link/token
+- ~~`verify-email` distinguished "no such account" from "bad code"~~ → both return the same generic message, matching login/forgot-password
+- ~~`req.ip` unreliable behind Railway's edge (no `trust proxy`)~~ → `app.set('trust proxy', 1)`, so rate limiters and audit-log IPs reflect the real client
+- ~~`xlsx` (SheetJS 0.18.5, known CVEs, no npm-published fix)~~ → replaced with `exceljs` for `.xlsx` + a small hand-rolled CSV parser for `.csv`; legacy `.xls` (unsupported by exceljs) is no longer accepted — users are prompted to re-save as `.xlsx`/`.csv`
 
 ## Related Documents
 
