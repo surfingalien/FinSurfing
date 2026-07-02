@@ -290,6 +290,60 @@ html.apple-mode .text-amber-400 { color: #b45309; }
 html.apple-mode .text-indigo-300,
 html.apple-mode .text-indigo-400 { color: #4f46e5; }
 
+/* ── Round 3: full-app sweep (grep-driven) ──────────────────────────────
+   Covers the accent/fill/border patterns used outside the Dashboard. */
+
+/* Neon-mint accent literals → Apple blue (text, borders, fills, buttons) */
+html.apple-mode .text-\[\#00ffcc\],
+html.apple-mode .text-\[\#00e6b8\] { color: #0071e3 !important; }
+html.apple-mode .hover\:text-\[\#00ffcc\]:hover { color: #0071e3 !important; }
+html.apple-mode .text-\[\#6366f1\] { color: #4f46e5; }
+
+/* Solid mint CTAs → filled blue with white label (they carry dark ink text) */
+html.apple-mode .bg-\[\#00ffcc\] { background-color: #0071e3 !important; }
+html.apple-mode .bg-\[\#00ffcc\].text-\[\#0a0e1a\] { color: #ffffff !important; }
+html.apple-mode .hover\:bg-\[\#00e6b8\]:hover { background-color: #0077ed !important; }
+
+/* Mint alpha tints (chips, active states, glows) → blue tints */
+html.apple-mode .bg-\[\#00ffcc\]\/5  { background-color: rgba(0,113,227,0.05) !important; }
+html.apple-mode .bg-\[\#00ffcc\]\/8  { background-color: rgba(0,113,227,0.08) !important; }
+html.apple-mode .bg-\[\#00ffcc\]\/10 { background-color: rgba(0,113,227,0.10) !important; }
+html.apple-mode .bg-\[\#00ffcc\]\/20 { background-color: rgba(0,113,227,0.15) !important; }
+html.apple-mode .bg-\[\#00ffcc\]\/25 { background-color: rgba(0,113,227,0.18) !important; }
+html.apple-mode .bg-\[\#00ffcc\]\/30 { background-color: rgba(0,113,227,0.22) !important; }
+html.apple-mode .bg-\[\#00ffcc\]\/40 { background-color: rgba(0,113,227,0.30) !important; }
+html.apple-mode .bg-\[\#00ffcc\]\/60 { background-color: rgba(0,113,227,0.50) !important; }
+html.apple-mode .border-\[\#00ffcc\]\/15 { border-color: rgba(0,113,227,0.20) !important; }
+html.apple-mode .border-\[\#00ffcc\]\/20 { border-color: rgba(0,113,227,0.25) !important; }
+html.apple-mode .border-\[\#00ffcc\]\/25 { border-color: rgba(0,113,227,0.28) !important; }
+html.apple-mode .border-\[\#00ffcc\]\/30 { border-color: rgba(0,113,227,0.32) !important; }
+html.apple-mode .border-\[\#00ffcc\]\/40 { border-color: rgba(0,113,227,0.40) !important; }
+html.apple-mode .border-\[\#00ffcc\]\/50 { border-color: rgba(0,113,227,0.50) !important; }
+html.apple-mode .border-\[\#00ffcc\]\/60 { border-color: rgba(0,113,227,0.60) !important; }
+
+/* Dark translucent panels (modals, dropdowns) → light translucent */
+html.apple-mode .bg-\[\#12121a\]\/70 { background-color: rgba(255,255,255,0.80) !important; }
+html.apple-mode .bg-\[\#12121a\]\/90 { background-color: rgba(255,255,255,0.92) !important; }
+
+/* Remaining faint fills / hover fills / hairlines from the sweep */
+html.apple-mode .bg-white\/10,
+html.apple-mode .bg-white\/\[0\.01\],
+html.apple-mode .bg-white\/\[0\.015\],
+html.apple-mode .bg-white\/\[0\.07\],
+html.apple-mode .bg-white\/\[0\.08\] { background-color: #ffffff !important; }
+html.apple-mode .hover\:bg-white\/10:hover,
+html.apple-mode .hover\:bg-white\/\[0\.02\]:hover,
+html.apple-mode .hover\:bg-white\/\[0\.03\]:hover { background-color: rgba(0,0,0,0.05) !important; }
+html.apple-mode .border-white\/20,
+html.apple-mode .border-white\/\[0\.03\],
+html.apple-mode .border-white\/\[0\.07\],
+html.apple-mode .border-white\/\[0\.08\],
+html.apple-mode .border-white\/\[0\.15\],
+html.apple-mode .border-white\/\[0\.2\] { border-color: rgba(0,0,0,0.08) !important; }
+
+/* Remaining opacity-variant white text */
+html.apple-mode .text-white\/50 { color: rgba(29,29,31,0.6); }
+
 /* ── Pro Mode — industrial terminal aesthetic ──────────── */
 html.pro-mode body {
   background-image: none !important;
