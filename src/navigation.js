@@ -13,6 +13,7 @@ import {
   Brain, Bookmark, Monitor, BookOpen, Globe, Target,
   Network, Clock, Radio, BrainCircuit, FolderOpen,
   Search, DollarSign, LayoutGrid, CalendarDays, Zap, FileText, Boxes, Mountain,
+  Share2,
 } from 'lucide-react'
 
 // ── Sidebar nav groups ────────────────────────────────────────────────────────
@@ -44,6 +45,7 @@ export const NAV_GROUPS = [
       { id: 'brain-activity',  label: 'Brain Activity', icon: Activity },
       { id: 'probability-lattice', label: 'Probability Lattice', icon: Boxes },
       { id: 'tail-ridge',      label: 'Tail Probability Ridge', icon: Mountain },
+      { id: 'relationship-graph', label: 'Relationship Graph', icon: Share2 },
       { id: 'buy-signals',     label: 'AI Buy Signals', icon: Sparkles },
       { id: 'ai-watchlist',    label: 'AI Watchlist',   icon: Bookmark },
       { id: 'agent-hub',       label: 'Agent Hub',      icon: Network },

@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { PortfolioProvider, usePortfolioContext } from './contexts/PortfolioContext'
 import { ApiKeysProvider } from './contexts/ApiKeysContext'
 import { ProModeProvider } from './contexts/ProModeContext'
+import { AppleModeProvider } from './contexts/AppleModeContext'
 import { ToastProvider } from './components/shared/ToastNotifications'
 import { TooltipProvider } from './components/shared/Tooltip'
 import LandingPage from './components/Landing/LandingPage'
@@ -61,6 +62,7 @@ const SentimentView          = lazy(() => import('./components/Sentiment/Sentime
 const FilingsView            = lazy(() => import('./components/Filings/FilingsView'))
 const ProbabilityLatticeView = lazy(() => import('./components/Lattice/ProbabilityLatticeView'))
 const TailProbabilityRidgeView = lazy(() => import('./components/Ridge/TailProbabilityRidgeView'))
+const RelationshipGraphView  = lazy(() => import('./components/Graph/RelationshipGraphView'))
 
 // ── Shared loading spinner ────────────────────────────────────────────────────
 function LoadingScreen({ label = 'Loading…', fullScreen = false }) {
@@ -243,6 +245,7 @@ function MainApp({ onSignIn }) {
     'filings':         () => <FilingsView defaultSymbol={analyzeSymbol} />,
     'probability-lattice': () => <ProbabilityLatticeView />,
     'tail-ridge':      () => <TailProbabilityRidgeView portfolio={portfolio} />,
+    'relationship-graph': () => <RelationshipGraphView portfolio={portfolio} />,
     'admin':          () => <AdminDashboard />,
   }
 
@@ -329,6 +332,7 @@ function MainApp({ onSignIn }) {
 export default function App() {
   return (
     <ProModeProvider>
+      <AppleModeProvider>
       <ApiKeysProvider>
         <TooltipProvider>
           <ToastProvider>
@@ -338,6 +342,7 @@ export default function App() {
           </ToastProvider>
         </TooltipProvider>
       </ApiKeysProvider>
+      </AppleModeProvider>
     </ProModeProvider>
   )
 }

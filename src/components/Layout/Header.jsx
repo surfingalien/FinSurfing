@@ -10,17 +10,29 @@
  */
 
 import { useState, useEffect, useRef } from 'react'
-import { Menu, Terminal, Search } from 'lucide-react'
+import { Menu, Terminal, Search, Sun } from 'lucide-react'
 import { fetchQuotes, subscribeQuotes } from '../../services/api'
 import { TICKER_SYMBOLS } from '../../data/portfolio'
 import { fmt, fmtPct } from '../../services/api'
 import { useProMode } from '../../contexts/ProModeContext'
+import { useAppleMode } from '../../contexts/AppleModeContext'
 
 export default function Header({ onMobileMenuOpen, onOpenPalette }) {
   const [tickerData, setTickerData] = useState([])
   const [time,       setTime]       = useState(new Date())
   const [marketOpen, setMarketOpen] = useState(false)
   const { proMode, toggleProMode } = useProMode()
+  const { appleMode, toggleAppleMode } = useAppleMode()
+
+  // The two themes override the same base classes — only one at a time
+  const switchToPro = () => {
+    if (!proMode && appleMode) toggleAppleMode()
+    toggleProMode()
+  }
+  const switchToApple = () => {
+    if (!appleMode && proMode) toggleProMode()
+    toggleAppleMode()
+  }
   const tickerMapRef = useRef({})
 
   useEffect(() => {
@@ -136,9 +148,23 @@ export default function Header({ onMobileMenuOpen, onOpenPalette }) {
         </button>
       )}
 
+      {/* Apple Mode toggle (light, minimal theme) */}
+      <button
+        onClick={switchToApple}
+        title={appleMode ? 'Back to dark theme' : 'Light mode (Apple-style aesthetic)'}
+        className={`shrink-0 px-3 h-full flex items-center gap-1.5 text-[10px] font-mono font-semibold border-l border-white/[0.06] transition-colors ${
+          appleMode
+            ? 'text-[#0071e3] bg-[#0071e3]/[0.08] hover:bg-[#0071e3]/[0.12]'
+            : 'text-slate-500 hover:text-slate-300 hover:bg-white/[0.04]'
+        }`}
+      >
+        <Sun className="w-3 h-3" />
+        <span className="hidden sm:block">LIGHT</span>
+      </button>
+
       {/* Pro Mode toggle */}
       <button
-        onClick={toggleProMode}
+        onClick={switchToPro}
         title={proMode ? 'Exit Pro Mode' : 'Enter Pro Mode (terminal aesthetic)'}
         className={`shrink-0 px-3 h-full flex items-center gap-1.5 text-[10px] font-mono font-semibold border-l border-white/[0.06] transition-colors ${
           proMode
