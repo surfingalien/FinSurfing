@@ -29,6 +29,7 @@ const { getOptionsFlowCompact } = require('../lib/options-flow-cache')
 const { fetchDailyBars }    = require('../lib/internal-api')
 const { tryParseAiJson }    = require('../lib/ai-json')
 const { baselineFromBars }  = require('../lib/ml-baseline')
+const { factorScores, factorLine } = require('../lib/factor-model')
 
 const router   = express.Router()
 const aiRouter = getRouter('ai-brain')
@@ -335,7 +336,9 @@ async function fetchTaSnapshot(universe, headers) {
       const c = bars.map(b => b.c)
       const v = bars.map(b => b.v)
       const line = compactTaLine(sym, o, h, l, c, v)
-      if (line) bySymbol.set(sym, line)
+      // Deterministic multi-factor scores ride along with the TA line
+      const fLine = factorLine(factorScores({ closes: c, highs: h, lows: l }))
+      if (line) bySymbol.set(sym, fLine ? `${line} ${fLine}` : line)
       // Capture key patterns for prediction calibration logging
       const pats = detectPatterns(o, h, l, c, v).filter(p => KEY_PATTERNS.includes(p))
       if (pats.length) patternMap.set(sym, pats)
@@ -513,6 +516,7 @@ router.post('/analyze', requireAuth, brainLimit, async (req, res) => {
   const taRsRankMap  = (taResult.status === 'fulfilled' && taResult.value.rsRankMap)  || new Map()
   if (taResult.status === 'fulfilled' && taResult.value.lines.length) {
     taSnippet = '\n\nCOMPUTED TECHNICALS (server-calculated from daily bars — authoritative; base technicalScore on these, do not invent indicator values):\n'
+      + 'FACTORS = deterministic multi-factor scores 0-100, 50=neutral (mom=momentum, trend, lowvol=low-volatility, comp=equal-weight composite) — comp ≥70 is strong multi-factor support, ≤30 a multi-factor headwind\n'
       + taResult.value.lines.join('\n')
   }
 

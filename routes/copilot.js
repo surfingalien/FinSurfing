@@ -33,6 +33,7 @@ const { getSocialSentiment } = require('../lib/social-sentiment')
 const { getAltDataSnippet }  = require('../lib/alt-data')
 const symbolDb = require('../lib/symbol-db')
 const { computeStats, readPredictions } = require('../lib/brain-learnings')
+const { computeEdgeReport, edgeBlock } = require('../lib/edge-report')
 const { claudePaused, pauseMessage } = require('../lib/ai-pause')
 const { INTERNAL_SECRET } = require('../lib/internal-secret')
 
@@ -308,8 +309,22 @@ const TOOLS = [
     },
   },
   {
+    name: 'critique_risk',
+    description: "AI risk-officer critique of the measured portfolio risk report: overall assessment, up to 3 risk reductions and 2 return enhancers — each grounded in a cited computed figure (Sharpe, VaR, beta, drawdown, sector concentration, correlations), never invented numbers. Use when asked how to reduce portfolio risk, improve risk-adjusted returns, or review the portfolio's risk posture.",
+    input_schema: {
+      type: 'object',
+      properties: {
+        symbols: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Optional: critique these symbols equal-weighted instead of the saved portfolio (max 20)',
+        },
+      },
+    },
+  },
+  {
     name: 'get_calibration',
-    description: "The AI Brain's measured track record: win rates and benchmark-beating alpha at 7d/30d, calibration by stated confidence, cross-model ensemble lift, and how the AI compares to a mechanical TA baseline on identical picks. Use when asked how reliable the AI's signals are.",
+    description: "The AI Brain's measured track record: win rates and benchmark-beating alpha at 7d/30d, calibration by stated confidence, cross-model ensemble lift, how the AI compares to a mechanical TA baseline on identical picks, and a ranked edge report showing which segments (confidence, ensemble, asset, sector, pattern, score band) beat or drag the overall alpha win rate. Use when asked how reliable the AI's signals are or where its edge is concentrated.",
     input_schema: { type: 'object', properties: {} },
   },
   {
@@ -640,6 +655,27 @@ async function dispatchTool(name, input, req) {
       return lines.join('\n')
     }
 
+    case 'critique_risk': {
+      const body = Array.isArray(input.symbols) && input.symbols.length
+        ? { symbols: input.symbols.slice(0, 20) }
+        : {}
+      const r = await fetch(`http://127.0.0.1:${port}/api/analytics/portfolio/critique`, {
+        method: 'POST', headers: fwdHeaders,
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(90_000),
+      })
+      const data = await r.json()
+      if (!data.critique) return `Risk critique failed: ${data.error || 'unknown error'}`
+      const c = data.critique
+      const item = (x, i) => `${i + 1}. ${x.action}\n   Evidence: ${x.evidence}`
+      const lines = [`**Portfolio Risk Critique** (${data.symbols.length} holdings — grounded in measured 1y metrics)`, c.assessment]
+      if (c.riskReductions.length) lines.push('\n**Reduce risk:**', ...c.riskReductions.map(item))
+      if (c.returnEnhancers.length) lines.push('\n**Enhance return (risk-neutral):**', ...c.returnEnhancers.map(item))
+      if (c.watchItems.length) lines.push('\n**Watch:** ' + c.watchItems.join(' · '))
+      lines.push('\n_Advisory only — nothing is executed. Figures cited come from computed portfolio analytics._')
+      return lines.join('\n')
+    }
+
     case 'get_calibration': {
       const stats = computeStats(readPredictions())
       if (!stats.totalResolved) return 'No resolved predictions yet — the track record builds as AI Brain picks age past 7 and 30 days.'
@@ -696,6 +732,10 @@ async function dispatchTool(name, input, req) {
         const sorted = Object.entries(stats.bySector).sort((a, b) => b[1].n - a[1].n).slice(0, 6)
         if (sorted.length) lines.push('By sector (top picks): ' + sorted.map(([k, c]) => `${k} ${pc(c.alphaWinRate ?? c.winRate)} alpha (n=${c.n})`).join(' | '))
       }
+      // Cross-segment edge mining: rank every calibration segment by measured
+      // edge vs the overall alpha win rate (lib/edge-report.js)
+      const edgeText = edgeBlock(computeEdgeReport(stats))
+      if (edgeText) lines.push(edgeText)
       return lines.join('\n')
     }
 
