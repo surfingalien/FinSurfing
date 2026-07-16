@@ -54,8 +54,9 @@ describe('anchorPoints', () => {
       .toEqual([{ point: 'Growth is strong', quote: null, anchored: false }])
   })
 
-  test('caps at 4, drops empties, tolerates junk', () => {
-    expect(anchorPoints([{}, { point: '' }, null, 'a', 'b', 'c', 'd', 'e'], transcript)).toHaveLength(2)
+  test('drops empties/junk first, then caps at 4 valid points', () => {
+    const out = anchorPoints([{}, { point: '' }, null, 'a', 'b', 'c', 'd', 'e'], transcript)
+    expect(out.map(p => p.point)).toEqual(['a', 'b', 'c', 'd']) // junk never crowds out valid points
     expect(anchorPoints('not an array', transcript)).toEqual([])
   })
 })
