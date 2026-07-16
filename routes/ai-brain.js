@@ -894,16 +894,36 @@ Rules:
   }
 })
 
-// GET /api/ai-brain/learnings — returns current self-improvement state for UI display
+// GET /api/ai-brain/learnings — returns current self-improvement state for UI
+// display, plus the human-owned overrides so the UI can show what's pinned,
+// suppressed, or directed.
 router.get('/learnings', (req, res) => {
   try {
-    const fs   = require('fs')
-    const path = require('path')
-    const file = path.join(__dirname, '../data/brain-learnings.json')
-    if (!fs.existsSync(file)) return res.json({ available: false })
-    const data = JSON.parse(fs.readFileSync(file, 'utf8'))
-    res.json({ available: true, ...data })
+    const { readLearnings, readOverrides } = require('../lib/brain-learnings')
+    const data = readLearnings()
+    const overrides = readOverrides()
+    if (!data) return res.json({ available: false, overrides })
+    res.json({ available: true, ...data, overrides })
   } catch { res.json({ available: false }) }
+})
+
+// PUT /api/ai-brain/learnings/overrides — white-box editable memory. Lets the
+// operator correct the Brain's self-written learnings: pin extra ones, suppress
+// wrong/stale ones, and set a directive note. These layer on top of the nightly
+// AI output (which is never mutated), so a human correction always wins and is
+// never clobbered by the next meta-analysis. requireAuth — operator-only.
+router.put('/learnings/overrides', requireAuth, (req, res) => {
+  try {
+    const { writeOverrides } = require('../lib/brain-learnings')
+    const { pinned, suppressed, note } = req.body || {}
+    if (pinned !== undefined && !Array.isArray(pinned)) return res.status(400).json({ error: 'pinned must be an array of strings' })
+    if (suppressed !== undefined && !Array.isArray(suppressed)) return res.status(400).json({ error: 'suppressed must be an array of strings' })
+    if (note !== undefined && typeof note !== 'string') return res.status(400).json({ error: 'note must be a string' })
+    const saved = writeOverrides({ pinned, suppressed, note })
+    res.json({ ok: true, overrides: saved })
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to save overrides: ' + e.message })
+  }
 })
 
 // Return % move from the honest "you could have bought here" anchor to a resolved

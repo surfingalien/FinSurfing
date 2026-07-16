@@ -7,9 +7,10 @@
  * — all computed deterministically by lib/brain-learnings.js.
  */
 
-import { useState } from 'react'
-import { Target, ChevronDown, ChevronUp, Sparkles, Scale, TrendingUp, AlertTriangle } from 'lucide-react'
-import { useQuery, fetchJson } from '../../hooks/useQuery'
+import { useState, useEffect } from 'react'
+import { Target, ChevronDown, ChevronUp, Sparkles, Scale, TrendingUp, AlertTriangle, Pencil, Pin, X, Check } from 'lucide-react'
+import { useQuery, fetchJson, invalidateQuery } from '../../hooks/useQuery'
+import { useAuth } from '../../contexts/AuthContext'
 
 const fmtPct = v => (v == null ? '—' : `${Math.round(v * 100)}%`)
 const pctColor = (v, neutral = 0.5) => {
@@ -46,6 +47,131 @@ function SectionHeader({ icon: Icon, label }) {
   return (
     <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest text-slate-500 mb-1.5">
       <Icon className="w-3 h-3" /> {label}
+    </div>
+  )
+}
+
+// White-box editable memory: the Brain writes keyLearnings nightly; a signed-in
+// operator can suppress a wrong/stale finding, pin their own, and set a
+// directive note. Edits are stored as overrides (PUT /learnings/overrides) that
+// layer on top of the AI output and survive the next nightly regeneration.
+function EditableLearnings({ data }) {
+  const { authFetch, isAuthenticated } = useAuth()
+  const [editing, setEditing] = useState(false)
+  const [suppressed, setSuppressed] = useState([])
+  const [pinned, setPinned] = useState([])
+  const [note, setNote] = useState('')
+  const [newPin, setNewPin] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [msg, setMsg] = useState(null)
+
+  // Seed local edit state from the server's overrides whenever they change.
+  useEffect(() => {
+    const o = data.overrides || {}
+    setSuppressed(o.suppressed || [])
+    setPinned(o.pinned || [])
+    setNote(o.note || '')
+  }, [data.overrides])
+
+  const learnings = data.keyLearnings || []
+  const isSuppressed = (l) => suppressed.some(s => s.trim().toLowerCase() === String(l).trim().toLowerCase())
+  const toggleSuppress = (l) =>
+    setSuppressed(prev => isSuppressed(l) ? prev.filter(s => s.trim().toLowerCase() !== String(l).trim().toLowerCase()) : [...prev, l])
+  const addPin = () => { const v = newPin.trim(); if (v) { setPinned(prev => [...prev, v]); setNewPin('') } }
+  const removePin = (i) => setPinned(prev => prev.filter((_, idx) => idx !== i))
+
+  const save = async () => {
+    setSaving(true); setMsg(null)
+    try {
+      const res = await authFetch('/api/ai-brain/learnings/overrides', {
+        method: 'PUT',
+        body: { suppressed, pinned, note },
+      })
+      if (!res.ok) throw new Error('save failed')
+      setMsg('Saved — the Brain will use this on its next scan.')
+      invalidateQuery('ai-brain-learnings')
+      setEditing(false)
+    } catch {
+      setMsg('Could not save. Check that you are signed in.')
+    } finally { setSaving(false) }
+  }
+
+  return (
+    <div className="sm:col-span-2">
+      <div className="flex items-center justify-between mb-1.5">
+        <div className="text-[10px] uppercase tracking-widest text-slate-500">
+          What the Brain learned from its own record
+        </div>
+        {isAuthenticated && (
+          <button
+            onClick={() => setEditing(v => !v)}
+            className="flex items-center gap-1 text-[10px] text-slate-400 hover:text-mint-400 transition-colors"
+          >
+            <Pencil className="w-3 h-3" /> {editing ? 'Done' : 'Edit memory'}
+          </button>
+        )}
+      </div>
+
+      <ul className="space-y-1">
+        {learnings.slice(0, 8).map((l, i) => (
+          <li key={i} className="text-xs flex items-start gap-2">
+            <span className="text-mint-500/60 shrink-0">{i + 1}.</span>
+            <span className={isSuppressed(l) ? 'text-slate-600 line-through' : 'text-slate-400'}>{l}</span>
+            {editing && (
+              <button
+                onClick={() => toggleSuppress(l)}
+                title={isSuppressed(l) ? 'Restore this learning' : 'Suppress — stop injecting this into scans'}
+                className="ml-auto shrink-0 text-slate-500 hover:text-red-400"
+              >
+                {isSuppressed(l) ? <Check className="w-3 h-3" /> : <X className="w-3 h-3" />}
+              </button>
+            )}
+          </li>
+        ))}
+        {pinned.map((p, i) => (
+          <li key={`pin-${i}`} className="text-xs flex items-start gap-2">
+            <Pin className="w-3 h-3 text-amber-400 shrink-0 mt-0.5" />
+            <span className="text-amber-200/90">{p}</span>
+            {editing && (
+              <button onClick={() => removePin(i)} className="ml-auto shrink-0 text-slate-500 hover:text-red-400">
+                <X className="w-3 h-3" />
+              </button>
+            )}
+          </li>
+        ))}
+      </ul>
+
+      {editing && (
+        <div className="mt-2 space-y-2 rounded-lg border border-white/[0.06] bg-white/[0.02] p-2.5">
+          <div className="flex gap-2">
+            <input
+              value={newPin}
+              onChange={e => setNewPin(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && addPin()}
+              placeholder="Pin your own learning…"
+              className="flex-1 bg-black/20 border border-white/[0.08] rounded px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-mint-500/40"
+            />
+            <button onClick={addPin} className="px-2 py-1 rounded bg-mint-500/15 text-mint-300 text-xs hover:bg-mint-500/25">Pin</button>
+          </div>
+          <textarea
+            value={note}
+            onChange={e => setNote(e.target.value)}
+            placeholder="Operator directive appended to every scan (e.g. 'Be extra cautious on unprofitable small-caps')…"
+            rows={2}
+            className="w-full bg-black/20 border border-white/[0.08] rounded px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-mint-500/40"
+          />
+          <div className="flex items-center gap-2">
+            <button
+              onClick={save}
+              disabled={saving}
+              className="px-3 py-1 rounded bg-mint-500/20 text-mint-300 text-xs font-medium hover:bg-mint-500/30 disabled:opacity-50"
+            >
+              {saving ? 'Saving…' : 'Save overrides'}
+            </button>
+            {msg && <span className="text-[10px] text-slate-400">{msg}</span>}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -276,20 +402,9 @@ export default function TrackRecordPanel() {
             </div>
           )}
 
-          {/* Key learnings */}
-          {data.keyLearnings?.length > 0 && (
-            <div className="sm:col-span-2">
-              <div className="text-[10px] uppercase tracking-widest text-slate-500 mb-1.5">
-                What the Brain learned from its own record
-              </div>
-              <ul className="space-y-1">
-                {data.keyLearnings.slice(0, 6).map((l, i) => (
-                  <li key={i} className="text-xs text-slate-400 flex gap-2">
-                    <span className="text-mint-500/60 shrink-0">{i + 1}.</span>{l}
-                  </li>
-                ))}
-              </ul>
-            </div>
+          {/* Key learnings — editable white-box memory */}
+          {(data.keyLearnings?.length > 0 || data.overrides?.pinned?.length > 0) && (
+            <EditableLearnings data={data} />
           )}
 
           {/* Post-mortems */}

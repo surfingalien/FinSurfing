@@ -76,6 +76,40 @@ railway up
 
 ---
 
+## Telegram bot gateway (optional)
+
+Get AI alerts on your phone and query the Brain from a chat. Fully opt-in —
+with no token set, the notifier is a silent no-op and the command bot never
+starts. Uses Node's built-in `fetch`, no new dependencies.
+
+Set these env vars (via `@BotFather` for the token; open
+`https://api.telegram.org/bot<token>/getUpdates` after messaging your bot to
+find your chat id):
+
+```
+TELEGRAM_BOT_TOKEN=      # from @BotFather
+TELEGRAM_CHAT_ID=        # your numeric chat id
+TELEGRAM_ALERTS_ENABLED=true
+```
+
+- **Push:** every alert-triggered AI analysis (via the existing
+  `alert-broadcaster`) is also sent to Telegram.
+- **Commands** (only the configured chat is answered): `/status`,
+  `/learnings` (the Brain's current self-learned findings), `/help`.
+
+## White-box, editable AI memory
+
+The AI Brain writes `keyLearnings` from its own resolved-prediction record
+every night. That memory is now **correctable**: a signed-in operator can
+suppress a wrong or stale finding, pin their own, and set a directive note
+right in the **Track Record** panel. Edits are stored as overrides
+(`PUT /api/ai-brain/learnings/overrides`, `data/brain-learnings-overrides.json`)
+that layer on top of the AI output — so a human correction always wins and is
+never clobbered by the next nightly meta-analysis. The merged result is what
+gets injected into every scan (and shown by the Telegram `/learnings` command).
+
+---
+
 ## Portfolio
 
 `AAPL` `ARM` `ADSK` `AMD` `AVGO` `BABA` `BROS` `CL` `COIN` `GOOG` `INTC` `MSFT` `NVDA` `ORCL` `PG` `QCOM` `SOUN` `TSLA` `TSM` `TXN` `XOM`
