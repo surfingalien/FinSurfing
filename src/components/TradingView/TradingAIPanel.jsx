@@ -1034,10 +1034,20 @@ export default function TradingAIPanel({ symbol, interval, price }) {
                         <ThumbsUp className="w-3 h-3" /> Bull
                       </div>
                       <div className="space-y-1">
-                        {(earnings.bullPoints ?? []).map((p, i) => (
+                        {(earnings.bullPointsAnchored ?? (earnings.bullPoints ?? []).map(p => ({ point: p }))).map((p, i) => (
                           <div key={i} className="flex items-start gap-1">
                             <span className="text-emerald-400/60 text-[10px] shrink-0 mt-0.5">+</span>
-                            <span className="text-[10px] text-slate-400 leading-snug">{p}</span>
+                            <span className="text-[10px] text-slate-400 leading-snug">
+                              {p.point}
+                              {p.quote && (
+                                <span
+                                  className={`block mt-0.5 italic ${p.anchored ? 'text-slate-500' : 'text-amber-500/70'}`}
+                                  title={p.anchored ? 'Verbatim quote verified against the transcript' : 'Quote could not be verified against the transcript'}
+                                >
+                                  {p.anchored ? '❝' : '⚠'} {p.quote}
+                                </span>
+                              )}
+                            </span>
                           </div>
                         ))}
                       </div>
@@ -1048,10 +1058,20 @@ export default function TradingAIPanel({ symbol, interval, price }) {
                         <ThumbsDown className="w-3 h-3" /> Bear
                       </div>
                       <div className="space-y-1">
-                        {(earnings.bearPoints ?? []).map((p, i) => (
+                        {(earnings.bearPointsAnchored ?? (earnings.bearPoints ?? []).map(p => ({ point: p }))).map((p, i) => (
                           <div key={i} className="flex items-start gap-1">
                             <span className="text-red-400/60 text-[10px] shrink-0 mt-0.5">−</span>
-                            <span className="text-[10px] text-slate-400 leading-snug">{p}</span>
+                            <span className="text-[10px] text-slate-400 leading-snug">
+                              {p.point}
+                              {p.quote && (
+                                <span
+                                  className={`block mt-0.5 italic ${p.anchored ? 'text-slate-500' : 'text-amber-500/70'}`}
+                                  title={p.anchored ? 'Verbatim quote verified against the transcript' : 'Quote could not be verified against the transcript'}
+                                >
+                                  {p.anchored ? '❝' : '⚠'} {p.quote}
+                                </span>
+                              )}
+                            </span>
                           </div>
                         ))}
                       </div>
@@ -1062,7 +1082,17 @@ export default function TradingAIPanel({ symbol, interval, price }) {
                 {/* ── Key Quote ─────────────────────────────────────────── */}
                 {earnings.keyQuote && (
                   <div className="px-3 mb-3">
-                    <div className="text-[10px] text-slate-500 mb-1.5 uppercase tracking-wider">Key Quote</div>
+                    <div className="text-[10px] text-slate-500 mb-1.5 uppercase tracking-wider flex items-center gap-1.5">
+                      Key Quote
+                      {earnings.keyQuoteAnchored != null && (
+                        <span
+                          className={`normal-case tracking-normal ${earnings.keyQuoteAnchored ? 'text-emerald-500/80' : 'text-amber-500/80'}`}
+                          title={earnings.keyQuoteAnchored ? 'Verified verbatim against the transcript' : 'Could not be verified against the transcript'}
+                        >
+                          {earnings.keyQuoteAnchored ? '✓ verified' : '⚠ unverified'}
+                        </span>
+                      )}
+                    </div>
                     <blockquote className="rounded-lg bg-white/[0.03] border-l-2 border-violet-500/40 border border-white/[0.05] pl-3 pr-2.5 py-2">
                       <p className="text-[11px] text-slate-300 leading-relaxed italic">"{earnings.keyQuote}"</p>
                     </blockquote>
