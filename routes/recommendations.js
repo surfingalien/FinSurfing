@@ -409,6 +409,14 @@ router.get('/journal', requireAuth, (req, res) => {
   res.json({ count: entries.length, entries })
 })
 
+// GET /api/recommendations/journal/verify — recompute the journal's hash chain.
+// valid=true proves no chained entry was altered, deleted, or reordered since
+// it was written; on a break, firstBreak pinpoints the earliest bad link.
+// Entries from before chaining existed are reported as `legacy`.
+router.get('/journal/verify', requireAuth, (req, res) => {
+  res.json(recJournal.verifyChain())
+})
+
 // GET /api/recommendations/personas — list available personas for the UI
 router.get('/personas', (req, res) => {
   const list = Object.values(PERSONAS).map(p => ({

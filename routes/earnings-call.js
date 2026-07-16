@@ -17,6 +17,7 @@ const { getRouter } = require('../lib/ai-router')
 const { CircuitOpenError } = require('../lib/circuit-breaker')
 const { compactProse } = require('../lib/compress')
 const { requireAuth } = require('../middleware/auth')
+const { normalizeForMatch, quoteAppears, anchorPoints } = require('../lib/quote-anchor')
 
 const router    = express.Router()
 const aiRouter  = getRouter('earnings-call')
@@ -59,14 +60,18 @@ Respond ONLY with valid JSON — no markdown, no text outside the JSON:
     { "name": "metric name ≤4 words", "value": "reported value or trend", "beat": true|false|null }
   ],
   "guidance": "1-2 sentence forward guidance summary",
-  "bullPoints": ["≤12 words each — max 4 bull points"],
-  "bearPoints": ["≤12 words each — max 4 bear points"],
+  "bullPoints": [{ "point": "≤12 words — max 4 bull points", "quote": "the verbatim transcript sentence (≤25 words) this point is based on — copy it EXACTLY, do not paraphrase" }],
+  "bearPoints": [{ "point": "≤12 words — max 4 bear points", "quote": "the verbatim transcript sentence (≤25 words) this point is based on — copy it EXACTLY, do not paraphrase" }],
   "keyQuote": "Most impactful verbatim management quote ≤40 words",
   "catalysts": ["≤10 words each — max 3 upcoming catalysts explicitly mentioned"],
   "risks": ["≤10 words each — max 3 risks explicitly mentioned"],
   "analystCard": "2-3 sentence synthesis: call quality, tone vs expectations, key investment implication"
-}`
 }
+
+Every bull/bear point MUST be anchored to a real quote from the transcript above. If you cannot find a supporting quote for a point, do not include the point.`
+}
+
+
 
 // ── GET /api/earnings-call ────────────────────────────────────────────────────
 router.get('/', requireAuth, earningsLimit, async (req, res) => {
@@ -111,6 +116,23 @@ router.get('/', requireAuth, earningsLimit, async (req, res) => {
       const m = cleaned.match(/\{[\s\S]*\}/)
       if (!m) return res.status(500).json({ error: 'AI analysis returned no parseable JSON — try again' })
       analysis = JSON.parse(m[0])
+    }
+
+    // Quote anchoring: verify every claimed quote against the REAL transcript
+    // (full content, not just the excerpt sent to the model). keyQuote gets the
+    // same check. bullPoints/bearPoints stay string arrays for backward
+    // compatibility; the anchored structures ride alongside.
+    const normalizedTranscript = normalizeForMatch(content)
+    const bullAnchored = anchorPoints(analysis.bullPoints, normalizedTranscript)
+    const bearAnchored = anchorPoints(analysis.bearPoints, normalizedTranscript)
+    analysis.bullPoints = bullAnchored.map(p => p.point)
+    analysis.bearPoints = bearAnchored.map(p => p.point)
+    analysis.bullPointsAnchored = bullAnchored
+    analysis.bearPointsAnchored = bearAnchored
+    analysis.keyQuoteAnchored = analysis.keyQuote ? quoteAppears(analysis.keyQuote, normalizedTranscript) : false
+    analysis.anchoring = {
+      verified:  [...bullAnchored, ...bearAnchored].filter(p => p.anchored).length + (analysis.keyQuoteAnchored ? 1 : 0),
+      unverified: [...bullAnchored, ...bearAnchored].filter(p => !p.anchored).length + (analysis.keyQuote && !analysis.keyQuoteAnchored ? 1 : 0),
     }
 
     // Available quarters for potential future multi-quarter view

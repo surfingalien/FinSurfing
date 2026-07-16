@@ -113,3 +113,78 @@ describe('append / read round-trip', () => {
     expect(j.readJournal({ file: path.join(os.tmpdir(), 'does-not-exist-xyz.jsonl') })).toEqual([])
   })
 })
+
+describe('trust scoring', () => {
+  const fullPick = { symbol: 'NVDA', entryPrice: 120, targetReturn: 25, stopLoss: 10, thesis: 'AI demand continues to outpace supply', sources: ['10-K'] }
+
+  test('fully accountable pick scores 100; bare ticker scores 0', () => {
+    expect(j.scorePick(fullPick)).toBe(100)
+    expect(j.scorePick({ symbol: 'X' })).toBe(0)
+  })
+
+  test('missing sources costs 25; short thesis does not count', () => {
+    expect(j.scorePick({ ...fullPick, sources: [] })).toBe(75)
+    expect(j.scorePick({ ...fullPick, thesis: 'buy' })).toBe(75)
+  })
+
+  test('scoreEntry averages picks, tiers, and names the weakest', () => {
+    const t = j.scoreEntry([fullPick, { symbol: 'AAPL', entryPrice: 190, targetReturn: 15, stopLoss: 8, thesis: 'Services growth with installed-base moat' }])
+    expect(t.score).toBe(88)
+    expect(t.tier).toBe('gold')
+    expect(t.weakest.symbol).toBe('AAPL')
+  })
+
+  test('buildEntry carries the trust block', () => {
+    expect(j.buildEntry({ recommendations: [fullPick] }).trust)
+      .toEqual({ score: 100, tier: 'gold', weakest: { symbol: 'NVDA', score: 100 } })
+  })
+})
+
+describe('hash chain', () => {
+  let file
+  beforeEach(() => { file = path.join(os.tmpdir(), `recj-chain-${Date.now()}-${Math.random().toString(36).slice(2)}.jsonl`) })
+  afterEach(() => { try { fs.unlinkSync(file) } catch {} })
+
+  const write = entries => fs.writeFileSync(file, entries.map(e => JSON.stringify(e)).join('\n') + '\n')
+  const read  = () => fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).map(JSON.parse)
+
+  test('appendEntry links each entry to the previous one', () => {
+    j.appendEntry(j.buildEntry({ recommendations: recs, rationale: 'a' }), file)
+    j.appendEntry(j.buildEntry({ recommendations: recs, rationale: 'b' }), file)
+    const [first, second] = read()
+    expect(first.prevChainHash).toBe(j.GENESIS_HASH)
+    expect(second.prevChainHash).toBe(first.chainHash)
+    expect(j.verifyChain(file)).toMatchObject({ valid: true, entries: 2, chained: 2, legacy: 0 })
+  })
+
+  test('tampering with a chained entry is detected at the right index', () => {
+    j.appendEntry(j.buildEntry({ recommendations: recs, rationale: 'a' }), file)
+    j.appendEntry(j.buildEntry({ recommendations: recs, rationale: 'b' }), file)
+    const entries = read()
+    entries[0].rationale = 'tampered'
+    write(entries)
+    const v = j.verifyChain(file)
+    expect(v.valid).toBe(false)
+    expect(v.firstBreak.index).toBe(1)
+  })
+
+  test('deleting a chained entry breaks the chain', () => {
+    j.appendEntry(j.buildEntry({ recommendations: recs, rationale: 'a' }), file)
+    j.appendEntry(j.buildEntry({ recommendations: recs, rationale: 'b' }), file)
+    j.appendEntry(j.buildEntry({ recommendations: recs, rationale: 'c' }), file)
+    const entries = read()
+    entries.splice(1, 1)
+    write(entries)
+    expect(j.verifyChain(file).valid).toBe(false)
+  })
+
+  test('legacy pre-chain entries are tolerated and counted', () => {
+    write([{ id: 'legacy', at: '2026-01-01', picks: [] }])
+    j.appendEntry(j.buildEntry({ recommendations: recs, rationale: 'a' }), file)
+    expect(j.verifyChain(file)).toMatchObject({ valid: true, entries: 2, chained: 1, legacy: 1 })
+  })
+
+  test('canonicalJson is key-order independent', () => {
+    expect(j.canonicalJson({ a: 1, b: { d: 2, c: 3 } })).toBe(j.canonicalJson({ b: { c: 3, d: 2 }, a: 1 }))
+  })
+})

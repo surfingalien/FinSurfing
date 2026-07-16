@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Search, TrendingUp, BarChart2, Activity } from 'lucide-react'
+import { Search, TrendingUp, BarChart2, Activity, GitCompareArrows } from 'lucide-react'
 import {
   ComposedChart, Line, Bar, Area, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, ReferenceLine, Legend
@@ -81,6 +81,43 @@ function aggregateSignal(signals) {
   return 'Hold'
 }
 
+// Condensed technical/fundamental snapshot of one symbol for the compare panel.
+function buildCompareSnapshot(candles, summary) {
+  const closes = candles.map(c => c.close)
+  const last   = closes[closes.length - 1]
+  const rsi    = calcRSI(closes)
+  const macd   = calcMACD(closes)
+  const lastMACD = macd[macd.length - 1]
+  const adxR   = calcADX(candles.map(c => c.high), candles.map(c => c.low), closes, 14)
+  const sigs   = deriveSignals(candles, [])
+  const pctFrom = idx => (closes.length > idx ? (last / closes[closes.length - 1 - idx] - 1) * 100 : null)
+  return {
+    price:      last,
+    rsi:        rsi[rsi.length - 1],
+    macdDir:    lastMACD?.macd != null && lastMACD?.signal != null ? (lastMACD.macd > lastMACD.signal ? 'bullish' : 'bearish') : null,
+    adx:        adxR.adx[adxR.adx.length - 1],
+    signal:     aggregateSignal(sigs),
+    return1m:   pctFrom(21),
+    returnFull: closes.length > 1 ? (last / closes[0] - 1) * 100 : null,
+    pe:         summary?.pe ?? null,
+    marketCap:  summary?.marketCap ?? null,
+  }
+}
+
+// Both series normalized to 100 at the first shared date — relative performance.
+function buildRelativeSeries(candlesA, candlesB) {
+  const byDateB = new Map(candlesB.map(c => [new Date(c.time).toDateString(), c.close]))
+  const shared  = candlesA.filter(c => byDateB.has(new Date(c.time).toDateString()))
+  if (shared.length < 2) return []
+  const baseA = shared[0].close
+  const baseB = byDateB.get(new Date(shared[0].time).toDateString())
+  return shared.map(c => ({
+    date: new Date(c.time).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+    a:    (c.close / baseA) * 100,
+    b:    (byDateB.get(new Date(c.time).toDateString()) / baseB) * 100,
+  }))
+}
+
 export default function AnalysisView({ defaultSymbol }) {
   const [symbol, setSymbol] = useState(defaultSymbol || 'AAPL')
   const [inputVal, setInputVal] = useState(defaultSymbol || 'AAPL')
@@ -94,6 +131,16 @@ export default function AnalysisView({ defaultSymbol }) {
   const [loading, setLoading] = useState(false)
   const [searchResults, setSearchResults] = useState([])
   const [showResults, setShowResults] = useState(false)
+
+  // Compare mode: a second symbol rendered against the first
+  const [compareOn, setCompareOn] = useState(false)
+  const [compareSymbol, setCompareSymbol] = useState('')
+  const [compareInput, setCompareInput] = useState('')
+  const [compareResults, setCompareResults] = useState([])
+  const [showCompareResults, setShowCompareResults] = useState(false)
+  const [compareData, setCompareData] = useState(null) // { snapshot, relative }
+  const [baseCandles, setBaseCandles] = useState([])
+  const [baseSnapshot, setBaseSnapshot] = useState(null)
 
   useEffect(() => {
     if (!symbol) return
@@ -148,6 +195,8 @@ export default function AnalysisView({ defaultSymbol }) {
 
       setChartData(enriched)
       setSummary(sumRes)
+      setBaseCandles(candles)
+      setBaseSnapshot(buildCompareSnapshot(candles, sumRes))
 
       // Basic signal rows for the side panel
       const sigs = deriveSignals(candles, activeIndicators)
@@ -159,6 +208,38 @@ export default function AnalysisView({ defaultSymbol }) {
     }).catch(e => console.warn('Analysis load failed:', e))
     .finally(() => setLoading(false))
   }, [symbol, range])
+
+  // Compare leg: fetched independently so toggling it never reloads the base
+  useEffect(() => {
+    if (!compareOn || !compareSymbol || !baseCandles.length) { setCompareData(null); return }
+    let cancelled = false
+    Promise.all([
+      fetchChart(compareSymbol, '1d', range),
+      fetchSummary(compareSymbol).catch(() => null),
+    ]).then(([chartRes, sumRes]) => {
+      if (cancelled) return
+      setCompareData({
+        snapshot: buildCompareSnapshot(chartRes.candles, sumRes),
+        relative: buildRelativeSeries(baseCandles, chartRes.candles),
+      })
+    }).catch(e => { console.warn('Compare load failed:', e); if (!cancelled) setCompareData(null) })
+    return () => { cancelled = true }
+  }, [compareOn, compareSymbol, range, baseCandles])
+
+  const handleCompareSearch = async (q) => {
+    setCompareInput(q)
+    if (!q.trim()) { setCompareResults([]); return }
+    const r = await searchSymbol(q).catch(() => [])
+    setCompareResults(r)
+    setShowCompareResults(true)
+  }
+
+  const handleCompareSelect = (sym) => {
+    setCompareSymbol(sym)
+    setCompareInput(sym)
+    setCompareResults([])
+    setShowCompareResults(false)
+  }
 
   const handleSearch = async (q) => {
     setInputVal(q)
@@ -234,6 +315,34 @@ export default function AnalysisView({ defaultSymbol }) {
             </button>
           ))}
         </div>
+        <button onClick={() => { setCompareOn(v => !v); if (compareOn) { setCompareSymbol(''); setCompareInput('') } }}
+          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border
+            ${compareOn ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40' : 'text-slate-400 border-white/[0.06] hover:text-white hover:bg-white/[0.06]'}`}>
+          <GitCompareArrows className="w-3.5 h-3.5" /> Compare
+        </button>
+        {compareOn && (
+          <div className="relative min-w-40 max-w-xs">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+            <input
+              value={compareInput}
+              onChange={e => handleCompareSearch(e.target.value)}
+              onBlur={() => setTimeout(() => setShowCompareResults(false), 200)}
+              placeholder="Compare with…"
+              className="input pl-9 uppercase"
+            />
+            {showCompareResults && compareResults.length > 0 && (
+              <div className="absolute top-full mt-1 w-full z-20 glass rounded-lg border border-white/[0.08] overflow-hidden">
+                {compareResults.map(r => (
+                  <button key={r.symbol} onMouseDown={() => handleCompareSelect(r.symbol)}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/[0.06] text-left text-sm transition-colors">
+                    <span className="font-mono text-indigo-400 font-semibold w-12 shrink-0">{r.symbol}</span>
+                    <span className="text-slate-300 truncate">{r.name}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Indicator toggles */}
@@ -279,6 +388,30 @@ export default function AnalysisView({ defaultSymbol }) {
                 </ComposedChart>
               </ResponsiveContainer>
             </div>
+
+            {/* Relative performance (compare mode) */}
+            {compareOn && compareSymbol && compareData?.relative?.length > 1 && (
+              <div className="glass rounded-xl p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-semibold text-white font-mono">
+                    {symbol} <span className="text-slate-500">vs</span> {compareSymbol} — Relative Performance
+                  </h3>
+                  <span className="text-xs text-slate-500">both = 100 at range start</span>
+                </div>
+                <ResponsiveContainer width="100%" height={200}>
+                  <ComposedChart data={compareData.relative}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
+                    <XAxis dataKey="date" tick={{ fill: '#64748b', fontSize: 10 }} tickLine={false} interval="preserveStartEnd" />
+                    <YAxis domain={['auto','auto']} tick={{ fill: '#64748b', fontSize: 10 }} tickLine={false} width={40} />
+                    <Tooltip content={<CustomTooltip />} />
+                    <ReferenceLine y={100} stroke="rgba(255,255,255,0.1)" strokeDasharray="4 2" />
+                    <Legend wrapperStyle={{ fontSize: 11 }} />
+                    <Line type="monotone" dataKey="a" stroke="#00ffcc" strokeWidth={2} dot={false} name={symbol} />
+                    <Line type="monotone" dataKey="b" stroke="#818cf8" strokeWidth={2} dot={false} name={compareSymbol} />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+            )}
 
             {/* Volume */}
             <div className="glass rounded-xl p-4">
@@ -351,6 +484,40 @@ export default function AnalysisView({ defaultSymbol }) {
 
           {/* Side panel */}
           <div className="space-y-3">
+
+            {/* Head-to-head (compare mode) */}
+            {compareOn && compareSymbol && compareData?.snapshot && baseSnapshot && (
+              <SectionCard title="Head to Head">
+                <div className="grid grid-cols-3 gap-1 text-[11px] mb-1">
+                  <span className="text-slate-500"></span>
+                  <span className="font-mono font-semibold text-mint-400 text-right">{symbol}</span>
+                  <span className="font-mono font-semibold text-indigo-400 text-right">{compareSymbol}</span>
+                </div>
+                {[
+                  { label: 'Price',      f: s => s.price != null ? `$${fmt(s.price)}` : '—' },
+                  { label: 'RSI (14)',   f: s => s.rsi != null ? s.rsi.toFixed(1) : '—' },
+                  { label: 'MACD',       f: s => s.macdDir ?? '—' },
+                  { label: 'ADX',        f: s => s.adx != null ? s.adx.toFixed(1) : '—' },
+                  { label: 'Signal',     f: s => s.signal },
+                  { label: '1M return',  f: s => s.return1m != null ? fmtPct(s.return1m) : '—', best: s => s.return1m },
+                  { label: `${range} return`, f: s => s.returnFull != null ? fmtPct(s.returnFull) : '—', best: s => s.returnFull },
+                  { label: 'P/E',        f: s => s.pe != null ? fmt(s.pe) : '—' },
+                  { label: 'Mkt Cap',    f: s => s.marketCap != null ? fmtLarge(s.marketCap) : '—' },
+                ].map(({ label, f, best }) => {
+                  const a = baseSnapshot, b = compareData.snapshot
+                  const aWins = best && best(a) != null && best(b) != null && best(a) > best(b)
+                  const bWins = best && best(a) != null && best(b) != null && best(b) > best(a)
+                  return (
+                    <div key={label} className="grid grid-cols-3 gap-1 py-1 border-b border-white/[0.04] last:border-0 text-[11px]">
+                      <span className="text-slate-500">{label}</span>
+                      <span className={`font-mono text-right ${aWins ? 'text-emerald-400 font-semibold' : 'text-slate-300'}`}>{f(a)}</span>
+                      <span className={`font-mono text-right ${bWins ? 'text-emerald-400 font-semibold' : 'text-slate-300'}`}>{f(b)}</span>
+                    </div>
+                  )
+                })}
+                <p className="text-[9px] text-slate-600 mt-2">Green = leader on that metric · Not financial advice</p>
+              </SectionCard>
+            )}
 
             {/* AI Signal — Supertrend + RSI + MACD + ADX + Ichimoku combined */}
             {aiSignal && (
