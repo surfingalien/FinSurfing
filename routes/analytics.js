@@ -50,8 +50,9 @@ async function fetchCloses(symbol, range = '1y', fwdHeaders = {}) {
 const {
   dailyReturns, sharpeRatio, sortinoRatio, maxDrawdown, annualizedReturn,
   annualizedVolatility, valueAtRisk, conditionalVaR, pearson, beta,
-  weightedReturnSeries, equityFromReturns,
+  alignedReturnPair, weightedReturnSeries, equityFromReturns,
 } = require('../lib/portfolio-metrics')
+const { alignSeries } = require('../utils/portfolio-backtest')
 
 // ── Main route ────────────────────────────────────────────────────────────────
 // Accepts optional ?symbols=AAPL,MSFT,GOOG query param for manual analysis
@@ -124,45 +125,59 @@ router.get('/portfolio', async (req, res) => {
   const closeMap = {}
   symsToFetch.forEach((s, i) => { closeMap[s] = holdingData[i] })
 
-  // ── Beta per holding ──────────────────────────────────────────────────────
-  const betas = {}
-  for (const sym of symsToFetch) {
-    const closes = closeMap[sym].map(p => p.close)
-    betas[sym] = beta(dailyReturns(closes), spyRet)
+  const manualMode = !!req.query.symbols
+
+  // Position weight: market value (shares × latest close) in portfolio mode —
+  // the previous share-count weighting let 100 shares of a $5 stock outweigh
+  // 1 share of a $600k stock. Manual ?symbols= lists are equal-weighted
+  // (shares are a placeholder 1 there, and value-weighting would weight by price).
+  const positionValue = (sym) => {
+    if (manualMode) return 1
+    const series = closeMap[sym] || []
+    const last   = series.length ? series[series.length - 1].close : null
+    const shares = holdingMeta[sym]?.shares || 0
+    return shares * (last ?? holdingMeta[sym]?.avgCost ?? 0)
   }
 
-  // Portfolio-weighted beta (weight by current market value approximation)
-  const totalShares = symsToFetch.reduce((s, sym) => s + (holdingMeta[sym]?.shares || 0), 0)
+  // ── Beta per holding (date-aligned vs SPY) ────────────────────────────────
+  const betas = {}
+  for (const sym of symsToFetch) {
+    const [rs, rm] = alignedReturnPair(closeMap[sym], spyData)
+    betas[sym] = beta(rs, rm)
+  }
+
+  // Portfolio-weighted beta (weighted by current market value)
   let portfolioBeta = null
-  if (totalShares > 0) {
+  {
     let weightedBeta = 0, validWeight = 0
     for (const sym of symsToFetch) {
       if (betas[sym] == null) continue
-      const w = (holdingMeta[sym]?.shares || 0) / totalShares
+      const w = positionValue(sym)
+      if (!(w > 0)) continue
       weightedBeta += betas[sym] * w
       validWeight  += w
     }
     portfolioBeta = validWeight > 0 ? weightedBeta / validWeight : null
   }
 
-  // ── Correlation matrix ────────────────────────────────────────────────────
+  // ── Correlation matrix (date-aligned pairs) ───────────────────────────────
   const correlations = []
   for (let i = 0; i < symsToFetch.length; i++) {
     for (let j = i + 1; j < symsToFetch.length; j++) {
       const a   = symsToFetch[i]; const b2 = symsToFetch[j]
-      const ra  = dailyReturns(closeMap[a].map(p => p.close))
-      const rb  = dailyReturns(closeMap[b2].map(p => p.close))
+      const [ra, rb] = alignedReturnPair(closeMap[a], closeMap[b2])
       const cor = pearson(ra, rb)
       if (cor !== null)
         correlations.push({ a, b: b2, r: +cor.toFixed(3) })
     }
   }
 
-  // ── Sector concentration ──────────────────────────────────────────────────
+  // ── Sector concentration (market-value weighted in portfolio mode) ────────
   const sectorMap = {}
   for (const sym of symsToFetch) {
     const sec = holdingMeta[sym]?.sector || 'Unknown'
-    sectorMap[sec] = (sectorMap[sec] || 0) + (holdingMeta[sym]?.shares || 1)
+    const v   = positionValue(sym)
+    sectorMap[sec] = (sectorMap[sec] || 0) + (v > 0 ? v : 0)
   }
   const totalHoldings = Object.values(sectorMap).reduce((a, b) => a + b, 0)
   const sectors = Object.entries(sectorMap).map(([name, count]) => ({
@@ -174,14 +189,17 @@ router.get('/portfolio', async (req, res) => {
   // ── Portfolio risk metrics (Sharpe, Sortino, drawdown, vol, VaR) ─────────
   // Value-weighted by shares × latest close when real position sizes are
   // known (portfolio mode); equal-weighted for manual ?symbols= lists.
-  const manualMode = !!req.query.symbols
+  // Series are intersected on common trading DATES (not right-aligned by
+  // count) so mixed crypto/equity calendars line up, and holdings whose data
+  // fetch failed are excluded instead of suppressing all metrics.
   const riskMetrics = {}
   try {
-    const alignedLength = Math.min(...symsToFetch.map(s => closeMap[s].length))
-    if (alignedLength >= 20 && symsToFetch.length > 0) {
-      const closeSeries = symsToFetch.map(s => closeMap[s].map(p => p.close))
-      const weights = manualMode ? null : symsToFetch.map(s => {
-        const closes = closeMap[s].map(p => p.close)
+    const symsWithData = symsToFetch.filter(s => (closeMap[s]?.length ?? 0) >= 20)
+    const aligned = alignSeries(Object.fromEntries(symsWithData.map(s => [s, closeMap[s]])))
+    if (aligned.dates.length >= 20 && symsWithData.length > 0) {
+      const closeSeries = symsWithData.map(s => aligned.closes[s])
+      const weights = manualMode ? null : symsWithData.map(s => {
+        const closes = aligned.closes[s]
         const last   = closes[closes.length - 1] || 0
         return (holdingMeta[s]?.shares || 0) * last
       })
