@@ -144,11 +144,13 @@ export default function AnalysisView({ defaultSymbol }) {
 
   useEffect(() => {
     if (!symbol) return
+    let cancelled = false
     setLoading(true)
     Promise.all([
       fetchChart(symbol, '1d', range),
       fetchSummary(symbol)
     ]).then(([chartRes, sumRes]) => {
+      if (cancelled) return
       const candles = chartRes.candles
       const closes  = candles.map(c => c.close)
       const highs   = candles.map(c => c.high)
@@ -203,10 +205,22 @@ export default function AnalysisView({ defaultSymbol }) {
       setSignals(sigs)
       setOverallSignal(aggregateSignal(sigs))
 
-      // Advanced multi-indicator signal
-      if (candles.length >= 60) setAiSignal(generateSignal(candles))
-    }).catch(e => console.warn('Analysis load failed:', e))
-    .finally(() => setLoading(false))
+      // Advanced multi-indicator signal. Always set (null when history is too
+      // thin) — leaving the previous value meant a symbol switch could keep
+      // showing the OLD ticker's BUY/stop/target card against the new chart.
+      setAiSignal(candles.length >= 60 ? generateSignal(candles) : null)
+    }).catch(e => {
+      console.warn('Analysis load failed:', e)
+      if (cancelled) return
+      // A failed load must not leave the previous symbol's analysis on screen
+      setChartData([])
+      setSignals([])
+      setOverallSignal('Hold')
+      setAiSignal(null)
+      setSummary(null)
+    })
+    .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
   }, [symbol, range])
 
   // Compare leg: fetched independently so toggling it never reloads the base

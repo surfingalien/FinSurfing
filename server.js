@@ -219,6 +219,11 @@ app.use('/api/ai-brain',          aiBrainRoutes)
 app.use('/api/trading-analysis',  tradingAnalysisRoutes)
 app.use('/api/governance',        governanceRoutes)
 app.use('/api/research-notes',    researchNotesRoutes)
+// Mount BEFORE /api/sentiment: the sentiment router applies requireAuth to
+// everything, and Express matches mounts in order — mounted after, the
+// public adanos scanner 401'd ("Missing access token") before ever
+// reaching its own handler.
+app.use('/api/sentiment/adanos',  adanosRoutes)
 app.use('/api/sentiment',         sentimentRoutes)
 app.use('/api/quantmind',         quantmindRoutes)
 app.use('/api/polymarket',        polymarketRoutes)
@@ -246,7 +251,6 @@ app.use('/api/strategy-lab', strategyLabRoutes)
 app.use('/api/forecast',          forecastRoutes)
 app.use('/api/calendar',          calendarRoutes)
 app.use('/api/heatmap',           heatmapRoutes)
-app.use('/api/sentiment/adanos',  adanosRoutes)
 
 // ── OpenBB sidecar proxy (optional — set OPENBB_URL env var to enable) ────────
 const OPENBB_URL = process.env.OPENBB_URL
