@@ -265,6 +265,19 @@ describe('computeStats', () => {
   })
 
 
+  test('byAssetType folds legacy "equity" records into "stock"', () => {
+    const records = [
+      mkRecord({ assetType: 'stock',  price30d: 120, benchRet30d: 2 }), // alpha win
+      mkRecord({ assetType: 'equity', price30d: 90,  benchRet30d: 2 }), // alpha loss (legacy label)
+      mkRecord({ assetType: 'crypto', price30d: 120, benchRet30d: 2 }), // alpha win
+    ]
+    const s = computeStats(records)
+    expect(s.byAssetType.equity).toBeUndefined() // never a separate segment
+    expect(s.byAssetType.stock.n).toBe(2)
+    expect(s.byAssetType.stock.alphaWinRate).toBe(0.5)
+    expect(s.byAssetType.crypto.n).toBe(1)
+  })
+
   test('h90 is computed when price90d is available', () => {
     const records = [
       mkRecord({ price7d: null, benchRet7d: null, price30d: null, benchRet30d: null, price90d: 130, benchRet90d: 5 }), // +30% vs +5% bench → alpha win

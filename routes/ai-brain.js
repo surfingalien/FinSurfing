@@ -373,7 +373,15 @@ function logPrediction(symbol, agents, zones, generatedAt, baseline = null, opti
     const dir = path.dirname(PREDICTION_LOG)
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
     const isCrypto = /-USD$/.test(symbol)
-    const assetType = isCrypto ? 'crypto' : (agents.sector ? 'stock' : 'equity')
+    // Consistent labels for byAssetType calibration — the old
+    // `sector ? 'stock' : 'equity'` split identical picks into two segments
+    // and lumped ETFs/funds in with stocks (computeStats normalizes legacy
+    // 'equity' rows back to 'stock' at read time).
+    const typeLabel = String(agents.type || '').toLowerCase()
+    const assetType = isCrypto || typeLabel === 'crypto' ? 'crypto'
+      : typeLabel === 'etf'  ? 'etf'
+      : typeLabel === 'fund' ? 'fund'
+      : 'stock'
     const record = JSON.stringify({
       symbol, generatedAt,
       sector:            agents.sector ?? null,

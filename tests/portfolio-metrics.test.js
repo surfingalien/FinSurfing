@@ -7,7 +7,7 @@
 const {
   dailyReturns, sharpeRatio, sortinoRatio, annualizedVolatility,
   maxDrawdown, annualizedReturn, valueAtRisk, conditionalVaR,
-  pearson, beta, weightedReturnSeries, equityFromReturns,
+  pearson, beta, alignedReturnPair, weightedReturnSeries, equityFromReturns,
   TRADING_DAYS, RISK_FREE_ANNUAL,
 } = require('../lib/portfolio-metrics')
 
@@ -105,6 +105,48 @@ describe('pearson / beta', () => {
   test('null under 5 observations', () => {
     expect(pearson([0.01], [0.01])).toBeNull()
     expect(beta([0.01], [0.01])).toBeNull()
+  })
+})
+
+describe('alignedReturnPair', () => {
+  const day = (n) => `2026-01-${String(n).padStart(2, '0')}`
+
+  test('computes matched returns over common dates only', () => {
+    // Crypto trades every day; equity skips the "weekend" (days 3-4).
+    const crypto = [1, 2, 3, 4, 5, 6].map(n => ({ date: day(n), close: 100 + n }))
+    const equity = [1, 2, 5, 6].map(n => ({ date: day(n), close: 200 + n }))
+    const [ra, rb] = alignedReturnPair(crypto, equity)
+    expect(ra).toHaveLength(3) // 4 common dates → 3 return pairs
+    expect(rb).toHaveLength(3)
+    // Second pair spans the equity gap on BOTH series: day2 → day5
+    expect(ra[1]).toBeCloseTo((105 - 102) / 102, 12)
+    expect(rb[1]).toBeCloseTo((205 - 202) / 202, 12)
+  })
+
+  test('identical calendars reproduce plain daily returns', () => {
+    const a = [100, 110, 99].map((c, i) => ({ date: day(i + 1), close: c }))
+    const b = [50, 55, 60].map((c, i) => ({ date: day(i + 1), close: c }))
+    const [ra, rb] = alignedReturnPair(a, b)
+    expect(ra).toEqual(dailyReturns([100, 110, 99]))
+    expect(rb).toEqual(dailyReturns([50, 55, 60]))
+  })
+
+  test('a perfectly correlated pair stays r=1 despite calendar gaps', () => {
+    // Same underlying path sampled on different calendars — misaligned
+    // positional pairing would break this; date pairing must not.
+    const path = Array.from({ length: 20 }, (_, i) => 100 * (1 + 0.01 * Math.sin(i)))
+    const full = path.map((c, i) => ({ date: day(i + 1), close: c }))
+    const gappy = full.filter((_, i) => i % 4 !== 3) // drop every 4th day
+    const [ra, rb] = alignedReturnPair(full, gappy)
+    expect(ra).toEqual(rb)
+    expect(pearson(ra, rb)).toBeCloseTo(1, 10)
+  })
+
+  test('empty when there is no date overlap', () => {
+    const a = [{ date: day(1), close: 100 }, { date: day(2), close: 101 }]
+    const b = [{ date: day(10), close: 50 }, { date: day(11), close: 51 }]
+    expect(alignedReturnPair(a, b)).toEqual([[], []])
+    expect(alignedReturnPair(null, b)).toEqual([[], []])
   })
 })
 

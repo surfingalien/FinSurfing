@@ -82,6 +82,24 @@ describe('winProbFromStats — empirical sourcing', () => {
     expect(r.source).toMatch(/default/)
   })
 
+  test('falls through to 7d when 30d exists but has too few resolved picks', () => {
+    const thin30 = {
+      h7:  { winRate: 0.52, nTradeable: 40 },
+      h30: { winRate: 1.0,  nTradeable: 3 }, // too few to trust
+    }
+    const r = winProbFromStats(thin30)
+    expect(r.p).toBe(0.52)
+    expect(r.source).toMatch(/7d/)
+  })
+
+  test('a measured 0% win rate is used as-is, not replaced by the fallback', () => {
+    const losing = { h30: { winRate: 0, nTradeable: 20 } }
+    const r = winProbFromStats(losing, { fallback: 0.5 })
+    expect(r.p).toBe(0)
+    // and Kelly sizes a p=0 system to zero, never a positive position
+    expect(suggestedSize({ winProb: r.p, winFrac: 0.25, lossFrac: 0.12 }).suggestedPct).toBe(0)
+  })
+
   test('reports provenance in source', () => {
     expect(winProbFromStats(stats, { confidence: 'High' }).source).toMatch(/calibration:High/)
   })

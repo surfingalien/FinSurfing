@@ -444,8 +444,8 @@ export default function PortfolioAnalyticsView({ portfolio }) {
 
           <div className="flex items-start gap-2 text-[10px] text-slate-600 p-3 rounded-lg bg-white/[0.02]">
             <Info className="w-3 h-3 mt-0.5 shrink-0" />
-            Beta and correlations computed from 1-year daily close prices. Sector weights approximate —
-            based on share counts, not current market value. Benchmark: SPY ETF.
+            Beta and correlations computed from 1-year daily close prices, paired on common trading dates.
+            Sector weights based on current market value (shares × latest close). Benchmark: SPY ETF.
           </div>
         </>
       )}
