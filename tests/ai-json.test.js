@@ -3,7 +3,7 @@
  * Unit tests for lib/ai-json.js — shared LLM JSON parsing.
  */
 
-const { parseAiJson, tryParseAiJson } = require('../lib/ai-json')
+const { parseAiJson, tryParseAiJson, extractArrayObjects } = require('../lib/ai-json')
 
 describe('parseAiJson', () => {
   test('parses plain JSON', () => {
@@ -47,5 +47,52 @@ describe('tryParseAiJson', () => {
     expect(tryParseAiJson('')).toBe(null)
     expect(tryParseAiJson('no json here')).toBe(null)
     expect(tryParseAiJson('{"truncated":')).toBe(null)
+  })
+})
+
+describe('extractArrayObjects', () => {
+  test('recovers all objects from a complete array', () => {
+    const text = '{"recommendations":[{"symbol":"AAPL","entryPrice":190},{"symbol":"MSFT","entryPrice":420}],"marketOutlook":"ok"}'
+    expect(extractArrayObjects(text, 'recommendations')).toEqual([
+      { symbol: 'AAPL', entryPrice: 190 },
+      { symbol: 'MSFT', entryPrice: 420 },
+    ])
+  })
+
+  test('salvages the complete objects from a TRUNCATED array', () => {
+    // Two full picks, then the response is cut off mid-third-object.
+    const text = '{"recommendations":[{"symbol":"AAPL","entryPrice":190},{"symbol":"MSFT","entryPrice":420},{"symbol":"NVDA","entr'
+    expect(extractArrayObjects(text, 'recommendations')).toEqual([
+      { symbol: 'AAPL', entryPrice: 190 },
+      { symbol: 'MSFT', entryPrice: 420 },
+    ])
+  })
+
+  test('handles nested objects and braces/brackets inside string values', () => {
+    const text = '{"recommendations":[{"symbol":"AAPL","meta":{"a":1},"thesis":"buy the {dip} [now]"}]}'
+    expect(extractArrayObjects(text, 'recommendations')).toEqual([
+      { symbol: 'AAPL', meta: { a: 1 }, thesis: 'buy the {dip} [now]' },
+    ])
+  })
+
+  test('is not fooled by an escaped quote inside a string', () => {
+    const text = '{"recommendations":[{"symbol":"AAPL","note":"he said \\"buy\\" }now"}]}'
+    expect(extractArrayObjects(text, 'recommendations')).toEqual([
+      { symbol: 'AAPL', note: 'he said "buy" }now' },
+    ])
+  })
+
+  test('returns [] when the key or array is absent', () => {
+    expect(extractArrayObjects('{"other":[1,2]}', 'recommendations')).toEqual([])
+    expect(extractArrayObjects('', 'recommendations')).toEqual([])
+    expect(extractArrayObjects('not json', 'recommendations')).toEqual([])
+  })
+
+  test('skips a malformed object but keeps the valid ones around it', () => {
+    const text = '{"recommendations":[{"symbol":"AAPL"},{oops},{"symbol":"MSFT"}]}'
+    expect(extractArrayObjects(text, 'recommendations')).toEqual([
+      { symbol: 'AAPL' },
+      { symbol: 'MSFT' },
+    ])
   })
 })

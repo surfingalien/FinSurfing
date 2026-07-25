@@ -29,6 +29,7 @@ const { getAltDataSnippet }  = require('../lib/alt-data')
 const { getOptionsFlowCompact } = require('../lib/options-flow-cache')
 const kelly = require('../lib/kelly')
 const { computeStats, readPredictions } = require('../lib/brain-learnings')
+const { extractArrayObjects } = require('../lib/ai-json')
 const recJournal = require('../lib/rec-journal')
 
 const recLimit = rateLimit({
@@ -294,7 +295,11 @@ Respond ONLY with a JSON object — no markdown, no explanation, just the JSON:
   let llmUsed = 'claude'
 
   try {
-    const result = await aiRouter.call({ prompt, maxTokens: 8192, symbols: allSymbols })
+    // 16k output budget: a full 20–22 pick set with per-item thesis/catalyst/
+    // sources runs well past 8k and was truncating mid-JSON → the parser saw a
+    // broken object and failed with "Unexpected end of JSON input". Matches the
+    // ai-brain budget for a comparable ranked-list response.
+    const result = await aiRouter.call({ prompt, maxTokens: 16000, symbols: allSymbols })
     raw     = result.text
     llmUsed = result.llmUsed
   } catch (err) {
@@ -305,16 +310,44 @@ Respond ONLY with a JSON object — no markdown, no explanation, just the JSON:
   }
 
   try {
+    let data = null
+    let truncated = false
+
+    // Preferred path: parse the whole payload.
     const match = raw.match(/\{[\s\S]*\}/)
-    if (!match) {
-      console.error('[recommendations] Non-JSON response:', raw.slice(0, 200))
-      return res.status(500).json({ error: 'Failed to parse AI recommendations' })
+    if (match) {
+      try { data = JSON.parse(match[0]) } catch { /* fall through to salvage */ }
     }
 
-    const data = JSON.parse(match[0])
+    // Salvage path: if the response was cut off at the token ceiling the full
+    // payload won't parse, but the picks that finished before the cut are
+    // intact. Recover them rather than failing the whole request.
+    if (!data || !Array.isArray(data.recommendations) || !data.recommendations.length) {
+      const salvaged = extractArrayObjects(raw, 'recommendations')
+      if (salvaged.length) {
+        data = { recommendations: salvaged, marketOutlook: data?.marketOutlook || '', keyRisks: data?.keyRisks || '' }
+        truncated = true
+        console.warn(`[recommendations] response incomplete — salvaged ${salvaged.length} complete picks`)
+      }
+    }
+
+    if (!data) {
+      console.error('[recommendations] Non-JSON response:', raw.slice(0, 200))
+      return res.status(502).json({ error: 'AI response was incomplete — please try again' })
+    }
+
     try { validateRecommendations(data) } catch (valErr) {
-      console.error('[recommendations] Schema validation failed:', valErr.message)
-      return res.status(500).json({ error: 'AI response did not match expected format — please try again' })
+      // On a truncated set, drop the malformed picks instead of failing outright.
+      if (truncated && Array.isArray(data.recommendations)) {
+        data.recommendations = data.recommendations.filter(r =>
+          r && r.symbol && typeof r.entryPrice === 'number' && r.entryPrice > 0 &&
+          typeof r.targetReturn === 'number' && r.targetReturn > 0 && r.targetReturn <= 500 &&
+          r.stopLoss != null && r.thesis != null)
+      }
+      if (!truncated || !data.recommendations.length) {
+        console.error('[recommendations] Schema validation failed:', valErr.message)
+        return res.status(500).json({ error: 'AI response did not match expected format — please try again' })
+      }
     }
 
     // ── Re-anchor prices to live market data ─────────────────────────────────
@@ -391,6 +424,7 @@ Respond ONLY with a JSON object — no markdown, no explanation, just the JSON:
       ...data,
       generatedAt: new Date().toISOString(),
       llmUsed,
+      truncated,
       persona: { id: persona.id, name: persona.name, emoji: persona.emoji, style: persona.style },
       macroRegime: macroData?.regime ?? null,
     })
