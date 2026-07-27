@@ -1,0 +1,11 @@
+# Harness-only dependencies. The model packages are intentionally NOT listed:
+# install just the one you're comparing, so a run never silently pulls ~2GB of
+# torch you didn't ask for.
+#
+#   TimesFM : pip install "timesfm[torch]>=2.5.0"   (already in ../requirements.txt)
+#   Kronos  : git clone https://github.com/shiyu-coder/Kronos && \
+#             pip install -r Kronos/requirements.txt && \
+#             export PYTHONPATH=/path/to/Kronos:$PYTHONPATH
+numpy>=1.26.0
+pandas>=2.0.0
+pytest>=8.0.0
