@@ -140,7 +140,18 @@ function generateSignals(closes, strategy, params) {
 // ── Trade simulation ──────────────────────────────────────────────────────────
 
 function simulate(timestamps, closes, strategy, params, initialCapital = 10000) {
-  const signals = generateSignals(closes, strategy, params)
+  return simulateWithSignals(timestamps, closes, generateSignals(closes, strategy, params), initialCapital)
+}
+
+/**
+ * Run the trade simulation over a PRECOMPUTED signal array (+1 buy, -1 sell,
+ * 0 hold). Split out of simulate() so signals produced elsewhere — e.g. the
+ * composed-rule interpreter in lib/strategy-dsl.js — are scored by exactly
+ * the same trade accounting and metrics as the built-in strategies. There is
+ * one execution/metrics implementation, so a novel strategy cannot be graded
+ * on a friendlier scale than a catalog one.
+ */
+function simulateWithSignals(timestamps, closes, signals, initialCapital = 10000) {
   const n       = closes.length
   const equity  = []
   const trades  = []
@@ -307,4 +318,4 @@ function optimizeStrategy(timestamps, closes, strategy, paramRanges, initialCapi
   return results.slice(0, maxResults)
 }
 
-module.exports = { simulate, optimizeStrategy, smaSeries, rsiSeries, macdSeries, bbSeries }
+module.exports = { simulate, simulateWithSignals, optimizeStrategy, generateSignals, smaSeries, emaSeries, rsiSeries, macdSeries, bbSeries }
