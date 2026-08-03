@@ -24,6 +24,8 @@ const { getAltDataSnippet, getGeopoliticalRiskSnippet } = require('../lib/alt-da
 const { getIndicators }      = require('./macro')
 const { requireAuth }     = require('../middleware/auth')
 const { getLearningsBlock, getAutoTunedThreshold } = require('../lib/brain-learnings')
+const { getStrategyBlock }  = require('../lib/strategy-library')
+const learningStore         = require('../lib/learning-store')
 const { compactTaLine, detectPatterns, KEY_PATTERNS, computeRsRanks } = require('../lib/technical-indicators')
 const { getOptionsFlowCompact } = require('../lib/options-flow-cache')
 const { fetchDailyBars }    = require('../lib/internal-api')
@@ -608,7 +610,13 @@ router.post('/analyze', requireAuth, brainLimit, async (req, res) => {
 
   // ── Step 2: prompt — contradiction engine + zones + assumptions ────────────
   const learningsBlock = getLearningsBlock()
-  const prompt = `You are a 5-agent investment AI with a Supervisor whose job is to SURFACE CONTRADICTIONS, not average scores.${learningsBlock}
+  // Evolved context: strategies that survived repeated real backtests, and
+  // calibration measured across EVERY AI surface (not just this one). Both
+  // return '' until they have earned something to say, so an unproven system
+  // never narrates confidence it hasn't measured.
+  const strategyBlock    = getStrategyBlock()
+  const calibrationBlock = learningStore.getCalibrationBlock()
+  const prompt = `You are a 5-agent investment AI with a Supervisor whose job is to SURFACE CONTRADICTIONS, not average scores.${learningsBlock}${calibrationBlock}${strategyBlock}
 ${socialSnippet}
 
 CRITICAL: When two agents disagree by 25+ points, that spread IS the primary signal. Do not smooth it. Surface it.
@@ -827,6 +835,28 @@ Rules:
       }, generatedAt, taBaselines.get(stock.symbol), optionsPcMap.get(stock.symbol) ?? null,
          taPatternMap.get(stock.symbol) ?? null, taRsRankMap.get(stock.symbol) ?? null)
     }
+
+    // Also record picks in the SHARED cross-surface learning store, so Brain
+    // outcomes calibrate alongside Advisory/paper-broker decisions instead of
+    // only inside this route's own log. Best-effort — never fails the scan.
+    try {
+      learningStore.recordDecisions(data.rankedStocks
+        .filter(s => s.symbol && s.currentPrice > 0)
+        .map(s => ({
+          surface:    'ai-brain',
+          symbol:     s.symbol,
+          action:     'buy',              // every ranked pick is an implicit buy
+          price:      s.currentPrice,
+          confidence: s.confidence ?? null,
+          at:         generatedAt,
+          meta: {
+            compositeScore: s.compositeScore ?? null,
+            sector:         s.sector ?? null,
+            scanMode,
+            verdict:        s.agentVerdict ?? null,
+          },
+        })))
+    } catch (e) { console.warn('[ai-brain] learning-store record failed:', e.message) }
 
     // Apply auto-tuned composite score threshold (derived from historical alpha win rates).
     // Only active when the nightly meta-analysis has produced a threshold from ≥5 resolved picks.

@@ -7,3 +7,8 @@ dist/
 .vercel/
 data/memstore-snapshot.json
 data/rec-journal.jsonl
+# Evolution runtime state — machine-generated, per-deployment
+data/strategy-library.jsonl
+data/learning-store.jsonl
+data/paper-portfolio.json
+data/paper-trades.jsonl
