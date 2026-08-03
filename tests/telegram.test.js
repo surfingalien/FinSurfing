@@ -57,6 +57,46 @@ describe('telegram-bot command parsing', () => {
   })
 })
 
+describe('telegram-bot authorization', () => {
+  const saved = { token: process.env.TELEGRAM_BOT_TOKEN, chat: process.env.TELEGRAM_CHAT_ID }
+  let sendSpy
+
+  beforeEach(() => {
+    process.env.TELEGRAM_BOT_TOKEN = 'test-token'
+    process.env.TELEGRAM_CHAT_ID   = '12345'
+    bot._resetForTests()
+    sendSpy = jest.spyOn(notify, 'send').mockResolvedValue(true)
+  })
+  afterEach(() => {
+    sendSpy.mockRestore()
+    if (saved.token === undefined) delete process.env.TELEGRAM_BOT_TOKEN; else process.env.TELEGRAM_BOT_TOKEN = saved.token
+    if (saved.chat  === undefined) delete process.env.TELEGRAM_CHAT_ID;   else process.env.TELEGRAM_CHAT_ID   = saved.chat
+  })
+
+  const msg = (chatId, text) => ({ message: { chat: { id: chatId }, text } })
+
+  test('an unauthorized chat gets NO reply — the bot must not be a free send trigger', async () => {
+    await bot.processUpdate(msg(99999, '/status'))
+    expect(sendSpy).not.toHaveBeenCalled()
+  })
+
+  test('repeated probing from a stranger still sends nothing', async () => {
+    for (let i = 0; i < 5; i++) await bot.processUpdate(msg(99999, '/status'))
+    expect(sendSpy).not.toHaveBeenCalled()
+  })
+
+  test('the authorized chat is answered', async () => {
+    await bot.processUpdate(msg(12345, '/help'))
+    expect(sendSpy).toHaveBeenCalledTimes(1)
+    expect(sendSpy.mock.calls[0][0]).toContain('FinSurf bot')
+  })
+
+  test('non-command messages are ignored even from the authorized chat', async () => {
+    await bot.processUpdate(msg(12345, 'just chatting'))
+    expect(sendSpy).not.toHaveBeenCalled()
+  })
+})
+
 describe('brain-learnings white-box overrides', () => {
   const bl = require('../lib/brain-learnings')
 
