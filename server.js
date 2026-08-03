@@ -2393,6 +2393,9 @@ app.listen(PORT, '0.0.0.0', () => {
     try { require('./lib/scheduled-jobs').init() }
     catch (e) { console.error('[scheduled-jobs] init failed:', e.message) }
   }, 5_000)
+  // Optional Telegram command bot (no-op unless TELEGRAM_BOT_TOKEN + CHAT_ID set)
+  try { require('./lib/telegram-bot').start() }
+  catch (e) { console.error('[telegram-bot] start failed:', e.message) }
 })
 
 // ── Signal performance checker (every 5 min) ─────────────────────────────────
