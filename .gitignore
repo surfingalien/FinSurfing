@@ -14,3 +14,5 @@ data/paper-portfolio.json
 data/paper-trades.jsonl
 # Human-owned overrides on the Brain's self-written learnings
 data/brain-learnings-overrides.json
+# Background scan jobs + results
+data/scan-jobs.jsonl
