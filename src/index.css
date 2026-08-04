@@ -140,209 +140,224 @@
   .ai-panel-in  { animation: none; }
 }
 
-/* ── Apple Mode — light, minimal, Apple-inspired aesthetic ───────────────────
-   Additive theme toggled by adding `apple-mode` to <html> (AppleModeContext,
-   mirrors pro-mode). Overrides the shared component classes plus the most
-   common dark-theme utility classes so existing views read correctly on a
-   light surface without touching any component. Pilot — refine per-view
-   after visual review. */
-html.apple-mode body {
+/* ── Light Mode (DEFAULT) — the product's primary theme ──────────────────────
+   Applied by adding `light-mode` to <html> (LightModeContext) and ON BY
+   DEFAULT — dark is now the opt-out. Implemented as an additive overlay over
+   the shared component classes and the dark-theme utility classes the views
+   hard-code, so 40+ views get a correct light surface without any of them
+   being rewritten (and dark keeps working by simply removing the class).
+
+   Palette: canvas #FFFFFF, surface #F9FAFB, ink #0F172A, body #475569,
+   accent #2563EB, hairlines #E2E8F0, layered low-opacity shadows. */
+html.light-mode body {
   background-image: none !important;
-  background-color: #f5f5f7 !important;
-  color: #1d1d1f;
-  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Inter, system-ui, sans-serif;
+  background-color: #F9FAFB !important;
+  color: #0F172A;
+  font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
 }
 
 /* Cards: white, soft shadow, no glass borders */
-html.apple-mode .glass {
+html.light-mode .glass {
   background: #ffffff !important;
-  border-color: rgba(0, 0, 0, 0.06) !important;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+  border-color: #E2E8F0 !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px -8px rgba(15, 23, 42, 0.10);
   backdrop-filter: none;
   border-radius: 18px !important;
 }
-html.apple-mode .glass-card:hover {
+html.light-mode .glass-card:hover {
   background: #ffffff !important;
-  border-color: rgba(0, 0, 0, 0.1) !important;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.09);
+  border-color: #CBD5E1 !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 12px 32px -10px rgba(15, 23, 42, 0.14);
 }
 
 /* Text: dark ink replaces the dark theme's light text scale */
-html.apple-mode .text-white  { color: #1d1d1f; }
-html.apple-mode .text-slate-100,
-html.apple-mode .text-slate-200,
-html.apple-mode .text-slate-300 { color: #424245; }
-html.apple-mode .text-slate-400 { color: #6e6e73; }
-html.apple-mode .text-slate-500 { color: #86868b; }
-html.apple-mode .text-slate-600,
-html.apple-mode .text-slate-700 { color: #a1a1a6; }
+html.light-mode .text-white  { color: #0F172A; }
+html.light-mode .text-slate-100,
+html.light-mode .text-slate-200,
+html.light-mode .text-slate-300 { color: #334155; }
+html.light-mode .text-slate-400 { color: #475569; }
+html.light-mode .text-slate-500 { color: #64748B; }
+html.light-mode .text-slate-600,
+html.light-mode .text-slate-700 { color: #94A3B8; }
+
+/* The landing page is authored NATIVELY in light mode, so the dark→light
+   translation layer above must not touch its text scale. Without this,
+   `text-slate-600` — body copy on the landing page — would be re-mapped to the
+   muted gray that only makes sense for text originally written for a dark
+   surface, washing the marketing copy out. Higher specificity wins. */
+html.light-mode .landing-root .text-slate-900 { color: #0F172A; }
+html.light-mode .landing-root .text-slate-700 { color: #334155; }
+html.light-mode .landing-root .text-slate-600 { color: #475569; }
+html.light-mode .landing-root .text-slate-500 { color: #64748B; }
+html.light-mode .landing-root .text-slate-400 { color: #94A3B8; }
+html.light-mode .landing-root .text-white     { color: #FFFFFF; }
 
 /* Accent: neon mint → Apple blue */
-html.apple-mode .text-mint-300,
-html.apple-mode .text-mint-400,
-html.apple-mode .text-mint-500,
-html.apple-mode .text-cyan-300,
-html.apple-mode .text-cyan-400  { color: #0071e3; }
+html.light-mode .text-mint-300,
+html.light-mode .text-mint-400,
+html.light-mode .text-mint-500,
+html.light-mode .text-cyan-300,
+html.light-mode .text-cyan-400  { color: #2563EB; }
 
 /* Buttons & inputs */
-html.apple-mode .btn-primary {
-  background: #0071e3 !important;
+html.light-mode .btn-primary {
+  background: #2563EB !important;
   color: #ffffff !important;
   border-color: transparent !important;
   border-radius: 980px;
 }
-html.apple-mode .btn-primary:hover { background: #0077ed !important; }
-html.apple-mode .btn-ghost { color: #6e6e73; }
-html.apple-mode .btn-ghost:hover { color: #1d1d1f; background: rgba(0, 0, 0, 0.05); }
-html.apple-mode .input {
+html.light-mode .btn-primary:hover { background: #1D4ED8 !important; }
+html.light-mode .btn-ghost { color: #475569; }
+html.light-mode .btn-ghost:hover { color: #0F172A; background: rgba(0, 0, 0, 0.05); }
+html.light-mode .input {
   background: #ffffff !important;
-  border-color: rgba(0, 0, 0, 0.15) !important;
-  color: #1d1d1f !important;
+  border-color: #CBD5E1 !important;
+  color: #0F172A !important;
 }
-html.apple-mode .input::placeholder { color: #86868b; }
-html.apple-mode .tab-active { color: #1d1d1f; background: rgba(0, 0, 0, 0.05); border-bottom-color: #0071e3; }
+html.light-mode .input::placeholder { color: #64748B; }
+html.light-mode .tab-active { color: #0F172A; background: rgba(0, 0, 0, 0.05); border-bottom-color: #2563EB; }
 
 /* Hard-coded dark surfaces (sidebar, header, tables, modals) */
-html.apple-mode .bg-\[\#060810\],
-html.apple-mode .bg-\[\#070b14\],
-html.apple-mode .bg-\[\#0a0e1a\],
-html.apple-mode .bg-\[\#0a0f1a\],
-html.apple-mode .bg-\[\#0d1120\],
-html.apple-mode .bg-\[\#0d1421\],
-html.apple-mode .bg-\[\#0e1120\],
-html.apple-mode .bg-\[\#0f1117\],
-html.apple-mode .bg-\[\#111827\],
-html.apple-mode .bg-\[\#12121a\],
-html.apple-mode .bg-\[\#1e2a3a\] { background-color: #ffffff !important; }
-html.apple-mode .bg-surface-400,
-html.apple-mode .bg-surface-300,
-html.apple-mode .bg-surface-200 { background-color: #f5f5f7 !important; }
+html.light-mode .bg-\[\#060810\],
+html.light-mode .bg-\[\#070b14\],
+html.light-mode .bg-\[\#0a0e1a\],
+html.light-mode .bg-\[\#0a0f1a\],
+html.light-mode .bg-\[\#0d1120\],
+html.light-mode .bg-\[\#0d1421\],
+html.light-mode .bg-\[\#0e1120\],
+html.light-mode .bg-\[\#0f1117\],
+html.light-mode .bg-\[\#111827\],
+html.light-mode .bg-\[\#12121a\],
+html.light-mode .bg-\[\#1e2a3a\] { background-color: #ffffff !important; }
+html.light-mode .bg-surface-400,
+html.light-mode .bg-surface-300,
+html.light-mode .bg-surface-200 { background-color: #F9FAFB !important; }
 
 /* Subtle fills/borders that were tuned for dark surfaces */
-html.apple-mode .divider { border-color: rgba(0, 0, 0, 0.08); }
-html.apple-mode ::-webkit-scrollbar-track { background: #f5f5f7; }
-html.apple-mode ::-webkit-scrollbar-thumb { background: #c7c7cc; }
-html.apple-mode ::-webkit-scrollbar-thumb:hover { background: #aeaeb2; }
+html.light-mode .divider { border-color: #E2E8F0; }
+html.light-mode ::-webkit-scrollbar-track { background: #F9FAFB; }
+html.light-mode ::-webkit-scrollbar-thumb { background: #CBD5E1; }
+html.light-mode ::-webkit-scrollbar-thumb:hover { background: #94A3B8; }
 
 /* Chart tooltips on light */
-html.apple-mode .recharts-default-tooltip {
+html.light-mode .recharts-default-tooltip {
   background: rgba(255, 255, 255, 0.97) !important;
   border: 1px solid rgba(0, 0, 0, 0.1) !important;
-  color: #1d1d1f !important;
+  color: #0F172A !important;
 }
 
 /* App shell + chrome. The sidebar/header use opacity-modified utility
    classes (bg-[#070b14]/95, bg-surface-300/80) which the plain selectors
    above can't match — cover them explicitly. */
-html.apple-mode .app-shell { background: #f5f5f7 !important; }
-html.apple-mode .bg-\[\#070b14\]\/95 { background-color: rgba(255, 255, 255, 0.94) !important; }
-html.apple-mode .bg-surface-300\/80 { background-color: rgba(255, 255, 255, 0.85) !important; }
-html.apple-mode .bg-surface-400\/60 { background-color: rgba(245, 245, 247, 0.7) !important; }
+html.light-mode .app-shell { background: #F9FAFB !important; }
+html.light-mode .bg-\[\#070b14\]\/95 { background-color: rgba(255, 255, 255, 0.94) !important; }
+html.light-mode .bg-surface-300\/80 { background-color: rgba(255, 255, 255, 0.85) !important; }
+html.light-mode .bg-surface-400\/60 { background-color: rgba(245, 245, 247, 0.7) !important; }
 
 /* Faint white fills tuned for dark surfaces → real light cards */
-html.apple-mode .bg-white\/5,
-html.apple-mode .bg-white\/\[0\.02\],
-html.apple-mode .bg-white\/\[0\.03\],
-html.apple-mode .bg-white\/\[0\.04\],
-html.apple-mode .bg-white\/\[0\.05\],
-html.apple-mode .bg-white\/\[0\.06\] { background-color: #ffffff !important; }
+html.light-mode .bg-white\/5,
+html.light-mode .bg-white\/\[0\.02\],
+html.light-mode .bg-white\/\[0\.03\],
+html.light-mode .bg-white\/\[0\.04\],
+html.light-mode .bg-white\/\[0\.05\],
+html.light-mode .bg-white\/\[0\.06\] { background-color: #ffffff !important; }
 
 /* Hairline borders: invisible white → visible light gray */
-html.apple-mode .border-white\/5,
-html.apple-mode .border-white\/10,
-html.apple-mode .border-white\/\[0\.04\],
-html.apple-mode .border-white\/\[0\.05\],
-html.apple-mode .border-white\/\[0\.06\],
-html.apple-mode .border-white\/\[0\.07\],
-html.apple-mode .border-white\/\[0\.08\],
-html.apple-mode .border-white\/\[0\.1\],
-html.apple-mode .border-white\/\[0\.12\] { border-color: rgba(0, 0, 0, 0.08) !important; }
+html.light-mode .border-white\/5,
+html.light-mode .border-white\/10,
+html.light-mode .border-white\/\[0\.04\],
+html.light-mode .border-white\/\[0\.05\],
+html.light-mode .border-white\/\[0\.06\],
+html.light-mode .border-white\/\[0\.07\],
+html.light-mode .border-white\/\[0\.08\],
+html.light-mode .border-white\/\[0\.1\],
+html.light-mode .border-white\/\[0\.12\] { border-color: #E2E8F0 !important; }
 
 /* Hover feedback on light (was translucent white-on-dark) */
-html.apple-mode .hover\:bg-white\/5:hover,
-html.apple-mode .hover\:bg-white\/\[0\.04\]:hover,
-html.apple-mode .hover\:bg-white\/\[0\.05\]:hover,
-html.apple-mode .hover\:bg-white\/\[0\.06\]:hover,
-html.apple-mode .hover\:bg-white\/\[0\.08\]:hover { background-color: rgba(0, 0, 0, 0.05) !important; }
-html.apple-mode .hover\:text-white:hover { color: #1d1d1f !important; }
+html.light-mode .hover\:bg-white\/5:hover,
+html.light-mode .hover\:bg-white\/\[0\.04\]:hover,
+html.light-mode .hover\:bg-white\/\[0\.05\]:hover,
+html.light-mode .hover\:bg-white\/\[0\.06\]:hover,
+html.light-mode .hover\:bg-white\/\[0\.08\]:hover { background-color: rgba(0, 0, 0, 0.05) !important; }
+html.light-mode .hover\:text-white:hover { color: #0F172A !important; }
 
 /* Opacity-variant white text (heatmap prices, muted labels) */
-html.apple-mode .text-white\/60,
-html.apple-mode .text-white\/70,
-html.apple-mode .text-white\/80,
-html.apple-mode .text-white\/90 { color: rgba(29, 29, 31, 0.75); }
+html.light-mode .text-white\/60,
+html.light-mode .text-white\/70,
+html.light-mode .text-white\/80,
+html.light-mode .text-white\/90 { color: rgba(15, 23, 42, 0.75); }
 
 /* Sidebar active item: mint glow → Apple blue tint */
-html.apple-mode .bg-\[\#00ffcc\]\/15 { background-color: rgba(0, 113, 227, 0.1) !important; }
+html.light-mode .bg-\[\#00ffcc\]\/15 { background-color: rgba(37, 99, 235, 0.1) !important; }
 
 /* Status colours: the pale dark-theme shades vanish on white — darken */
-html.apple-mode .text-emerald-100,
-html.apple-mode .text-emerald-200 { color: #065f46; }
-html.apple-mode .text-emerald-300,
-html.apple-mode .text-emerald-400 { color: #059669; }
-html.apple-mode .text-red-100,
-html.apple-mode .text-red-200 { color: #991b1b; }
-html.apple-mode .text-red-300,
-html.apple-mode .text-red-400 { color: #dc2626; }
-html.apple-mode .text-amber-200\/60 { color: rgba(180, 83, 9, 0.8); }
-html.apple-mode .text-amber-300,
-html.apple-mode .text-amber-400 { color: #b45309; }
-html.apple-mode .text-indigo-300,
-html.apple-mode .text-indigo-400 { color: #4f46e5; }
+html.light-mode .text-emerald-100,
+html.light-mode .text-emerald-200 { color: #065f46; }
+html.light-mode .text-emerald-300,
+html.light-mode .text-emerald-400 { color: #059669; }
+html.light-mode .text-red-100,
+html.light-mode .text-red-200 { color: #991b1b; }
+html.light-mode .text-red-300,
+html.light-mode .text-red-400 { color: #dc2626; }
+html.light-mode .text-amber-200\/60 { color: rgba(180, 83, 9, 0.8); }
+html.light-mode .text-amber-300,
+html.light-mode .text-amber-400 { color: #b45309; }
+html.light-mode .text-indigo-300,
+html.light-mode .text-indigo-400 { color: #4f46e5; }
 
 /* ── Round 3: full-app sweep (grep-driven) ──────────────────────────────
    Covers the accent/fill/border patterns used outside the Dashboard. */
 
 /* Neon-mint accent literals → Apple blue (text, borders, fills, buttons) */
-html.apple-mode .text-\[\#00ffcc\],
-html.apple-mode .text-\[\#00e6b8\] { color: #0071e3 !important; }
-html.apple-mode .hover\:text-\[\#00ffcc\]:hover { color: #0071e3 !important; }
-html.apple-mode .text-\[\#6366f1\] { color: #4f46e5; }
+html.light-mode .text-\[\#00ffcc\],
+html.light-mode .text-\[\#00e6b8\] { color: #2563EB !important; }
+html.light-mode .hover\:text-\[\#00ffcc\]:hover { color: #2563EB !important; }
+html.light-mode .text-\[\#6366f1\] { color: #4f46e5; }
 
 /* Solid mint CTAs → filled blue with white label (they carry dark ink text) */
-html.apple-mode .bg-\[\#00ffcc\] { background-color: #0071e3 !important; }
-html.apple-mode .bg-\[\#00ffcc\].text-\[\#0a0e1a\] { color: #ffffff !important; }
-html.apple-mode .hover\:bg-\[\#00e6b8\]:hover { background-color: #0077ed !important; }
+html.light-mode .bg-\[\#00ffcc\] { background-color: #2563EB !important; }
+html.light-mode .bg-\[\#00ffcc\].text-\[\#0a0e1a\] { color: #ffffff !important; }
+html.light-mode .hover\:bg-\[\#00e6b8\]:hover { background-color: #1D4ED8 !important; }
 
 /* Mint alpha tints (chips, active states, glows) → blue tints */
-html.apple-mode .bg-\[\#00ffcc\]\/5  { background-color: rgba(0,113,227,0.05) !important; }
-html.apple-mode .bg-\[\#00ffcc\]\/8  { background-color: rgba(0,113,227,0.08) !important; }
-html.apple-mode .bg-\[\#00ffcc\]\/10 { background-color: rgba(0,113,227,0.10) !important; }
-html.apple-mode .bg-\[\#00ffcc\]\/20 { background-color: rgba(0,113,227,0.15) !important; }
-html.apple-mode .bg-\[\#00ffcc\]\/25 { background-color: rgba(0,113,227,0.18) !important; }
-html.apple-mode .bg-\[\#00ffcc\]\/30 { background-color: rgba(0,113,227,0.22) !important; }
-html.apple-mode .bg-\[\#00ffcc\]\/40 { background-color: rgba(0,113,227,0.30) !important; }
-html.apple-mode .bg-\[\#00ffcc\]\/60 { background-color: rgba(0,113,227,0.50) !important; }
-html.apple-mode .border-\[\#00ffcc\]\/15 { border-color: rgba(0,113,227,0.20) !important; }
-html.apple-mode .border-\[\#00ffcc\]\/20 { border-color: rgba(0,113,227,0.25) !important; }
-html.apple-mode .border-\[\#00ffcc\]\/25 { border-color: rgba(0,113,227,0.28) !important; }
-html.apple-mode .border-\[\#00ffcc\]\/30 { border-color: rgba(0,113,227,0.32) !important; }
-html.apple-mode .border-\[\#00ffcc\]\/40 { border-color: rgba(0,113,227,0.40) !important; }
-html.apple-mode .border-\[\#00ffcc\]\/50 { border-color: rgba(0,113,227,0.50) !important; }
-html.apple-mode .border-\[\#00ffcc\]\/60 { border-color: rgba(0,113,227,0.60) !important; }
+html.light-mode .bg-\[\#00ffcc\]\/5  { background-color: rgba(37,99,235,0.05) !important; }
+html.light-mode .bg-\[\#00ffcc\]\/8  { background-color: rgba(37,99,235,0.08) !important; }
+html.light-mode .bg-\[\#00ffcc\]\/10 { background-color: rgba(37,99,235,0.10) !important; }
+html.light-mode .bg-\[\#00ffcc\]\/20 { background-color: rgba(37,99,235,0.15) !important; }
+html.light-mode .bg-\[\#00ffcc\]\/25 { background-color: rgba(37,99,235,0.18) !important; }
+html.light-mode .bg-\[\#00ffcc\]\/30 { background-color: rgba(37,99,235,0.22) !important; }
+html.light-mode .bg-\[\#00ffcc\]\/40 { background-color: rgba(37,99,235,0.30) !important; }
+html.light-mode .bg-\[\#00ffcc\]\/60 { background-color: rgba(37,99,235,0.50) !important; }
+html.light-mode .border-\[\#00ffcc\]\/15 { border-color: rgba(37,99,235,0.20) !important; }
+html.light-mode .border-\[\#00ffcc\]\/20 { border-color: rgba(37,99,235,0.25) !important; }
+html.light-mode .border-\[\#00ffcc\]\/25 { border-color: rgba(37,99,235,0.28) !important; }
+html.light-mode .border-\[\#00ffcc\]\/30 { border-color: rgba(37,99,235,0.32) !important; }
+html.light-mode .border-\[\#00ffcc\]\/40 { border-color: rgba(37,99,235,0.40) !important; }
+html.light-mode .border-\[\#00ffcc\]\/50 { border-color: rgba(37,99,235,0.50) !important; }
+html.light-mode .border-\[\#00ffcc\]\/60 { border-color: rgba(37,99,235,0.60) !important; }
 
 /* Dark translucent panels (modals, dropdowns) → light translucent */
-html.apple-mode .bg-\[\#12121a\]\/70 { background-color: rgba(255,255,255,0.80) !important; }
-html.apple-mode .bg-\[\#12121a\]\/90 { background-color: rgba(255,255,255,0.92) !important; }
+html.light-mode .bg-\[\#12121a\]\/70 { background-color: rgba(255,255,255,0.80) !important; }
+html.light-mode .bg-\[\#12121a\]\/90 { background-color: rgba(255,255,255,0.92) !important; }
 
 /* Remaining faint fills / hover fills / hairlines from the sweep */
-html.apple-mode .bg-white\/10,
-html.apple-mode .bg-white\/\[0\.01\],
-html.apple-mode .bg-white\/\[0\.015\],
-html.apple-mode .bg-white\/\[0\.07\],
-html.apple-mode .bg-white\/\[0\.08\] { background-color: #ffffff !important; }
-html.apple-mode .hover\:bg-white\/10:hover,
-html.apple-mode .hover\:bg-white\/\[0\.02\]:hover,
-html.apple-mode .hover\:bg-white\/\[0\.03\]:hover { background-color: rgba(0,0,0,0.05) !important; }
-html.apple-mode .border-white\/20,
-html.apple-mode .border-white\/\[0\.03\],
-html.apple-mode .border-white\/\[0\.07\],
-html.apple-mode .border-white\/\[0\.08\],
-html.apple-mode .border-white\/\[0\.15\],
-html.apple-mode .border-white\/\[0\.2\] { border-color: rgba(0,0,0,0.08) !important; }
+html.light-mode .bg-white\/10,
+html.light-mode .bg-white\/\[0\.01\],
+html.light-mode .bg-white\/\[0\.015\],
+html.light-mode .bg-white\/\[0\.07\],
+html.light-mode .bg-white\/\[0\.08\] { background-color: #ffffff !important; }
+html.light-mode .hover\:bg-white\/10:hover,
+html.light-mode .hover\:bg-white\/\[0\.02\]:hover,
+html.light-mode .hover\:bg-white\/\[0\.03\]:hover { background-color: rgba(0,0,0,0.05) !important; }
+html.light-mode .border-white\/20,
+html.light-mode .border-white\/\[0\.03\],
+html.light-mode .border-white\/\[0\.07\],
+html.light-mode .border-white\/\[0\.08\],
+html.light-mode .border-white\/\[0\.15\],
+html.light-mode .border-white\/\[0\.2\] { border-color: #E2E8F0 !important; }
 
 /* Remaining opacity-variant white text */
-html.apple-mode .text-white\/50 { color: rgba(29,29,31,0.6); }
+html.light-mode .text-white\/50 { color: rgba(15,23,42,0.6); }
 
 /* ── Pro Mode — industrial terminal aesthetic ──────────── */
 html.pro-mode body {
