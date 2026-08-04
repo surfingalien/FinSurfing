@@ -71,7 +71,9 @@ export default function BuySignalsView({ portfolio, onAnalyze }) {
         body:    JSON.stringify(body),
       })
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Failed to get recommendations')
+      // Heartbeated endpoint: once the keep-alive starts the status is pinned
+      // at 200, so a failure can only be reported in the body. Check both.
+      if (!res.ok || data.error) throw new Error(data.error || 'Failed to get recommendations')
       setRecs(data)
 
       // Fetch live market prices for all recommended symbols

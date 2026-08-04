@@ -79,7 +79,10 @@ export default function AIBrainView({ portfolio, onAnalyze }) {
         body:    JSON.stringify(body),
       })
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Analysis failed')
+      // The scan is heartbeated to survive mobile idle timeouts, which pins the
+      // status at 200 once the first keep-alive byte goes out — so a failure can
+      // only be reported in the body. Check both.
+      if (!res.ok || data.error) throw new Error(data.error || 'Analysis failed')
       setAnalysis(data)
     } catch (e) {
       setError(e.message)

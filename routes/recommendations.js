@@ -30,6 +30,7 @@ const { getOptionsFlowCompact } = require('../lib/options-flow-cache')
 const kelly = require('../lib/kelly')
 const { computeStats, readPredictions } = require('../lib/brain-learnings')
 const { extractArrayObjects } = require('../lib/ai-json')
+const { startJsonHeartbeat } = require('../lib/http-heartbeat')
 const recJournal = require('../lib/rec-journal')
 
 const recLimit = rateLimit({
@@ -145,6 +146,12 @@ async function fetchLiveQuotes(symbols, fwdHeaders) {
 }
 
 router.post('/', requireAuth, recLimit, async (req, res) => {
+  // Same mobile idle-timeout exposure as the AI Brain scan: a 16k-token
+  // generation holds the connection for a long time writing nothing, and the
+  // browser reports the dropped connection as a bare "Load failed".
+  // Failures after the first heartbeat arrive as 200 + `error` in the body.
+  startJsonHeartbeat(res)
+
   if (process.env.AI_RECOMMENDATIONS_DISABLED === 'true')
     return res.status(503).json({ error: 'AI Buy Signals are temporarily disabled (kill switch active)', killSwitch: true })
 

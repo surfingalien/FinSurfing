@@ -32,6 +32,7 @@ const { fetchDailyBars }    = require('../lib/internal-api')
 const { tryParseAiJson }    = require('../lib/ai-json')
 const { baselineFromBars }  = require('../lib/ml-baseline')
 const { factorScores, factorLine } = require('../lib/factor-model')
+const { startJsonHeartbeat } = require('../lib/http-heartbeat')
 
 const router   = express.Router()
 const aiRouter = getRouter('ai-brain')
@@ -438,6 +439,13 @@ function logPrediction(symbol, agents, zones, generatedAt, baseline = null, opti
 }
 
 router.post('/analyze', requireAuth, brainLimit, async (req, res) => {
+  // A scan runs 2–4 minutes writing nothing; mobile browsers and edge proxies
+  // drop an idle connection and the client sees a bare "Load failed" with no
+  // HTTP response. Trickle whitespace so the connection stays warm — invisible
+  // to JSON.parse. NOTE: after the first heartbeat the status is pinned at 200,
+  // so failures are signalled by `error` in the body (the client checks both).
+  startJsonHeartbeat(res)
+
   if (process.env.AI_BRAIN_DISABLED === 'true')
     return res.status(503).json({ error: 'AI Brain is temporarily disabled (kill switch active)', killSwitch: true })
 
