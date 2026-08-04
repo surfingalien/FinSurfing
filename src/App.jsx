@@ -4,7 +4,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { PortfolioProvider, usePortfolioContext } from './contexts/PortfolioContext'
 import { ApiKeysProvider } from './contexts/ApiKeysContext'
 import { ProModeProvider } from './contexts/ProModeContext'
-import { AppleModeProvider } from './contexts/AppleModeContext'
+import { LightModeProvider } from './contexts/LightModeContext'
 import { ToastProvider } from './components/shared/ToastNotifications'
 import { TooltipProvider } from './components/shared/Tooltip'
 import LandingPage from './components/Landing/LandingPage'
@@ -331,7 +331,7 @@ function MainApp({ onSignIn }) {
 export default function App() {
   return (
     <ProModeProvider>
-      <AppleModeProvider>
+      <LightModeProvider>
       <ApiKeysProvider>
         <TooltipProvider>
           <ToastProvider>
@@ -341,7 +341,7 @@ export default function App() {
           </ToastProvider>
         </TooltipProvider>
       </ApiKeysProvider>
-      </AppleModeProvider>
+      </LightModeProvider>
     </ProModeProvider>
   )
 }
