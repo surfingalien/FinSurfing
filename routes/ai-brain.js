@@ -999,14 +999,54 @@ router.get('/learnings', (req, res) => {
 router.put('/learnings/overrides', requireAuth, (req, res) => {
   try {
     const { writeOverrides } = require('../lib/brain-learnings')
-    const { pinned, suppressed, note } = req.body || {}
+    const { pinned, suppressed, note, reason } = req.body || {}
     if (pinned !== undefined && !Array.isArray(pinned)) return res.status(400).json({ error: 'pinned must be an array of strings' })
     if (suppressed !== undefined && !Array.isArray(suppressed)) return res.status(400).json({ error: 'suppressed must be an array of strings' })
     if (note !== undefined && typeof note !== 'string') return res.status(400).json({ error: 'note must be a string' })
-    const saved = writeOverrides({ pinned, suppressed, note })
+    if (reason !== undefined && typeof reason !== 'string') return res.status(400).json({ error: 'reason must be a string' })
+    // `reason` is the operator's evidence for the edit — recorded on the
+    // refinement so the history explains WHY, not just what changed.
+    const saved = writeOverrides({ pinned, suppressed, note },
+      { evidence: reason ? { reason: reason.slice(0, 300) } : null })
     res.json({ ok: true, overrides: saved })
   } catch (e) {
     res.status(500).json({ error: 'Failed to save overrides: ' + e.message })
+  }
+})
+
+// GET /api/ai-brain/refinements — the memory's refinement history: every
+// nightly AI rewrite and human edit, with the evidence behind it, what
+// changed, and whether the hash chain is intact. Read-only, no secrets.
+router.get('/refinements', (req, res) => {
+  try {
+    const refinement = require('../lib/memory-refinement')
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 25, 1), 100)
+    const entries = refinement.readRefinements({ limit })
+    res.json({
+      count: entries.length,
+      chain: refinement.verifyChain(),
+      // Snapshots are large and only needed for revert — omit from the list.
+      entries: entries.map(({ snapshot, ...rest }) => rest),
+    })
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to read refinements: ' + e.message })
+  }
+})
+
+// POST /api/ai-brain/refinements/:seq/revert — roll the memory back to the
+// state captured before that refinement. Works for both the nightly AI
+// rewrite and human edits; the revert is itself logged as a refinement, so
+// it's auditable and can be undone in turn. requireAuth — operator-only.
+router.post('/refinements/:seq/revert', requireAuth, (req, res) => {
+  try {
+    const { revertRefinement } = require('../lib/brain-learnings')
+    const seq = parseInt(req.params.seq, 10)
+    if (!Number.isFinite(seq) || seq < 1) return res.status(400).json({ error: 'seq must be a positive integer' })
+    const result = revertRefinement(seq, { reason: typeof req.body?.reason === 'string' ? req.body.reason.slice(0, 300) : null })
+    if (!result.ok) return res.status(404).json(result)
+    res.json(result)
+  } catch (e) {
+    res.status(500).json({ error: 'Revert failed: ' + e.message })
   }
 })
 
