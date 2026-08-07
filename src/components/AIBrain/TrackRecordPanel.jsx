@@ -8,7 +8,7 @@
  */
 
 import { useState, useEffect } from 'react'
-import { Target, ChevronDown, ChevronUp, Sparkles, Scale, TrendingUp, AlertTriangle, Pencil, Pin, X, Check } from 'lucide-react'
+import { Target, ChevronDown, ChevronUp, Sparkles, Scale, TrendingUp, AlertTriangle, Pencil, Pin, X, Check, Clock, RefreshCw } from 'lucide-react'
 import { useQuery, fetchJson, invalidateQuery } from '../../hooks/useQuery'
 import { useAuth } from '../../contexts/AuthContext'
 
@@ -51,10 +51,98 @@ function SectionHeader({ icon: Icon, label }) {
   )
 }
 
+// Reviewable, reversible memory history. Every nightly AI rewrite and human
+// edit is a refinement carrying the evidence behind it, what changed, and a
+// snapshot — so a bad regeneration or a mistaken suppression can be rolled back
+// instead of being permanent. Adapted from prime-agent's Continual Harness.
+function RefinementHistory() {
+  const { authFetch, isAuthenticated } = useAuth()
+  const [open, setOpen] = useState(false)
+  const [busy, setBusy] = useState(null)
+  const [msg, setMsg] = useState(null)
+  const { data } = useQuery(
+    'ai-brain-refinements',
+    () => fetchJson('/api/ai-brain/refinements?limit=25'),
+    { staleMs: 5 * 60_000, enabled: open },
+  )
+
+  const revert = async (seq) => {
+    if (!confirm(`Roll the Brain's memory back to the state before refinement #${seq}?`)) return
+    setBusy(seq); setMsg(null)
+    try {
+      const res = await authFetch(`/api/ai-brain/refinements/${seq}/revert`, { method: 'POST', body: {} })
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok || body.ok === false) throw new Error(body.error || 'revert failed')
+      setMsg(`Reverted to the state before #${seq}.`)
+      invalidateQuery('ai-brain-learnings')
+      invalidateQuery('ai-brain-refinements')
+    } catch (e) {
+      setMsg(e.message || 'Revert failed.')
+    } finally { setBusy(null) }
+  }
+
+  const entries = data?.entries || []
+  const chainBroken = data?.chain && data.chain.valid === false
+
+  return (
+    <div className="mt-3 pt-2 border-t border-white/[0.05]">
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest text-slate-500 hover:text-slate-300 transition-colors"
+      >
+        <Clock className="w-3 h-3" /> Memory history {open ? '▾' : '▸'}
+      </button>
+
+      {open && (
+        <div className="mt-2 space-y-1.5">
+          {chainBroken && (
+            <div className="text-[10px] text-red-400 flex items-center gap-1">
+              <AlertTriangle className="w-3 h-3" /> History chain broken at #{data.chain.firstBreak?.seq} — {data.chain.firstBreak?.reason}
+            </div>
+          )}
+          {!entries.length && <p className="text-[10px] text-slate-500">No refinements recorded yet.</p>}
+          {entries.map(e => (
+            <div key={e.seq} className="flex items-start gap-2 text-[11px] rounded-lg border border-white/[0.05] bg-white/[0.02] px-2.5 py-1.5">
+              <span className={`shrink-0 text-[9px] uppercase font-semibold px-1.5 py-0.5 rounded mt-0.5 ${
+                e.actor === 'ai' ? 'bg-blue-500/15 text-blue-300' : 'bg-mint-500/15 text-mint-300'
+              }`}>{e.actor}</span>
+              <div className="min-w-0 flex-1">
+                <div className="text-slate-300">
+                  #{e.seq} · {e.summary}
+                  <span className="text-slate-600"> · {new Date(e.at).toLocaleDateString()}</span>
+                </div>
+                {e.evidence?.reason && (
+                  <div className="text-slate-500 truncate" title={e.evidence.reason}>
+                    {e.evidence.reason}
+                    {e.evidence.resolvedPredictions != null && ` · ${e.evidence.resolvedPredictions} resolved`}
+                  </div>
+                )}
+                {!e.evidenced && <div className="text-amber-500/70 text-[10px]">no evidence recorded</div>}
+              </div>
+              {isAuthenticated && (
+                <button
+                  onClick={() => revert(e.seq)}
+                  disabled={busy === e.seq}
+                  title="Roll the memory back to the state before this refinement"
+                  className="shrink-0 flex items-center gap-1 text-[10px] text-slate-500 hover:text-amber-400 disabled:opacity-50"
+                >
+                  <RefreshCw className="w-3 h-3" /> {busy === e.seq ? '…' : 'Revert'}
+                </button>
+              )}
+            </div>
+          ))}
+          {msg && <p className="text-[10px] text-slate-400">{msg}</p>}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // White-box editable memory: the Brain writes keyLearnings nightly; a signed-in
 // operator can suppress a wrong/stale finding, pin their own, and set a
 // directive note. Edits are stored as overrides (PUT /learnings/overrides) that
-// layer on top of the AI output and survive the next nightly regeneration.
+// layer on top of the AI output and survive the next nightly regeneration, and
+// each edit is recorded as a revertible refinement with its stated reason.
 function EditableLearnings({ data }) {
   const { authFetch, isAuthenticated } = useAuth()
   const [editing, setEditing] = useState(false)
@@ -62,6 +150,7 @@ function EditableLearnings({ data }) {
   const [pinned, setPinned] = useState([])
   const [note, setNote] = useState('')
   const [newPin, setNewPin] = useState('')
+  const [reason, setReason] = useState('')
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState(null)
 
@@ -85,11 +174,15 @@ function EditableLearnings({ data }) {
     try {
       const res = await authFetch('/api/ai-brain/learnings/overrides', {
         method: 'PUT',
-        body: { suppressed, pinned, note },
+        // `reason` is the evidence recorded on the refinement — it's what makes
+        // the history answer "why did the Brain change its mind", not just "what".
+        body: { suppressed, pinned, note, reason: reason.trim() || undefined },
       })
       if (!res.ok) throw new Error('save failed')
       setMsg('Saved — the Brain will use this on its next scan.')
       invalidateQuery('ai-brain-learnings')
+      invalidateQuery('ai-brain-refinements')
+      setReason('')
       setEditing(false)
     } catch {
       setMsg('Could not save. Check that you are signed in.')
@@ -160,6 +253,12 @@ function EditableLearnings({ data }) {
             rows={2}
             className="w-full bg-black/20 border border-white/[0.08] rounded px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-mint-500/40"
           />
+          <input
+            value={reason}
+            onChange={e => setReason(e.target.value)}
+            placeholder="Why this change? (recorded as evidence in the refinement history)"
+            className="w-full bg-black/20 border border-white/[0.08] rounded px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-mint-500/40"
+          />
           <div className="flex items-center gap-2">
             <button
               onClick={save}
@@ -172,6 +271,8 @@ function EditableLearnings({ data }) {
           </div>
         </div>
       )}
+
+      <RefinementHistory />
     </div>
   )
 }

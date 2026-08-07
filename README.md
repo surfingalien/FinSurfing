@@ -108,6 +108,31 @@ that layer on top of the AI output — so a human correction always wins and is
 never clobbered by the next nightly meta-analysis. The merged result is what
 gets injected into every scan (and shown by the Telegram `/learnings` command).
 
+### Refinement history — evidence-backed and reversible
+
+Memory changes are no longer destructive. Every change — the nightly AI rewrite
+*and* every human edit — is recorded as a **refinement** in an append-only,
+hash-chained log (`data/brain-refinements.jsonl`) carrying:
+
+- **who** changed it (`ai` for the nightly meta-analysis, `human` for an edit)
+- **the evidence**: for the AI, the resolved-prediction count and alpha win
+  rates that drove it; for a human, the reason typed alongside the edit
+  (unevidenced changes are still allowed, but flagged as such)
+- **the diff** — exactly which learnings/pins/directives changed
+- **a full snapshot of the prior state**, so a rollback is exact
+
+Open **Memory history** in the Track Record panel to read it, or hit
+`GET /api/ai-brain/refinements`. Any entry can be rolled back with
+`POST /api/ai-brain/refinements/:seq/revert` — a bad nightly regeneration or a
+mistaken suppression is recoverable. Reverts are themselves logged, so the undo
+is auditable and can be undone in turn. The chain is tamper-evident: editing or
+deleting past history breaks verification, surfaced in the panel.
+
+This follows the *Continual Harness* model from
+[prime-agent](https://github.com/PrimeIntellect-ai/prime-agent): memory advances
+through small, evidence-backed, reviewable updates with recorded snapshots for
+rollback — never opaque rewrites.
+
 ---
 
 ## Portfolio

@@ -16,3 +16,4 @@ data/paper-trades.jsonl
 data/brain-learnings-overrides.json
 # Background scan jobs + results
 data/scan-jobs.jsonl
+data/brain-refinements.jsonl
