@@ -10,28 +10,28 @@
  */
 
 import { useState, useEffect, useRef } from 'react'
-import { Menu, Terminal, Search, Sun } from 'lucide-react'
+import { Menu, Terminal, Search, Sun, Moon } from 'lucide-react'
 import { fetchQuotes, subscribeQuotes } from '../../services/api'
 import { TICKER_SYMBOLS } from '../../data/portfolio'
 import { fmt, fmtPct } from '../../services/api'
 import { useProMode } from '../../contexts/ProModeContext'
-import { useAppleMode } from '../../contexts/AppleModeContext'
+import { useLightMode } from '../../contexts/LightModeContext'
 
 export default function Header({ onMobileMenuOpen, onOpenPalette }) {
   const [tickerData, setTickerData] = useState([])
   const [time,       setTime]       = useState(new Date())
   const [marketOpen, setMarketOpen] = useState(false)
   const { proMode, toggleProMode } = useProMode()
-  const { appleMode, toggleAppleMode } = useAppleMode()
+  const { lightMode, toggleLightMode } = useLightMode()
 
   // The two themes override the same base classes — only one at a time
   const switchToPro = () => {
-    if (!proMode && appleMode) toggleAppleMode()
+    if (!proMode && lightMode) toggleLightMode()
     toggleProMode()
   }
-  const switchToApple = () => {
-    if (!appleMode && proMode) toggleProMode()
-    toggleAppleMode()
+  const switchToLight = () => {
+    if (!lightMode && proMode) toggleProMode()
+    toggleLightMode()
   }
   const tickerMapRef = useRef({})
 
@@ -148,18 +148,18 @@ export default function Header({ onMobileMenuOpen, onOpenPalette }) {
         </button>
       )}
 
-      {/* Apple Mode toggle (light, minimal theme) */}
+      {/* Theme toggle — light is the default, so this switches to dark */}
       <button
-        onClick={switchToApple}
-        title={appleMode ? 'Back to dark theme' : 'Light mode (Apple-style aesthetic)'}
+        onClick={switchToLight}
+        title={lightMode ? 'Switch to dark theme' : 'Back to light theme'}
         className={`shrink-0 px-3 h-full flex items-center gap-1.5 text-[10px] font-mono font-semibold border-l border-white/[0.06] transition-colors ${
-          appleMode
-            ? 'text-[#0071e3] bg-[#0071e3]/[0.08] hover:bg-[#0071e3]/[0.12]'
+          lightMode
+            ? 'text-[#2563EB] bg-[#2563EB]/[0.08] hover:bg-[#2563EB]/[0.12]'
             : 'text-slate-500 hover:text-slate-300 hover:bg-white/[0.04]'
         }`}
       >
-        <Sun className="w-3 h-3" />
-        <span className="hidden sm:block">LIGHT</span>
+        {lightMode ? <Moon className="w-3 h-3" /> : <Sun className="w-3 h-3" />}
+        <span className="hidden sm:block">{lightMode ? 'DARK' : 'LIGHT'}</span>
       </button>
 
       {/* Pro Mode toggle */}

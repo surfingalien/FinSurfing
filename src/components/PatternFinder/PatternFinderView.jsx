@@ -82,11 +82,12 @@ export default function PatternFinderView({ onAnalyze }) {
       const res = await fetch(`/api/patterns/${encodeURIComponent(sym)}`, {
         headers: getApiKeyHeaders(),
       })
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}))
-        throw new Error(body.error || `Request failed (${res.status})`)
-      }
-      const json = await res.json()
+      // The endpoint heartbeats to survive slow mobile connections, which pins
+      // the status at 200 once the first keep-alive byte goes out — so a failure
+      // can only arrive as `error` in the body. Check both.
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok || json.error)
+        throw new Error(json.error || `Request failed (${res.status})`)
       setData(json)
     } catch (err) {
       setError(err.message || 'Failed to analyze patterns')

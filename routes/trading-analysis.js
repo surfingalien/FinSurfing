@@ -21,6 +21,7 @@ const {
 const { getSocialSentiment } = require('../lib/social-sentiment')
 const { getAltDataSnippet }  = require('../lib/alt-data')
 const { getOptionsFlowCompact } = require('../lib/options-flow-cache')
+const { startJsonHeartbeat } = require('../lib/http-heartbeat')
 
 const aiRouter = getRouter('trading-analysis')
 
@@ -413,6 +414,12 @@ Respond with ONLY pure JSON (absolutely no markdown fences, no backticks, no cod
 // ── POST /analyze ─────────────────────────────────────────────────────────────
 
 router.post('/analyze', requireAuth, async (req, res) => {
+  // Up to three sequential chart fetches (30s timeout each) before the context
+  // fan-out and the LLM call — long enough for a mobile connection to idle out
+  // mid-request, which the browser reports as a bare "Load failed". Failures
+  // after the first heartbeat arrive as 200 + `error`, so clients check both.
+  startJsonHeartbeat(res)
+
   const symbol = req.body.symbol || req.query.symbol
   const interval = req.body.interval || req.query.interval || 'D'
   const clientLivePrice = req.body.livePrice ?? req.body.clientLivePrice ?? null

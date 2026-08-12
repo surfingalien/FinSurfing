@@ -10,6 +10,8 @@
  */
 
 const express       = require('express')
+const { startJsonHeartbeat } = require('../lib/http-heartbeat')
+
 const router        = express.Router()
 const rateLimit     = require('express-rate-limit')
 const { getRouter } = require('../lib/ai-router')
@@ -212,6 +214,10 @@ Return ONLY this JSON object:
 
 // ── GET /:symbol ──────────────────────────────────────────────────────────────
 router.get('/:symbol', patternLimit, async (req, res) => {
+  // A wide provider fan-out plus a 3k-token LLM call. Failures after the first
+  // heartbeat arrive as 200 + `error` in the body, so clients check both.
+  startJsonHeartbeat(res)
+
   const raw = req.params.symbol
   if (!raw || !VALID_SYMBOL.test(raw))
     return res.status(400).json({ error: 'Valid symbol required (alphanumeric, . or -, max 10 chars)' })

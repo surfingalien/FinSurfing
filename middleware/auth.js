@@ -58,4 +58,20 @@ function requireAdmin(req, res, next) {
   next()
 }
 
-module.exports = { requireAuth, optionalAuth, requireAdmin, SECRET }
+/**
+ * The user a request acts for.
+ *
+ * Normally that's the JWT subject. But when the background job queue
+ * (lib/ai-job-queue.js) drives a route over loopback, requireAuth is satisfied
+ * by the internal secret and never sets req.user — so a queued run would lose
+ * its owner and silently stop reading/writing that user's history. The owner
+ * therefore rides in the job params, and is honoured ONLY for a verified
+ * internal call. Without that gate any browser could pass `userId` in the body
+ * and act as somebody else.
+ */
+function effectiveUserId(req) {
+  if (req.user?.userId) return req.user.userId
+  return isInternalRequest(req) ? (req.body?.userId ?? undefined) : undefined
+}
+
+module.exports = { requireAuth, optionalAuth, requireAdmin, effectiveUserId, SECRET }

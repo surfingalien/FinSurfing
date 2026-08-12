@@ -20,7 +20,8 @@ const router              = express.Router()
 const rateLimit           = require('express-rate-limit')
 const { getRouter }       = require('../lib/ai-router')
 const { CircuitOpenError } = require('../lib/circuit-breaker')
-const { requireAuth }     = require('../middleware/auth')
+const { requireAuth, effectiveUserId } = require('../middleware/auth')
+const { mountJobRoutes, skipLoopback } = require('../lib/ai-job-routes')
 const { getUserPrefs, saveUserPref } = require('../db/ai_memory')
 const { PERSONAS }        = require('../lib/investor-personas')
 const { getIndicators }   = require('./macro')
@@ -33,8 +34,13 @@ const { extractArrayObjects } = require('../lib/ai-json')
 const { startJsonHeartbeat } = require('../lib/http-heartbeat')
 const recJournal = require('../lib/rec-journal')
 
+// skipLoopback: the background worker calls POST / over loopback, so every
+// user's queued run arrives from the same address. Without the skip they'd
+// share one 5/min budget and a queued run could be rejected for someone else's
+// traffic; the real per-user limit is the queue's own cap.
 const recLimit = rateLimit({
   windowMs: 60 * 1000, max: 5,
+  skip: skipLoopback,
   message: { error: 'Too many recommendation requests — wait a minute' },
 })
 
@@ -161,7 +167,10 @@ router.post('/', requireAuth, recLimit, async (req, res) => {
   const focusStr   = focusSymbols.length ? focusSymbols.join(', ') : ''
   const fwdHeaders = fwdKeys(req)
   const port       = process.env.PORT || 3001
-  const userId     = req.user?.userId
+  // Not req.user.userId: the background queue drives this route over loopback,
+  // where requireAuth is satisfied by the internal secret and never sets
+  // req.user. Without this the run would be journalled under nobody.
+  const userId     = effectiveUserId(req)
 
   // Load prior rec history to avoid repeating recently recommended symbols
   const recHistory = userId ? await getUserPrefs(userId, 'rec_history', 5) : []
@@ -439,6 +448,40 @@ Respond ONLY with a JSON object — no markdown, no explanation, just the JSON:
     console.error('[recommendations]', err.message)
     return res.status(500).json({ error: 'Recommendation service error: ' + err.message })
   }
+})
+
+// ── Background generation ────────────────────────────────────────────────────
+// A 16k-token generation is long enough that holding the connection open ties
+// the result to a live tab — and on mobile the connection frequently died
+// outright, surfacing as a bare "Load failed". POST /job runs the same
+// generation on the server and persists the result, so closing the page no
+// longer throws away a run that was already paid for.
+mountJobRoutes(router, {
+  kind: 'recommendations',
+  requireAuth,
+  noun: 'recommendation',
+  disabledEnv: 'AI_RECOMMENDATIONS_DISABLED',
+  label: (p) => (p.focusSymbols.length ? p.focusSymbols.join(',') : p.persona),
+  buildParams: (req) => {
+    const {
+      holdings = [], focusSymbols = [], persona = 'default',
+      includeMacro = true, includeFunds = false, includeFilings = false,
+    } = req.body || {}
+
+    if (!PERSONAS[persona]) return { error: `Unknown persona: ${persona}` }
+
+    const clean = arr => (Array.isArray(arr) ? arr : [])
+      .map(s => String(s).toUpperCase().replace(/[^A-Z0-9.-]/g, '')).filter(Boolean).slice(0, 20)
+
+    return {
+      holdings:       clean(holdings),
+      focusSymbols:   clean(focusSymbols),
+      persona,
+      includeMacro:   !!includeMacro,
+      includeFunds:   !!includeFunds,
+      includeFilings: !!includeFilings,
+    }
+  },
 })
 
 // GET /api/recommendations/journal — versioned, diffable history of this user's

@@ -5,6 +5,7 @@
 
 import { useState, useCallback, useEffect } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
+import { useBackgroundJob } from '../../hooks/useBackgroundJob'
 import {
   Sparkles, RefreshCw, TrendingUp, Clock,
   AlertTriangle, Search, X, Download,
@@ -57,48 +58,48 @@ export default function BuySignalsView({ portfolio, onAnalyze }) {
       .filter(Boolean)
       .slice(0, 15)
 
-  const generate = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      const body = { holdings, persona: personaId, includeMacro: true }
-      if (customSymbols.trim()) body.focusSymbols = parseSymbols(customSymbols)
-      if (includeFunds && !customSymbols.trim()) body.includeFunds = true
-      const authHeader = accessToken ? { Authorization: `Bearer ${accessToken}` } : {}
-      const res = await fetch('/api/recommendations', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json', ...getApiKeyHeaders(), ...authHeader },
-        body:    JSON.stringify(body),
-      })
-      const data = await res.json()
-      // Heartbeated endpoint: once the keep-alive starts the status is pinned
-      // at 200, so a failure can only be reported in the body. Check both.
-      if (!res.ok || data.error) throw new Error(data.error || 'Failed to get recommendations')
-      setRecs(data)
+  // ── Background generation ────────────────────────────────────────────────
+  // The run happens on the SERVER: useBackgroundJob enqueues it and polls.
+  // Closing the tab — or losing the request on a flaky mobile connection, which
+  // showed up as a bare "Load failed" — no longer discards a generation that has
+  // already been paid for.
 
-      // Fetch live market prices for all recommended symbols
-      try {
-        const syms = (data.recommendations ?? []).map(r => r.symbol).join(',')
-        if (!syms) return
-        const qRes = await fetch(`/api/quote?symbols=${syms}`, { headers: getApiKeyHeaders() })
-        const qData = await qRes.json()
-        const qMap = {}
-        for (const q of qData?.quoteResponse?.result ?? []) {
-          if (q.regularMarketPrice != null) {
-            qMap[q.symbol] = {
-              price:     q.regularMarketPrice,
-              changePct: q.regularMarketChangePercent ?? null,
-            }
-          }
+  // Live prices are supplementary — a failure here must never fail the run.
+  const loadQuotes = useCallback(async (data) => {
+    try {
+      const syms = (data?.recommendations ?? []).map(r => r.symbol).filter(Boolean).join(',')
+      if (!syms) return
+      const qRes = await fetch(`/api/quote?symbols=${syms}`, { headers: getApiKeyHeaders() })
+      const qData = await qRes.json()
+      const qMap = {}
+      for (const q of qData?.quoteResponse?.result ?? []) {
+        if (q.regularMarketPrice != null) {
+          qMap[q.symbol] = { price: q.regularMarketPrice, changePct: q.regularMarketChangePercent ?? null }
         }
-        setLiveQuotes(qMap)
-      } catch { /* live prices are optional */ }
-    } catch (e) {
-      setError(e.message)
-    } finally {
-      setLoading(false)
-    }
-  }, [holdings, customSymbols, accessToken, personaId, includeFunds])
+      }
+      setLiveQuotes(qMap)
+    } catch { /* live prices are optional */ }
+  }, [])
+
+  const job = useBackgroundJob({
+    startPath:  '/api/recommendations/job',
+    pollPath:   '/api/recommendations/job',
+    storageKey: 'finsurf_active_recs',
+    accessToken,
+    noun: 'recommendation run',
+    onStart:  () => { setLoading(true); setError(null) },
+    onResult: (result) => { setRecs(result); setError(null); setLoading(false); loadQuotes(result) },
+    onError:  (msg) => { setError(msg); setLoading(false) },
+  })
+  const jobStatus = job.status
+  const startJob  = job.start   // stable identity; `job` itself is a fresh object each render
+
+  const generate = useCallback(() => {
+    const body = { holdings, persona: personaId, includeMacro: true }
+    if (customSymbols.trim()) body.focusSymbols = parseSymbols(customSymbols)
+    if (includeFunds && !customSymbols.trim()) body.includeFunds = true
+    return startJob(body)
+  }, [holdings, customSymbols, personaId, includeFunds, startJob])
 
   const displayed = (recs?.recommendations ?? []).filter(r => {
     if (filter !== 'all' && r.type !== filter) return false
@@ -214,6 +215,26 @@ export default function BuySignalsView({ portfolio, onAnalyze }) {
       )}
 
       {/* ── Loading skeleton ── */}
+      {loading && (
+        <div className="glass rounded-2xl p-4 flex items-start gap-3">
+          <RefreshCw className="w-4 h-4 text-mint-400 animate-spin shrink-0 mt-0.5" />
+          <div>
+            <p className="text-white text-sm font-semibold">
+              {jobStatus === 'queued'
+                ? 'Your run is queued…'
+                : 'Claude is picking your signals…'}
+            </p>
+            {/* The run happens server-side, so the tab is no longer load-bearing. */}
+            <p className="text-mint-400/70 text-[11px] mt-1.5 flex items-center gap-1.5">
+              <Clock className="w-3 h-3" />
+              {jobStatus === 'queued'
+                ? 'Another run is going — yours starts as soon as it finishes. You can close this page and come back.'
+                : 'Running on the server — you can close this page and come back'}
+            </p>
+          </div>
+        </div>
+      )}
+
       {loading && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {Array.from({ length: 8 }).map((_, i) => (

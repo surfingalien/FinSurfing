@@ -1,6 +1,6 @@
 'use strict'
 /**
- * Unit tests for lib/scan-queue.js — the background scan queue.
+ * Unit tests for lib/ai-job-queue.js — the shared background job queue.
  *
  * Covers enqueue/limits, per-user isolation (one user must never see or cancel
  * another's scan), status transitions, and the "what do I show on a cold page
@@ -8,7 +8,7 @@
  * pure queue mechanics.
  */
 
-const queue = require('../lib/scan-queue')
+const queue = require('../lib/ai-job-queue')
 
 beforeEach(() => queue._resetForTests())
 
@@ -40,6 +40,48 @@ describe('enqueue', () => {
     // Spread across users so the per-user cap isn't what trips first
     for (let i = 0; i < queue.MAX_QUEUE; i++) queue.enqueue({ userId: `u${i}`, params })
     expect(() => queue.enqueue({ userId: 'zz', params })).toThrow(/queue is full/i)
+  })
+})
+
+describe('job kinds', () => {
+  const recParams = { persona: 'buffett', holdings: [] }
+
+  test('an unknown kind is rejected before anything is queued', () => {
+    expect(() => queue.enqueue({ userId: 'u1', kind: 'nope', params })).toThrow(/unknown job kind/i)
+    expect(queue.getQueue().pending).toBe(0)
+  })
+
+  test('ids are prefixed per kind, so a job is identifiable on sight', () => {
+    expect(queue.enqueue({ userId: 'u1', kind: 'scan', params }).id).toMatch(/^scan-/)
+    expect(queue.enqueue({ userId: 'u1', kind: 'recommendations', params: recParams }).id).toMatch(/^rec-/)
+  })
+
+  test('every kind maps to a real internal path and timeout', () => {
+    for (const [name, def] of Object.entries(queue.JOB_KINDS)) {
+      expect(def.path).toMatch(/^\/api\//)
+      expect(def.timeoutMs).toBeGreaterThan(0)
+      expect(def.prefix).toBeTruthy()
+      expect(name).toBeTruthy()
+    }
+  })
+
+  test('getUserJobs filters by kind — Advisory never shows Brain scans', () => {
+    queue.enqueue({ userId: 'u1', kind: 'scan', params })
+    queue.enqueue({ userId: 'u1', kind: 'recommendations', params: recParams })
+    expect(queue.getUserJobs('u1', 10, 'scan')).toHaveLength(1)
+    expect(queue.getUserJobs('u1', 10, 'recommendations')).toHaveLength(1)
+    expect(queue.getUserJobs('u1', 10)).toHaveLength(2)   // unfiltered sees both
+  })
+
+  test('the per-user cap counts every kind together', () => {
+    for (let i = 0; i < queue.MAX_PER_USER; i++) queue.enqueue({ userId: 'u1', kind: 'scan', params })
+    expect(() => queue.enqueue({ userId: 'u1', kind: 'recommendations', params: recParams }))
+      .toThrow(/already have/i)
+  })
+
+  test('the reported kind survives a round trip', () => {
+    const { id } = queue.enqueue({ userId: 'u1', kind: 'recommendations', params: recParams })
+    expect(queue.getJob(id, 'u1').kind).toBe('recommendations')
   })
 })
 
