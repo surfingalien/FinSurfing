@@ -27,26 +27,70 @@ export function AuthProvider({ children }) {
   const [authError,   setAuthError]   = useState(null)
   const refreshTimer = useRef(null)
 
+  // Mirrors of the token state, readable from callbacks without making every
+  // consumer's identity churn on each token rotation.
+  const tokenRef     = useRef(null)
+  const expiresAtRef = useRef(0)
+  const refreshInFlight = useRef(null)
+
+  const applySession = useCallback((data) => {
+    tokenRef.current     = data.accessToken
+    expiresAtRef.current = Date.now() + (data.expiresIn ?? 900) * 1000
+    setUser(data.user)
+    setAccessToken(data.accessToken)
+  }, [])
+
+  const clearSession = useCallback(() => {
+    tokenRef.current     = null
+    expiresAtRef.current = 0
+    setUser(null)
+    setAccessToken(null)
+  }, [])
+
   // ── Silent refresh ─────────────────────────────
   const scheduleRefresh = useCallback((expiresIn = 900) => {
     if (refreshTimer.current) clearTimeout(refreshTimer.current)
     // Refresh 60s before expiry
     const delay = Math.max((expiresIn - 60) * 1000, 10000)
-    refreshTimer.current = setTimeout(() => silentRefresh(), delay)
+    refreshTimer.current = setTimeout(() => silentRefreshRef.current?.(), delay)
   }, [])
 
-  const silentRefresh = useCallback(async () => {
-    try {
-      const res  = await API('/refresh', { method: 'POST' })
-      if (!res.ok) { setUser(null); setAccessToken(null); return }
-      const data = await res.json()
-      setUser(data.user)
-      setAccessToken(data.accessToken)
-      scheduleRefresh(data.expiresIn)
-    } catch {
-      setUser(null); setAccessToken(null)
-    }
-  }, [scheduleRefresh])
+  /**
+   * Exchange the refresh cookie for a new access token. Resolves to the new
+   * token, or null if the session is gone.
+   *
+   * SINGLE-FLIGHT, and that is not an optimisation. The server treats a refresh
+   * token as single-use and reads a second presentation as replay: it revokes
+   * every token the user has and audits `token_reuse_detected`. Two overlapping
+   * refreshes — trivially reachable now that a background job polls every 4s —
+   * would therefore log the user out rather than renew them.
+   */
+  const silentRefresh = useCallback(() => {
+    if (refreshInFlight.current) return refreshInFlight.current
+    refreshInFlight.current = (async () => {
+      try {
+        const res = await API('/refresh', { method: 'POST' })
+        if (!res.ok) { clearSession(); return null }
+        const data = await res.json()
+        applySession(data)
+        scheduleRefresh(data.expiresIn)
+        return data.accessToken
+      } catch {
+        // A network blip is not proof the session is dead — keep the token and
+        // let the caller's 401 handling decide. Clearing here would sign the
+        // user out every time the connection wobbles.
+        return null
+      } finally {
+        refreshInFlight.current = null
+      }
+    })()
+    return refreshInFlight.current
+  }, [scheduleRefresh, applySession, clearSession])
+
+  // scheduleRefresh is created once and fires long after render, so it reaches
+  // silentRefresh through a ref rather than closing over a stale copy.
+  const silentRefreshRef = useRef(silentRefresh)
+  silentRefreshRef.current = silentRefresh
 
   // ── Restore session on mount ───────────────────
   useEffect(() => {
@@ -54,17 +98,36 @@ export function AuthProvider({ children }) {
     return () => { if (refreshTimer.current) clearTimeout(refreshTimer.current) }
   }, [])  // eslint-disable-line
 
+  // ── Re-check on foreground ─────────────────────
+  // Mobile browsers suspend timers in a backgrounded tab, so the 14-minute
+  // refresh never fires while the phone is locked or the tab is away. Coming
+  // back to the page reliably landed on an expired token and a "Token expired"
+  // banner — which is exactly the state a background job is meant to survive.
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return
+      if (!tokenRef.current) return                        // logged out; nothing to renew
+      if (Date.now() < expiresAtRef.current - 60_000) return  // still comfortably valid
+      silentRefreshRef.current?.()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    window.addEventListener('focus', onVisible)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible)
+      window.removeEventListener('focus', onVisible)
+    }
+  }, [])
+
   // ── Register ───────────────────────────────────
   const register = useCallback(async ({ email, password, displayName }) => {
     setAuthError(null)
     const res  = await API('/register', { method: 'POST', body: { email, password, displayName } })
     const data = await res.json()
     if (!res.ok) throw new Error(data.error || 'Registration failed')
-    setUser(data.user)
-    setAccessToken(data.accessToken)
+    applySession(data)
     scheduleRefresh(data.expiresIn)
     return data.user
-  }, [scheduleRefresh])
+  }, [scheduleRefresh, applySession])
 
   // ── Login ──────────────────────────────────────
   const login = useCallback(async ({ email, password, rememberMe = false }) => {
@@ -77,19 +140,17 @@ export function AuthProvider({ children }) {
       if (data.email) err.email = data.email
       throw err
     }
-    setUser(data.user)
-    setAccessToken(data.accessToken)
+    applySession(data)
     scheduleRefresh(data.expiresIn)
     return data.user
-  }, [scheduleRefresh])
+  }, [scheduleRefresh, applySession])
 
   // ── Logout ─────────────────────────────────────
   const logout = useCallback(async () => {
     if (refreshTimer.current) clearTimeout(refreshTimer.current)
     await API('/logout', { method: 'POST' }).catch(() => {})
-    setUser(null)
-    setAccessToken(null)
-  }, [])
+    clearSession()
+  }, [clearSession])
 
   // ── Forgot password ────────────────────────────
   const forgotPassword = useCallback(async (email) => {
@@ -108,20 +169,47 @@ export function AuthProvider({ children }) {
   }, [])
 
   // ── Authorised fetch helper ────────────────────
-  // Use this for any API call that needs the access token
-  const authFetch = useCallback((url, opts = {}) => {
-    if (!accessToken) return Promise.reject(new Error('Not authenticated'))
-    return fetch(url, {
+  // Use this for any API call that needs the access token.
+  //
+  // Retries ONCE through a refresh on a 401. The access token lives 15 minutes
+  // and the renewal timer does not run in a backgrounded mobile tab, so any
+  // long-lived page — a polling background job above all — will eventually
+  // present an expired token. Without this the user just saw "Token expired"
+  // and had to reload.
+  //
+  // `requireToken: false` marks an endpoint that also serves logged-out users
+  // (e.g. GET /api/market-focus): the token is attached when there is one, but
+  // its absence is not an error. Without that escape hatch, routing a public
+  // endpoint through here would break it for anonymous visitors.
+  const authFetch = useCallback(async (url, { requireToken = true, ...opts } = {}) => {
+    const send = (token) => fetch(url, {
       ...opts,
       credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
-        Authorization:  `Bearer ${accessToken}`,
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...(opts.headers || {}),
       },
-      body: opts.body ? JSON.stringify(opts.body) : undefined,
+      // Callers pass either a plain object (stringified here, as they always
+      // have) or an already-serialised string.
+      body: opts.body && typeof opts.body !== 'string' ? JSON.stringify(opts.body) : opts.body,
     })
-  }, [accessToken])
+
+    let token = tokenRef.current
+    if (!token) {
+      // No session and none needed — go straight out, don't burn a refresh.
+      if (!requireToken) return send(null)
+      token = await silentRefresh()
+      if (!token) throw new Error('Not authenticated')
+    }
+
+    const res = await send(token)
+    if (res.status !== 401) return res
+
+    const fresh = await silentRefresh()
+    if (!fresh) return res          // session really is gone — let the 401 surface
+    return send(fresh)
+  }, [silentRefresh])
 
   const isAuthenticated = !!user && !!accessToken
 

@@ -4,7 +4,6 @@
  */
 
 import { useState, useCallback, useEffect } from 'react'
-import { useAuth } from '../../contexts/AuthContext'
 import { useBackgroundJob } from '../../hooks/useBackgroundJob'
 import {
   Sparkles, RefreshCw, TrendingUp, Clock,
@@ -30,7 +29,6 @@ function getApiKeyHeaders() {
 
 /* ── Main view ───────────────────────────────────── */
 export default function BuySignalsView({ portfolio, onAnalyze }) {
-  const { accessToken } = useAuth()
   const [recs,          setRecs]          = useState(null)
   const [loading,       setLoading]       = useState(false)
   const [error,         setError]         = useState(null)
@@ -85,7 +83,6 @@ export default function BuySignalsView({ portfolio, onAnalyze }) {
     startPath:  '/api/recommendations/job',
     pollPath:   '/api/recommendations/job',
     storageKey: 'finsurf_active_recs',
-    accessToken,
     noun: 'recommendation run',
     onStart:  () => { setLoading(true); setError(null) },
     onResult: (result) => { setRecs(result); setError(null); setLoading(false); loadQuotes(result) },

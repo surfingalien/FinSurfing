@@ -112,7 +112,7 @@ function IndicatorRow({ label, value, colorClass, even }) {
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function TradingAIPanel({ symbol, interval, price }) {
-  const { accessToken } = useAuth()
+  const { authFetch } = useAuth()
   const [tab, setTab] = useState('analysis')
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState(null)
@@ -150,11 +150,10 @@ export default function TradingAIPanel({ symbol, interval, price }) {
         } catch { /* server will fall back to bar close */ }
       }
 
-      const authHeader = accessToken ? { Authorization: `Bearer ${accessToken}` } : {}
-      const res = await fetch('/api/trading-analysis/analyze', {
+      const res = await authFetch('/api/trading-analysis/analyze', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...getApiKeyHeaders(), ...authHeader },
-        body: JSON.stringify({ symbol, interval, livePrice }),
+        headers: getApiKeyHeaders(),
+        body: { symbol, interval, livePrice },
       })
       // The endpoint heartbeats to survive slow mobile connections, which pins
       // the status at 200 once the first keep-alive byte goes out — so a failure
@@ -184,7 +183,7 @@ export default function TradingAIPanel({ symbol, interval, price }) {
       setError(e.message)
     }
     setLoading(false)
-  }, [symbol, interval, price])
+  }, [symbol, interval, price, authFetch])
 
   // ── Auto-analyze on symbol / interval change ───────────────────────────────
   useEffect(() => {
@@ -223,9 +222,8 @@ export default function TradingAIPanel({ symbol, interval, price }) {
     const assistantMsg = { role: 'assistant', content: '' }
     setChatHistory(h => [...h, assistantMsg])
     try {
-      const res = await fetch('/api/trading-analysis/chat', {
+      const res = await authFetch('/api/trading-analysis/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}) },
         body: JSON.stringify({
           message: msg,
           symbol,
@@ -282,8 +280,8 @@ export default function TradingAIPanel({ symbol, interval, price }) {
     setEarningsLoading(true)
     setEarningsError(null)
     try {
-      const res = await fetch(`/api/earnings-call?symbol=${encodeURIComponent(ticker)}`, {
-        headers: { ...getApiKeyHeaders(), ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}) },
+      const res = await authFetch(`/api/earnings-call?symbol=${encodeURIComponent(ticker)}`, {
+        headers: getApiKeyHeaders(),
         signal: AbortSignal.timeout(30000),
       })
       const data = await res.json()
@@ -294,7 +292,7 @@ export default function TradingAIPanel({ symbol, interval, price }) {
       setEarningsError(e.message)
     }
     setEarningsLoading(false)
-  }, [symbol, ticker, accessToken])
+  }, [symbol, ticker, authFetch])
 
   // ── Tabs bar ───────────────────────────────────────────────────────────────
   const TABS = [

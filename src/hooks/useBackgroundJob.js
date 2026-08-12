@@ -20,7 +20,6 @@
  *     startPath: '/api/ai-brain/scan',
  *     pollPath:  '/api/ai-brain/scan',
  *     storageKey: 'finsurf_active_scan',
- *     accessToken,
  *     noun: 'scan',
  *     onResult: setAnalysis,
  *     onError:  setError,
@@ -32,6 +31,7 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { getApiKeyHeaders } from '../services/api'
+import { useAuth } from '../contexts/AuthContext'
 
 const POLL_MS = 4000
 
@@ -39,7 +39,6 @@ export function useBackgroundJob({
   startPath,
   pollPath,
   storageKey,
-  accessToken,
   noun = 'run',
   onResult,
   onError,
@@ -55,11 +54,21 @@ export function useBackgroundJob({
   const cb = useRef({ onResult, onError, onStart })
   cb.current = { onResult, onError, onStart }
 
-  const authHeaders = useCallback(() => ({
-    'Content-Type': 'application/json',
-    ...getApiKeyHeaders(),
-    ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-  }), [accessToken])
+  // authFetch, not a hand-rolled Authorization header: a job can poll for
+  // minutes and the 15-minute access token will expire underneath it —
+  // especially on mobile, where the renewal timer is suspended while the tab is
+  // backgrounded. authFetch refreshes and retries once on a 401, so a returning
+  // user sees their result instead of "Token expired".
+  const { accessToken, authFetch } = useAuth()
+  // A boolean, not the token itself: the token rotates every ~14 minutes, and
+  // depending on its value would re-run the resume effect on every rotation —
+  // re-emitting the last completed result and restarting the poll interval.
+  const isAuthed = !!accessToken
+
+  const call = useCallback(
+    (url, opts = {}) => authFetch(url, { ...opts, headers: { ...getApiKeyHeaders(), ...(opts.headers || {}) } }),
+    [authFetch],
+  )
 
   const stop = useCallback(() => {
     if (pollTimer.current) { clearInterval(pollTimer.current); pollTimer.current = null }
@@ -75,7 +84,7 @@ export function useBackgroundJob({
 
   const poll = useCallback(async (jobId) => {
     try {
-      const res = await fetch(`${pollPath}/${encodeURIComponent(jobId)}`, { headers: authHeaders() })
+      const res = await call(`${pollPath}/${encodeURIComponent(jobId)}`)
       if (res.status === 404) {   // lost to a restart — stop chasing it
         finish({ status: 'failed', error: `This ${noun} is no longer available (the server may have restarted).` })
         return
@@ -85,7 +94,7 @@ export function useBackgroundJob({
       if (job.status === 'done' || job.status === 'failed') finish(job)
       else setStatus(job.status)
     } catch { /* transient network blip — keep polling */ }
-  }, [pollPath, authHeaders, finish, noun])
+  }, [pollPath, call, finish, noun])
 
   const watch = useCallback((jobId) => {
     try { localStorage.setItem(storageKey, jobId) } catch { /* private mode */ }
@@ -100,9 +109,7 @@ export function useBackgroundJob({
     setStatus('starting')
     cb.current.onStart?.()
     try {
-      const res = await fetch(startPath, {
-        method: 'POST', headers: authHeaders(), body: JSON.stringify(body),
-      })
+      const res = await call(startPath, { method: 'POST', body })
       const data = await res.json()
       if (!res.ok || data.error) throw new Error(data.error || `Could not start the ${noun}`)
       setStatus(data.status ?? 'queued')
@@ -113,19 +120,19 @@ export function useBackgroundJob({
       cb.current.onError?.(e.message)
       return null
     }
-  }, [startPath, authHeaders, watch, noun])
+  }, [startPath, call, watch, noun])
 
   // Reattach on mount: resume a run started before the tab closed, else show
   // the most recent completed one so the view is never blank after a run.
   useEffect(() => {
-    if (!accessToken) return undefined
+    if (!isAuthed) return undefined
     let cancelled = false
     ;(async () => {
       let saved = null
       try { saved = localStorage.getItem(storageKey) } catch { /* private mode */ }
       if (saved) {
         try {
-          const res = await fetch(`${pollPath}/${encodeURIComponent(saved)}`, { headers: authHeaders() })
+          const res = await call(`${pollPath}/${encodeURIComponent(saved)}`)
           const { job } = res.ok ? await res.json() : { job: null }
           if (cancelled) return
           if (job && (job.status === 'queued' || job.status === 'running')) {
@@ -137,13 +144,13 @@ export function useBackgroundJob({
       }
       if (!restoreLatest) return
       try {
-        const res = await fetch(`${pollPath}/latest`, { headers: authHeaders() })
+        const res = await call(`${pollPath}/latest`)
         const { job } = res.ok ? await res.json() : { job: null }
         if (!cancelled && job?.result) cb.current.onResult?.(job.result)
       } catch { /* nothing cached yet */ }
     })()
     return () => { cancelled = true }
-  }, [accessToken, storageKey, pollPath, restoreLatest, authHeaders, watch, finish])
+  }, [isAuthed, storageKey, pollPath, restoreLatest, call, watch, finish])
 
   useEffect(() => stop, [stop])
 

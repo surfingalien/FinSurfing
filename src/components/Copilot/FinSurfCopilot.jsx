@@ -96,7 +96,10 @@ export default function FinSurfCopilot({ portfolio = [], watchlist = [] }) {
   const inputRef = useRef(null)
   const abortRef = useRef(null)
   const { keys } = useApiKeys?.() ?? { keys: {} }
-  const { accessToken } = useAuth?.() ?? {}
+  const { authFetch } = useAuth?.() ?? {}
+  // This component is also mounted outside the auth provider in some shells,
+  // where useAuth yields nothing — fall back to plain fetch rather than crash.
+  const doFetch = authFetch ?? ((url, opts) => fetch(url, opts))
   const activeProvider = PROVIDERS.find(p => p.id === providerId) || PROVIDERS[0]
 
   useEffect(() => {
@@ -131,11 +134,11 @@ export default function FinSurfCopilot({ portfolio = [], watchlist = [] }) {
       for (const [k, v] of Object.entries(keys || {})) {
         if (v) extraHeaders[`x-${k.toLowerCase()}-key`] = v
       }
-      if (accessToken) extraHeaders['Authorization'] = `Bearer ${accessToken}`
-
-      const r = await fetch('/api/copilot/chat', {
+      // authFetch, so a 401 refreshes and retries rather than killing the
+      // stream. It returns the Response untouched, so SSE reading is unaffected.
+      const r = await doFetch('/api/copilot/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...extraHeaders },
+        headers: extraHeaders,
         body: JSON.stringify({
           messages: apiMessages,
           portfolio: portfolio.map?.(p => p.symbol || p).filter(Boolean),
@@ -199,7 +202,7 @@ export default function FinSurfCopilot({ portfolio = [], watchlist = [] }) {
       setStreaming(false)
       setActiveTools([])
     }
-  }, [input, messages, streaming, portfolio, watchlist, keys, accessToken])
+  }, [input, messages, streaming, portfolio, watchlist, keys, doFetch])
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() }
