@@ -25,14 +25,12 @@ const TONE_STYLE = {
 }
 
 function Card({ symbol, form }) {
-  const { accessToken } = useAuth()
+  const { authFetch } = useAuth()
   const formQs = form && form !== 'Latest' ? `?form=${encodeURIComponent(form)}` : ''
   const key = `filings:${symbol}:${form || 'Latest'}`
   const { data, error, loading, refetch } = useQuery(
     key,
-    () => fetchJson(`/api/filings/${encodeURIComponent(symbol)}${formQs}`, {
-      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
-    }),
+    () => fetchJson(`/api/filings/${encodeURIComponent(symbol)}${formQs}`, {}, authFetch),
     { staleMs: 6 * 60 * 60_000 },   // matches the route's 6h server cache
   )
 

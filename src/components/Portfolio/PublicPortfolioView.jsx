@@ -183,13 +183,9 @@ export default function PublicPortfolioView({ portfolioId, username, onClose }) 
         ? `${BASE}/api/public/users/${encodeURIComponent(username)}/portfolio`
         : `${BASE}/api/public/portfolios/${portfolioId}`
 
-      // Try authenticated fetch first (for shared/private), fall back to plain
-      let res
-      try {
-        res = await authFetch(url)
-      } catch {
-        res = await fetch(url)
-      }
+      // Attach the token when there is one (unlocks shared/private portfolios)
+      // but don't require it — this page serves logged-out visitors too.
+      const res = await authFetch(url, { requireToken: false })
       if (res.status === 404) throw new Error('Portfolio not found or not public')
       if (res.status === 429) throw new Error('Too many requests — please wait a moment')
       if (!res.ok) {

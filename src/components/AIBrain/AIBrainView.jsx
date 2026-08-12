@@ -11,7 +11,6 @@
  */
 
 import { useState, useCallback, useEffect } from 'react'
-import { useAuth } from '../../contexts/AuthContext'
 import { useQuery, fetchJson } from '../../hooks/useQuery'
 import { useBackgroundJob } from '../../hooks/useBackgroundJob'
 import {
@@ -32,7 +31,6 @@ import SymbolSearchInput from './scan/SymbolSearchInput'
 
 /* ── Main view ────────────────────────────────────────────── */
 export default function AIBrainView({ portfolio, onAnalyze }) {
-  const { accessToken } = useAuth()
   const [analysis,      setAnalysis]      = useState(null)
   const [loading,       setLoading]       = useState(false)
   const [error,         setError]         = useState(null)
@@ -65,7 +63,6 @@ export default function AIBrainView({ portfolio, onAnalyze }) {
     startPath:  '/api/ai-brain/scan',
     pollPath:   '/api/ai-brain/scan',
     storageKey: 'finsurf_active_scan',
-    accessToken,
     noun: 'scan',
     onStart:  () => { setLoading(true); setError(null); setActiveAgent(0) },
     onResult: (result) => { setAnalysis(result); setError(null); setLoading(false); setActiveAgent(-1) },

@@ -182,7 +182,7 @@ function MarketPulseBar({ pulse, sessionLabel }) {
 // ── Main view ─────────────────────────────────────────────────────────────────
 
 export default function MarketFocusView({ portfolio, watchlist: watchlistSymbols = [] }) {
-  const { accessToken } = useAuth()
+  const { authFetch } = useAuth()
   const [data,     setData]     = useState(null)
   const [loading,  setLoading]  = useState(false)
   const [error,    setError]    = useState(null)
@@ -191,22 +191,22 @@ export default function MarketFocusView({ portfolio, watchlist: watchlistSymbols
 
   const holdings = portfolio?.positions?.map(p => p.symbol) ?? []
 
-  const authHeader = accessToken ? { Authorization: `Bearer ${accessToken}` } : {}
-
   const loadFocus = useCallback(async (force = false) => {
     setLoading(true)
     setError(null)
     try {
       let res
       if (force) {
-        res = await fetch('/api/market-focus/refresh', {
+        res = await authFetch('/api/market-focus/refresh', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...getApiKeyHeaders(), ...authHeader },
-          body: JSON.stringify({ holdings, watchlist: watchlistSymbols }),
+          headers: getApiKeyHeaders(),
+          body: { holdings, watchlist: watchlistSymbols },
         })
       } else {
-        res = await fetch('/api/market-focus', {
-          headers: { ...getApiKeyHeaders(), ...authHeader },
+        // This GET also serves logged-out visitors.
+        res = await authFetch('/api/market-focus', {
+          headers: getApiKeyHeaders(),
+          requireToken: false,
         })
       }
       const d = await res.json()
@@ -217,7 +217,7 @@ export default function MarketFocusView({ portfolio, watchlist: watchlistSymbols
     } finally {
       setLoading(false)
     }
-  }, [holdings, watchlistSymbols, accessToken])
+  }, [holdings, watchlistSymbols, authFetch])
 
   // Load on mount
   useEffect(() => { loadFocus(false) }, [])

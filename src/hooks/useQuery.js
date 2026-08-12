@@ -108,8 +108,10 @@ export function useQuery(key, fetcher, { staleMs = 30_000, refetchMs = 0, enable
 }
 
 /** Fetch JSON with non-2xx → thrown Error(message from body when present). */
-export async function fetchJson(url, options) {
-  const res  = await fetch(url, options)
+// `fetchImpl` lets authenticated callers pass AuthContext's authFetch, which
+// refreshes and retries once on a 401 instead of surfacing "Token expired".
+export async function fetchJson(url, options, fetchImpl = fetch) {
+  const res  = await fetchImpl(url, options)
   const body = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(body.error || `Request failed (${res.status})`)
   return body
