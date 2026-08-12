@@ -3,8 +3,9 @@
  * Covers stocks, ETFs, and cryptocurrencies.
  */
 
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
+import { useBackgroundJob } from '../../hooks/useBackgroundJob'
 import {
   Sparkles, RefreshCw, TrendingUp, Clock,
   AlertTriangle, Search, X, Download,
@@ -40,8 +41,6 @@ export default function BuySignalsView({ portfolio, onAnalyze }) {
   const [includeFunds,  setIncludeFunds]  = useState(false)
   const [personaId,     setPersonaId]     = useState('default')
   const [personas,      setPersonas]      = useState([])
-  const [jobStatus,     setJobStatus]     = useState(null)
-  const pollTimer = useRef(null)
 
   const holdings = portfolio?.positions?.map(p => p.symbol) ?? []
 
@@ -60,16 +59,10 @@ export default function BuySignalsView({ portfolio, onAnalyze }) {
       .slice(0, 15)
 
   // ── Background generation ────────────────────────────────────────────────
-  // The run happens on the SERVER: we enqueue it, remember the job id, and
-  // poll. Closing the tab — or losing the request on a flaky mobile
-  // connection, which showed up as a bare "Load failed" — no longer discards
-  // a generation that has already been paid for.
-  const JOB_KEY = 'finsurf_active_recs'
-
-  const authHeaders = useCallback(
-    () => ({ 'Content-Type': 'application/json', ...getApiKeyHeaders(), ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}) }),
-    [accessToken],
-  )
+  // The run happens on the SERVER: useBackgroundJob enqueues it and polls.
+  // Closing the tab — or losing the request on a flaky mobile connection, which
+  // showed up as a bare "Load failed" — no longer discards a generation that has
+  // already been paid for.
 
   // Live prices are supplementary — a failure here must never fail the run.
   const loadQuotes = useCallback(async (data) => {
@@ -88,92 +81,25 @@ export default function BuySignalsView({ portfolio, onAnalyze }) {
     } catch { /* live prices are optional */ }
   }, [])
 
-  const stopPolling = useCallback(() => {
-    if (pollTimer.current) { clearInterval(pollTimer.current); pollTimer.current = null }
-  }, [])
+  const job = useBackgroundJob({
+    startPath:  '/api/recommendations/job',
+    pollPath:   '/api/recommendations/job',
+    storageKey: 'finsurf_active_recs',
+    accessToken,
+    noun: 'recommendation run',
+    onStart:  () => { setLoading(true); setError(null) },
+    onResult: (result) => { setRecs(result); setError(null); setLoading(false); loadQuotes(result) },
+    onError:  (msg) => { setError(msg); setLoading(false) },
+  })
+  const jobStatus = job.status
+  const startJob  = job.start   // stable identity; `job` itself is a fresh object each render
 
-  const finishJob = useCallback((job) => {
-    stopPolling()
-    try { localStorage.removeItem(JOB_KEY) } catch {}
-    setLoading(false)
-    setJobStatus(null)
-    if (job?.status === 'done' && job.result) {
-      setRecs(job.result); setError(null); loadQuotes(job.result)
-    } else if (job?.status === 'failed') {
-      setError(job.error || 'Failed to get recommendations')
-    }
-  }, [stopPolling, loadQuotes])
-
-  const pollJob = useCallback(async (jobId) => {
-    try {
-      const res = await fetch(`/api/recommendations/job/${encodeURIComponent(jobId)}`, { headers: authHeaders() })
-      if (res.status === 404) {   // lost to a restart — stop chasing it
-        finishJob({ status: 'failed', error: 'This run is no longer available (the server may have restarted).' })
-        return
-      }
-      const { job } = await res.json()
-      if (!job) return
-      if (job.status === 'done' || job.status === 'failed') finishJob(job)
-      else setJobStatus(job.status)
-    } catch { /* transient blip — keep polling */ }
-  }, [authHeaders, finishJob])
-
-  const watchJob = useCallback((jobId) => {
-    try { localStorage.setItem(JOB_KEY, jobId) } catch {}
-    setLoading(true)
-    stopPolling()
-    pollJob(jobId)
-    pollTimer.current = setInterval(() => pollJob(jobId), 4000)
-  }, [pollJob, stopPolling])
-
-  const generate = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      const body = { holdings, persona: personaId, includeMacro: true }
-      if (customSymbols.trim()) body.focusSymbols = parseSymbols(customSymbols)
-      if (includeFunds && !customSymbols.trim()) body.includeFunds = true
-      const res = await fetch('/api/recommendations/generate', {
-        method: 'POST', headers: authHeaders(), body: JSON.stringify(body),
-      })
-      const data = await res.json()
-      if (!res.ok || data.error) throw new Error(data.error || 'Could not start the run')
-      setJobStatus(data.status ?? 'queued')
-      watchJob(data.jobId)
-    } catch (e) {
-      setError(e.message)
-      setLoading(false)
-    }
-  }, [holdings, customSymbols, personaId, includeFunds, authHeaders, watchJob])
-
-  // Reattach on mount: resume a run started before the tab closed, else show
-  // the most recent completed one so the page is never blank after a run.
-  useEffect(() => {
-    if (!accessToken) return
-    let cancelled = false
-    ;(async () => {
-      let saved = null
-      try { saved = localStorage.getItem(JOB_KEY) } catch {}
-      if (saved) {
-        try {
-          const res = await fetch(`/api/recommendations/job/${encodeURIComponent(saved)}`, { headers: authHeaders() })
-          const { job } = res.ok ? await res.json() : { job: null }
-          if (cancelled) return
-          if (job && (job.status === 'queued' || job.status === 'running')) { watchJob(saved); return }
-          if (job && job.status === 'done' && job.result) { finishJob(job); return }
-        } catch { /* fall through to latest */ }
-        try { localStorage.removeItem(JOB_KEY) } catch {}
-      }
-      try {
-        const res = await fetch('/api/recommendations/job/latest', { headers: authHeaders() })
-        const { job } = res.ok ? await res.json() : { job: null }
-        if (!cancelled && job?.result) { setRecs(job.result); loadQuotes(job.result) }
-      } catch { /* nothing cached yet */ }
-    })()
-    return () => { cancelled = true }
-  }, [accessToken, authHeaders, watchJob, finishJob, loadQuotes])
-
-  useEffect(() => stopPolling, [stopPolling])
+  const generate = useCallback(() => {
+    const body = { holdings, persona: personaId, includeMacro: true }
+    if (customSymbols.trim()) body.focusSymbols = parseSymbols(customSymbols)
+    if (includeFunds && !customSymbols.trim()) body.includeFunds = true
+    return startJob(body)
+  }, [holdings, customSymbols, personaId, includeFunds, startJob])
 
   const displayed = (recs?.recommendations ?? []).filter(r => {
     if (filter !== 'all' && r.type !== filter) return false

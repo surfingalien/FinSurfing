@@ -33,7 +33,7 @@ const { tryParseAiJson }    = require('../lib/ai-json')
 const { baselineFromBars }  = require('../lib/ml-baseline')
 const { factorScores, factorLine } = require('../lib/factor-model')
 const { startJsonHeartbeat } = require('../lib/http-heartbeat')
-const jobQueue               = require('../lib/ai-job-queue')
+const { mountJobRoutes }    = require('../lib/ai-job-routes')
 
 const router   = express.Router()
 const aiRouter = getRouter('ai-brain')
@@ -914,69 +914,31 @@ Rules:
 // GET  /scans       → this user's recent scans (newest first)
 // GET  /scan/latest → the most recent completed scan, for a cold page load
 
-// Cheap to call (it only enqueues), but still bounded so the queue can't be
-// flooded — the per-user cap in scan-queue is the real limit.
-const scanEnqueueLimit = rateLimit({
-  windowMs: 5 * 60 * 1000, max: 10,
-  skip: (req) => {
-    const addr = req.socket?.remoteAddress || ''
-    return addr === '127.0.0.1' || addr === '::1' || addr === '::ffff:127.0.0.1'
-  },
-  message: { error: 'Too many scan requests — wait a few minutes' },
-})
-
-router.post('/scan', requireAuth, scanEnqueueLimit, (req, res) => {
-  if (process.env.AI_BRAIN_DISABLED === 'true')
-    return res.status(503).json({ error: 'AI Brain is temporarily disabled (kill switch active)', killSwitch: true })
-
-  const { symbols, scanMode = 'broad', horizon = '6m', holdings = [] } = req.body || {}
-  if (!['3m', '6m', '12m'].includes(horizon))
-    return res.status(400).json({ error: 'horizon must be 3m, 6m, or 12m' })
-
+mountJobRoutes(router, {
+  kind: 'scan',
+  requireAuth,
+  base: '/scan',
+  listPath: '/scans',
+  noun: 'scan',
+  disabledEnv: 'AI_BRAIN_DISABLED',
+  label: (p) => (p.symbols ? p.symbols.join(',') : p.scanMode),
   // Validate here rather than at run time — a job that can only fail should
   // never reach the queue.
-  const params = { horizon, holdings: Array.isArray(holdings) ? holdings.slice(0, 50) : [] }
-  if (Array.isArray(symbols) && symbols.length) {
-    params.symbols = symbols.map(s => String(s).toUpperCase().replace(/[^A-Z0-9.-]/g, '')).filter(Boolean).slice(0, 20)
-    if (!params.symbols.length) return res.status(400).json({ error: 'no valid symbols provided' })
-  } else {
-    if (!SCAN_UNIVERSES[scanMode]) return res.status(400).json({ error: `unknown scanMode: ${scanMode}` })
-    params.scanMode = scanMode
-  }
+  buildParams: (req) => {
+    const { symbols, scanMode = 'broad', horizon = '6m', holdings = [] } = req.body || {}
+    if (!['3m', '6m', '12m'].includes(horizon))
+      return { error: 'horizon must be 3m, 6m, or 12m' }
 
-  try {
-    const { id, position } = jobQueue.enqueue({
-      userId: req.user?.userId,
-      kind:   'scan',
-      params,
-      label: params.symbols ? params.symbols.join(',') : scanMode,
-    })
-    return res.status(202).json({ ok: true, jobId: id, position, status: position === 1 ? 'running' : 'queued' })
-  } catch (e) {
-    return res.status(503).json({ error: e.message })
-  }
-})
-
-// Fixed path — must be declared before '/scan/:id' or it'd be read as an id.
-router.get('/scan/latest', requireAuth, (req, res) => {
-  res.json({ job: jobQueue.getLatestResult(req.user?.userId, 'scan') })
-})
-
-router.get('/scan/:id', requireAuth, (req, res) => {
-  const job = jobQueue.getJob(req.params.id, req.user?.userId)
-  if (!job) return res.status(404).json({ error: 'Scan not found' })
-  res.json({ job })
-})
-
-router.delete('/scan/:id', requireAuth, (req, res) => {
-  const ok = jobQueue.cancel(req.params.id, req.user?.userId)
-  if (!ok) return res.status(404).json({ error: 'Scan not found, already running, or already finished' })
-  res.json({ ok: true })
-})
-
-router.get('/scans', requireAuth, (req, res) => {
-  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 10, 1), 50)
-  res.json({ jobs: jobQueue.getUserJobs(req.user?.userId, limit, 'scan'), queue: jobQueue.getQueue() })
+    const params = { horizon, holdings: Array.isArray(holdings) ? holdings.slice(0, 50) : [] }
+    if (Array.isArray(symbols) && symbols.length) {
+      params.symbols = symbols.map(s => String(s).toUpperCase().replace(/[^A-Z0-9.-]/g, '')).filter(Boolean).slice(0, 20)
+      if (!params.symbols.length) return { error: 'no valid symbols provided' }
+    } else {
+      if (!SCAN_UNIVERSES[scanMode]) return { error: `unknown scanMode: ${scanMode}` }
+      params.scanMode = scanMode
+    }
+    return params
+  },
 })
 
 // GET /api/ai-brain/learnings — returns current self-improvement state for UI

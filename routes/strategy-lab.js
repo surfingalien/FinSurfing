@@ -24,6 +24,7 @@ const { CircuitOpenError } = require('../lib/circuit-breaker')
 const { fetchDailyBars } = require('../lib/internal-api')
 const { compactTaLine } = require('../lib/technical-indicators')
 const { buildProposalPrompt, parseProposals, evaluateProposals, MAX_PROPOSALS } = require('../lib/strategy-lab')
+const { startJsonHeartbeat } = require('../lib/http-heartbeat')
 
 const router = express.Router()
 const aiRouter = getRouter('strategy-lab')
@@ -31,6 +32,12 @@ const aiRouter = getRouter('strategy-lab')
 const VALID_RANGES = ['1y', '2y', '5y']
 
 router.post('/propose', requireAuth, async (req, res) => {
+  // A bar fetch plus an LLM call plus 2 backtests per proposal is long enough
+  // that a mobile connection can idle out mid-run, which the browser reports as
+  // a bare "Load failed". Failures after the first heartbeat arrive as
+  // 200 + `error` in the body, so clients must check both.
+  startJsonHeartbeat(res)
+
   const { symbol, range = '2y', initialCapital = 10000, count = 3 } = req.body || {}
 
   if (!symbol || typeof symbol !== 'string')

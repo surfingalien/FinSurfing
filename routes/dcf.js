@@ -11,6 +11,8 @@
  */
 
 const express       = require('express')
+const { startJsonHeartbeat } = require('../lib/http-heartbeat')
+
 const router        = express.Router()
 const rateLimit     = require('express-rate-limit')
 const { getRouter } = require('../lib/ai-router')
@@ -126,6 +128,11 @@ All percentages as plain numbers (e.g. 8.5 means 8.5%). Return ONLY this JSON ob
 
 // ── POST / ────────────────────────────────────────────────────────────────────
 router.post('/', dcfLimit, async (req, res) => {
+  // Four provider calls plus a 4k-token LLM call; keeps a slow mobile
+  // connection from idling out mid-request. Failures after the first heartbeat
+  // arrive as 200 + `error` in the body.
+  startJsonHeartbeat(res)
+
   const raw = req.body?.symbol
   if (!raw || typeof raw !== 'string' || !VALID_SYMBOL.test(raw.trim()))
     return res.status(400).json({ error: 'Valid symbol required (alphanumeric, . or -, max 10 chars)' })

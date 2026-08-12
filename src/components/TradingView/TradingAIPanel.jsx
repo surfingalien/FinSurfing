@@ -156,8 +156,11 @@ export default function TradingAIPanel({ symbol, interval, price }) {
         headers: { 'Content-Type': 'application/json', ...getApiKeyHeaders(), ...authHeader },
         body: JSON.stringify({ symbol, interval, livePrice }),
       })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Analysis failed')
+      // The endpoint heartbeats to survive slow mobile connections, which pins
+      // the status at 200 once the first keep-alive byte goes out — so a failure
+      // can only arrive as `error` in the body. Check both.
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || data.error) throw new Error(data.error || 'Analysis failed')
       setResult(data)
 
       // Generate alerts from patterns

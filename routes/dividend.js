@@ -11,6 +11,8 @@
  */
 
 const express       = require('express')
+const { startJsonHeartbeat } = require('../lib/http-heartbeat')
+
 const router        = express.Router()
 const rateLimit     = require('express-rate-limit')
 const { getRouter } = require('../lib/ai-router')
@@ -176,6 +178,11 @@ Return ONLY this JSON object:
 
 // ── POST /screen ──────────────────────────────────────────────────────────────
 router.post('/screen', dividendLimit, async (req, res) => {
+  // Up to 20 symbols x 2 provider calls before a 4k-token LLM call. Long enough
+  // for a mobile connection to idle out, which surfaces as a bare "Load failed".
+  // Failures after the first heartbeat arrive as 200 + `error` in the body.
+  startJsonHeartbeat(res)
+
   const body = req.body || {}
 
   // Resolve symbol list

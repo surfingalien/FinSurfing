@@ -10,9 +10,10 @@
  * - Prediction instrumentation (backend)
  */
 
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useQuery, fetchJson } from '../../hooks/useQuery'
+import { useBackgroundJob } from '../../hooks/useBackgroundJob'
 import {
   Brain, TrendingUp, RefreshCw, AlertTriangle,
   Zap, Activity, Clock, Download,
@@ -22,7 +23,7 @@ import { exportAnalysisToPDF } from '../../utils/pdfExport'
 import TrackRecordPanel from './TrackRecordPanel'
 import {
   SCAN_MODES, FUND_SUBMODES, STOCK_SUBMODES, ETF_SUBMODES, CRYPTO_SUBMODES,
-  getApiKeyHeaders, AGENTS, HORIZON_OPTIONS,
+  AGENTS, HORIZON_OPTIONS,
 } from './scan/constants'
 import StockCard from './scan/StockCard'
 import AgentOrb from './scan/AgentOrb'
@@ -57,107 +58,31 @@ export default function AIBrainView({ portfolio, onAnalyze }) {
       .slice(0, 20)
 
   // ── Background scans ──────────────────────────────────────────────────────
-  // The scan runs on the SERVER: we enqueue it, remember the job id, and poll.
-  // Closing the tab (or the request dying on a flaky mobile connection) no
-  // longer loses a scan that has already been paid for — reopening the page
-  // reattaches to the running job, or shows the last completed one.
-  const JOB_KEY = 'finsurf_active_scan'
-  const pollTimer = useRef(null)
-  const [jobStatus, setJobStatus] = useState(null)   // 'queued' | 'running' | null
+  // The scan runs on the SERVER: useBackgroundJob enqueues it and polls, so
+  // closing the tab (or the request dying on a flaky mobile connection) no
+  // longer loses a scan that has already been paid for.
+  const job = useBackgroundJob({
+    startPath:  '/api/ai-brain/scan',
+    pollPath:   '/api/ai-brain/scan',
+    storageKey: 'finsurf_active_scan',
+    accessToken,
+    noun: 'scan',
+    onStart:  () => { setLoading(true); setError(null); setActiveAgent(0) },
+    onResult: (result) => { setAnalysis(result); setError(null); setLoading(false); setActiveAgent(-1) },
+    onError:  (msg) => { setError(msg); setLoading(false); setActiveAgent(-1) },
+  })
+  const jobStatus = job.status
+  const startJob  = job.start   // stable identity; `job` itself is a fresh object each render
 
-  const authHeaders = useCallback(
-    () => ({ 'Content-Type': 'application/json', ...getApiKeyHeaders(), ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}) }),
-    [accessToken],
-  )
-
-  const stopPolling = useCallback(() => {
-    if (pollTimer.current) { clearInterval(pollTimer.current); pollTimer.current = null }
-  }, [])
-
-  const finishJob = useCallback((job) => {
-    stopPolling()
-    try { localStorage.removeItem(JOB_KEY) } catch {}
-    setActiveAgent(-1)
-    setLoading(false)
-    setJobStatus(null)
-    if (job?.status === 'done' && job.result) { setAnalysis(job.result); setError(null) }
-    else if (job?.status === 'failed')        setError(job.error || 'Analysis failed')
-  }, [stopPolling])
-
-  const pollJob = useCallback(async (jobId) => {
-    try {
-      const res = await fetch(`/api/ai-brain/scan/${encodeURIComponent(jobId)}`, { headers: authHeaders() })
-      if (res.status === 404) {   // lost to a restart — stop chasing it
-        finishJob({ status: 'failed', error: 'Scan is no longer available (the server may have restarted).' })
-        return
-      }
-      const { job } = await res.json()
-      if (!job) return
-      if (job.status === 'done' || job.status === 'failed') finishJob(job)
-      else setJobStatus(job.status)
-    } catch { /* transient network blip — keep polling */ }
-  }, [authHeaders, finishJob])
-
-  const watchJob = useCallback((jobId) => {
-    try { localStorage.setItem(JOB_KEY, jobId) } catch {}
-    setLoading(true)
-    setActiveAgent(0)
-    stopPolling()
-    pollJob(jobId)
-    pollTimer.current = setInterval(() => pollJob(jobId), 4000)
-  }, [pollJob, stopPolling])
-
-  const runAnalysis = useCallback(async () => {
-    setLoading(true)
-    setError(null)
+  const runAnalysis = useCallback(() => {
     setAnalysis(null)
-    setActiveAgent(0)
-    try {
-      const body = { horizon, holdings, scanMode }
-      if (customSymbols.trim()) {
-        body.symbols = parseSymbols(customSymbols)
-        delete body.scanMode
-      }
-      const res  = await fetch('/api/ai-brain/scan', {
-        method: 'POST', headers: authHeaders(), body: JSON.stringify(body),
-      })
-      const data = await res.json()
-      if (!res.ok || data.error) throw new Error(data.error || 'Could not start the scan')
-      setJobStatus(data.status ?? 'queued')
-      watchJob(data.jobId)
-    } catch (e) {
-      setError(e.message)
-      setActiveAgent(-1)
-      setLoading(false)
+    const body = { horizon, holdings, scanMode }
+    if (customSymbols.trim()) {
+      body.symbols = parseSymbols(customSymbols)
+      delete body.scanMode
     }
-  }, [horizon, holdings, customSymbols, scanMode, authHeaders, watchJob])
-
-  // Reattach on mount: resume a scan started before the tab was closed, else
-  // show the most recent completed one so the page is never blank after a run.
-  useEffect(() => {
-    if (!accessToken) return
-    let cancelled = false
-    ;(async () => {
-      let saved = null
-      try { saved = localStorage.getItem(JOB_KEY) } catch {}
-      if (saved) {
-        try {
-          const res = await fetch(`/api/ai-brain/scan/${encodeURIComponent(saved)}`, { headers: authHeaders() })
-          const { job } = res.ok ? await res.json() : { job: null }
-          if (cancelled) return
-          if (job && (job.status === 'queued' || job.status === 'running')) { watchJob(saved); return }
-          if (job && job.status === 'done' && job.result) { finishJob(job); return }
-        } catch { /* fall through to latest */ }
-        try { localStorage.removeItem(JOB_KEY) } catch {}
-      }
-      try {
-        const res = await fetch('/api/ai-brain/scan/latest', { headers: authHeaders() })
-        const { job } = res.ok ? await res.json() : { job: null }
-        if (!cancelled && job?.result) setAnalysis(job.result)
-      } catch { /* nothing cached yet */ }
-    })()
-    return () => { cancelled = true }
-  }, [accessToken, authHeaders, watchJob, finishJob])
+    return startJob(body)
+  }, [horizon, holdings, customSymbols, scanMode, startJob])
 
   // Animate the agent orbs while a scan is in flight.
   useEffect(() => {
@@ -165,8 +90,6 @@ export default function AIBrainView({ portfolio, onAnalyze }) {
     const cycle = setInterval(() => setActiveAgent(prev => (prev + 1) % (AGENTS.length + 1)), 1800)
     return () => clearInterval(cycle)
   }, [loading])
-
-  useEffect(() => stopPolling, [stopPolling])
 
   const conflictCount          = analysis?.rankedStocks?.filter(s => s.agentConflict?.exists).length ?? 0
   const convictionCount        = analysis?.rankedStocks?.filter(s => s.highConviction).length ?? 0
