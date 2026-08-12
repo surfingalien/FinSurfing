@@ -33,7 +33,7 @@ const { tryParseAiJson }    = require('../lib/ai-json')
 const { baselineFromBars }  = require('../lib/ml-baseline')
 const { factorScores, factorLine } = require('../lib/factor-model')
 const { startJsonHeartbeat } = require('../lib/http-heartbeat')
-const scanQueue              = require('../lib/scan-queue')
+const jobQueue               = require('../lib/ai-job-queue')
 
 const router   = express.Router()
 const aiRouter = getRouter('ai-brain')
@@ -945,8 +945,9 @@ router.post('/scan', requireAuth, scanEnqueueLimit, (req, res) => {
   }
 
   try {
-    const { id, position } = scanQueue.enqueue({
+    const { id, position } = jobQueue.enqueue({
       userId: req.user?.userId,
+      kind:   'scan',
       params,
       label: params.symbols ? params.symbols.join(',') : scanMode,
     })
@@ -958,24 +959,24 @@ router.post('/scan', requireAuth, scanEnqueueLimit, (req, res) => {
 
 // Fixed path — must be declared before '/scan/:id' or it'd be read as an id.
 router.get('/scan/latest', requireAuth, (req, res) => {
-  res.json({ job: scanQueue.getLatestResult(req.user?.userId) })
+  res.json({ job: jobQueue.getLatestResult(req.user?.userId, 'scan') })
 })
 
 router.get('/scan/:id', requireAuth, (req, res) => {
-  const job = scanQueue.getJob(req.params.id, req.user?.userId)
+  const job = jobQueue.getJob(req.params.id, req.user?.userId)
   if (!job) return res.status(404).json({ error: 'Scan not found' })
   res.json({ job })
 })
 
 router.delete('/scan/:id', requireAuth, (req, res) => {
-  const ok = scanQueue.cancel(req.params.id, req.user?.userId)
+  const ok = jobQueue.cancel(req.params.id, req.user?.userId)
   if (!ok) return res.status(404).json({ error: 'Scan not found, already running, or already finished' })
   res.json({ ok: true })
 })
 
 router.get('/scans', requireAuth, (req, res) => {
   const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 10, 1), 50)
-  res.json({ jobs: scanQueue.getUserJobs(req.user?.userId, limit), queue: scanQueue.getQueue() })
+  res.json({ jobs: jobQueue.getUserJobs(req.user?.userId, limit, 'scan'), queue: jobQueue.getQueue() })
 })
 
 // GET /api/ai-brain/learnings — returns current self-improvement state for UI

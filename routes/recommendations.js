@@ -21,6 +21,7 @@ const rateLimit           = require('express-rate-limit')
 const { getRouter }       = require('../lib/ai-router')
 const { CircuitOpenError } = require('../lib/circuit-breaker')
 const { requireAuth }     = require('../middleware/auth')
+const { isInternalRequest } = require('../lib/internal-secret')
 const { getUserPrefs, saveUserPref } = require('../db/ai_memory')
 const { PERSONAS }        = require('../lib/investor-personas')
 const { getIndicators }   = require('./macro')
@@ -31,10 +32,21 @@ const kelly = require('../lib/kelly')
 const { computeStats, readPredictions } = require('../lib/brain-learnings')
 const { extractArrayObjects } = require('../lib/ai-json')
 const { startJsonHeartbeat } = require('../lib/http-heartbeat')
+const jobQueue = require('../lib/ai-job-queue')
 const recJournal = require('../lib/rec-journal')
+
+// The background worker calls POST / over loopback, so every user's queued run
+// arrives from the same address. Without this skip they'd share one 5/min
+// budget and a queued run could be rejected for someone else's traffic; the
+// real per-user limit is the queue's own cap. Mirrors routes/ai-brain.js.
+const skipLoopback = (req) => {
+  const addr = req.socket?.remoteAddress || ''
+  return addr === '127.0.0.1' || addr === '::1' || addr === '::ffff:127.0.0.1'
+}
 
 const recLimit = rateLimit({
   windowMs: 60 * 1000, max: 5,
+  skip: skipLoopback,
   message: { error: 'Too many recommendation requests — wait a minute' },
 })
 
@@ -161,7 +173,11 @@ router.post('/', requireAuth, recLimit, async (req, res) => {
   const focusStr   = focusSymbols.length ? focusSymbols.join(', ') : ''
   const fwdHeaders = fwdKeys(req)
   const port       = process.env.PORT || 3001
-  const userId     = req.user?.userId
+  // When the background queue drives this route, requireAuth is satisfied by the
+  // internal secret and leaves req.user unset — so the owner rides in the body.
+  // Honoured ONLY for a verified internal call, so a browser can never generate
+  // (or journal) a run under someone else's id.
+  const userId     = req.user?.userId ?? (isInternalRequest(req) ? req.body?.userId : undefined)
 
   // Load prior rec history to avoid repeating recently recommended symbols
   const recHistory = userId ? await getUserPrefs(userId, 'rec_history', 5) : []
@@ -439,6 +455,87 @@ Respond ONLY with a JSON object — no markdown, no explanation, just the JSON:
     console.error('[recommendations]', err.message)
     return res.status(500).json({ error: 'Recommendation service error: ' + err.message })
   }
+})
+
+// ── Background generation ────────────────────────────────────────────────────
+// A 16k-token generation is long enough that holding the connection open ties
+// the result to a live tab — and on mobile the connection frequently died
+// outright, surfacing as a bare "Load failed". These endpoints run the same
+// generation on the server and persist the result, so closing the page no
+// longer throws away a run that was already paid for. Mirrors the AI Brain
+// scan endpoints exactly, sharing one queue (lib/ai-job-queue.js).
+//
+// POST /generate      → { jobId } immediately
+// GET  /job/latest    → most recent completed run, for a cold page load
+// GET  /job/:id       → status, and the result once it's done
+// GET  /jobs          → this user's recent runs
+
+const genEnqueueLimit = rateLimit({
+  windowMs: 5 * 60 * 1000, max: 10,
+  skip: skipLoopback,
+  message: { error: 'Too many recommendation requests — wait a few minutes' },
+})
+
+router.post('/generate', requireAuth, genEnqueueLimit, (req, res) => {
+  if (process.env.AI_RECOMMENDATIONS_DISABLED === 'true')
+    return res.status(503).json({ error: 'AI Buy Signals are temporarily disabled (kill switch active)', killSwitch: true })
+
+  const {
+    holdings = [], focusSymbols = [], persona = 'default',
+    includeMacro = true, includeFunds = false, includeFilings = false,
+  } = req.body || {}
+
+  if (!PERSONAS[persona]) return res.status(400).json({ error: `Unknown persona: ${persona}` })
+
+  const clean = arr => (Array.isArray(arr) ? arr : [])
+    .map(s => String(s).toUpperCase().replace(/[^A-Z0-9.-]/g, '')).filter(Boolean).slice(0, 20)
+
+  const params = {
+    holdings:     clean(holdings),
+    focusSymbols: clean(focusSymbols),
+    persona,
+    includeMacro:   !!includeMacro,
+    includeFunds:   !!includeFunds,
+    includeFilings: !!includeFilings,
+    // The worker calls POST / over loopback, where requireAuth is satisfied by
+    // the internal secret rather than a JWT. Without this the run would lose its
+    // owner: no personal rec history, and a journal entry attributed to nobody.
+    userId: req.user?.userId,
+  }
+
+  try {
+    const { id, position } = jobQueue.enqueue({
+      userId: req.user?.userId,
+      kind:   'recommendations',
+      params,
+      label:  params.focusSymbols.length ? params.focusSymbols.join(',') : persona,
+    })
+    return res.status(202).json({ ok: true, jobId: id, position, status: position === 1 ? 'running' : 'queued' })
+  } catch (e) {
+    return res.status(503).json({ error: e.message })
+  }
+})
+
+// Fixed path — declared before '/job/:id' or it would be read as an id.
+router.get('/job/latest', requireAuth, (req, res) => {
+  res.json({ job: jobQueue.getLatestResult(req.user?.userId, 'recommendations') })
+})
+
+router.get('/job/:id', requireAuth, (req, res) => {
+  const job = jobQueue.getJob(req.params.id, req.user?.userId)
+  if (!job) return res.status(404).json({ error: 'Run not found' })
+  res.json({ job })
+})
+
+router.delete('/job/:id', requireAuth, (req, res) => {
+  const ok = jobQueue.cancel(req.params.id, req.user?.userId)
+  if (!ok) return res.status(404).json({ error: 'Run not found, already running, or already finished' })
+  res.json({ ok: true })
+})
+
+router.get('/jobs', requireAuth, (req, res) => {
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 10, 1), 50)
+  res.json({ jobs: jobQueue.getUserJobs(req.user?.userId, limit, 'recommendations') })
 })
 
 // GET /api/recommendations/journal — versioned, diffable history of this user's

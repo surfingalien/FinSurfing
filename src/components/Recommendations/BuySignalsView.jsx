@@ -3,7 +3,7 @@
  * Covers stocks, ETFs, and cryptocurrencies.
  */
 
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
 import {
   Sparkles, RefreshCw, TrendingUp, Clock,
@@ -40,6 +40,8 @@ export default function BuySignalsView({ portfolio, onAnalyze }) {
   const [includeFunds,  setIncludeFunds]  = useState(false)
   const [personaId,     setPersonaId]     = useState('default')
   const [personas,      setPersonas]      = useState([])
+  const [jobStatus,     setJobStatus]     = useState(null)
+  const pollTimer = useRef(null)
 
   const holdings = portfolio?.positions?.map(p => p.symbol) ?? []
 
@@ -57,6 +59,73 @@ export default function BuySignalsView({ portfolio, onAnalyze }) {
       .filter(Boolean)
       .slice(0, 15)
 
+  // ── Background generation ────────────────────────────────────────────────
+  // The run happens on the SERVER: we enqueue it, remember the job id, and
+  // poll. Closing the tab — or losing the request on a flaky mobile
+  // connection, which showed up as a bare "Load failed" — no longer discards
+  // a generation that has already been paid for.
+  const JOB_KEY = 'finsurf_active_recs'
+
+  const authHeaders = useCallback(
+    () => ({ 'Content-Type': 'application/json', ...getApiKeyHeaders(), ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}) }),
+    [accessToken],
+  )
+
+  // Live prices are supplementary — a failure here must never fail the run.
+  const loadQuotes = useCallback(async (data) => {
+    try {
+      const syms = (data?.recommendations ?? []).map(r => r.symbol).filter(Boolean).join(',')
+      if (!syms) return
+      const qRes = await fetch(`/api/quote?symbols=${syms}`, { headers: getApiKeyHeaders() })
+      const qData = await qRes.json()
+      const qMap = {}
+      for (const q of qData?.quoteResponse?.result ?? []) {
+        if (q.regularMarketPrice != null) {
+          qMap[q.symbol] = { price: q.regularMarketPrice, changePct: q.regularMarketChangePercent ?? null }
+        }
+      }
+      setLiveQuotes(qMap)
+    } catch { /* live prices are optional */ }
+  }, [])
+
+  const stopPolling = useCallback(() => {
+    if (pollTimer.current) { clearInterval(pollTimer.current); pollTimer.current = null }
+  }, [])
+
+  const finishJob = useCallback((job) => {
+    stopPolling()
+    try { localStorage.removeItem(JOB_KEY) } catch {}
+    setLoading(false)
+    setJobStatus(null)
+    if (job?.status === 'done' && job.result) {
+      setRecs(job.result); setError(null); loadQuotes(job.result)
+    } else if (job?.status === 'failed') {
+      setError(job.error || 'Failed to get recommendations')
+    }
+  }, [stopPolling, loadQuotes])
+
+  const pollJob = useCallback(async (jobId) => {
+    try {
+      const res = await fetch(`/api/recommendations/job/${encodeURIComponent(jobId)}`, { headers: authHeaders() })
+      if (res.status === 404) {   // lost to a restart — stop chasing it
+        finishJob({ status: 'failed', error: 'This run is no longer available (the server may have restarted).' })
+        return
+      }
+      const { job } = await res.json()
+      if (!job) return
+      if (job.status === 'done' || job.status === 'failed') finishJob(job)
+      else setJobStatus(job.status)
+    } catch { /* transient blip — keep polling */ }
+  }, [authHeaders, finishJob])
+
+  const watchJob = useCallback((jobId) => {
+    try { localStorage.setItem(JOB_KEY, jobId) } catch {}
+    setLoading(true)
+    stopPolling()
+    pollJob(jobId)
+    pollTimer.current = setInterval(() => pollJob(jobId), 4000)
+  }, [pollJob, stopPolling])
+
   const generate = useCallback(async () => {
     setLoading(true)
     setError(null)
@@ -64,41 +133,47 @@ export default function BuySignalsView({ portfolio, onAnalyze }) {
       const body = { holdings, persona: personaId, includeMacro: true }
       if (customSymbols.trim()) body.focusSymbols = parseSymbols(customSymbols)
       if (includeFunds && !customSymbols.trim()) body.includeFunds = true
-      const authHeader = accessToken ? { Authorization: `Bearer ${accessToken}` } : {}
-      const res = await fetch('/api/recommendations', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json', ...getApiKeyHeaders(), ...authHeader },
-        body:    JSON.stringify(body),
+      const res = await fetch('/api/recommendations/generate', {
+        method: 'POST', headers: authHeaders(), body: JSON.stringify(body),
       })
       const data = await res.json()
-      // Heartbeated endpoint: once the keep-alive starts the status is pinned
-      // at 200, so a failure can only be reported in the body. Check both.
-      if (!res.ok || data.error) throw new Error(data.error || 'Failed to get recommendations')
-      setRecs(data)
-
-      // Fetch live market prices for all recommended symbols
-      try {
-        const syms = (data.recommendations ?? []).map(r => r.symbol).join(',')
-        if (!syms) return
-        const qRes = await fetch(`/api/quote?symbols=${syms}`, { headers: getApiKeyHeaders() })
-        const qData = await qRes.json()
-        const qMap = {}
-        for (const q of qData?.quoteResponse?.result ?? []) {
-          if (q.regularMarketPrice != null) {
-            qMap[q.symbol] = {
-              price:     q.regularMarketPrice,
-              changePct: q.regularMarketChangePercent ?? null,
-            }
-          }
-        }
-        setLiveQuotes(qMap)
-      } catch { /* live prices are optional */ }
+      if (!res.ok || data.error) throw new Error(data.error || 'Could not start the run')
+      setJobStatus(data.status ?? 'queued')
+      watchJob(data.jobId)
     } catch (e) {
       setError(e.message)
-    } finally {
       setLoading(false)
     }
-  }, [holdings, customSymbols, accessToken, personaId, includeFunds])
+  }, [holdings, customSymbols, personaId, includeFunds, authHeaders, watchJob])
+
+  // Reattach on mount: resume a run started before the tab closed, else show
+  // the most recent completed one so the page is never blank after a run.
+  useEffect(() => {
+    if (!accessToken) return
+    let cancelled = false
+    ;(async () => {
+      let saved = null
+      try { saved = localStorage.getItem(JOB_KEY) } catch {}
+      if (saved) {
+        try {
+          const res = await fetch(`/api/recommendations/job/${encodeURIComponent(saved)}`, { headers: authHeaders() })
+          const { job } = res.ok ? await res.json() : { job: null }
+          if (cancelled) return
+          if (job && (job.status === 'queued' || job.status === 'running')) { watchJob(saved); return }
+          if (job && job.status === 'done' && job.result) { finishJob(job); return }
+        } catch { /* fall through to latest */ }
+        try { localStorage.removeItem(JOB_KEY) } catch {}
+      }
+      try {
+        const res = await fetch('/api/recommendations/job/latest', { headers: authHeaders() })
+        const { job } = res.ok ? await res.json() : { job: null }
+        if (!cancelled && job?.result) { setRecs(job.result); loadQuotes(job.result) }
+      } catch { /* nothing cached yet */ }
+    })()
+    return () => { cancelled = true }
+  }, [accessToken, authHeaders, watchJob, finishJob, loadQuotes])
+
+  useEffect(() => stopPolling, [stopPolling])
 
   const displayed = (recs?.recommendations ?? []).filter(r => {
     if (filter !== 'all' && r.type !== filter) return false
@@ -214,6 +289,26 @@ export default function BuySignalsView({ portfolio, onAnalyze }) {
       )}
 
       {/* ── Loading skeleton ── */}
+      {loading && (
+        <div className="glass rounded-2xl p-4 flex items-start gap-3">
+          <RefreshCw className="w-4 h-4 text-mint-400 animate-spin shrink-0 mt-0.5" />
+          <div>
+            <p className="text-white text-sm font-semibold">
+              {jobStatus === 'queued'
+                ? 'Your run is queued…'
+                : 'Claude is picking your signals…'}
+            </p>
+            {/* The run happens server-side, so the tab is no longer load-bearing. */}
+            <p className="text-mint-400/70 text-[11px] mt-1.5 flex items-center gap-1.5">
+              <Clock className="w-3 h-3" />
+              {jobStatus === 'queued'
+                ? 'Another run is going — yours starts as soon as it finishes. You can close this page and come back.'
+                : 'Running on the server — you can close this page and come back'}
+            </p>
+          </div>
+        </div>
+      )}
+
       {loading && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {Array.from({ length: 8 }).map((_, i) => (
