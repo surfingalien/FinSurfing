@@ -373,6 +373,18 @@ const TOOLS = [
     },
   },
   {
+    name: 'find_exposure',
+    description: "Find LISTED stocks with disclosed business exposure to a company — its suppliers, customers, partners, industry peers, and competitors. The anchor can be a public ticker (NVDA, TSM, PLTR, META, INTC, AMD, AVGO) OR a private company you cannot buy directly (SPACEX, OPENAI, ANDURIL, STRIPE, XAI, DATABRICKS, BLUEORIGIN) — for private ones this is the only way to get tradeable exposure. Every supplier/customer edge is backed by a VERBATIM quote from that company's SEC filing, checked character-for-character against the source, so relationships are evidenced rather than recalled. Returns ranked tickers with the relationship type, the quote, the filing, and the disclosed revenue percentage when the filing states one. Use when asked things like 'who supplies SpaceX', 'what stocks benefit from Nvidia', 'who are Palantir's competitors', 'how do I get exposure to OpenAI', or 'find the supply chain for X'.",
+    input_schema: {
+      type: 'object',
+      required: ['anchor'],
+      properties: {
+        anchor: { type: 'string', description: 'US ticker (NVDA, TSM, PLTR) or private-company key (SPACEX, OPENAI, ANDURIL, STRIPE, XAI, DATABRICKS, BLUEORIGIN).' },
+        refresh: { type: 'boolean', description: 'Rebuild from EDGAR (slow, minutes). Omit or false to read the stored map instantly — prefer this.' },
+      },
+    },
+  },
+  {
     name: 'get_price_performance',
     description: 'Price performance of a symbol vs the S&P 500 (SPY) over 1M, 3M, 6M, 1Y, and YTD — plus 52-week high/low. Use when asked about relative performance, "how has X done vs S&P", or historical returns.',
     input_schema: {
@@ -915,6 +927,34 @@ async function dispatchTool(name, input, req) {
       } catch (e) {
         return `Fundamentals fetch failed for ${sym}: ${e.message}`
       }
+    }
+
+    case 'find_exposure': {
+      const anchor = String(input.anchor || '').toUpperCase().replace(/[^A-Z0-9.-]/g, '').slice(0, 24)
+      if (!anchor) return 'No anchor company provided.'
+      // Default to the stored graph: a refresh is minutes of EDGAR round-trips
+      // plus a model call per candidate, which is not a thing to do mid-chat
+      // unless explicitly asked for.
+      const path = input.refresh ? `/api/exposure/${anchor}` : `/api/exposure/${anchor}/graph`
+      const r = await fetch(`http://127.0.0.1:${port}${path}`, {
+        headers: fwdHeaders,
+        // A refresh is EDGAR round-trips plus a model call per candidate.
+        signal: AbortSignal.timeout(input.refresh ? 600_000 : 15_000),
+      })
+      const d = await r.json()
+      if (d?.error) return `Exposure lookup failed: ${d.error}`
+      if (!d?.edges?.length) {
+        return input.refresh
+          ? `No evidenced exposure found for ${anchor}.`
+          : `No stored exposure map for ${anchor}. Ask again with refresh=true to build one from SEC filings (takes a few minutes).`
+      }
+      const rows = d.edges.slice(0, 15).map(e => {
+        const mat = e.materialityPct != null ? ` — ${e.materialityPct}% of its revenue` : ''
+        const q = e.evidence?.quote ? `\n      "${e.evidence.quote.slice(0, 220)}" (${e.evidence.form} ${e.evidence.filedAt})` : ''
+        return `  ${e.symbol} [${e.relation}, score ${e.score}]${mat}${q}`
+      })
+      const diffLine = d.diff?.changed ? `\n\nCHANGES SINCE LAST RUN:\n${(d.diff.dropped || []).map(x => `  ⚠ ${x.symbol} no longer names ${anchor}`).join('\n')}` : ''
+      return `Listed companies with disclosed exposure to ${anchor} (quotes verified against SEC filings):\n${rows.join('\n')}${diffLine}\n\nTradeable universe: ${(d.universe || []).join(', ')}`
     }
 
     case 'analyze_filing': {

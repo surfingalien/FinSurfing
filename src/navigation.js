@@ -56,6 +56,7 @@ export const NAV_GROUPS = [
       { id: 'quantmind',       label: 'QuantMind',      icon: FlaskConical },
       { id: 'recommendations', label: 'Advisory',       icon: Lightbulb },
       { id: 'filings',         label: 'Filing Research', icon: FileText },
+      { id: 'exposure',    label: 'Exposure Map',  icon: Network      },
       { id: 'macro',           label: 'Macro',          icon: Globe },
       { id: 'polymarket',      label: 'Polymarket',     icon: TrendingUp },
       { id: 'dcf-valuation',   label: 'DCF Valuation',  icon: TrendingUp },
