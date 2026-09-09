@@ -12,6 +12,7 @@
 const {
   PRIVATE_ANCHORS, dedupeAliases, resolveAnchor,
   parseFtsHits, fullTextSearch, searchAvailable, findMentions,
+  fundHolders, FUND_FORMS,
 } = require('../lib/edgar-search')
 
 const okJson = payload => async () => ({ ok: true, status: 200, json: async () => payload })
@@ -239,5 +240,72 @@ describe('findMentions', () => {
     }
     const out = await findMentions(anchorInfo, { fetchImpl })
     expect(out).toHaveLength(1)
+  })
+})
+
+/**
+ * fundHolders — the third discovery path, and the only one that reaches a
+ * company whose shares are not for sale. You cannot buy SpaceX; you can buy a
+ * listed fund that holds it, and its NAV moves with the stake.
+ */
+describe('fundHolders', () => {
+  const privateAnchor = { key: 'SPACEX', label: 'SpaceX', aliases: ['Space Exploration Technologies'], listed: false, cik: null }
+  const listedAnchor  = { key: 'NVDA', label: 'NVIDIA CORP', aliases: ['NVIDIA CORP'], listed: true, cik: '0001045810' }
+
+  function routedFetch(rows, seen = []) {
+    return async (url) => {
+      const u = decodeURIComponent(String(url)).replace(/\+/g, ' ')
+      if (u.includes('company_tickers.json')) return { ok: true, status: 200, json: async () => TICKER_MAP }
+      seen.push(u)
+      return { ok: true, status: 200, json: async () => ftsPayload(rows) }
+    }
+  }
+
+  test('a fund filing that names the anchor becomes a candidate', async () => {
+    const out = await fundHolders(privateAnchor, {
+      fetchImpl: routedFetch([{ cik: '1819994', display: 'Rocket Lab USA, Inc. (RKLB)', form: 'NPORT-P', date: '2026-05-30', accession: 'n1' }]),
+    })
+    expect(out).toHaveLength(1)
+    expect(out[0]).toMatchObject({ symbol: 'RKLB', discovery: 'fund_holding' })
+  })
+
+  test('the discovery tag differs from findMentions — the mention MEANS something else', async () => {
+    const fetchImpl = routedFetch([{ cik: '1819994', display: 'X (RKLB)', form: 'NPORT-P', date: '2026-05-30', accession: 'n1' }])
+    const holders = await fundHolders(privateAnchor, { fetchImpl })
+    const mentions = await findMentions(privateAnchor, { fetchImpl })
+    expect(holders[0].discovery).toBe('fund_holding')
+    expect(mentions[0].discovery).toBe('filing_search')
+  })
+
+  test('searches the fund forms, not the operating-company ones', async () => {
+    const seen = []
+    await fundHolders(privateAnchor, { fetchImpl: routedFetch([], seen) })
+    expect(seen.some(u => u.includes('NPORT-P'))).toBe(true)
+    expect(seen.some(u => u.includes('N-CSR'))).toBe(true)
+    expect(seen.some(u => u.includes('10-K'))).toBe(false)
+  })
+
+  test('both EDGAR spellings of the N-PORT family are searched', () => {
+    // The index has used 'NPORT-P' and 'N-PORT'; hinging a discovery path on
+    // which one it happens to use today is how a path silently returns zero.
+    expect(FUND_FORMS).toEqual(expect.arrayContaining(['NPORT-P', 'N-PORT', 'N-CSR', 'N-CSRS']))
+  })
+
+  test('refuses a LISTED anchor without touching the network', async () => {
+    // Every index fund holds NVDA. Running this for a public anchor returns a
+    // ranked list of the fund industry: correct, useless, and paid for.
+    const fetchImpl = jest.fn(routedFetch([]))
+    expect(await fundHolders(listedAnchor, { fetchImpl })).toEqual([])
+    expect(fetchImpl).not.toHaveBeenCalled()
+  })
+
+  test('a missing or malformed anchor returns [] rather than throwing', async () => {
+    expect(await fundHolders(null)).toEqual([])
+    expect(await fundHolders(undefined)).toEqual([])
+  })
+
+  test('an unreachable endpoint yields no candidates instead of an exception', async () => {
+    const out = await fundHolders(privateAnchor, { fetchImpl: async () => { throw new Error('ENOTFOUND') } })
+    expect(out).toEqual([])
   })
 })
