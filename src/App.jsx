@@ -63,6 +63,7 @@ const FilingsView            = lazy(() => import('./components/Filings/FilingsVi
 const ProbabilityLatticeView = lazy(() => import('./components/Lattice/ProbabilityLatticeView'))
 const TailProbabilityRidgeView = lazy(() => import('./components/Ridge/TailProbabilityRidgeView'))
 const RelationshipGraphView  = lazy(() => import('./components/Graph/RelationshipGraphView'))
+const ExposureView           = lazy(() => import('./components/Exposure/ExposureView'))
 
 // ── Shared loading spinner ────────────────────────────────────────────────────
 function LoadingScreen({ label = 'Loading…', fullScreen = false }) {
@@ -245,6 +246,7 @@ function MainApp({ onSignIn }) {
     'probability-lattice': () => <ProbabilityLatticeView />,
     'tail-ridge':      () => <TailProbabilityRidgeView portfolio={portfolio} />,
     'relationship-graph': () => <RelationshipGraphView portfolio={portfolio} />,
+    'exposure':        () => <ExposureView onAnalyze={navigateToAnalyze} />,
     'admin':          () => <AdminDashboard />,
   }
 
