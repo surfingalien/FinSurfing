@@ -40,6 +40,18 @@ const aiRouter = getRouter('ai-brain')
 
 const PREDICTION_LOG = path.join(__dirname, '../data/ai-brain-predictions.jsonl')
 
+/**
+ * Bump this whenever the scan prompt changes in a way that could move the
+ * picks — scoring rules, injected context, output schema.
+ *
+ * It is stamped onto every prediction and segments calibration alongside the
+ * model id. Without it, a prompt rewrite silently pools its results with the
+ * old prompt's, and the measured win rate becomes an average over two
+ * different systems that no longer describes either — the same failure the
+ * ML baseline's walk-forward gate exists to prevent on the other side.
+ */
+const SCAN_PROMPT_VERSION = 1
+
 const brainLimit = rateLimit({
   windowMs: 5 * 60 * 1000, max: 4,
   skip:    (req) => {
@@ -372,7 +384,10 @@ async function fetchTaSnapshot(universe, headers) {
 }
 
 // Write a prediction record for future win-rate tracking
-function logPrediction(symbol, agents, zones, generatedAt, baseline = null, optionsPcRatio = null, taPatterns = null, rsRankAtScan = null) {
+function logPrediction(symbol, agents, zones, generatedAt, {
+  baseline = null, optionsPcRatio = null, taPatterns = null, rsRankAtScan = null,
+  regimeAtScan = null, modelVersion = null,
+} = {}) {
   try {
     const dir = path.dirname(PREDICTION_LOG)
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
@@ -427,6 +442,19 @@ function logPrediction(symbol, agents, zones, generatedAt, baseline = null, opti
       optionsPcRatio:    optionsPcRatio ?? null,
       taPatterns:        taPatterns?.length ? taPatterns : null,
       rsRankAtScan:      rsRankAtScan ?? null, // 0-100 intra-universe RS percentile at scan time
+      // The macro regime the scan actually ran in, from the FRED assessment
+      // already injected into this prompt. A strategy that only works risk-on
+      // has an overall win rate that describes neither regime.
+      regimeAtScan:      regimeAtScan ?? null,
+      // Which generator produced this pick: model id + prompt version. A model
+      // swap or a prompt rewrite is a new system, and pooling its results with
+      // the old one's yields an average that describes neither.
+      modelVersion:      modelVersion ?? null,
+      promptVersion:     SCAN_PROMPT_VERSION,
+      // Barrier levels, so the nightly resolver can ask which came FIRST —
+      // the target, the stop, or the clock. Scoring only the +30d close counts
+      // a pick that hit its target on day 3 and round-tripped as a loss.
+      stopLoss:          Number.isFinite(Number(agents.stopLoss)) ? Number(agents.stopLoss) : null,
       // Mechanical ML-baseline 7d direction call from the same bars the scan
       // saw (lib/ml-baseline.js) — lets calibration compare AI vs baseline
       baselineProb:     baseline?.prob ?? null,
@@ -833,6 +861,13 @@ Rules:
       }
     }
 
+    // What produced these picks, stamped on every record so calibration can
+    // segment on it later. The regime is the FRED assessment already injected
+    // into this scan's prompt — the same string the model reasoned from, not a
+    // re-derivation that could disagree with it.
+    const regimeAtScan = (macroResult.status === 'fulfilled' && macroResult.value?.regime?.regime) || null
+    const modelVersion = llmUsed === 'claude' ? 'claude-sonnet-4-6' : 'llama-3.3-70b-versatile'
+
     // Log each prediction for win-rate tracking (log ALL picks before threshold filter
     // so calibration data covers the full score distribution, not just filtered picks)
     for (const stock of data.rankedStocks) {
@@ -841,8 +876,14 @@ Rules:
         entryZoneHigh:  stock.entryZoneHigh,
         targetZoneLow:  stock.targetZoneLow,
         targetZoneHigh: stock.targetZoneHigh,
-      }, generatedAt, taBaselines.get(stock.symbol), optionsPcMap.get(stock.symbol) ?? null,
-         taPatternMap.get(stock.symbol) ?? null, taRsRankMap.get(stock.symbol) ?? null)
+      }, generatedAt, {
+        baseline:       taBaselines.get(stock.symbol),
+        optionsPcRatio: optionsPcMap.get(stock.symbol) ?? null,
+        taPatterns:     taPatternMap.get(stock.symbol) ?? null,
+        rsRankAtScan:   taRsRankMap.get(stock.symbol) ?? null,
+        regimeAtScan,
+        modelVersion,
+      })
     }
 
     // Also record picks in the SHARED cross-surface learning store, so Brain
@@ -863,6 +904,11 @@ Rules:
             sector:         s.sector ?? null,
             scanMode,
             verdict:        s.agentVerdict ?? null,
+            // Which generator produced it, so cross-surface calibration can
+            // tell a model swap apart from a change in the market.
+            modelVersion,
+            promptVersion:  SCAN_PROMPT_VERSION,
+            regime:         regimeAtScan,
           },
         })))
     } catch (e) { console.warn('[ai-brain] learning-store record failed:', e.message) }

@@ -24,6 +24,7 @@ const { requireAuth, effectiveUserId } = require('../middleware/auth')
 const { mountJobRoutes, skipLoopback } = require('../lib/ai-job-routes')
 const { getUserPrefs, saveUserPref } = require('../db/ai_memory')
 const { PERSONAS }        = require('../lib/investor-personas')
+const learningStore       = require('../lib/learning-store')
 const { getIndicators }   = require('./macro')
 const { getSocialSentiment } = require('../lib/social-sentiment')
 const { getAltDataSnippet }  = require('../lib/alt-data')
@@ -485,6 +486,34 @@ Respond ONLY with a JSON object — no markdown, no explanation, just the JSON:
         sectors, 'recommendations'
       )
     }
+
+    // Record every surviving pick in the SHARED cross-surface learning store,
+    // stamped with the PERSONA that produced it.
+    //
+    // The journal already stored the persona, but nothing carried it into
+    // calibration — so "does Buffett actually beat Wood on this system, or does
+    // it just sound different?" had no answer, and the personas were a styling
+    // choice rather than a measured one. Best-effort: never fails the run.
+    try {
+      learningStore.recordDecisions((data.recommendations || [])
+        .filter(r => r?.symbol && r.entryPrice > 0)
+        .map(r => ({
+          surface:    'advisory',
+          symbol:     r.symbol,
+          action:     'buy',
+          price:      r.entryPrice,
+          confidence: r.confidence ?? null,
+          meta: {
+            persona:      persona.id,
+            sector:       r.sector ?? null,
+            assetType:    r.type ?? null,
+            targetReturn: r.targetReturn ?? null,
+            stopLoss:     r.stopLoss ?? null,
+            regime:       macroData?.regime?.regime ?? null,
+            modelVersion: llmUsed === 'claude' ? 'claude-sonnet-4-6' : 'llama-3.3-70b-versatile',
+          },
+        })))
+    } catch (e) { console.warn('[recommendations] learning-store record failed:', e.message) }
 
     // Journal this run as a versioned, diffable "commit" (rationale = market
     // outlook). Best-effort; appendEntry never throws to the caller.

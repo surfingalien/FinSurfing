@@ -172,3 +172,77 @@ describe('pendingDecisions', () => {
     expect(pendingDecisions([noPrice], { horizonDays: 7, now })).toHaveLength(0)
   })
 })
+
+/**
+ * Persona / model / regime splits.
+ *
+ * These are properties of the DECIDER, not of the market. A difference between
+ * two of them is the one thing on a decision record the system actually
+ * controls — and without them the personas were a styling choice nobody could
+ * check.
+ */
+describe('calibrationReport — decider splits', () => {
+  const withMeta = (retPct, meta, n = MIN_SAMPLE) =>
+    Array.from({ length: n }, () => resolved(retPct, 2, { surface: 'advisory', meta }))
+
+  test('byPersona separates personas that produced different outcomes', () => {
+    const r = calibrationReport([
+      ...withMeta(6,  { persona: 'buffett' }),
+      ...withMeta(-4, { persona: 'wood' }),
+    ])
+    expect(r.byPersona.buffett.winRate).toBe(1)
+    expect(r.byPersona.wood.winRate).toBe(0)
+  })
+
+  test('a persona below MIN_SAMPLE is not reported at all', () => {
+    // A win rate over three picks is noise, and noise that names a persona
+    // reads as a verdict on it.
+    const r = calibrationReport([
+      ...withMeta(6, { persona: 'buffett' }),
+      ...withMeta(-4, { persona: 'wood' }, MIN_SAMPLE - 1),
+    ])
+    expect(r.byPersona.buffett).toBeDefined()
+    expect(r.byPersona.wood).toBeUndefined()
+  })
+
+  test('rows with no persona are excluded, not pooled under a bucket', () => {
+    const r = calibrationReport([
+      ...withMeta(6, { persona: 'buffett' }),
+      ...Array.from({ length: MIN_SAMPLE }, () => resolved(-4, 2, { surface: 'ai-brain' })),
+    ])
+    expect(Object.keys(r.byPersona)).toEqual(['buffett'])
+  })
+
+  test('byModel and byRegime split the same way', () => {
+    const r = calibrationReport([
+      ...withMeta(6,  { modelVersion: 'claude-sonnet-4-6', regime: 'Risk-On / Growth Favoured' }),
+      ...withMeta(-4, { modelVersion: 'llama-3.3-70b-versatile', regime: 'Risk-Off / Defensive' }),
+    ])
+    expect(r.byModel['claude-sonnet-4-6'].winRate).toBe(1)
+    expect(r.byModel['llama-3.3-70b-versatile'].winRate).toBe(0)
+    expect(r.byRegime['Risk-Off / Defensive'].winRate).toBe(0)
+  })
+
+  test('all three are null when no decision carries the field', () => {
+    const r = calibrationReport(Array.from({ length: MIN_SAMPLE }, () => resolved(6, 2)))
+    expect(r.byPersona).toBeNull()
+    expect(r.byModel).toBeNull()
+    expect(r.byRegime).toBeNull()
+  })
+
+  test('the prompt block names the personas once there is enough to say', () => {
+    const r = calibrationReport([
+      ...withMeta(6,  { persona: 'buffett' }),
+      ...withMeta(-4, { persona: 'wood' }),
+    ])
+    const block = buildCalibrationBlock(r)
+    expect(block).toMatch(/By investor persona/)
+    expect(block).toMatch(/buffett/)
+    expect(block).toMatch(/measured, not stylistic/)
+  })
+
+  test('the block stays silent about a split it could not measure', () => {
+    const r = calibrationReport(Array.from({ length: MIN_SAMPLE }, () => resolved(6, 2)))
+    expect(buildCalibrationBlock(r)).not.toMatch(/By investor persona/)
+  })
+})

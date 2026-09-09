@@ -4,7 +4,7 @@
  * Pure functions only — no HTTP, no Anthropic calls, no file I/O.
  */
 
-const { computeStats, nearestClose, zoneTouched, benchmarkFor, checkEntryZones } = require('../lib/brain-learnings')
+const { computeStats, nearestClose, zoneTouched, tripleBarrier, benchmarkFor, checkEntryZones } = require('../lib/brain-learnings')
 
 const DAY = 86400 * 1000
 
@@ -404,5 +404,131 @@ describe('checkEntryZones', () => {
 
   test('returns empty when priceMap is empty', () => {
     expect(checkEntryZones({}, [mkPred()])).toHaveLength(0)
+  })
+})
+
+/**
+ * tripleBarrier — which came FIRST, the target, the stop, or the clock.
+ *
+ * Scoring a pick only at its +30d close answers a question nobody asked: a pick
+ * that hit its target on day 3 and round-tripped is recorded as a loss, and one
+ * that blew through its stop on day 2 and recovered is recorded as a win.
+ */
+describe('tripleBarrier', () => {
+  const t0 = Date.UTC(2026, 0, 5)
+  const to = t0 + 30 * DAY
+  const bar = (d, l, h) => ({ t: t0 + d * DAY, l, h, c: (l + h) / 2 })
+  const win = { from: t0, to, target: 115, stop: 90 }
+
+  test('a target touched on day 3 is a target hit, not the day-30 close', () => {
+    const bars = [bar(1, 99, 103), bar(3, 110, 118), bar(20, 88.1, 95)]
+    // Day 20 dips near the stop but never reaches it — the target already won.
+    expect(tripleBarrier(bars, win)).toMatchObject({ label: 'target', days: 3 })
+  })
+
+  test('a stop hit before the target is a loss, whatever the close does after', () => {
+    const bars = [bar(2, 85, 95), bar(10, 112, 120)]
+    expect(tripleBarrier(bars, win)).toMatchObject({ label: 'stop', days: 2 })
+  })
+
+  test('neither barrier touched is a timeout, labelled as such', () => {
+    const bars = [bar(1, 98, 104), bar(15, 95, 108), bar(29, 99, 110)]
+    expect(tripleBarrier(bars, win).label).toBe('time')
+  })
+
+  test('both barriers inside ONE daily bar resolves as the stop', () => {
+    // Daily data cannot say which came first intraday. Assuming the win would
+    // inflate every rate this feeds, in the direction that flatters the system.
+    expect(tripleBarrier([bar(4, 85, 120)], win)).toMatchObject({ label: 'stop' })
+  })
+
+  test('bars outside the window are ignored', () => {
+    const before = { t: t0 - 5 * DAY, l: 80, h: 82, c: 81 }
+    const after  = { t: to + 5 * DAY, l: 120, h: 125, c: 122 }
+    expect(tripleBarrier([before, ...[bar(10, 99, 104)], after], win).label).toBe('time')
+  })
+
+  test('a short is scored the other way round', () => {
+    const short = { from: t0, to, target: 90, stop: 115, long: false }
+    expect(tripleBarrier([bar(3, 85, 95)], short)).toMatchObject({ label: 'target' })
+    expect(tripleBarrier([bar(3, 116, 120)], short)).toMatchObject({ label: 'stop' })
+  })
+
+  test('missing or inconsistent levels return null, never a guess', () => {
+    expect(tripleBarrier([bar(1, 99, 104)], { from: t0, to, target: null, stop: 90 })).toBeNull()
+    expect(tripleBarrier([bar(1, 99, 104)], { from: t0, to, target: 115, stop: null })).toBeNull()
+    // A long whose stop sits above its target is a mislogged record.
+    expect(tripleBarrier([bar(1, 99, 104)], { from: t0, to, target: 90, stop: 115 })).toBeNull()
+  })
+
+  test('no bars covering the window is unscoreable, NOT a timeout', () => {
+    // Reporting 'time' here would turn a data gap into a measured non-event.
+    expect(tripleBarrier([], win)).toBeNull()
+    expect(tripleBarrier([{ t: to + 40 * DAY, l: 1, h: 2, c: 1.5 }], win)).toBeNull()
+  })
+
+  test('falls back to the close when a bar carries no high/low', () => {
+    expect(tripleBarrier([{ t: t0 + 2 * DAY, c: 120 }], win)).toMatchObject({ label: 'target' })
+  })
+})
+
+describe('computeStats — regime, generator and barrier segments', () => {
+  const mk = (over = {}) => ({
+    symbol: 'NVDA', generatedAt: '2026-05-01T00:00:00.000Z', confidence: 'High',
+    basePrice: 100, entryZoneMid: 100, targetZoneMid: 115, entered: true,
+    price7d: 105, benchRet7d: 1, price30d: 112, benchRet30d: 3,
+    ...over,
+  })
+
+  test('byRegime splits picks by the macro regime they were made in', () => {
+    const s = computeStats([
+      mk({ regimeAtScan: 'Risk-On / Growth Favoured' }),
+      mk({ regimeAtScan: 'Risk-On / Growth Favoured', price30d: 120 }),
+      mk({ regimeAtScan: 'Risk-Off / Defensive', price30d: 88, benchRet30d: 3 }),
+    ])
+    expect(s.byRegime['Risk-On / Growth Favoured'].n).toBe(2)
+    expect(s.byRegime['Risk-On / Growth Favoured'].winRate).toBe(1)
+    expect(s.byRegime['Risk-Off / Defensive'].winRate).toBe(0)
+  })
+
+  test('byRegime is null when nothing carries a regime — not an "unknown" bucket', () => {
+    expect(computeStats([mk()]).byRegime).toBeNull()
+  })
+
+  test('byModelVersion keys on model AND prompt version together', () => {
+    // Either changing makes a new system; pooling them yields a number that
+    // describes neither.
+    const s = computeStats([
+      mk({ modelVersion: 'claude-sonnet-4-6', promptVersion: 1 }),
+      mk({ modelVersion: 'claude-sonnet-4-6', promptVersion: 2, price30d: 90, benchRet30d: 3 }),
+    ])
+    expect(Object.keys(s.byModelVersion).sort())
+      .toEqual(['claude-sonnet-4-6/v1', 'claude-sonnet-4-6/v2'])
+    expect(s.byModelVersion['claude-sonnet-4-6/v1'].winRate).toBe(1)
+    expect(s.byModelVersion['claude-sonnet-4-6/v2'].winRate).toBe(0)
+  })
+
+  test('records logged before the stamp existed are excluded, not bucketed', () => {
+    const s = computeStats([mk(), mk({ modelVersion: 'claude-sonnet-4-6', promptVersion: 1 })])
+    expect(Object.keys(s.byModelVersion)).toEqual(['claude-sonnet-4-6/v1'])
+    expect(s.byModelVersion['claude-sonnet-4-6/v1'].n).toBe(1)
+  })
+
+  test('barriers report how often the stated targets and stops were reachable', () => {
+    const s = computeStats([
+      mk({ barrier: { label: 'target', days: 4 } }),
+      mk({ barrier: { label: 'target', days: 8 } }),
+      mk({ barrier: { label: 'stop',   days: 2 } }),
+      mk({ barrier: { label: 'time',   days: 30 } }),
+    ])
+    expect(s.barriers.n).toBe(4)
+    expect(s.barriers.targetFirst).toBe(0.5)
+    expect(s.barriers.stopFirst).toBe(0.25)
+    expect(s.barriers.neither).toBe(0.25)
+    expect(s.barriers.avgDaysToTarget).toBe(6)
+  })
+
+  test('barriers is null until at least one window has been resolved', () => {
+    expect(computeStats([mk()]).barriers).toBeNull()
   })
 })
