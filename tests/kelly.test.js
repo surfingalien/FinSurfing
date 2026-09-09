@@ -104,3 +104,49 @@ describe('winProbFromStats — empirical sourcing', () => {
     expect(winProbFromStats(stats, { confidence: 'High' }).source).toMatch(/calibration:High/)
   })
 })
+
+describe('winProbFromStats — per-asset-class sourcing', () => {
+  // Stocks, ETFs and crypto have genuinely different hit rates; a blended
+  // number sizes all three wrong, so the asset segment is the most specific
+  // evidence available and is checked first.
+  const stats = {
+    h30: { winRate: 0.58, nTradeable: 30 },
+    calibration: { High: { n: 25, winRate: 0.66 } },
+    byAssetType: {
+      stock:  { n: 40, winRate: 0.61 },
+      crypto: { n: 30, winRate: 0.44 },
+      etf:    { n: 5,  winRate: 0.80 },   // too few samples to trust
+    },
+  }
+
+  test('uses the asset-class win rate when it has enough samples', () => {
+    expect(winProbFromStats(stats, { assetType: 'crypto' }).p).toBe(0.44)
+    expect(winProbFromStats(stats, { assetType: 'stock' }).p).toBe(0.61)
+  })
+
+  test('asset class outranks the confidence bucket — it is the segment the pick is in', () => {
+    const r = winProbFromStats(stats, { assetType: 'crypto', confidence: 'High' })
+    expect(r.p).toBe(0.44)
+    expect(r.source).toMatch(/assetType:crypto/)
+  })
+
+  test('a thin asset segment falls through rather than sizing off noise', () => {
+    const r = winProbFromStats(stats, { assetType: 'etf' })
+    expect(r.p).toBe(0.58)               // overall 30d, not the n=5 80%
+    expect(r.source).toMatch(/30d/)
+  })
+
+  test("matches computeStats by folding the legacy 'equity' label into 'stock'", () => {
+    expect(winProbFromStats(stats, { assetType: 'equity' }).p).toBe(0.61)
+  })
+
+  test('is case-insensitive and unaffected by an unknown asset class', () => {
+    expect(winProbFromStats(stats, { assetType: 'CRYPTO' }).p).toBe(0.44)
+    expect(winProbFromStats(stats, { assetType: 'warrant' }).p).toBe(0.58)
+  })
+
+  test('omitting assetType preserves the previous behaviour exactly', () => {
+    expect(winProbFromStats(stats, { confidence: 'High' }).p).toBe(0.66)
+    expect(winProbFromStats(stats).p).toBe(0.58)
+  })
+})

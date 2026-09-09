@@ -7,7 +7,7 @@ import { useState, useCallback, useEffect } from 'react'
 import { useBackgroundJob } from '../../hooks/useBackgroundJob'
 import {
   Sparkles, RefreshCw, TrendingUp, Clock,
-  AlertTriangle, Search, X, Download,
+  AlertTriangle, Search, X, Download, ShieldCheck,
 } from 'lucide-react'
 import { exportBuySignalsToPDF } from '../../utils/pdfExport'
 import { MacroBanner } from '../Macro/MacroPanel'
@@ -16,6 +16,59 @@ import { PersonaPicker } from './signals/PersonaPicker'
 import { RecCard } from './signals/RecCard'
 
 /* ── Helpers ─────────────────────────────────── */
+/**
+ * EdgeGateBanner — what the expected-value screen removed, and why.
+ *
+ * The model is asked for a fixed slate of ~20 picks every run, so a full list
+ * is not evidence that 20 good ideas existed. The server scores each candidate
+ * on its own reward/risk against the measured win rate for its asset class,
+ * net of round-trip costs, and drops the ones that don't clear the floor.
+ * Showing what was screened out is the point — a silently shortened list looks
+ * like a weak run rather than a working filter.
+ */
+function EdgeGateBanner({ gate, abstained }) {
+  const [open, setOpen] = useState(false)
+  if (!gate?.rejected?.length) return null
+
+  return (
+    <div className={`rounded-xl p-3 border ${abstained
+      ? 'bg-amber-500/[0.07] border-amber-500/25'
+      : 'bg-white/[0.03] border-white/[0.08]'}`}>
+      <div className="flex items-start gap-3">
+        <ShieldCheck className={`w-4 h-4 mt-0.5 shrink-0 ${abstained ? 'text-amber-400' : 'text-mint-400'}`} />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className={`text-xs font-bold ${abstained ? 'text-amber-300' : 'text-white'}`}>
+              {abstained
+                ? 'No actionable picks this run'
+                : `${gate.kept} of ${gate.evaluated} picks cleared the edge screen`}
+            </span>
+            <span className="text-[10px] text-slate-500">
+              · needs &gt; {(gate.minNetEdge * 100).toFixed(2)}% expected edge per unit risked, after costs
+            </span>
+          </div>
+          <button
+            onClick={() => setOpen(o => !o)}
+            className="text-[10px] text-slate-400 hover:text-slate-200 mt-1 underline underline-offset-2"
+          >
+            {open ? 'Hide' : `Show ${gate.rejected.length} screened out`}
+          </button>
+          {open && (
+            <ul className="mt-2 space-y-1">
+              {gate.rejected.map((r, i) => (
+                <li key={`${r.symbol}-${i}`} className="text-[11px] text-slate-400 flex gap-2">
+                  <span className="font-semibold text-slate-300 shrink-0">{r.symbol}</span>
+                  <span className="min-w-0">{r.reason}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function getApiKeyHeaders() {
   try {
     const stored = JSON.parse(localStorage.getItem('finsurf_api_keys') || '{}')
@@ -297,6 +350,11 @@ export default function BuySignalsView({ portfolio, onAnalyze }) {
             <MacroBanner regime={recs.macroRegime} signals={recs.macroRegime.signals} />
           )}
 
+          {/* Edge gate — what the expected-value screen removed, and why */}
+          {recs.edgeGate?.rejected?.length > 0 && (
+            <EdgeGateBanner gate={recs.edgeGate} abstained={recs.abstained} />
+          )}
+
           {/* Market outlook banner */}
           <div className="glass rounded-xl p-4 border border-white/[0.06]">
             <div className="flex items-start gap-3">
@@ -361,7 +419,9 @@ export default function BuySignalsView({ portfolio, onAnalyze }) {
           {/* Cards grid */}
           {displayed.length === 0 ? (
             <div className="glass rounded-xl p-8 text-center text-slate-500 text-sm">
-              No recommendations match the selected filters.
+              {recs.abstained
+                ? 'Every candidate was screened out on expected value — see above. No action is the recommendation.'
+                : 'No recommendations match the selected filters.'}
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
