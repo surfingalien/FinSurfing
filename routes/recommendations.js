@@ -29,6 +29,7 @@ const { getSocialSentiment } = require('../lib/social-sentiment')
 const { getAltDataSnippet }  = require('../lib/alt-data')
 const { getOptionsFlowCompact } = require('../lib/options-flow-cache')
 const kelly = require('../lib/kelly')
+const expectedValue = require('../lib/expected-value')
 const { computeStats, readPredictions } = require('../lib/brain-learnings')
 const { extractArrayObjects } = require('../lib/ai-json')
 const { startJsonHeartbeat } = require('../lib/http-heartbeat')
@@ -387,31 +388,90 @@ Respond ONLY with a JSON object — no markdown, no explanation, just the JSON:
     if (pricesAnchored > 0)
       console.log(`[recommendations] re-anchored prices for ${pricesAnchored}/${recSymbols.length} symbols`)
 
-    // ── Kelly position sizing (advisory) ─────────────────────────────────────
-    // Suggested size = fractional Kelly capped at maxFraction, using the pick's
-    // own reward/risk (targetReturn/stopLoss) and an EMPIRICAL win probability
-    // from resolved-prediction calibration (NOT a heuristic confidence score).
-    // Recs carry `risk`, not a calibrated confidence bucket, so we use the
-    // overall historical win rate; falls back to a conservative default until
-    // enough predictions have resolved.
+    // ── Expected-value gate + Kelly position sizing (advisory) ───────────────
+    // The prompt asks for a fixed slate (20–22), so the model always returns a
+    // full one. This is where the system earns the right to hand back fewer:
+    // each pick is scored on its own reward/risk against an EMPIRICAL win
+    // probability for ITS ASSET CLASS and a realistic round-trip cost, and
+    // anything without a positive net edge over the floor is dropped. The model
+    // is never told a gate exists, so it can't pad toward it.
+    //
+    // Sizing then uses the SAME cost-adjusted payoffs (netWinFrac/netLossFrac)
+    // that produced the verdict — a pick can't be judged on net edge and sized
+    // on gross. Win probability falls back to a conservative default until
+    // enough predictions have resolved, which leaves the gate inert rather than
+    // arbitrary on a cold start.
     let kellyStats = null
     try { kellyStats = computeStats(readPredictions()) } catch { /* calibration optional */ }
-    const { p: winProb, source: winProbSource } = kelly.winProbFromStats(kellyStats, { fallback: 0.5 })
-    data.recommendations = data.recommendations.map(rec => {
+
+    const minNetEdge = Number(process.env.ADVISORY_MIN_NET_EDGE) > 0
+      ? Number(process.env.ADVISORY_MIN_NET_EDGE)
+      : expectedValue.MIN_NET_EDGE
+
+    const winProbSources = new Set()
+    const rejected = []
+
+    const scored = data.recommendations.map(rec => {
       // Citations: keep only non-empty string sources, max 4 (defensive against
       // the model omitting/malforming the field). Always present as an array.
       const sources = Array.isArray(rec.sources) ? rec.sources.filter(s => typeof s === 'string' && s.trim()).slice(0, 4) : []
-      const W = (rec.targetReturn || 0) / 100
-      const L = (rec.stopLoss     || 0) / 100
-      if (!(W > 0) || !(L > 0)) return { ...rec, sources }
-      const sizing = kelly.suggestedSize({ winProb, winFrac: W, lossFrac: L, fraction: 0.5, maxFraction: 0.2 })
-      return { ...rec, sources, sizing: { ...sizing, winProbSource } }
+
+      const { p: winProb, source: winProbSource } = kelly.winProbFromStats(kellyStats, {
+        assetType: expectedValue.normalizeAssetType(rec.type),
+        fallback:  0.5,
+      })
+      winProbSources.add(winProbSource)
+
+      const ev = expectedValue.evaluateTrade({
+        winProb,
+        targetReturn: rec.targetReturn,
+        stopLoss:     rec.stopLoss,
+        assetType:    rec.type,
+        minNetEdge,
+      })
+
+      // Unscoreable (no usable target/stop) — can't measure an edge, so don't
+      // claim one. Kept rather than dropped: silence about a pick is not
+      // evidence against it, and schema validation already bounds the field.
+      if (!ev) return { ...rec, sources, expectedValue: null }
+
+      const sizing = kelly.suggestedSize({
+        winProb,
+        winFrac:     ev.netWinFrac,
+        lossFrac:    ev.netLossFrac,
+        fraction:    0.5,
+        maxFraction: 0.2,
+      })
+      return { ...rec, sources, expectedValue: ev, sizing: { ...sizing, winProbSource, netOfCosts: true } }
     })
+
+    data.recommendations = scored.filter(rec => {
+      if (!rec.expectedValue || rec.expectedValue.actionable) return true
+      const { verdict, reason, netEdge, breakEvenWinProb } = rec.expectedValue
+      rejected.push({ symbol: rec.symbol, type: rec.type ?? null, verdict, reason, netEdge, breakEvenWinProb })
+      return false
+    })
+
+    if (rejected.length)
+      console.log(`[recommendations] edge gate dropped ${rejected.length}/${scored.length}: ` +
+        rejected.map(r => `${r.symbol} (${r.verdict})`).join(', '))
 
     // Strip any holdings the AI recommended despite the instruction — last-resort guard
     if (holdings.length) {
       const heldSet = new Set(holdings.map(s => String(s).toUpperCase()))
       data.recommendations = data.recommendations.filter(r => !heldSet.has(String(r.symbol).toUpperCase()))
+    }
+
+    // Built AFTER the holdings strip so `kept` always equals what the caller
+    // actually receives — otherwise a gate-passing pick that is then stripped
+    // as an existing holding would leave `kept` contradicting `abstained`.
+    const edgeGate = {
+      minNetEdge,
+      evaluated:       scored.length,
+      kept:            data.recommendations.length,
+      rejected,
+      winProbSources:  [...winProbSources],
+      costModelBps:    expectedValue.ROUND_TRIP_BPS,
     }
 
     // Save what was recommended so future calls avoid repeating symbols/sectors
@@ -441,6 +501,11 @@ Respond ONLY with a JSON object — no markdown, no explanation, just the JSON:
       generatedAt: new Date().toISOString(),
       llmUsed,
       truncated,
+      // True when every candidate failed the edge gate. An empty slate is a
+      // real answer, not an error — the alternative is padding the list with
+      // picks the math says are not worth the friction.
+      abstained: data.recommendations.length === 0,
+      edgeGate,
       persona: { id: persona.id, name: persona.name, emoji: persona.emoji, style: persona.style },
       macroRegime: macroData?.regime ?? null,
     })
