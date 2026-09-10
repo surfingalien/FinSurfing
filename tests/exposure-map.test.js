@@ -9,7 +9,8 @@
 
 const {
   RELATIONS, RELATION_NAMES, MIN_EDGE_SCORE, STALE_DAYS,
-  normalizeForMatch, verifyFinding, recencyFactor, scoreEdge, isActionable,
+  normalizeForMatch, verifyFinding, extractHoldingEvidence,
+  recencyFactor, scoreEdge, isActionable,
   buildEdges, toUniverse, exposureBlock, buildClassifyPrompt,
 } = require('../lib/exposure-map')
 
@@ -265,5 +266,114 @@ describe('RELATIONS registry', () => {
 
   test('every relation documents what it means for the reader', () => {
     for (const r of RELATION_NAMES) expect(RELATIONS[r].desc.length).toBeGreaterThan(10)
+  })
+})
+
+/**
+ * extractHoldingEvidence — the model-free path.
+ *
+ * A schedule of investments already states the relationship, so the quote is
+ * SLICED from the source rather than written by anything. That makes it
+ * verbatim by construction; these tests pin that construction, because the
+ * moment a quote stops being a literal substring the hallucination gate stops
+ * meaning anything on this path.
+ */
+describe('extractHoldingEvidence', () => {
+  const SCHEDULE =
+    'Schedule of Investments as of March 31, 2026. Private Company Holdings. ' +
+    'Space Exploration Technologies Corp., Class A Common Stock, 1,250,000 shares, ' +
+    'fair value $45,600,000, 4.9% of net assets. ' +
+    'Stripe, Inc., Series H Preferred, 900,000 shares, fair value $12,000,000, 1.3% of net assets.'
+
+  test('the quote is a literal substring of the source — verbatim by construction', () => {
+    const ev = extractHoldingEvidence(SCHEDULE, ['Space Exploration Technologies', 'SpaceX'])
+    expect(SCHEDULE).toContain(ev.quote)
+  })
+
+  test('the quote passes the same gate the model path must pass', () => {
+    const ev = extractHoldingEvidence(SCHEDULE, ['Space Exploration Technologies', 'SpaceX'])
+    const check = verifyFinding({ relation: 'holder', quote: ev.quote }, SCHEDULE,
+      { anchorAliases: ['Space Exploration Technologies'] })
+    expect(check.ok).toBe(true)
+  })
+
+  test('prefers the longest matching alias — schedules list legal names', () => {
+    const ev = extractHoldingEvidence(SCHEDULE, ['SpaceX', 'Space Exploration Technologies'])
+    expect(ev.alias).toBe('Space Exploration Technologies')
+  })
+
+  test('reads the share of net assets stated in the same row', () => {
+    expect(extractHoldingEvidence(SCHEDULE, ['Space Exploration Technologies']).materialityPct).toBe(4.9)
+  })
+
+  test('takes the percentage belonging to the row, not the next holding down', () => {
+    const ev = extractHoldingEvidence(SCHEDULE, ['Stripe, Inc.'])
+    expect(ev.materialityPct).toBe(1.3)
+  })
+
+  test('a bare number with no % sign is never read as a percentage', () => {
+    // In an N-PORT XML dump this could be a share count, a dollar value or part
+    // of a CUSIP. Guessing would put an invented number on the card.
+    const xml = 'Space Exploration Technologies Corp N/A 549300 4.85 Long EC CORP US N ' + 'x'.repeat(80)
+    expect(extractHoldingEvidence(xml, ['Space Exploration Technologies']).materialityPct).toBeNull()
+  })
+
+  test('a percentage far past the mention belongs to another row', () => {
+    const text = 'Space Exploration Technologies Corp' + ' filler'.repeat(60) + ' 7.7% of net assets'
+    expect(extractHoldingEvidence(text, ['Space Exploration Technologies']).materialityPct).toBeNull()
+  })
+
+  test('an implausible percentage is dropped rather than carried', () => {
+    const text = 'Holdings. Space Exploration Technologies Corp 250% of something odd. ' + 'y'.repeat(60)
+    expect(extractHoldingEvidence(text, ['Space Exploration Technologies']).materialityPct).toBeNull()
+  })
+
+  test('returns null when the anchor is absent — no filler, no guess', () => {
+    expect(extractHoldingEvidence(SCHEDULE, ['Anduril Industries'])).toBeNull()
+    expect(extractHoldingEvidence('', ['SpaceX'])).toBeNull()
+    expect(extractHoldingEvidence(SCHEDULE, [])).toBeNull()
+    expect(extractHoldingEvidence(null, ['SpaceX'])).toBeNull()
+  })
+
+  test('a mention with too little text around it is not evidence', () => {
+    expect(extractHoldingEvidence('SpaceX', ['SpaceX'])).toBeNull()
+  })
+
+  test('does not cut a word in half at either edge', () => {
+    const text = 'alpha bravo charlie delta '.repeat(30) + 'SpaceX Corp holding ' + 'echo foxtrot golf '.repeat(30)
+    const ev = extractHoldingEvidence(text, ['SpaceX'])
+    expect(ev.quote).toMatch(/^\S/)
+    expect(text).toContain(ev.quote)
+    // Every token in the quote is a whole token of the source.
+    for (const tok of ev.quote.split(/\s+/)) expect(text.split(/\s+/)).toContain(tok)
+  })
+
+  test('clamps to the text bounds when the mention sits at the very start', () => {
+    const text = 'SpaceX Corp is held at 3.2% of net assets by this fund as disclosed herein.'
+    const ev = extractHoldingEvidence(text, ['SpaceX'])
+    expect(ev.quote).toBe(text)
+    expect(ev.materialityPct).toBe(3.2)
+  })
+})
+
+describe('fund form weighting', () => {
+  test('every EDGAR fund-form spelling scores above the floor', () => {
+    // The label comes back from EDGAR's submissions index, and the N-PORT family
+    // has appeared as both 'NPORT-P' and 'N-PORT'. An unlisted spelling falls to
+    // the default weight, lands at 24 against a floor of 25, and silently
+    // deletes the entire fund-holding discovery path.
+    const filedAt = new Date().toISOString().slice(0, 10)
+    for (const form of ['NPORT-P', 'N-PORT', 'N-CSR', 'N-CSRS']) {
+      expect(scoreEdge({ relation: 'holder', form, filedAt })).toBeGreaterThanOrEqual(MIN_EDGE_SCORE)
+    }
+  })
+
+  test('a fund holding is not excluded from the tradeable universe', () => {
+    // Competitors are; holders are the whole point for a private anchor.
+    const edges = buildEdges('SPACEX', [{
+      symbol: 'DXYZ', relation: 'holder', quote: 'x'.repeat(50), form: 'NPORT-P',
+      filedAt: new Date().toISOString().slice(0, 10), url: 'u', materialityPct: 4.9,
+    }])
+    expect(toUniverse(edges)).toEqual(['DXYZ'])
   })
 })

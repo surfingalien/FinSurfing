@@ -10,6 +10,11 @@
  * claim with no quote behind it is exactly what this feature exists to avoid
  * producing, so the evidence is the primary content of a card, not a detail
  * tucked behind a disclosure triangle.
+ *
+ * A build runs on the SERVER (useBackgroundJob -> lib/ai-job-queue.js). It can
+ * take minutes and costs a model call per candidate, so tying it to a live tab
+ * meant closing the page threw away work already paid for. Reading a STORED map
+ * stays a plain fetch — it touches neither network nor model.
  */
 
 import { useState, useCallback, useEffect } from 'react'
@@ -17,6 +22,7 @@ import {
   Network, RefreshCw, AlertTriangle, ExternalLink, Search,
   ArrowUpRight, ArrowDownRight, Minus, TrendingUp,
 } from 'lucide-react'
+import { useBackgroundJob } from '../../hooks/useBackgroundJob'
 
 const RELATION_STYLE = {
   supplier:   { label: 'Supplier',   cls: 'text-mint-400 bg-mint-500/10 border-mint-500/25' },
@@ -153,11 +159,13 @@ function DiffPanel({ anchor, diff }) {
 
 /* ── View ──────────────────────────────────────────────────────────────── */
 
+const cleanAnchor = k => String(k || '').toUpperCase().replace(/[^A-Z0-9.-]/g, '')
+
 export default function ExposureView({ onAnalyze }) {
   const [anchor, setAnchor]   = useState('')
   const [anchors, setAnchors] = useState(null)
   const [data, setData]       = useState(null)
-  const [loading, setLoading] = useState(false)
+  const [reading, setReading] = useState(false)   // stored-map fetch only
   const [error, setError]     = useState(null)
   const [filter, setFilter]   = useState('all')
 
@@ -167,26 +175,50 @@ export default function ExposureView({ onAnalyze }) {
       .catch(() => {})
   }, [])
 
-  const load = useCallback(async (key, refresh) => {
-    const a = String(key || '').toUpperCase().replace(/[^A-Z0-9.-]/g, '')
+  // The build runs server-side. On mount this reattaches to one still in
+  // flight, or replays the last completed one, so returning to the tab shows
+  // the map instead of an empty form.
+  const job = useBackgroundJob({
+    startPath:  '/api/exposure/job',
+    pollPath:   '/api/exposure/job',
+    storageKey: 'finsurf_active_exposure',
+    noun:       'exposure map',
+    onStart:  () => setError(null),
+    onError:  setError,
+    onResult: (result) => {
+      setData(result)
+      if (result?.anchor) setAnchor(result.anchor)
+    },
+  })
+  const startJob = job.start
+
+  /** Read the STORED map: no network beyond our own server, no model, instant. */
+  const read = useCallback(async (key) => {
+    const a = cleanAnchor(key)
     if (!a) return
-    setLoading(true); setError(null)
+    setReading(true); setError(null)
     try {
-      const path = refresh ? `/api/exposure/${a}` : `/api/exposure/${a}/graph`
-      const r = await fetch(path, { headers: { ...authHeaders(), ...getApiKeyHeaders() } })
+      const r = await fetch(`/api/exposure/${a}/graph`, { headers: { ...authHeaders(), ...getApiKeyHeaders() } })
       const d = await r.json()
-      // The build endpoint is heartbeated, so a failure arrives as 200 with an
-      // `error` in the body — res.ok alone is not enough to trust the payload.
       if (!r.ok || d.error) throw new Error(d.error || `Request failed (${r.status})`)
-      if (refresh || d.edges?.length) setData(d)
-      else setData({ ...d, empty: true })
+      setData(d.edges?.length ? d : { ...d, empty: true })
       setAnchor(a)
     } catch (e) {
       setError(e.message)
     } finally {
-      setLoading(false)
+      setReading(false)
     }
   }, [])
+
+  /** Enqueue a fresh build from SEC filings. */
+  const build = useCallback((key) => {
+    const a = cleanAnchor(key)
+    if (!a) return
+    setAnchor(a)
+    startJob({ anchor: a })
+  }, [startJob])
+
+  const loading = reading || job.running
 
   const edges = (data?.edges ?? []).filter(e => filter === 'all' || e.relation === filter)
   const counts = (data?.edges ?? []).reduce((acc, e) => {
@@ -210,7 +242,7 @@ export default function ExposureView({ onAnalyze }) {
         </div>
         {data && !data.empty && (
           <button
-            onClick={() => load(anchor, true)}
+            onClick={() => build(anchor)}
             disabled={loading}
             className="btn-secondary flex items-center gap-2 text-xs shrink-0 disabled:opacity-50"
           >
@@ -223,7 +255,7 @@ export default function ExposureView({ onAnalyze }) {
       {/* Anchor picker */}
       <div className="glass rounded-xl p-4 space-y-3">
         <form
-          onSubmit={e => { e.preventDefault(); load(anchor, true) }}
+          onSubmit={e => { e.preventDefault(); build(anchor) }}
           className="flex gap-2"
         >
           <div className="relative flex-1">
@@ -236,7 +268,7 @@ export default function ExposureView({ onAnalyze }) {
             />
           </div>
           <button type="submit" disabled={loading || !anchor} className="btn-primary text-xs px-4 disabled:opacity-50">
-            {loading ? 'Mapping…' : 'Map exposure'}
+            {job.running ? 'Mapping…' : 'Map exposure'}
           </button>
         </form>
 
@@ -244,7 +276,7 @@ export default function ExposureView({ onAnalyze }) {
           <div className="flex flex-wrap gap-1.5">
             <span className="text-[10px] text-slate-500 self-center mr-1">Private:</span>
             {anchors.private.map(a => (
-              <button key={a.key} onClick={() => load(a.key, false)}
+              <button key={a.key} onClick={() => read(a.key)}
                       className="text-[10px] px-2 py-1 rounded-md bg-white/[0.04] border border-white/10 text-slate-300 hover:border-mint-500/30 hover:text-mint-400 transition-colors">
                 {a.label}
               </button>
@@ -255,7 +287,7 @@ export default function ExposureView({ onAnalyze }) {
           <div className="flex flex-wrap gap-1.5">
             <span className="text-[10px] text-slate-500 self-center mr-1">Mapped:</span>
             {anchors.tracked.slice(0, 10).map(t => (
-              <button key={t.anchor} onClick={() => load(t.anchor, false)}
+              <button key={t.anchor} onClick={() => read(t.anchor)}
                       className="text-[10px] px-2 py-1 rounded-md bg-mint-500/[0.07] border border-mint-500/20 text-mint-400 hover:border-mint-500/40 transition-colors">
                 {t.anchor} ({t.edges})
               </button>
@@ -273,14 +305,21 @@ export default function ExposureView({ onAnalyze }) {
 
       {loading && (
         <div className="glass rounded-xl p-8 text-center text-sm text-slate-400">
-          Searching SEC filings and verifying quotes… this takes a few minutes on a fresh anchor.
+          {job.status === 'queued'
+            ? 'Queued behind another run — it will start on its own.'
+            : 'Searching SEC filings and verifying quotes… this takes a few minutes on a fresh anchor.'}
+          {job.running && (
+            <div className="text-[11px] text-slate-500 mt-2">
+              This runs on the server — you can close the tab and come back.
+            </div>
+          )}
         </div>
       )}
 
       {!loading && data?.empty && (
         <div className="glass rounded-xl p-8 text-center text-sm text-slate-400">
           No stored map for <b className="text-white">{data.anchor}</b> yet.
-          <button onClick={() => load(data.anchor, true)} className="text-mint-400 hover:underline ml-1">
+          <button onClick={() => build(data.anchor)} className="text-mint-400 hover:underline ml-1">
             Build one from SEC filings
           </button>.
         </div>

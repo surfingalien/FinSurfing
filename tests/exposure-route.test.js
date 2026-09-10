@@ -18,6 +18,7 @@ const path    = require('path')
 // jest.mock factories may only reference vars prefixed with `mock`.
 const mockCall         = jest.fn()
 const mockFindMentions = jest.fn()
+const mockFundHolders  = jest.fn()
 const mockFindPeers    = jest.fn()
 const mockGetFiling    = jest.fn()
 
@@ -28,6 +29,7 @@ jest.mock('../lib/edgar-search', () => {
   return {
     ...actual,
     findMentions: (...a) => mockFindMentions(...a),
+    fundHolders:  (...a) => mockFundHolders(...a),
     findPeers:    (...a) => mockFindPeers(...a),
   }
 })
@@ -68,10 +70,14 @@ beforeAll(() => {
 
 beforeEach(() => {
   mockCall.mockReset(); mockFindMentions.mockReset()
+  mockFundHolders.mockReset()
   mockFindPeers.mockReset(); mockGetFiling.mockReset()
   try { fs.unlinkSync(mockGraphFile) } catch { /* first run */ }
 
   mockFindPeers.mockReturnValue({ basis: 'industry', peers: [] })
+  // Off by default: only the fund-holdings tests below opt in, so every other
+  // test keeps exercising exactly the path it names.
+  mockFundHolders.mockResolvedValue([])
   mockFindMentions.mockResolvedValue([
     { cik: '0001819994', symbol: 'RKLB', company: 'Rocket Lab USA, Inc.', form: '10-K',
       filedAt: '2026-02-14', matchedAlias: 'SpaceX', mentions: 3, discovery: 'filing_search' },
@@ -234,5 +240,143 @@ describe('POST /api/exposure/:anchor/research', () => {
       .set('Authorization', `Bearer ${token}`).send({})
     expect(res.status).toBe(404)
     expect(res.body.error).toMatch(/No exposure map/)
+  })
+})
+
+/**
+ * The fund-holdings path — the only route to a company whose shares you cannot
+ * buy. It is deliberately model-free: a schedule of investments already STATES
+ * the relationship, so the quote is sliced out of the filing rather than
+ * written by anything.
+ */
+describe('fund holdings (private anchors)', () => {
+  const SCHEDULE =
+    'Schedule of Investments. Private Holdings. ' +
+    'Space Exploration Technologies Corp., Class A Common 1,250,000 shares $45,600,000 4.9% of net assets. ' +
+    'Stripe, Inc., Series H 900,000 shares $12,000,000 1.3% of net assets.'
+
+  const holderFiling = {
+    symbol: 'DXYZ', form: 'NPORT-P', filingDate: '2026-05-30',
+    url: 'https://sec.gov/nport', excerpt: SCHEDULE,
+  }
+
+  beforeEach(() => {
+    mockFindMentions.mockResolvedValue([])
+    mockFundHolders.mockResolvedValue([
+      { cik: '0001938046', symbol: 'DXYZ', company: 'Destiny Tech100 Inc.', form: 'NPORT-P',
+        filedAt: '2026-05-30', matchedAlias: 'Space Exploration Technologies', mentions: 2,
+        discovery: 'fund_holding' },
+    ])
+    mockGetFiling.mockResolvedValue(holderFiling)
+  })
+
+  test('a disclosed holding becomes an edge with NO model call at all', async () => {
+    const res = await get('/api/exposure/SPACEX')
+    expect(res.status).toBe(200)
+    expect(mockCall).not.toHaveBeenCalled()
+    expect(res.body.edges).toHaveLength(1)
+    expect(res.body.edges[0]).toMatchObject({ symbol: 'DXYZ', relation: 'holder', discovery: 'fund_holding' })
+  })
+
+  test('the quote is lifted verbatim from the schedule, not written', async () => {
+    const res = await get('/api/exposure/SPACEX')
+    const quote = res.body.edges[0].evidence.quote
+    expect(SCHEDULE).toContain(quote)
+    expect(quote).toMatch(/Space Exploration Technologies/)
+  })
+
+  test('the stated share of net assets is carried through as materiality', async () => {
+    const res = await get('/api/exposure/SPACEX')
+    expect(res.body.edges[0].materialityPct).toBe(4.9)
+  })
+
+  test('a fund holding clears MIN_EDGE_SCORE — the NPORT-P form label must be weighted', async () => {
+    // Regression guard. At the default form weight this scores 24 against a
+    // floor of 25, which deletes the whole path with no error anywhere.
+    const res = await get('/api/exposure/SPACEX')
+    expect(res.body.edges[0].score).toBeGreaterThanOrEqual(25)
+  })
+
+  test('a fund whose LATEST report no longer names the anchor is not an edge', async () => {
+    mockGetFiling.mockResolvedValue({
+      ...holderFiling,
+      excerpt: 'Schedule of Investments. Common Stocks. Apple Inc. 2.1% of net assets.',
+    })
+    const res = await get('/api/exposure/SPACEX')
+    expect(res.body.edges).toEqual([])
+  })
+
+  test('the path is skipped for a LISTED anchor — every index fund holds NVDA', async () => {
+    await get('/api/exposure/RKLB?suppliers=false')
+    expect(mockFundHolders).not.toHaveBeenCalled()
+  })
+
+  test('?funds=false skips it', async () => {
+    await get('/api/exposure/SPACEX?funds=false&suppliers=false')
+    expect(mockFundHolders).not.toHaveBeenCalled()
+  })
+
+  test('an empty map for a private anchor says WHY, so it never reads as "no exposure"', async () => {
+    mockFindMentions.mockRejectedValue(new Error('efts unreachable'))
+    mockFundHolders.mockRejectedValue(new Error('efts unreachable'))
+    const res = await get('/api/exposure/SPACEX')
+    expect(res.body.edges).toEqual([])
+    expect(res.body.searchAvailable).toBe(false)
+    expect(res.body.notes.join(' ')).toMatch(/no peer fallback/)
+    expect(res.body.notes.join(' ')).toMatch(/not evidence that nothing is exposed/)
+  })
+})
+
+/**
+ * Queue wiring. A build costs up to a dozen model calls; before this it lived
+ * and died with the browser tab that started it.
+ */
+describe('background job endpoints', () => {
+  test('POST /job enqueues and returns a jobId instead of the map', async () => {
+    const res = await request(app).post('/api/exposure/job')
+      .set('Authorization', `Bearer ${token}`).send({ anchor: 'SPACEX' })
+    expect(res.status).toBe(202)
+    expect(res.body.jobId).toMatch(/^exp-/)
+    // Enqueue only — the run happens on the worker, over loopback.
+    expect(mockFindMentions).not.toHaveBeenCalled()
+  })
+
+  test('POST /job rejects a missing anchor before queueing anything', async () => {
+    const res = await request(app).post('/api/exposure/job')
+      .set('Authorization', `Bearer ${token}`).send({})
+    expect(res.status).toBe(400)
+    expect(res.body.error).toMatch(/anchor/i)
+  })
+
+  test('the job endpoints are matched before /:anchor — "jobs" is a valid anchor string', async () => {
+    // Declared the other way round this lists nothing and tries to map a
+    // company called JOBS, which fails as a 404 from EDGAR rather than as a
+    // routing bug anyone would recognise.
+    const res = await request(app).get('/api/exposure/jobs')
+      .set('Authorization', `Bearer ${token}`)
+    expect(res.status).toBe(200)
+    expect(Array.isArray(res.body.jobs)).toBe(true)
+    expect(mockFindMentions).not.toHaveBeenCalled()
+  })
+
+  test('GET /job/latest is not read as a job id', async () => {
+    const res = await request(app).get('/api/exposure/job/latest')
+      .set('Authorization', `Bearer ${token}`)
+    expect(res.status).toBe(200)
+    expect(res.body).toHaveProperty('job')
+  })
+
+  test('the queue drives POST /build, which does the same work as the inline GET', async () => {
+    mockFindMentions.mockResolvedValue([])
+    mockFundHolders.mockResolvedValue([])
+    mockFindPeers.mockReturnValue({ basis: 'industry', peers: [] })
+    const { JOB_KINDS } = require('../lib/ai-job-queue')
+    expect(JOB_KINDS.exposure.path).toBe('/api/exposure/build')
+
+    const res = await request(app).post('/api/exposure/build')
+      .set('Authorization', `Bearer ${token}`).send({ anchor: 'SPACEX' })
+    expect(res.status).toBe(200)
+    expect(res.body).toMatchObject({ anchor: 'SPACEX', listed: false })
+    expect(res.body).toHaveProperty('edges')
   })
 })
