@@ -69,8 +69,11 @@ function foldSymbol(sym, articles, { source, toTen, bullish = 0.1, bearish = -0.
   const avg = agg.mean
   // Prefer a headline that is not itself a syndicated copy — a press-release
   // title is the least informative thing we could show as the summary.
-  const { weights } = clusterArticles(articles)
-  const pick = articles[weights.findIndex(w => w === 1)] ?? articles[0]
+  // `representatives` already resolves that, without re-clustering and without
+  // indexing back into an array the clusterer never saw.
+  const pick = agg.unsyndicated.find(a => a.title)
+    ?? agg.representatives.find(a => a.title)
+    ?? articles[0]
   return {
     symbol: sym,
     sentiment: avg > bullish ? 'bullish' : avg < bearish ? 'bearish' : 'neutral',

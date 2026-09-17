@@ -248,3 +248,40 @@ describe('weightedSentiment', () => {
     expect(r.total).toBe(2)
   })
 })
+
+describe('weightedSentiment representatives', () => {
+  test('returns one article per distinct story, cluster roots included', () => {
+    const rows = [
+      { title: 'Acme Announces Record Q4 Revenue', body: WIRE_BODY, url: 'https://a.com/1', publishedAt: '2026-01-03T06:00:00Z', score: 0.6, polarity: 1 },
+      { title: 'Acme Announces Record Q4 Revenue', body: WIRE_BODY, url: 'https://b.com/2', publishedAt: '2026-01-03T09:00:00Z', score: 0.6, polarity: 1 },
+      { title: 'Acme faces EU antitrust probe over pricing', url: 'https://d.com/4', score: -0.6, polarity: -1 },
+    ]
+    const r = weightedSentiment(rows)
+    expect(r.representatives).toHaveLength(2)
+    expect(r.representatives.map(a => a.url)).toEqual(['https://a.com/1', 'https://d.com/4'])
+    // The press-release cluster root is a real story, but it was republished —
+    // so it is not in `unsyndicated`, which is what a one-line summary quotes.
+    expect(r.unsyndicated.map(a => a.url)).toEqual(['https://d.com/4'])
+  })
+
+  test('with nothing but syndicated copy, unsyndicated is empty and callers fall back', () => {
+    const r = weightedSentiment([
+      { title: 'Acme Announces Record Q4 Revenue', body: WIRE_BODY, url: 'https://a.com/1', score: 0.6 },
+      { title: 'Acme Announces Record Q4 Revenue', body: WIRE_BODY, url: 'https://b.com/2', score: 0.6 },
+    ])
+    expect(r.unsyndicated).toEqual([])
+    expect(r.representatives).toHaveLength(1)
+  })
+
+  test('representatives align with the FILTERED rows, never the caller array', () => {
+    // An unscored article is dropped before clustering, so a caller indexing
+    // cluster ids back into its own array would read the wrong row.
+    const r = weightedSentiment([
+      { title: 'no score here at all', score: null },
+      { title: 'Acme lands defense contract worth billions', score: 0.5 },
+    ])
+    expect(r.total).toBe(1)
+    expect(r.representatives).toHaveLength(1)
+    expect(r.representatives[0].title).toMatch(/defense/)
+  })
+})
