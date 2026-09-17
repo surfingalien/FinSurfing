@@ -11,6 +11,15 @@
  *  4. FMP stock_news   — headlines → Claude scores
  *  5. Finnhub company-news — headlines → Claude scores (original fallback)
  *
+ * SYNDICATION. Every provider here returns articles, and a wire story
+ * republished by five outlets arrives as five articles carrying the same score.
+ * Averaged naively, one press release outvotes an independent piece 5:1 and
+ * `headline_count` claims five times the corroboration that exists. Each
+ * provider therefore runs its articles through `lib/source-independence.js`,
+ * which clusters derivative copies and gives each distinct STORY one vote.
+ * `headline_count` still reports raw articles; `independentCount` reports
+ * stories, and `syndicated` says when the two diverge.
+ *
  * Results cached 25 minutes in-process.
  */
 
@@ -18,6 +27,7 @@ const express         = require('express')
 const https           = require('https')
 const Anthropic       = require('@anthropic-ai/sdk')
 const { requireAuth } = require('../middleware/auth')
+const { weightedSentiment, clusterArticles } = require('../lib/source-independence')
 
 const router = express.Router()
 router.use(requireAuth)
@@ -46,6 +56,61 @@ function httpsGet(url) {
   })
 }
 
+/**
+ * Fold one symbol's articles into a result row, counting each distinct story
+ * once. `toTen` maps the provider's native scale onto our 1-10 scale.
+ */
+function foldSymbol(sym, articles, { source, toTen, bullish = 0.1, bearish = -0.1, emptySummary }) {
+  const agg = weightedSentiment(articles)
+  if (!agg.total) {
+    return { symbol: sym, sentiment: 'neutral', score: 5, summary: emptySummary,
+             headline_count: 0, independentCount: 0, syndicated: false, source }
+  }
+  const avg = agg.mean
+  // Prefer a headline that is not itself a syndicated copy — a press-release
+  // title is the least informative thing we could show as the summary.
+  // `representatives` already resolves that, without re-clustering and without
+  // indexing back into an array the clusterer never saw.
+  const pick = agg.unsyndicated.find(a => a.title)
+    ?? agg.representatives.find(a => a.title)
+    ?? articles[0]
+  return {
+    symbol: sym,
+    sentiment: avg > bullish ? 'bullish' : avg < bearish ? 'bearish' : 'neutral',
+    score: toTen(avg),
+    summary: (pick?.title || emptySummary).slice(0, 80),
+    headline_count: agg.total,            // raw articles seen
+    independentCount: agg.independentCount, // distinct stories among them
+    syndicated: agg.syndicated,
+    source,
+  }
+}
+
+/** -1..+1 → 1..10 */
+const toTen = avg => Math.round(((avg + 1) / 2) * 9 + 1)
+
+/**
+ * Distinct headlines for the Claude-scored lane.
+ *
+ * Claude cannot tell that five of the six headlines it is shown are the same
+ * press release, so it reads the repetition as corroboration and scores the
+ * symbol more bullish than the news supports. Clustering FIRST and passing only
+ * one headline per story is the whole fix; slicing to `limit` afterwards means
+ * the budget buys five stories rather than five copies.
+ */
+function dedupeHeadlines(articles, limit = 5) {
+  const rows = (articles || []).filter(a => a?.title)
+  if (!rows.length) return { headlines: [], total: 0, independentCount: 0 }
+  const { clusters, independentCount } = clusterArticles(rows)
+  // One representative per story: every article except the non-root members of
+  // a cluster. Selecting on weight===1 instead would drop a syndicated story
+  // ENTIRELY — no member of a cluster of four has weight 1 — which silences
+  // the news rather than de-duplicating it.
+  const suppressed = new Set(clusters.flatMap(c => c.members))
+  const picked = rows.filter((_, i) => !suppressed.has(i)).slice(0, limit)
+  return { headlines: picked.map(a => a.title), total: rows.length, independentCount }
+}
+
 // ── 1. Benzinga — pre-scored news sentiment ───────────────────────────────────
 async function getBenzingaSentiment(symbols, key) {
   if (!key) return null
@@ -55,28 +120,26 @@ async function getBenzingaSentiment(symbols, key) {
     const data = await httpsGet(url)
     if (!Array.isArray(data) || !data.length) return null
 
-    const scoreMap = {}, headlineMap = {}
+    const bySym = {}
     for (const article of data) {
       for (const stock of (article.stocks || [])) {
         const sym = stock.name?.toUpperCase()
         if (!sym || !symbols.includes(sym)) continue
-        if (!scoreMap[sym]) { scoreMap[sym] = []; headlineMap[sym] = [] }
+        if (!bySym[sym]) bySym[sym] = []
         // Benzinga sentiment: 'Bullish', 'Bearish', 'Neutral'
         const s = (article.sentiment || stock.sentiment || '').toLowerCase()
         const score = s === 'bullish' ? 0.6 : s === 'bearish' ? -0.6 : 0
-        scoreMap[sym].push(score)
-        if (article.title) headlineMap[sym].push(article.title)
+        bySym[sym].push({
+          title: article.title, url: article.url, body: article.body,
+          publishedAt: article.created || article.updated, score, polarity: score,
+        })
       }
     }
 
-    const mapped = symbols.map(sym => {
-      const scores = scoreMap[sym] || []
-      if (!scores.length) return null
-      const avg = scores.reduce((a, b) => a + b, 0) / scores.length
-      const score10 = Math.round(((avg + 1) / 2) * 9 + 1)
-      const sentiment = avg > 0.1 ? 'bullish' : avg < -0.1 ? 'bearish' : 'neutral'
-      return { symbol: sym, sentiment, score: score10, summary: (headlineMap[sym][0] || '').slice(0, 80), headline_count: scores.length, source: 'benzinga' }
-    })
+    const mapped = symbols.map(sym =>
+      bySym[sym]?.length
+        ? foldSymbol(sym, bySym[sym], { source: 'benzinga', toTen, emptySummary: 'No recent news via Benzinga' })
+        : null)
     const valid = mapped.filter(Boolean)
     return valid.length === symbols.length ? valid : null
   } catch (e) {
@@ -93,31 +156,27 @@ async function getMarketauxSentiment(symbols, key) {
   const data = await httpsGet(url)
   if (!Array.isArray(data?.data) || !data.data.length) return null
 
-  // Build per-symbol score map from entity sentiment
-  const scoreMap = {}
-  const headlineMap = {}
+  // Build per-symbol article list from entity sentiment
+  const bySym = {}
   for (const article of data.data) {
     for (const entity of (article.entities || [])) {
       const sym = entity.symbol?.toUpperCase()
       if (!sym || !symbols.includes(sym)) continue
-      if (!scoreMap[sym]) { scoreMap[sym] = []; headlineMap[sym] = [] }
-      if (entity.sentiment_score != null) scoreMap[sym].push(entity.sentiment_score)
-      if (article.title) headlineMap[sym].push(article.title)
+      if (entity.sentiment_score == null) continue
+      if (!bySym[sym]) bySym[sym] = []
+      bySym[sym].push({
+        title: article.title, url: article.url,
+        body: article.description || article.snippet,
+        publishedAt: article.published_at,
+        score: entity.sentiment_score, polarity: entity.sentiment_score,
+      })
     }
   }
 
-  return symbols.map(sym => {
-    const scores = scoreMap[sym] || []
-    const avg    = scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : 0
-    // Convert -1..+1 → 1..10 scale
-    const score10 = Math.round(((avg + 1) / 2) * 9 + 1)
-    const sentiment = avg > 0.15 ? 'bullish' : avg < -0.15 ? 'bearish' : 'neutral'
-    const headlines = headlineMap[sym] || []
-    const summary = headlines.length
-      ? headlines[0].slice(0, 80)
-      : 'No recent news via Marketaux'
-    return { symbol: sym, sentiment, score: score10, summary, headline_count: headlines.length, source: 'marketaux' }
-  })
+  return symbols.map(sym => foldSymbol(sym, bySym[sym] || [], {
+    source: 'marketaux', toTen, bullish: 0.15, bearish: -0.15,
+    emptySummary: 'No recent news via Marketaux',
+  }))
 }
 
 // ── 2. Alpha Vantage NEWS_SENTIMENT ──────────────────────────────────────────
@@ -130,31 +189,31 @@ async function getAVNewsSentiment(symbols, key) {
   if (!Array.isArray(data?.feed) || !data.feed.length) return null
   if (data?.Note || data?.Information) return null // rate limit hit
 
-  // Build per-symbol aggregate
-  const scoreMap = {}
-  const headlineMap = {}
+  // Build per-symbol aggregate. The old exact-title `new Set()` here was the
+  // closest thing we had to de-duplication, and it missed every syndicated
+  // copy that had been retitled — which is most of them.
+  const bySym = {}
   for (const article of data.feed) {
     for (const ts of (article.ticker_sentiment || [])) {
       const sym = ts.ticker?.toUpperCase()
       if (!sym || !symbols.includes(sym)) continue
       const score = parseFloat(ts.ticker_sentiment_score)
-      if (!isNaN(score)) {
-        if (!scoreMap[sym]) { scoreMap[sym] = []; headlineMap[sym] = [] }
-        scoreMap[sym].push(score)
-        if (article.title) headlineMap[sym].push(article.title)
-      }
+      if (isNaN(score)) continue
+      if (!bySym[sym]) bySym[sym] = []
+      bySym[sym].push({
+        title: article.title, url: article.url, body: article.summary,
+        // AV stamps time as YYYYMMDDTHHMMSS — ISO-ify so root selection works.
+        publishedAt: String(article.time_published || '').replace(
+          /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})$/, '$1-$2-$3T$4:$5:$6Z'),
+        score, polarity: score,
+      })
     }
   }
 
-  return symbols.map(sym => {
-    const scores = scoreMap[sym] || []
-    const avg    = scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : 0
-    const score10 = Math.round(((avg + 1) / 2) * 9 + 1)
-    const sentiment = avg > 0.15 ? 'bullish' : avg < -0.15 ? 'bearish' : 'neutral'
-    const headlines = [...new Set(headlineMap[sym] || [])]
-    const summary = headlines.length ? headlines[0].slice(0, 80) : 'No recent news via Alpha Vantage'
-    return { symbol: sym, sentiment, score: score10, summary, headline_count: headlines.length, source: 'alphavantage' }
-  })
+  return symbols.map(sym => foldSymbol(sym, bySym[sym] || [], {
+    source: 'alphavantage', toTen, bullish: 0.15, bearish: -0.15,
+    emptySummary: 'No recent news via Alpha Vantage',
+  }))
 }
 
 // ── 3. FMP stock_news — headlines for Claude to score ────────────────────────
@@ -164,14 +223,13 @@ async function getFMPNewsForSentiment(symbols, key, from, to) {
   const url = `https://financialmodelingprep.com/api/v3/stock_news?tickers=${encodeURIComponent(tickers)}&limit=50&apikey=${key}`
   const data = await httpsGet(url)
   if (!Array.isArray(data) || !data.length) return null
-  return symbols.map(sym => ({
-    sym,
-    headlines: data
+  return symbols.map(sym => {
+    const articles = data
       .filter(a => a.symbol?.toUpperCase() === sym && new Date(a.publishedDate) >= new Date(from))
-      .slice(0, 5)
-      .map(a => a.title)
-      .filter(Boolean),
-  }))
+      .map(a => ({ title: a.title, url: a.url, body: a.text, publishedAt: a.publishedDate }))
+    // Dedupe BEFORE the slice, so the 5-headline budget buys 5 stories.
+    return { sym, ...dedupeHeadlines(articles, 5) }
+  })
 }
 
 // ── 4. Finnhub company-news — batched to avoid rate limits ───────────────────
@@ -205,10 +263,13 @@ async function getFinnhubNewsForSentiment(symbols, key, from, to) {
     const batchResults = await Promise.all(
       batch.map(sym =>
         finnhubGet(`/company-news?symbol=${sym}&from=${from}&to=${to}`, key)
-          .then(n => ({
-            sym,
-            headlines: Array.isArray(n) ? n.slice(0, 5).map(h => h.headline).filter(Boolean) : [],
-          }))
+          .then(n => {
+            const articles = Array.isArray(n) ? n.map(h => ({
+              title: h.headline, url: h.url, body: h.summary,
+              publishedAt: h.datetime ? new Date(h.datetime * 1000).toISOString() : null,
+            })) : []
+            return { sym, ...dedupeHeadlines(articles, 5) }
+          })
       )
     )
     results.push(...batchResults)
@@ -219,11 +280,16 @@ async function getFinnhubNewsForSentiment(symbols, key, from, to) {
 
 // ── Claude scoring (used when provider doesn't have native sentiment) ─────────
 async function scoreWithClaude(newsData, apiKey) {
-  const newsContext = newsData.map(({ sym, headlines }) =>
-    headlines.length
-      ? `${sym}:\n${headlines.map(h => `  - ${h}`).join('\n')}`
-      : `${sym}: no recent news`
-  ).join('\n\n')
+  // Headlines are already de-duplicated by story (dedupeHeadlines), so each
+  // line is one distinct piece of news. Where syndication was collapsed we say
+  // so, rather than letting the shorter list read as a quieter news cycle.
+  const newsContext = newsData.map(({ sym, headlines, total, independentCount }) => {
+    if (!headlines.length) return `${sym}: no recent news`
+    const collapsed = total > independentCount
+      ? ` (${total} articles collapsed to ${independentCount} distinct stories — syndicated copies removed)`
+      : ''
+    return `${sym}:${collapsed}\n${headlines.map(h => `  - ${h}`).join('\n')}`
+  }).join('\n\n')
 
   const prompt = `You are a financial analyst. Assess the investment sentiment for each stock based on these recent news headlines.
 
@@ -247,6 +313,9 @@ Scoring guide:
 - 5    = neutral or no news
 - 3-4  = mildly bearish
 - 1-2  = strongly bearish (miss, guidance cut, regulatory issue, lawsuit)
+
+Each bullet is ONE distinct story; syndicated reprints have already been
+collapsed. Do not treat a short list as weak news — treat it as few stories.
 
 If a symbol has no news, return score 5 and sentiment "neutral".`
 
@@ -339,6 +408,7 @@ router.get('/portfolio', async (req, res) => {
       const results = symbols.map(sym => ({
         symbol: sym, sentiment: 'neutral', score: 5,
         summary: 'No news provider configured', headline_count: 0,
+        independentCount: 0, syndicated: false,
       }))
       return res.json({
         results, cached: false, updatedAt: Date.now(),
@@ -352,7 +422,19 @@ router.get('/portfolio', async (req, res) => {
       ? `No company news found via ${newsSource}. Company news may require a higher plan tier.`
       : null
 
-    const results = await scoreWithClaude(newsData, anthropicKey)
+    const scored = await scoreWithClaude(newsData, anthropicKey)
+    // The model echoes a headline_count it inferred from the list it was shown.
+    // Replace it with the measured numbers — a count is arithmetic, not a call.
+    const countsBySym = new Map(newsData.map(d => [d.sym, d]))
+    const results = (Array.isArray(scored) ? scored : []).map(r => {
+      const c = countsBySym.get(r.symbol) || {}
+      return {
+        ...r,
+        headline_count: c.total ?? r.headline_count ?? 0,
+        independentCount: c.independentCount ?? 0,
+        syndicated: (c.total ?? 0) > (c.independentCount ?? 0),
+      }
+    })
 
     const ts = Date.now()
     sentimentCache.set(cacheKey, { results, ts, source: newsSource })
@@ -365,3 +447,6 @@ router.get('/portfolio', async (req, res) => {
 })
 
 module.exports = router
+// Exported for unit tests — pure folding logic, no HTTP.
+module.exports.foldSymbol      = foldSymbol
+module.exports.dedupeHeadlines = dedupeHeadlines

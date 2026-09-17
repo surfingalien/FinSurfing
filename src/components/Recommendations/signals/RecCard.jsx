@@ -1,6 +1,6 @@
 import {
   AlertTriangle, Target, Shield, Zap, BarChart2,
-  Bookmark, BookmarkCheck,
+  Bookmark, BookmarkCheck, CheckCircle2, ShieldAlert,
 } from 'lucide-react'
 import { useAIWatchlist } from '../../../hooks/useAIWatchlist'
 import { TYPE_CONFIG } from './config'
@@ -150,6 +150,38 @@ export function RecCard({ rec, onAnalyze, liveQuote }) {
           </div>
         )}
       </div>
+
+      {/* Verified evidence.
+          Every citation here was checked back against the data the model was
+          actually shown (lib/claim-support.js): any figure it names occurs in
+          that data, and anything it could not support was dropped before this
+          rendered. That check is why the list is worth showing at all. */}
+      {(rec.sources?.length > 0 || rec.citationCheck?.dropped > 0) && (
+        <div className="mt-2 pt-2 border-t border-white/[0.06]">
+          {rec.sources?.length > 0 && (
+            <ul className="space-y-0.5">
+              {rec.sources.map((src, i) => (
+                <li key={i} className="flex items-start gap-1.5 text-[11px]">
+                  <CheckCircle2 className="w-3 h-3 text-mint-400 shrink-0 mt-0.5" />
+                  <span className="text-slate-400">{src}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          {rec.citationCheck?.dropped > 0 && (
+            <div
+              className="flex items-start gap-1.5 text-[10px] mt-1"
+              title="A cited figure did not appear in the data this pick was generated from, so the citation was removed rather than shown as evidence."
+            >
+              <ShieldAlert className="w-3 h-3 text-amber-400 shrink-0 mt-0.5" />
+              <span className="text-amber-400/80">
+                {rec.citationCheck.dropped} unverified citation{rec.citationCheck.dropped === 1 ? '' : 's'} removed
+                {rec.citationCheck.ungrounded && ' — no evidence survived'}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Footer: sector + watchlist */}
       <div className="flex items-center justify-between mt-3">

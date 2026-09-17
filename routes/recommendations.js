@@ -25,6 +25,7 @@ const { mountJobRoutes, skipLoopback } = require('../lib/ai-job-routes')
 const { getUserPrefs, saveUserPref } = require('../db/ai_memory')
 const { PERSONAS }        = require('../lib/investor-personas')
 const learningStore       = require('../lib/learning-store')
+const claimSupport        = require('../lib/claim-support')
 const { getIndicators }   = require('./macro')
 const { getSocialSentiment } = require('../lib/social-sentiment')
 const { getAltDataSnippet }  = require('../lib/alt-data')
@@ -49,6 +50,14 @@ const recLimit = rateLimit({
 const aiRouter = getRouter('recommendations')
 
 // Extract user API key headers to forward to the internal quote endpoint
+/** Compact per-pick citation verdict for the response. */
+const pickAudit = (a) => ({
+  claimed: a.checked,
+  kept: a.kept.length,
+  dropped: a.rejected.length,
+  ungrounded: a.allRejected,
+})
+
 function fwdKeys(req) {
   const h = {}
   for (const k of ['x-aisa-key','x-finnhub-key','x-fmp-key','x-td-key','x-av-key']) {
@@ -263,10 +272,16 @@ router.post('/', requireAuth, recLimit, async (req, res) => {
     ? `\nINVESTOR PERSONA: ${persona.name} (${persona.style})\n${persona.systemPrompt}\n`
     : ''
 
+  // The evidence the model is about to be shown, kept verbatim so every
+  // citation it returns can be checked back against it (lib/claim-support.js).
+  // This is the same string interpolated into the prompt below — if the two
+  // ever drift apart the audit is checking a document nobody read.
+  const evidenceBlock = `${livePriceSnippet}${analystConsensusSnippet}${macroSnippet}${earningsSnippet}${sentimentSnippet}${socialSentimentSnippet}${insiderSnippet}${optionsSnippet}${filingsSnippet}`
+
   const prompt = `${personaBlock}You are a senior portfolio strategist channeling the investment philosophy above. Provide specific actionable buy recommendations for a retail investor.
 
 Current portfolio holdings (avoid overlap): ${holdingStr}${focusInstructions}
-${livePriceSnippet}${analystConsensusSnippet}${macroSnippet}${earningsSnippet}${sentimentSnippet}${socialSentimentSnippet}${insiderSnippet}${optionsSnippet}${filingsSnippet}${historySnippet}
+${evidenceBlock}${historySnippet}
 
 ${countInstructions}
 ${persona.constraints ? '\n' + persona.constraints : ''}
@@ -411,11 +426,20 @@ Respond ONLY with a JSON object — no markdown, no explanation, just the JSON:
 
     const winProbSources = new Set()
     const rejected = []
+    const citationAudits = []
 
     const scored = data.recommendations.map(rec => {
-      // Citations: keep only non-empty string sources, max 4 (defensive against
-      // the model omitting/malforming the field). Always present as an array.
-      const sources = Array.isArray(rec.sources) ? rec.sources.filter(s => typeof s === 'string' && s.trim()).slice(0, 4) : []
+      // Citations. The shape check (non-empty strings, max 4) is defensive
+      // against a malformed field; the SUPPORT check is the real gate. A
+      // citation is rendered to the reader as evidence, so one that cites a
+      // figure we never injected is worse than no citation at all — it is
+      // rejected, with its reason, exactly as edgeGate rejects a thin edge.
+      const claimed = Array.isArray(rec.sources)
+        ? rec.sources.filter(s => typeof s === 'string' && s.trim()).slice(0, 4)
+        : []
+      const audit = claimSupport.auditSources(claimed, evidenceBlock)
+      citationAudits.push({ symbol: rec.symbol, ...audit })
+      const sources = audit.kept
 
       const { p: winProb, source: winProbSource } = kelly.winProbFromStats(kellyStats, {
         assetType: expectedValue.normalizeAssetType(rec.type),
@@ -434,7 +458,7 @@ Respond ONLY with a JSON object — no markdown, no explanation, just the JSON:
       // Unscoreable (no usable target/stop) — can't measure an edge, so don't
       // claim one. Kept rather than dropped: silence about a pick is not
       // evidence against it, and schema validation already bounds the field.
-      if (!ev) return { ...rec, sources, expectedValue: null }
+      if (!ev) return { ...rec, sources, citationCheck: pickAudit(audit), expectedValue: null }
 
       const sizing = kelly.suggestedSize({
         winProb,
@@ -443,7 +467,7 @@ Respond ONLY with a JSON object — no markdown, no explanation, just the JSON:
         fraction:    0.5,
         maxFraction: 0.2,
       })
-      return { ...rec, sources, expectedValue: ev, sizing: { ...sizing, winProbSource, netOfCosts: true } }
+      return { ...rec, sources, citationCheck: pickAudit(audit), expectedValue: ev, sizing: { ...sizing, winProbSource, netOfCosts: true } }
     })
 
     data.recommendations = scored.filter(rec => {
@@ -535,6 +559,9 @@ Respond ONLY with a JSON object — no markdown, no explanation, just the JSON:
       // picks the math says are not worth the friction.
       abstained: data.recommendations.length === 0,
       edgeGate,
+      // What the model claimed as evidence vs what the evidence actually said.
+      citationAudit: claimSupport.summarizeAudits(
+        citationAudits.filter(a => data.recommendations.some(r => r.symbol === a.symbol))),
       persona: { id: persona.id, name: persona.name, emoji: persona.emoji, style: persona.style },
       macroRegime: macroData?.regime ?? null,
     })
