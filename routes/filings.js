@@ -35,10 +35,12 @@ const filingsLimit = rateLimit({
 })
 
 function buildPrompt(f) {
-  return `You are a senior equity research analyst. The following is an excerpt of the narrative sections (MD&A and/or Risk Factors) of ${f.company || f.symbol}'s most recent SEC ${f.form} filing (filed ${f.filingDate}).
+  return `You are a senior equity research analyst. ${require('../lib/untrusted').UNTRUSTED_POLICY}
+
+The following is an excerpt of the narrative sections (MD&A and/or Risk Factors) of ${f.company || f.symbol}'s most recent SEC ${f.form} filing (filed ${f.filingDate}).
 
 FILING EXCERPT:
-${f.excerpt}
+${require('../lib/untrusted').wrapUntrusted(f.excerpt, f.url || `sec:${f.symbol}`, { label: `SEC ${f.form}` })}
 
 Respond ONLY with valid JSON — no markdown, no text outside the JSON:
 {

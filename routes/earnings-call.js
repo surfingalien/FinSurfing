@@ -43,10 +43,12 @@ async function transcriptSubAgent(symbol, key) {
 
 // ── Sub-agent: analyze transcript with Claude ─────────────────────────────────
 function buildAnalystPrompt(symbol, quarter, year, date, excerpt) {
-  return `You are a senior equity research analyst at a top-tier investment bank. Analyze this earnings call transcript for ${symbol} (${quarter} ${year}, ${date}) and produce a concise structured analyst card.
+  return `You are a senior equity research analyst at a top-tier investment bank. ${require('../lib/untrusted').UNTRUSTED_POLICY}
+
+Analyze this earnings call transcript for ${symbol} (${quarter} ${year}, ${date}) and produce a concise structured analyst card.
 
 TRANSCRIPT (excerpt):
-${excerpt}
+${require('../lib/untrusted').wrapUntrusted(excerpt, `transcript:${symbol}`, { label: 'earnings call transcript' })}
 
 Respond ONLY with valid JSON — no markdown, no text outside the JSON:
 {
