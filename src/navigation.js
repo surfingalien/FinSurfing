@@ -14,6 +14,7 @@ import {
   Network, Clock, Radio, BrainCircuit, FolderOpen,
   Search, DollarSign, LayoutGrid, CalendarDays, Zap, FileText, Boxes, Mountain,
   Share2,
+  Filter,
 } from 'lucide-react'
 
 // ── Sidebar nav groups ────────────────────────────────────────────────────────
@@ -62,6 +63,7 @@ export const NAV_GROUPS = [
       { id: 'dcf-valuation',   label: 'DCF Valuation',  icon: TrendingUp },
       { id: 'pattern-finder',  label: 'Pattern Finder', icon: Search },
       { id: 'dividend-screen', label: 'Dividend Screen', icon: DollarSign },
+      { id: 'screener',        label: 'Screener',       icon: Filter },
     ],
   },
   {

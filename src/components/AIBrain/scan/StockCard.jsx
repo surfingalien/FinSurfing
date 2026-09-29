@@ -7,6 +7,7 @@ import {
 import { useAIWatchlist } from '../../../hooks/useAIWatchlist'
 import { AGENTS, VERDICT_CONFIG, CONFIDENCE_CONFIG, VOLUME_SIGNAL } from './constants'
 import { ScoreBar, CompositeRing, ConflictBanner, PriceZones, ThesisAssumptions } from './StockCardParts'
+import { signedPct, drawdownPct } from '../../../utils/formatPct'
 
 /* ── StockCard ─────────────────────────────────────────────── */
 function compositeScoreBand(score) {
@@ -111,11 +112,11 @@ export default function StockCard({ stock, onAnalyze, horizon, byCompositeScore 
             <div className="flex gap-2 mb-3 flex-wrap">
               <div className="flex items-center gap-1 text-[11px]">
                 <Target className="w-3 h-3 text-emerald-400" />
-                <span className="text-emerald-400 font-mono font-bold">+{stock.targetReturn}%</span>
+                <span className="text-emerald-400 font-mono font-bold">{signedPct(stock.targetReturn)}</span>
               </div>
               <div className="flex items-center gap-1 text-[11px]">
                 <Shield className="w-3 h-3 text-red-400" />
-                <span className="text-red-400 font-mono font-bold">-{stock.stopLoss}%</span>
+                <span className="text-red-400 font-mono font-bold">{drawdownPct(stock.stopLoss)}</span>
               </div>
               {stock.volumeSignal && stock.volumeSignal !== 'Unknown' && (
                 <span className={`text-[9px] font-medium px-1.5 py-0.5 rounded ${volSig.bg} ${volSig.color}`}>

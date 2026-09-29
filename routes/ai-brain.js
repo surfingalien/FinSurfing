@@ -17,7 +17,7 @@ const express             = require('express')
 const rateLimit           = require('express-rate-limit')
 const fs                  = require('fs')
 const path                = require('path')
-const { getRouter }       = require('../lib/ai-router')
+const { getRouter, GROQ_MODEL } = require('../lib/ai-router')
 const { CircuitOpenError } = require('../lib/circuit-breaker')
 const { getSocialSentiment, getCryptoFearGreed, getBtcDominance } = require('../lib/social-sentiment')
 const { getAltDataSnippet, getGeopoliticalRiskSnippet } = require('../lib/alt-data')
@@ -28,6 +28,7 @@ const { getStrategyBlock }  = require('../lib/strategy-library')
 const learningStore         = require('../lib/learning-store')
 const { compactTaLine, detectPatterns, KEY_PATTERNS, computeRsRanks } = require('../lib/technical-indicators')
 const { getOptionsFlowCompact } = require('../lib/options-flow-cache')
+const { auditPicks }        = require('../lib/price-coherence')
 const { fetchDailyBars }    = require('../lib/internal-api')
 const { tryParseAiJson }    = require('../lib/ai-json')
 const { baselineFromBars }  = require('../lib/ml-baseline')
@@ -802,6 +803,31 @@ Rules:
     if (!Array.isArray(data.rankedStocks) || !data.rankedStocks.length)
       return res.status(500).json({ error: 'AI Brain returned no ranked stocks — try again' })
 
+    // ── Price coherence gate ─────────────────────────────────────────────────
+    // The model is asked for percentages AND, separately, for six absolute
+    // dollar bounds. Nothing checked the two against each other, so a scan
+    // could hand back a "Moderate Buy" whose target sat below its stop and
+    // whose stop zone was centred on the stop-loss PERCENTAGE as if it were a
+    // price. Every one of those levels is derivable from inputs we already
+    // hold, so lib/price-coherence.js derives them instead of trusting them.
+    //
+    // This runs BEFORE logPrediction and recordDecisions on purpose: an
+    // incoherent pick that reaches those stores is resolved against real bars
+    // weeks later and counted as measured evidence, which corrupts the
+    // calibration the whole Brain steers by.
+    const coherencePrices = Object.fromEntries(
+      validQuotes.map(q => [q.symbol, q.regularMarketPrice]))
+    const coherence = auditPicks(data.rankedStocks, coherencePrices)
+    if (!coherence.picks.length)
+      return res.status(500).json({ error: 'AI Brain returned no internally consistent picks — try again' })
+    if (coherence.audit.droppedPicks.length || coherence.audit.levelsRepaired)
+      console.warn(`[ai-brain] coherence: ${coherence.audit.kept}/${coherence.audit.checked} kept, ` +
+        `${coherence.audit.levelsRepaired} repaired` +
+        (coherence.audit.droppedPicks.length
+          ? ` — dropped ${coherence.audit.droppedPicks.map(d => `${d.symbol} (${d.reason})`).join(', ')}`
+          : ''))
+    data.rankedStocks = coherence.picks
+
     // ── Cross-model agreement — annotate each pick with the second opinion ────
     let ensemble = null
     if (secondText) {
@@ -840,7 +866,7 @@ Rules:
           if (signals >= 3) stock.highConviction = true
         }
         ensemble = {
-          secondModel:  'llama-3.3-70b-versatile',
+          secondModel:  GROQ_MODEL,
           overlapCount: overlap,
           overlapPct:   Math.round((overlap / data.rankedStocks.length) * 100),
         }
@@ -866,7 +892,7 @@ Rules:
     // into this scan's prompt — the same string the model reasoned from, not a
     // re-derivation that could disagree with it.
     const regimeAtScan = (macroResult.status === 'fulfilled' && macroResult.value?.regime?.regime) || null
-    const modelVersion = llmUsed === 'claude' ? 'claude-sonnet-4-6' : 'llama-3.3-70b-versatile'
+    const modelVersion = llmUsed === 'claude' ? 'claude-sonnet-4-6' : GROQ_MODEL
 
     // Log each prediction for win-rate tracking (log ALL picks before threshold filter
     // so calibration data covers the full score distribution, not just filtered picks)
@@ -938,9 +964,10 @@ Rules:
       universeAnalyzed: universe,
       liveDataSymbols:  liveQuotes.map(q => q.symbol),
       llmUsed,
-      modelUsed: llmUsed === 'claude' ? 'claude-sonnet-4-6' : 'llama-3.3-70b-versatile',
+      modelUsed: llmUsed === 'claude' ? 'claude-sonnet-4-6' : GROQ_MODEL,
       ensemble,
       thresholdApplied,
+      coherenceAudit:   coherence.audit,
       agentsUsed: ['Fundamental Analyst','Technical Analyst','Sentiment Agent','Macro Economist','Risk Manager','Supervisor'],
     })
   } catch (err) {
