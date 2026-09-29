@@ -14,7 +14,7 @@ import { useState, useCallback, useEffect } from 'react'
 import { useQuery, fetchJson } from '../../hooks/useQuery'
 import { useBackgroundJob } from '../../hooks/useBackgroundJob'
 import {
-  Brain, TrendingUp, RefreshCw, AlertTriangle,
+  Brain, TrendingUp, RefreshCw, AlertTriangle, ShieldAlert,
   Zap, Activity, Clock, Download,
   LineChart, Bitcoin, GitFork, Layers, PieChart,
 } from 'lucide-react'
@@ -262,6 +262,50 @@ export default function AIBrainView({ portfolio, onAnalyze }) {
         <div className="flex items-start gap-3 p-4 rounded-xl bg-red-500/10 border border-red-500/25 text-red-400 text-sm">
           <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
           <span>{error}</span>
+        </div>
+      )}
+
+      {/* ── Abstained ──
+          The scan ran and declined to recommend anything. That is a result, not
+          a failure, so it must not wear the red error styling: telling a user
+          "try again" when the model simply would not buy the symbol invites
+          them to re-roll a paid call until it says yes. */}
+      {!loading && analysis?.abstained && (
+        <div className="glass rounded-2xl p-5 space-y-3">
+          <div className="flex items-start gap-3">
+            <ShieldAlert className="w-5 h-5 shrink-0 mt-0.5 text-amber-400" />
+            <div className="min-w-0">
+              <div className="font-semibold text-amber-400">No buy recommendation</div>
+              <div className="text-sm text-slate-400 mt-1">
+                The scan ran and found nothing it would recommend buying here.
+              </div>
+            </div>
+          </div>
+
+          {analysis.coherenceAudit?.abstainedPicks?.length > 0 && (
+            <div className="space-y-1.5">
+              {analysis.coherenceAudit.abstainedPicks.map(a => (
+                <div key={a.symbol} className="flex items-center gap-2 text-[12px] px-3 py-2 rounded-lg bg-slate-500/10">
+                  <span className="font-mono font-bold">{a.symbol}</span>
+                  <span className="text-slate-500">— {a.verdict || 'Avoid'}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {analysis.coherenceAudit?.droppedPicks?.length > 0 && (
+            <div className="space-y-1.5">
+              <div className="text-[11px] text-slate-500">
+                Dropped for internal inconsistency — the model contradicted itself, so the pick was not shown:
+              </div>
+              {analysis.coherenceAudit.droppedPicks.map(d => (
+                <div key={d.symbol} className="flex items-start gap-2 text-[12px] px-3 py-2 rounded-lg bg-red-500/8 text-red-400">
+                  <span className="font-mono font-bold shrink-0">{d.symbol}</span>
+                  <span className="opacity-80">— {d.reason}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

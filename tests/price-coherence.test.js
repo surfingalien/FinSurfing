@@ -252,3 +252,68 @@ describe('auditPicks', () => {
     expect(r.picks[0].coherenceRepairs).toEqual([expect.stringMatching(/compositeScore recomputed/)])
   })
 })
+
+/**
+ * The AVAX regression: a single-symbol scan returned a red
+ * "no internally consistent picks — try again" error.
+ *
+ * Root cause was upstream of this module — the scan schema offered only buy
+ * verdicts, so a model that disliked the symbol could only say so with a
+ * negative targetReturn on a "Buy", which this gate correctly refused to
+ * trust. With one symbol that emptied the slate. The gate's half of the fix
+ * is reading the VERDICT instead of assuming every pick is a long.
+ */
+describe('abstain verdicts — declining to recommend is not a contradiction', () => {
+  const AVOID = { symbol: 'AVAX', agentVerdict: 'Avoid', targetReturn: -12, stopLoss: 20 }
+
+  test('an Avoid pick survives with a negative target instead of being dropped', () => {
+    const { pick, drop } = coherentZones(AVOID)
+    expect(drop).toBeNull()
+    expect(pick.actionable).toBe(false)
+  })
+
+  test('…and carries no derived zones, because there is no trade to price', () => {
+    const { pick } = coherentZones({ ...AVOID, entryZoneLow: 10, entryZoneHigh: 11 }, { livePrice: 10.5 })
+    expect(pick.targetZoneLow).toBeUndefined()
+    expect(pick.stopZoneLow).toBeUndefined()
+  })
+
+  test('the same numbers under a BUY verdict are still dropped', () => {
+    // The gate did not get laxer — the verdict is what changed the question.
+    expect(coherentZones({ ...AVOID, agentVerdict: 'Moderate Buy' }).drop)
+      .toMatch(/negative targetReturn/)
+  })
+
+  test('every abstain verdict is recognised, case and spacing insensitively', () => {
+    for (const v of ['Avoid', 'avoid', ' SELL ', 'No Trade', 'Hold', 'Neutral']) {
+      expect(coherentZones({ ...AVOID, agentVerdict: v }).drop).toBeNull()
+    }
+  })
+
+  test('a missing verdict still defaults to long, so the gate never weakens by omission', () => {
+    expect(coherentZones({ symbol: 'X', targetReturn: -5, stopLoss: 10 }).drop)
+      .toMatch(/negative targetReturn/)
+  })
+
+  test('an explicit long override still beats the verdict', () => {
+    expect(coherentZones(AVOID, { long: true }).drop).toMatch(/negative targetReturn/)
+  })
+
+  test('a buy pick is marked actionable', () => {
+    expect(coherentZones(GOOD, { livePrice: 100 }).pick.actionable).toBe(true)
+  })
+
+  test('auditPicks separates abstains from drops and counts what is tradeable', () => {
+    const r = auditPicks([GOOD, AVOID, DXYZ], { NVDA: 100 })
+    expect(r.audit).toMatchObject({ checked: 3, kept: 2, actionable: 1 })
+    expect(r.audit.abstainedPicks).toEqual([{ symbol: 'AVAX', verdict: 'Avoid' }])
+    expect(r.audit.droppedPicks.map(d => d.symbol)).toEqual(['DXYZ'])
+  })
+
+  test('a slate of nothing but abstains is not empty — it is the answer', () => {
+    // This is the case that used to 500.
+    const r = auditPicks([AVOID], {})
+    expect(r.picks).toHaveLength(1)
+    expect(r.audit.actionable).toBe(0)
+  })
+})
