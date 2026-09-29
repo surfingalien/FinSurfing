@@ -39,7 +39,13 @@ const { mountJobRoutes }    = require('../lib/ai-job-routes')
 const router   = express.Router()
 const aiRouter = getRouter('ai-brain')
 
-const PREDICTION_LOG = path.join(__dirname, '../data/ai-brain-predictions.jsonl')
+// Overridable so a test can redirect the append. data/ai-brain-predictions.jsonl
+// is TRACKED in git and is the calibration record the whole Brain steers by, so
+// anything exercising this route would otherwise write fake predictions into it
+// that resolve against real bars weeks later and count as measured evidence.
+// Server-operator controlled, never user input.
+const PREDICTION_LOG = process.env.AI_BRAIN_PREDICTION_LOG
+  || path.join(__dirname, '../data/ai-brain-predictions.jsonl')
 
 /**
  * Bump this whenever the scan prompt changes in a way that could move the

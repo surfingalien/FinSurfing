@@ -43,6 +43,17 @@ jest.mock('../routes/macro',           () => ({ getIndicators: async () => null 
 process.env.NODE_ENV   = 'test'
 process.env.JWT_SECRET = 'test-secret-for-jest-only-32chars!!'
 
+// data/ai-brain-predictions.jsonl is tracked in git and is the real calibration
+// record. An actionable pick in this suite calls logPrediction, so without this
+// redirect the tests append fake AVAX predictions to it — which would then be
+// resolved against real bars and scored as evidence. Set BEFORE the route is
+// required, since it reads the path once at module load.
+const os   = require('os')
+const fsp  = require('fs')
+const pathp = require('path')
+const TMP_LOG = pathp.join(os.tmpdir(), `ai-brain-predictions-test-${process.pid}.jsonl`)
+process.env.AI_BRAIN_PREDICTION_LOG = TMP_LOG
+
 let app, token
 const realFetch = global.fetch
 
@@ -60,7 +71,10 @@ beforeEach(() => {
   // the route already treats each as best-effort.
   global.fetch = jest.fn(async () => { throw new Error('offline in test') })
 })
-afterAll(() => { global.fetch = realFetch })
+afterAll(() => {
+  global.fetch = realFetch
+  try { fsp.unlinkSync(TMP_LOG) } catch { /* never created */ }
+})
 
 const stock = (over = {}) => ({
   rank: 1, symbol: 'AVAX', name: 'Avalanche', sector: 'Crypto', type: 'Crypto',
@@ -138,6 +152,26 @@ describe('POST /api/ai-brain/analyze — the AVAX regression', () => {
     expect(res.body.rankedStocks.map(p => p.symbol)).toEqual(['AVAX', 'DOGE'])
     expect(res.body.coherenceAudit).toMatchObject({ checked: 2, kept: 2, actionable: 1 })
     expect(res.body.coherenceAudit.abstainedPicks).toEqual([{ symbol: 'DOGE', verdict: 'Avoid' }])
+  })
+
+  test('predictions go to the redirected log, not the tracked calibration record', async () => {
+    // Not circular: this proves the AI_BRAIN_PREDICTION_LOG override is in
+    // effect. If it ever stops being honoured the redirect silently fails and
+    // this suite resumes appending fake AVAX rows to the real, git-tracked
+    // calibration log — which is how this was found in the first place.
+    mockCall.mockResolvedValue(reply(stock()))
+    await scan()
+
+    expect(fsp.existsSync(TMP_LOG)).toBe(true)
+    expect(fsp.readFileSync(TMP_LOG, 'utf8')).toMatch(/"symbol":"AVAX"/)
+  })
+
+  test('an abstain writes no prediction at all', async () => {
+    // An "Avoid" is not a trade, so it must never reach the calibration record.
+    try { fsp.unlinkSync(TMP_LOG) } catch { /* fine */ }
+    mockCall.mockResolvedValue(reply(stock({ agentVerdict: 'Avoid', targetReturn: 0, stopLoss: 0 })))
+    await scan()
+    expect(fsp.existsSync(TMP_LOG)).toBe(false)
   })
 
   test('the prompt offers the model a way to decline', async () => {
