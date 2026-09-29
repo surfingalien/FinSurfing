@@ -51,7 +51,10 @@ const PREDICTION_LOG = path.join(__dirname, '../data/ai-brain-predictions.jsonl'
  * different systems that no longer describes either — the same failure the
  * ML baseline's walk-forward gate exists to prevent on the other side.
  */
-const SCAN_PROMPT_VERSION = 1
+// v2: agentVerdict gained "Avoid", so a bearish read no longer leaks out as a
+// negative targetReturn on a buy. That changes which picks appear, so rows
+// before and after must not be pooled in calibration.
+const SCAN_PROMPT_VERSION = 2
 
 const brainLimit = rateLimit({
   windowMs: 5 * 60 * 1000, max: 4,
@@ -683,7 +686,7 @@ Respond ONLY with valid JSON (no markdown, no text outside the JSON object):
       "currentPrice": 0.0,
       "compositeScore": 0,
       "confidence": "High|Medium|Low",
-      "agentVerdict": "Strong Buy|Buy|Moderate Buy",
+      "agentVerdict": "Strong Buy|Buy|Moderate Buy|Avoid",
       "targetReturn": 0,
       "stopLoss": 0,
       "entryZoneLow": 0.0,
@@ -733,6 +736,7 @@ Respond ONLY with valid JSON (no markdown, no text outside the JSON object):
 
 Rules:
 - Include up to 20 top picks ranked by compositeScore; prefer symbols NOT already in holdings
+- agentVerdict: use "Avoid" when the setup is genuinely unattractive or the evidence points DOWN. Do NOT express a bearish view as a negative targetReturn on a buy verdict — say "Avoid" and explain why in the analyses. For "Avoid", set targetReturn and stopLoss to 0 and leave the price zones at 0; there is no trade to price. Never pad the list with buys you do not believe
 - compositeScore = weighted avg (fundamental 25%, technical 20%, sentiment 15%, macro 20%, risk 20%)
 - RSRank in COMPUTED TECHNICALS = intra-universe relative-strength percentile over 20 days (100=top, 0=weakest in this scan). Boost technicalScore +8 when RSRank ≥ 70 with uptrend; cut -8 when RSRank ≤ 30 (chronic underperformer) unless thesis is explicit turnaround
 - All scores 0-100; riskScore: higher = safer
@@ -818,8 +822,28 @@ Rules:
     const coherencePrices = Object.fromEntries(
       validQuotes.map(q => [q.symbol, q.regularMarketPrice]))
     const coherence = auditPicks(data.rankedStocks, coherencePrices)
-    if (!coherence.picks.length)
-      return res.status(500).json({ error: 'AI Brain returned no internally consistent picks — try again' })
+
+    // An empty slate is a REAL ANSWER, never a 500. The old hard failure was
+    // wrong twice over: it told the user the system had broken when the truth
+    // was "the model would not recommend this", and on a single-symbol scan one
+    // unusable row took the whole run down. Same stance as the Advisory EV
+    // gate's `abstained: true` — abstaining is a result, and the reasons ride
+    // along in coherenceAudit so the UI can say WHICH symbol and WHY.
+    if (!coherence.picks.length) {
+      return res.json({
+        ...data,
+        rankedStocks:   [],
+        abstained:      true,
+        coherenceAudit: coherence.audit,
+        horizon, scanMode,
+        processedAt: generatedAt,
+        universeAnalyzed: universe,
+        notes: coherence.audit.droppedPicks.length
+          ? [`No internally consistent picks: ${coherence.audit.droppedPicks
+               .map(d => `${d.symbol} (${d.reason})`).join(', ')}`]
+          : ['The scan returned no picks for this universe.'],
+      })
+    }
     if (coherence.audit.droppedPicks.length || coherence.audit.levelsRepaired)
       console.warn(`[ai-brain] coherence: ${coherence.audit.kept}/${coherence.audit.checked} kept, ` +
         `${coherence.audit.levelsRepaired} repaired` +
@@ -896,7 +920,10 @@ Rules:
 
     // Log each prediction for win-rate tracking (log ALL picks before threshold filter
     // so calibration data covers the full score distribution, not just filtered picks)
-    for (const stock of data.rankedStocks) {
+    // Only actionable picks are predictions. An "Avoid" carries no entry,
+    // target or stop, so resolving it against bars in 30 days would score a
+    // trade nobody was told to take.
+    for (const stock of data.rankedStocks.filter(p => p.actionable !== false)) {
       logPrediction(stock.symbol, stock, {
         entryZoneLow:   stock.entryZoneLow,
         entryZoneHigh:  stock.entryZoneHigh,
@@ -917,7 +944,7 @@ Rules:
     // only inside this route's own log. Best-effort — never fails the scan.
     try {
       learningStore.recordDecisions(data.rankedStocks
-        .filter(s => s.symbol && s.currentPrice > 0)
+        .filter(s => s.symbol && s.currentPrice > 0 && s.actionable !== false)
         .map(s => ({
           surface:    'ai-brain',
           symbol:     s.symbol,
@@ -945,7 +972,8 @@ Rules:
     const autoThreshold = getAutoTunedThreshold()
     let thresholdApplied = null
     if (autoThreshold != null) {
-      const filtered = data.rankedStocks.filter(s => (s.compositeScore ?? 0) >= autoThreshold)
+      const filtered = data.rankedStocks.filter(s =>
+        s.actionable === false || (s.compositeScore ?? 0) >= autoThreshold)
       if (filtered.length >= 3) {
         const before = data.rankedStocks.length
         data.rankedStocks = filtered
