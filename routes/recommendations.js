@@ -18,7 +18,8 @@
 const express             = require('express')
 const router              = express.Router()
 const rateLimit           = require('express-rate-limit')
-const { getRouter }       = require('../lib/ai-router')
+const { roundPrice, ANCHOR_TOLERANCE } = require('../lib/price-coherence')
+const { getRouter, GROQ_MODEL }       = require('../lib/ai-router')
 const { CircuitOpenError } = require('../lib/circuit-breaker')
 const { requireAuth, effectiveUserId } = require('../middleware/auth')
 const { mountJobRoutes, skipLoopback } = require('../lib/ai-job-routes')
@@ -388,21 +389,45 @@ Respond ONLY with a JSON object — no markdown, no explanation, just the JSON:
     const { priceMap: postLivePrices } = await fetchLiveQuotes(recSymbols, fwdHeaders)
     const allLivePrices  = { ...preLivePrices, ...postLivePrices }
 
-    let pricesAnchored = 0
+    let pricesAnchored   = 0
+    let levelsRecomputed = 0
     data.recommendations = data.recommendations.map(rec => {
-      const lp = allLivePrices[rec.symbol]
-      if (!lp || lp <= 0) return rec
-      if (Math.abs(lp - rec.entryPrice) / rec.entryPrice < 0.03) return rec
+      const lp  = allLivePrices[rec.symbol]
+      const tr  = Number(rec.targetReturn)
+      const stp = Number(rec.stopLoss)
+      if (!Number.isFinite(tr) || !Number.isFinite(stp) || !(rec.entryPrice > 0)) return rec
 
-      pricesAnchored++
-      const entry = +lp.toFixed(lp >= 100 ? 2 : 4)
-      const tp    = +(entry * (1 + rec.targetReturn / 100)).toFixed(entry >= 100 ? 2 : 4)
-      const sl    = +(entry * (1 - rec.stopLoss    / 100)).toFixed(entry >= 100 ? 2 : 4)
-      return { ...rec, entryPrice: entry, takeProfitPrice: tp, stopLossPrice: sl, livePriceUsed: true }
+      // The live quote only replaces the model's entry once it has drifted far
+      // enough to be stale rather than a deliberately lower pullback fill.
+      let entry = rec.entryPrice
+      let anchored = false
+      if (lp > 0 && Math.abs(lp - entry) / entry >= ANCHOR_TOLERANCE) {
+        entry = lp
+        anchored = true
+        pricesAnchored++
+      }
+      entry = roundPrice(entry)
+
+      // The derived levels are now recomputed UNCONDITIONALLY. They used to be
+      // rebuilt only when the entry moved, so inside the 3% band the model's own
+      // takeProfitPrice/stopLossPrice survived untouched with nothing checking
+      // they equal entryPrice × (1 ± pct/100) — and validateRecommendations
+      // never looked at them either. A card could show a target that did not
+      // follow from the percentage printed beside it.
+      const tp = roundPrice(entry * (1 + tr  / 100))
+      const sl = roundPrice(entry * (1 - stp / 100))
+      if (rec.takeProfitPrice !== tp || rec.stopLossPrice !== sl) levelsRecomputed++
+
+      return {
+        ...rec,
+        entryPrice: entry, takeProfitPrice: tp, stopLossPrice: sl,
+        ...(anchored || rec.livePriceUsed ? { livePriceUsed: true } : {}),
+      }
     })
 
-    if (pricesAnchored > 0)
-      console.log(`[recommendations] re-anchored prices for ${pricesAnchored}/${recSymbols.length} symbols`)
+    if (pricesAnchored > 0 || levelsRecomputed > 0)
+      console.log(`[recommendations] re-anchored ${pricesAnchored}/${recSymbols.length} entries, ` +
+        `recomputed levels on ${levelsRecomputed}`)
 
     // ── Expected-value gate + Kelly position sizing (advisory) ───────────────
     // The prompt asks for a fixed slate (20–22), so the model always returns a
@@ -534,7 +559,7 @@ Respond ONLY with a JSON object — no markdown, no explanation, just the JSON:
             targetReturn: r.targetReturn ?? null,
             stopLoss:     r.stopLoss ?? null,
             regime:       macroData?.regime?.regime ?? null,
-            modelVersion: llmUsed === 'claude' ? 'claude-sonnet-4-6' : 'llama-3.3-70b-versatile',
+            modelVersion: llmUsed === 'claude' ? 'claude-sonnet-4-6' : GROQ_MODEL,
           },
         })))
     } catch (e) { console.warn('[recommendations] learning-store record failed:', e.message) }

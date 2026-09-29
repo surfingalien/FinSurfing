@@ -36,6 +36,7 @@ const { computeStats, readPredictions } = require('../lib/brain-learnings')
 const { computeEdgeReport, edgeBlock } = require('../lib/edge-report')
 const { claudePaused, pauseMessage } = require('../lib/ai-pause')
 const { INTERNAL_SECRET } = require('../lib/internal-secret')
+const { GROQ_MODEL } = require('../lib/ai-router')
 
 // Use warm cache from scheduled-jobs if available, fall back to live fetch
 async function getAltData(symbol) {
@@ -1289,7 +1290,7 @@ Produce a concise structured report using this format:
 
 const PROVIDER_DEFAULTS = {
   claude: { model: 'claude-sonnet-4-6' },
-  groq:   { model: 'llama-3.3-70b-versatile', baseUrl: 'https://api.groq.com/openai/v1' },
+  groq:   { model: GROQ_MODEL,                baseUrl: 'https://api.groq.com/openai/v1' },
   codex:  { model: 'gpt-4o',                  baseUrl: 'https://api.openai.com/v1' },
 }
 

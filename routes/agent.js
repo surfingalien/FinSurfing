@@ -30,6 +30,7 @@ const router   = express.Router()
 const { computeAll }           = require('../utils/technicals')
 const { fetchAllFundamentals } = require('../utils/dataProviders')
 const { getChatHistory, saveChatSummary } = require('../db/ai_memory')
+const { GROQ_MODEL }           = require('../lib/ai-router')
 
 // ── Lazy-load Anthropic SDK ───────────────────────────────────────────────────
 let _client = null
@@ -112,7 +113,7 @@ async function* streamGroq(systemPrompt, messages, signal) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
     body: JSON.stringify({
-      model:      'llama-3.3-70b-versatile',
+      model:      GROQ_MODEL,
       max_tokens: 4096,
       temperature: 0.7,
       stream:     true,

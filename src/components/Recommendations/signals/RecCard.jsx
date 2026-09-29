@@ -4,6 +4,7 @@ import {
 } from 'lucide-react'
 import { useAIWatchlist } from '../../../hooks/useAIWatchlist'
 import { TYPE_CONFIG } from './config'
+import { signedPct } from '../../../utils/formatPct'
 
 const RISK_CONFIG = {
   Low:    { color: 'text-emerald-400', bg: 'bg-emerald-500/10', dot: 'bg-emerald-400' },
@@ -92,7 +93,7 @@ export function RecCard({ rec, onAnalyze, liveQuote }) {
           <div className="text-[10px] text-slate-500 mb-0.5 flex items-center justify-center gap-1">
             <Target className="w-2.5 h-2.5" /> Target
           </div>
-          <div className="text-emerald-400 font-mono font-bold text-sm">+{rec.targetReturn}%</div>
+          <div className="text-emerald-400 font-mono font-bold text-sm">{signedPct(rec.targetReturn)}</div>
         </div>
         <div className="bg-white/[0.03] rounded-lg p-2 text-center">
           <div className="text-[10px] text-slate-500 mb-0.5 flex items-center justify-center gap-1">
