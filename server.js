@@ -42,6 +42,7 @@ const calendarRoutes        = require('./routes/calendar')
 const heatmapRoutes         = require('./routes/heatmap')
 const adanosRoutes          = require('./routes/sentiment-adanos')
 const symbolDb              = require('./lib/symbol-db')
+const { mergeQuotes, fromSymbolDb, DEFAULT_LIMIT, MAX_LIMIT } = require('./lib/symbol-search')
 // MCP endpoint depends on @modelcontextprotocol/sdk — a load failure here
 // (runtime/version mismatch) must degrade to a 503 on /api/mcp, never crash
 // the server: a boot crash fails Railway's healthcheck and silently pins
@@ -641,7 +642,7 @@ async function getFinnhubSearch(q, keys = {}) {
     const d = await apiFetch(fhUrl(`/search?q=${encodeURIComponent(q)}`, key), 8000)
     if (!d?.result?.length) return null
     const typeMap = { 'Common Stock':'EQUITY', 'ETP':'ETF', 'Index':'INDEX', 'ADR':'EQUITY', 'Mutual Fund':'FUND', 'ETF':'ETF' }
-    return { quotes: d.result.slice(0, 10).map(r => ({
+    return { quotes: d.result.slice(0, SEARCH_PROVIDER_CAP).map(r => ({
       symbol: r.symbol, shortname: r.description, longname: r.description,
       quoteType: typeMap[r.type] || 'EQUITY', exchange: r.displaySymbol,
     })) }
@@ -815,7 +816,7 @@ async function getFMPSearch(q, keys = {}) {
   const key = keys.fmp || FMP_KEY()
   if (!key) return null
   try {
-    const data = await apiFetch(fmpUrl(`/search?query=${encodeURIComponent(q)}&limit=10`, key), 8000)
+    const data = await apiFetch(fmpUrl(`/search?query=${encodeURIComponent(q)}&limit=${SEARCH_PROVIDER_CAP}`, key), 8000)
     if (!Array.isArray(data) || !data.length) return null
     return { quotes: data.map(r => {
       // FMP search doesn't return a type field in v3 — infer from exchange and name
@@ -2254,7 +2255,7 @@ async function getAVSearch(query, keys = {}) {
     if (!Array.isArray(matches) || !matches.length) return null
     return { quotes: matches
       .filter(m => m['4. region'] === 'United States' || m['1. symbol'].length <= 5)
-      .slice(0, 8)
+      .slice(0, SEARCH_PROVIDER_CAP)
       .map(m => ({
         symbol:    m['1. symbol'],
         shortname: m['2. name'],
@@ -2283,7 +2284,7 @@ async function getTwelveDataSearch(query, keys = {}) {
         s.exchange?.startsWith('BATS') ||
         s.instrument_type?.toUpperCase() === 'ETF'
       )
-      .slice(0, 8)
+      .slice(0, SEARCH_PROVIDER_CAP)
       .map(s => ({
         symbol:    s.symbol,
         shortname: s.instrument_name,
@@ -2296,51 +2297,63 @@ async function getTwelveDataSearch(query, keys = {}) {
 }
 
 // Rank search results: exact ticker match first, then by symbol length (shorter = more relevant)
-function rankSearchQuotes(quotes, q) {
-  const qUp = q.trim().toUpperCase()
-  return quotes.slice().sort((a, b) => {
-    const sA = (a.symbol || '').toUpperCase()
-    const sB = (b.symbol || '').toUpperCase()
-    const exactA = sA === qUp ? 10 : 0
-    const exactB = sB === qUp ? 10 : 0
-    if (exactB !== exactA) return exactB - exactA
-    return sA.length - sB.length
-  })
-}
+/** Per-provider result cap. Ranking happens AFTER the merge, so each
+  * provider must hand over enough rows for the best match to survive. */
+const SEARCH_PROVIDER_CAP = 25
 
 app.get('/api/search', async (req, res) => {
   const { q } = req.query
   if (!q) return res.status(400).json({ error: 'q required' })
-  const keys = extractKeys(req)
+  const limit = Math.max(1, Math.min(MAX_LIMIT, parseInt(req.query.limit, 10) || DEFAULT_LIMIT))
+  const keys  = extractKeys(req)
+
+  // This used to be a first-non-empty-wins cascade, so a single Finnhub row
+  // silenced FMP, TwelveData, AlphaVantage and the local 300k-symbol index —
+  // which is why whole classes of instrument (mutual funds especially, where
+  // FMP is the only provider this repo trusts for NAV) were unsearchable
+  // whenever Finnhub happened to return anything at all.
+  //
+  // Tier 1 runs the two broadest providers plus the local index, which costs
+  // no network and no quota. Tier 2 only pays for the long-tail providers when
+  // tier 1 found nothing, so the common case is still cheap.
+  const localQuotes = (() => {
+    try { return fromSymbolDb(symbolDb.search(q, SEARCH_PROVIDER_CAP)) }
+    catch { return [] }
+  })()
+
+  const settledQuotes = (r, provider) =>
+    r.status === 'fulfilled' && r.value?.quotes?.length
+      ? { provider, quotes: r.value.quotes }
+      : null
+
   try {
-    const fh = await getFinnhubSearch(q, keys)
-    if (fh?.quotes?.length) return res.json({ quotes: rankSearchQuotes(fh.quotes, q) })
+    const [fh, fmp] = await Promise.allSettled([
+      getFinnhubSearch(q, keys),
+      getFMPSearch(q, keys),
+    ])
 
-    const fmp = await getFMPSearch(q, keys)
-    if (fmp?.quotes?.length) return res.json({ quotes: rankSearchQuotes(fmp.quotes, q) })
+    const lists = [
+      settledQuotes(fh,  'finnhub'),
+      settledQuotes(fmp, 'fmp'),
+      localQuotes.length ? { provider: 'symboldb', quotes: localQuotes } : null,
+    ].filter(Boolean)
 
-    const td = await getTwelveDataSearch(q, keys)
-    if (td?.quotes?.length) return res.json({ quotes: rankSearchQuotes(td.quotes, q) })
+    let quotes = mergeQuotes(lists, q, { limit })
+    if (quotes.length) return res.json({ quotes })
 
-    const av = await getAVSearch(q, keys)
-    if (av?.quotes?.length) return res.json({ quotes: rankSearchQuotes(av.quotes, q) })
+    const [td, av] = await Promise.allSettled([
+      getTwelveDataSearch(q, keys),
+      getAVSearch(q, keys),
+    ])
+    lists.push(settledQuotes(td, 'twelvedata'), settledQuotes(av, 'alphavantage'))
 
-    // Final fallback: local FinanceDatabase index (no network, fast, 300k+ symbols)
-    const dbResults = symbolDb.search(q, 8)
-    if (dbResults.length) {
-      const classMap = { equity: 'EQUITY', etf: 'ETF', fund: 'FUND', crypto: 'EQUITY' }
-      return res.json({ quotes: rankSearchQuotes(dbResults.map(r => ({
-        symbol:    r.symbol,
-        shortname: r.name,
-        longname:  r.name,
-        quoteType: classMap[r.assetClass] || 'EQUITY',
-        exchange:  'US',
-      })), q) })
-    }
-
-    res.json({ quotes: [] })
+    quotes = mergeQuotes(lists.filter(Boolean), q, { limit })
+    res.json({ quotes })
   } catch (e) {
-    res.json({ quotes: [] })
+    // The local index needs no network, so a total provider outage still
+    // answers rather than returning an empty list that reads as "no such stock".
+    res.json({ quotes: mergeQuotes(
+      localQuotes.length ? [{ provider: 'symboldb', quotes: localQuotes }] : [], q, { limit }) })
   }
 })
 
