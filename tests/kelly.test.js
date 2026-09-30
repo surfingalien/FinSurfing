@@ -6,6 +6,9 @@
 
 const { fullKelly, edge, suggestedSize, winProbFromStats } = require('../lib/kelly')
 
+// Expected shrunk rate: (wins + 0.5·20) / (n + 20) — see winProbFromStats.
+const shrunk = (rate, n) => +((Math.round(rate * n) + 10) / (n + 20)).toFixed(4)
+
 describe('fullKelly', () => {
   test('classic asymmetric payoff: (pW − qL)/(WL)', () => {
     // p=0.6, W=0.25, L=0.12 → (0.15 − 0.048)/0.03 = 3.4
@@ -65,15 +68,15 @@ describe('winProbFromStats — empirical sourcing', () => {
   }
 
   test('prefers the per-confidence bucket when it has enough samples', () => {
-    expect(winProbFromStats(stats, { confidence: 'High' }).p).toBe(0.66)
+    expect(winProbFromStats(stats, { confidence: 'High' }).p).toBe(shrunk(0.66, 25))
   })
 
   test('falls back to overall (30d) win rate when bucket sample is too small', () => {
-    expect(winProbFromStats(stats, { confidence: 'Medium' }).p).toBe(0.58)
+    expect(winProbFromStats(stats, { confidence: 'Medium' }).p).toBe(shrunk(0.58, 30))
   })
 
   test('uses overall 30d win rate when no confidence given', () => {
-    expect(winProbFromStats(stats).p).toBe(0.58)
+    expect(winProbFromStats(stats).p).toBe(shrunk(0.58, 30))
   })
 
   test('falls back to a conservative default when no data', () => {
@@ -88,14 +91,15 @@ describe('winProbFromStats — empirical sourcing', () => {
       h30: { winRate: 1.0,  nTradeable: 3 }, // too few to trust
     }
     const r = winProbFromStats(thin30)
-    expect(r.p).toBe(0.52)
+    expect(r.p).toBe(shrunk(0.52, 40))
     expect(r.source).toMatch(/7d/)
   })
 
-  test('a measured 0% win rate is used as-is, not replaced by the fallback', () => {
+  test('a measured 0% win rate drags p far below the fallback, never replaced by it', () => {
     const losing = { h30: { winRate: 0, nTradeable: 20 } }
     const r = winProbFromStats(losing, { fallback: 0.5 })
-    expect(r.p).toBe(0)
+    expect(r.p).toBe(0.25)
+    expect(r.raw).toBe(0)
     // and Kelly sizes a p=0 system to zero, never a positive position
     expect(suggestedSize({ winProb: r.p, winFrac: 0.25, lossFrac: 0.12 }).suggestedPct).toBe(0)
   })
@@ -120,33 +124,59 @@ describe('winProbFromStats — per-asset-class sourcing', () => {
   }
 
   test('uses the asset-class win rate when it has enough samples', () => {
-    expect(winProbFromStats(stats, { assetType: 'crypto' }).p).toBe(0.44)
-    expect(winProbFromStats(stats, { assetType: 'stock' }).p).toBe(0.61)
+    expect(winProbFromStats(stats, { assetType: 'crypto' }).raw).toBe(0.44)
+    expect(winProbFromStats(stats, { assetType: 'stock' }).raw).toBe(0.61)
   })
 
   test('asset class outranks the confidence bucket — it is the segment the pick is in', () => {
     const r = winProbFromStats(stats, { assetType: 'crypto', confidence: 'High' })
-    expect(r.p).toBe(0.44)
+    expect(r.raw).toBe(0.44)
     expect(r.source).toMatch(/assetType:crypto/)
   })
 
   test('a thin asset segment falls through rather than sizing off noise', () => {
     const r = winProbFromStats(stats, { assetType: 'etf' })
-    expect(r.p).toBe(0.58)               // overall 30d, not the n=5 80%
+    expect(r.raw).toBe(0.58)             // overall 30d, not the n=5 80%
     expect(r.source).toMatch(/30d/)
   })
 
   test("matches computeStats by folding the legacy 'equity' label into 'stock'", () => {
-    expect(winProbFromStats(stats, { assetType: 'equity' }).p).toBe(0.61)
+    expect(winProbFromStats(stats, { assetType: 'equity' }).raw).toBe(0.61)
   })
 
   test('is case-insensitive and unaffected by an unknown asset class', () => {
-    expect(winProbFromStats(stats, { assetType: 'CRYPTO' }).p).toBe(0.44)
-    expect(winProbFromStats(stats, { assetType: 'warrant' }).p).toBe(0.58)
+    expect(winProbFromStats(stats, { assetType: 'CRYPTO' }).raw).toBe(0.44)
+    expect(winProbFromStats(stats, { assetType: 'warrant' }).raw).toBe(0.58)
   })
 
   test('omitting assetType preserves the previous behaviour exactly', () => {
-    expect(winProbFromStats(stats, { confidence: 'High' }).p).toBe(0.66)
-    expect(winProbFromStats(stats).p).toBe(0.58)
+    expect(winProbFromStats(stats, { confidence: 'High' }).p).toBe(shrunk(0.66, 25))
+    expect(winProbFromStats(stats).p).toBe(shrunk(0.58, 30))
+  })
+})
+
+describe('winProbFromStats — shrinkage toward the prior', () => {
+  test('a thin 70% is not treated as a known 70%', () => {
+    const r = winProbFromStats({ h30: { winRate: 0.7, nTradeable: 20 } })
+    expect(r.raw).toBe(0.7)
+    expect(r.p).toBeCloseTo(0.6, 4)          // (14 + 10) / (20 + 20)
+  })
+
+  test('a well-measured rate is barely moved', () => {
+    const r = winProbFromStats({ h30: { winRate: 0.7, nTradeable: 1500 } })
+    expect(r.p).toBeGreaterThan(0.695)
+  })
+
+  test('size falls with the evidence: same raw rate, fewer picks, smaller position', () => {
+    const size = n => suggestedSize({
+      winProb: winProbFromStats({ h30: { winRate: 0.65, nTradeable: n } }).p,
+      winFrac: 0.2, lossFrac: 0.1, fraction: 0.1, maxFraction: 1,   // uncapped, to compare
+    }).suggestedPct
+    expect(size(15)).toBeLessThan(size(500))
+  })
+
+  test('uses exact win counts when computeStats provides them', () => {
+    const r = winProbFromStats({ h30: { winRate: 0.667, wins: 2, nTradeable: 3 } }, { minN: 1 })
+    expect(r.p).toBeCloseTo(12 / 23, 4)
   })
 })

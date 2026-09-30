@@ -460,7 +460,8 @@ function logPrediction(symbol, agents, zones, generatedAt, {
       // Barrier levels, so the nightly resolver can ask which came FIRST —
       // the target, the stop, or the clock. Scoring only the +30d close counts
       // a pick that hit its target on day 3 and round-tripped as a loss.
-      stopLoss:          Number.isFinite(Number(agents.stopLoss)) ? Number(agents.stopLoss) : null,
+      stopLoss:          Number.isFinite(Number(agents.stopLoss)) ? Number(agents.stopLoss) : null,   // PERCENT below entry
+      stopZoneMid:       zones?.stopZoneLow != null ? (zones.stopZoneLow + zones.stopZoneHigh) / 2 : null, // PRICE
       // Mechanical ML-baseline 7d direction call from the same bars the scan
       // saw (lib/ml-baseline.js) — lets calibration compare AI vs baseline
       baselineProb:     baseline?.prob ?? null,
