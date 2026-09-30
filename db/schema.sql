@@ -479,3 +479,16 @@ CREATE TABLE IF NOT EXISTS last_quotes (
   market_time  BIGINT,
   saved_at     BIGINT           NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS durable_files (
+  -- Snapshots of the Brain's learning stores (data/*.jsonl|json), gzipped.
+  -- Railway's disk is wiped on every deploy; lib/durable-files.js restores
+  -- these at boot (before anything reads data/) and flushes changes back.
+  -- Also created by the restore itself, which runs before this migration.
+  name        TEXT        PRIMARY KEY,
+  content     BYTEA       NOT NULL,
+  sha256      TEXT        NOT NULL,
+  bytes       BIGINT      NOT NULL,
+  version     INTEGER     NOT NULL,
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);

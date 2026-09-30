@@ -139,9 +139,18 @@ function generateSignals(closes, strategy, params) {
 
 // ── Trade simulation ──────────────────────────────────────────────────────────
 
-function simulate(timestamps, closes, strategy, params, initialCapital = 10000) {
-  return simulateWithSignals(timestamps, closes, generateSignals(closes, strategy, params), initialCapital)
+function simulate(timestamps, closes, strategy, params, initialCapital = 10000, opts = {}) {
+  return simulateWithSignals(timestamps, closes, generateSignals(closes, strategy, params), initialCapital, opts)
 }
+
+// Execution model defaults. The engine used to fill every order at the close
+// of the very bar whose close generated the signal — a price nobody can trade
+// at, since the signal does not exist until that close prints — and charged
+// nothing to trade, while lib/expected-value.js charges the same strategies
+// 10-60bps per round trip before letting a pick through. Both flattered every
+// strategy, most of all the high-turnover ones.
+const DEFAULT_COST_BPS = 10          // round trip; ROUND_TRIP_BPS.stock
+const DEFAULT_FILL     = 'next'      // 'next' = next bar's open (close if no opens); 'close' = legacy same-bar
 
 /**
  * Run the trade simulation over a PRECOMPUTED signal array (+1 buy, -1 sell,
@@ -150,50 +159,86 @@ function simulate(timestamps, closes, strategy, params, initialCapital = 10000) 
  * the same trade accounting and metrics as the built-in strategies. There is
  * one execution/metrics implementation, so a novel strategy cannot be graded
  * on a friendlier scale than a catalog one.
+ *
+ * opts.costBps — round-trip cost in basis points, half charged on each side
+ *                (callers derive it from the asset class: costBpsForSymbol)
+ * opts.fill    — 'next' (default): a signal on bar i fills on bar i+1, at
+ *                opts.opens[i+1] when given, else closes[i+1]. A signal on
+ *                the final bar never fills. 'close': legacy same-bar fill.
+ * opts.opens   — optional open prices aligned with closes
  */
-function simulateWithSignals(timestamps, closes, signals, initialCapital = 10000) {
+function simulateWithSignals(timestamps, closes, signals, initialCapital = 10000, opts = {}) {
   const n       = closes.length
   const equity  = []
   const trades  = []
+  const costBps = Number.isFinite(opts.costBps) && opts.costBps >= 0 ? opts.costBps : DEFAULT_COST_BPS
+  const fill    = opts.fill === 'close' ? 'close' : DEFAULT_FILL
+  const opens   = Array.isArray(opts.opens) ? opts.opens : null
+  const half    = costBps / 2 / 10_000
 
   let cash   = initialCapital
   let shares = 0
-  let entryPrice = null
+  let entryPrice = null      // net of cost — what the position actually cost
   let entryDate  = null
+  let pending    = 0         // order carried to the next bar under 'next' fills
+  let costPaid   = 0
 
-  for (let i = 0; i < n; i++) {
-    const price = closes[i]
-    const date  = new Date(timestamps[i] * 1000).toISOString().slice(0, 10)
-    const value = cash + shares * price
-    equity.push({ date, value: +value.toFixed(2) })
-
-    if (signals[i] === 1 && shares === 0 && cash > price) {
-      shares     = Math.floor(cash / price)
-      cash      -= shares * price
-      entryPrice = price
+  const execute = (side, px, date) => {
+    if (side === 1 && shares === 0) {
+      const buyPx = px * (1 + half)
+      const qty = Math.floor(cash / buyPx)
+      if (qty <= 0) return
+      shares     = qty
+      cash      -= qty * buyPx
+      costPaid  += qty * px * half
+      entryPrice = buyPx
       entryDate  = date
-      trades.push({ type: 'buy', date, price: +price.toFixed(4), shares })
-    } else if (signals[i] === -1 && shares > 0) {
-      const proceeds = shares * price
-      const pnl      = ((price - entryPrice) / entryPrice) * 100
+      trades.push({ type: 'buy', date, price: +px.toFixed(4), netPrice: +buyPx.toFixed(4), shares })
+    } else if (side === -1 && shares > 0) {
+      const sellPx   = px * (1 - half)
+      const pnl      = ((sellPx - entryPrice) / entryPrice) * 100
       const duration = Math.round((new Date(date) - new Date(entryDate)) / 86_400_000)
-      cash += proceeds
-      trades.push({ type: 'sell', date, price: +price.toFixed(4), shares, pnl: +pnl.toFixed(2), durationDays: duration })
+      cash     += shares * sellPx
+      costPaid += shares * px * half
+      trades.push({ type: 'sell', date, price: +px.toFixed(4), netPrice: +sellPx.toFixed(4), shares, pnl: +pnl.toFixed(2), durationDays: duration })
       shares     = 0
       entryPrice = null
       entryDate  = null
     }
   }
 
-  // Close any open position at last price
+  for (let i = 0; i < n; i++) {
+    const price = closes[i]
+    const date  = new Date(timestamps[i] * 1000).toISOString().slice(0, 10)
+
+    // Yesterday's signal fills at today's open (or close when opens are absent).
+    if (pending) {
+      const o = opens?.[i]
+      execute(pending, Number.isFinite(o) && o > 0 ? o : price, date)
+      pending = 0
+    }
+
+    equity.push({ date, value: +(cash + shares * price).toFixed(2) })
+
+    if (signals[i] === 1 || signals[i] === -1) {
+      if (fill === 'close') execute(signals[i], price, date)
+      else pending = signals[i]
+    }
+  }
+
+  // Close any open position at the last price, paying the exit cost, and mark
+  // the final equity point at that liquidation value.
   if (shares > 0) {
     const price    = closes.at(-1)
-    const pnl      = ((price - entryPrice) / entryPrice) * 100
+    const sellPx   = price * (1 - half)
+    const pnl      = ((sellPx - entryPrice) / entryPrice) * 100
     const duration = Math.round((new Date(equity.at(-1).date) - new Date(entryDate)) / 86_400_000)
     trades.push({
-      type: 'sell', date: equity.at(-1).date, price: +price.toFixed(4),
+      type: 'sell', date: equity.at(-1).date, price: +price.toFixed(4), netPrice: +sellPx.toFixed(4),
       shares, pnl: +pnl.toFixed(2), durationDays: duration, open: true,
     })
+    costPaid += shares * price * half
+    equity[equity.length - 1] = { ...equity.at(-1), value: +(cash + shares * sellPx).toFixed(2) }
   }
 
   // ── Metrics ──────────────────────────────────────────────────────────────
@@ -253,7 +298,8 @@ function simulateWithSignals(timestamps, closes, signals, initialCapital = 10000
     ? Math.round(closed.reduce((s, t) => s + (t.durationDays ?? 0), 0) / closed.length)
     : 0
 
-  const buyHold    = ((lastClose - firstClose) / firstClose) * 100
+  // Buy & hold pays the same round trip, so alpha compares like with like.
+  const buyHold    = ((lastClose * (1 - half)) / (firstClose * (1 + half)) - 1) * 100
 
   return {
     equity,
@@ -279,6 +325,9 @@ function simulateWithSignals(timestamps, closes, signals, initialCapital = 10000
       profitFactor:     profitFactor ? +profitFactor.toFixed(2) : null,
       buyHoldReturn:    +buyHold.toFixed(2),
       alpha:            +(totalReturn - buyHold).toFixed(2),
+      costBps,
+      fill,
+      costPaid:         +costPaid.toFixed(2),
     }
   }
 }
@@ -288,7 +337,7 @@ function simulateWithSignals(timestamps, closes, signals, initialCapital = 10000
 // results sorted by the given metric (default: sharpeRatio).
 // paramRanges: { paramKey: { min, max, step } }
 // Returns: array of { params, metrics } sorted descending by sortBy
-function optimizeStrategy(timestamps, closes, strategy, paramRanges, initialCapital = 10000, sortBy = 'sharpeRatio', maxResults = 50) {
+function optimizeStrategy(timestamps, closes, strategy, paramRanges, initialCapital = 10000, sortBy = 'sharpeRatio', maxResults = 50, opts = {}) {
   // Build grid of all param combinations
   const keys  = Object.keys(paramRanges)
   const grids = keys.map(k => {
@@ -308,7 +357,7 @@ function optimizeStrategy(timestamps, closes, strategy, paramRanges, initialCapi
     const params = {}
     keys.forEach((k, i) => { params[k] = combo[i] })
     try {
-      const r = simulate(timestamps, closes, strategy, params, initialCapital)
+      const r = simulate(timestamps, closes, strategy, params, initialCapital, opts)
       if (r.metrics.totalTrades < 2) continue   // skip configs with no trades
       results.push({ params: { ...params }, metrics: r.metrics })
     } catch (_) {}
@@ -318,4 +367,19 @@ function optimizeStrategy(timestamps, closes, strategy, paramRanges, initialCapi
   return results.slice(0, maxResults)
 }
 
-module.exports = { simulate, simulateWithSignals, optimizeStrategy, generateSignals, smaSeries, emaSeries, rsiSeries, macdSeries, bbSeries }
+/**
+ * Round-trip cost for a symbol, from the same table the Advisory EV gate uses
+ * (lib/expected-value.js ROUND_TRIP_BPS), so a strategy is backtested at the
+ * cost the rest of the app assumes it will pay.
+ */
+function costBpsForSymbol(symbol, assetType = null) {
+  const { ROUND_TRIP_BPS, normalizeAssetType } = require('../lib/expected-value')
+  const key = normalizeAssetType(assetType)
+    || (require('../lib/crypto-classify').isCryptoSymbol(String(symbol || '')) ? 'crypto' : 'stock')
+  return ROUND_TRIP_BPS[key]
+}
+
+module.exports = {
+  simulate, simulateWithSignals, optimizeStrategy, generateSignals, costBpsForSymbol,
+  smaSeries, emaSeries, rsiSeries, macdSeries, bbSeries, DEFAULT_COST_BPS, DEFAULT_FILL,
+}

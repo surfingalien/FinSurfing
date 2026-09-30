@@ -1146,11 +1146,11 @@ async function dispatchTool(name, input, req) {
           return (
             `${i + 1}. ${VERDICT_ICON[p.verdict] || ''} **${p.name}** — ${p.strategy} ${JSON.stringify(p.params)} · verdict: ${p.verdict}\n` +
             (m ? `   Return ${m.totalReturn}% vs buy&hold ${m.buyHoldReturn}% (alpha ${m.alpha}%) · Sharpe ${m.sharpeRatio} · MaxDD ${m.maxDrawdown}% · ${m.totalTrades} trades, ${m.winRate}% win\n` : '') +
-            (p.recent ? `   Recent window: return ${p.recent.totalReturn}% (alpha ${p.recent.alpha}%), ${p.recent.totalTrades} trades\n` : '') +
+            (p.early && p.recent ? `   Older window: alpha ${p.early.alpha}%, Sharpe ${p.early.sharpeRatio} · held-out newest window${p.split ? ` (from ${p.split})` : ''}: alpha ${p.recent.alpha}%, Sharpe ${p.recent.sharpeRatio} — validated only if both hold\n` : '') +
             `   ${p.rationale}${p.marketFit ? `\n   Best in: ${p.marketFit}` : ''}`
           )
         }).join('\n\n') +
-        '\n\n_All metrics computed by the backtest engine on real historical bars — the AI only proposed the rules. Past performance ≠ future results._'
+        '\n\n_All metrics computed by the backtest engine on real historical bars, with next-bar fills and round-trip costs — the AI only proposed the rules. Past performance ≠ future results._'
       )
     }
 

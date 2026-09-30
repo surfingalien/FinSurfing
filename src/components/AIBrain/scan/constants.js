@@ -87,6 +87,9 @@ export const VERDICT_CONFIG = {
   'Strong Buy':   { color: 'text-emerald-400', bg: 'bg-emerald-500/15', border: 'border-emerald-500/30' },
   'Buy':          { color: 'text-mint-400',    bg: 'bg-mint-500/15',    border: 'border-mint-500/30'    },
   'Moderate Buy': { color: 'text-amber-400',   bg: 'bg-amber-500/15',   border: 'border-amber-500/25'   },
+  // A verdict that declines to recommend. Without its own entry it fell back to
+  // the 'Buy' config and rendered "Avoid" in mint — a decline styled like a go.
+  'Avoid':        { color: 'text-slate-300',   bg: 'bg-slate-500/20',   border: 'border-slate-400/30'   },
 }
 
 export const CONFIDENCE_CONFIG = {

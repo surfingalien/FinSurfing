@@ -119,7 +119,8 @@ describe('brain-learnings white-box overrides', () => {
   // to prevent. Measured and human-authored content live in separate sections.
   test('getLearningsBlock separates measured findings from operator guidance', () => {
     const fs = require('fs'), path = require('path')
-    const LEARNINGS = path.join(__dirname, '../data/brain-learnings.json')
+    // The same dir brain-learnings resolved at load — a temp dir under the test setup.
+    const LEARNINGS = path.join(require('../lib/data-dir').DATA_DIR, 'brain-learnings.json')
     const beforeL = fs.existsSync(LEARNINGS) ? fs.readFileSync(LEARNINGS) : null
     const beforeO = fs.existsSync(bl.OVERRIDES_FILE) ? fs.readFileSync(bl.OVERRIDES_FILE) : null
     try {

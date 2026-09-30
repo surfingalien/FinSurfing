@@ -11,6 +11,8 @@ const {
   buildProposalPrompt,
   parseProposals,
   verdictFor,
+  consistentVerdict,
+  evaluateSignals,
   evaluateProposals,
 } = require('../lib/strategy-lab')
 
@@ -190,5 +192,54 @@ describe('evaluateProposals', () => {
         expect(out[i - 1].metrics.sharpeRatio).toBeGreaterThanOrEqual(out[i].metrics.sharpeRatio)
       }
     }
+  })
+})
+
+// ── Two-window verdict ───────────────────────────────────────────────────────
+
+describe('consistentVerdict — both disjoint windows must agree', () => {
+  const good = { totalTrades: 5, alpha: 4, sharpeRatio: 1 }
+  const bad  = { totalTrades: 5, alpha: -4, sharpeRatio: -1 }
+  const thin = { totalTrades: 1, alpha: 9, sharpeRatio: 2 }
+  test('validated only when both windows validate', () => {
+    expect(consistentVerdict(good, good)).toBe('validated')
+    expect(consistentVerdict(good, bad)).toBe('mixed')
+    expect(consistentVerdict(bad, good)).toBe('mixed')
+    expect(consistentVerdict(bad, bad)).toBe('rejected')
+  })
+  test('too few trades in either window is insufficient, not a pass', () => {
+    expect(consistentVerdict(good, thin)).toBe('insufficient_trades')
+  })
+})
+
+describe('evaluateSignals', () => {
+  const n = 300
+  const timestamps = Array.from({ length: n }, (_, i) => 1_700_000_000 + i * 86400)
+
+  test('a rule that worked only in the older window is NOT validated', () => {
+    // Square wave: 100 for phases 0-4, 105 for 5-9. Fills are NEXT-bar, so a
+    // signal on phase 9 fills at the low and one on phase 4 at the high. The
+    // rule buys the lows in the older 70% and buys the highs in the newest 30%.
+    const k = Math.floor(n * 0.7)
+    const closes = Array.from({ length: n }, (_, i) => 100 + (i % 10 < 5 ? 0 : 5) + i * 0.01)
+    const signals = closes.map((_, i) => {
+      const phase = i % 10
+      const early = i < k
+      if (phase === 9) return early ? 1 : -1
+      if (phase === 4) return early ? -1 : 1
+      return 0
+    })
+    const r = evaluateSignals(timestamps, closes, signals, { costBps: 0 })
+    expect(r.early.alpha).toBeGreaterThan(0)
+    expect(r.recent.alpha).toBeLessThan(0)
+    expect(r.verdict).not.toBe('validated')
+    expect(r.split).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+  })
+
+  test('short histories fall back to a single full-range verdict', () => {
+    const closes = Array.from({ length: 80 }, (_, i) => 100 + i)
+    const r = evaluateSignals(timestamps.slice(0, 80), closes, closes.map(() => 0))
+    expect(r.early).toBeNull()
+    expect(r.recent).toBeNull()
   })
 })

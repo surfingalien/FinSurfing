@@ -24,6 +24,7 @@ const library       = require('../lib/strategy-library')
 const learningStore = require('../lib/learning-store')
 const paperBroker   = require('../lib/paper-broker')
 const { fetchDailyBars } = require('../lib/internal-api')
+const durableFiles  = require('../lib/durable-files')
 
 // ── Status ────────────────────────────────────────────────────────────────────
 
@@ -42,6 +43,9 @@ router.get('/status', (req, res) => {
       })),
       calibration: learningStore.getCalibration(),
       paper:       paperBroker.snapshot(),
+      // Whether the stores above survive a deploy. enabled:false in production
+      // means every number on this page resets at the next deploy.
+      persistence: durableFiles.status(),
     })
   } catch (e) {
     console.error('[evolution/status]', e.message)

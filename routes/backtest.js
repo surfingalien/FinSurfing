@@ -12,13 +12,25 @@
  */
 
 const express = require('express')
-const { simulate, optimizeStrategy } = require('../utils/backtest')
+const { simulate, optimizeStrategy, costBpsForSymbol } = require('../utils/backtest')
 const { runPortfolioBacktest } = require('../utils/portfolio-backtest')
 
 const router = express.Router()
 
 const VALID_STRATEGIES = ['sma_crossover', 'rsi_threshold', 'macd_signal', 'bb_reversion']
 const VALID_RANGES     = ['1y', '2y', '5y']
+
+// Execution model for a request: next-bar fills and the asset class's
+// round-trip cost unless the caller asks otherwise (costBps clamped 0-200;
+// fill 'close' reproduces the legacy same-bar fills for comparison).
+function executionFor(body, sym, opens) {
+  const c = Number(body?.costBps)
+  return {
+    costBps: Number.isFinite(c) ? Math.max(0, Math.min(200, c)) : costBpsForSymbol(sym),
+    fill:    body?.fill === 'close' ? 'close' : 'next',
+    opens,
+  }
+}
 
 router.post('/', async (req, res) => {
   const { symbol, strategy, params = {}, range = '1y', initialCapital = 10000 } = req.body
@@ -56,7 +68,7 @@ router.post('/', async (req, res) => {
 
     // Strip null closes
     const pairs = timestamps
-      .map((t, i) => ({ t, c: ohlcv.close[i] }))
+      .map((t, i) => ({ t, c: ohlcv.close[i], o: ohlcv.open?.[i] }))
       .filter(p => p.c != null && !isNaN(p.c))
 
     if (pairs.length < 30)
@@ -65,7 +77,7 @@ router.post('/', async (req, res) => {
     const ts     = pairs.map(p => p.t)
     const closes = pairs.map(p => p.c)
 
-    const backtestResult = simulate(ts, closes, strategy, params, capital)
+    const backtestResult = simulate(ts, closes, strategy, params, capital, executionFor(req.body, sym, pairs.map(p => p.o)))
 
     return res.json({
       symbol:    sym,
@@ -125,11 +137,14 @@ router.post('/optimize', async (req, res) => {
     if (!timestamps || !ohlcv?.close || timestamps.length < 30)
       return res.status(422).json({ error: `Insufficient price history for ${sym}` })
 
-    const pairs  = timestamps.map((t, i) => ({ t, c: ohlcv.close[i] })).filter(p => p.c != null && !isNaN(p.c))
+    const pairs  = timestamps.map((t, i) => ({ t, c: ohlcv.close[i], o: ohlcv.open?.[i] })).filter(p => p.c != null && !isNaN(p.c))
     const ts     = pairs.map(p => p.t)
     const closes = pairs.map(p => p.c)
 
-    const results = optimizeStrategy(ts, closes, strategy, paramRanges, capital, sortBy)
+    // NOTE: the optimizer ranks many configs on one history — its top result
+    // is in-sample by construction. Strategy Lab's two-window verdict is the
+    // honest check for a config picked here.
+    const results = optimizeStrategy(ts, closes, strategy, paramRanges, capital, sortBy, 50, executionFor(req.body, sym, pairs.map(p => p.o)))
     return res.json({ symbol: sym, strategy, range, combinations: combos, results })
   } catch (err) {
     if (err.name === 'AbortError' || err.name === 'TimeoutError')

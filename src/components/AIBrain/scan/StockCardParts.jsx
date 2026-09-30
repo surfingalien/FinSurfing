@@ -67,6 +67,19 @@ export function ConflictBanner({ conflict }) {
 
 /* ── PriceZones ────────────────────────────────────────────── */
 export function PriceZones({ stock }) {
+  // A pick the Brain declined carries no levels by design — there is no trade to
+  // price. Rendering nothing made that look like a missing feature, so say it.
+  if (stock.actionable === false) {
+    return (
+      <div className="mt-3 rounded-xl px-3 py-2.5 bg-slate-500/10 border border-slate-400/20">
+        <div className="text-[11px] font-semibold text-slate-300">No entry, target or stop</div>
+        <div className="text-[10px] text-slate-500 mt-0.5 leading-snug">
+          The Brain does not recommend buying this, so there are no levels to quote.
+        </div>
+      </div>
+    )
+  }
+
   const hasZones = stock.entryZoneLow || stock.entryZoneHigh
   const hasFallback = stock.entryPrice
   if (!hasZones && !hasFallback) return null

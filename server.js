@@ -7,6 +7,12 @@ const compression  = require('compression')
 const cookieParser = require('cookie-parser')
 const rateLimit    = require('express-rate-limit')
 
+// Restore the Brain's learning stores (data/*) from Postgres BEFORE any route
+// or lib module is required — some read data/ at require time, and Railway's
+// disk starts empty on every deploy. Synchronous by design; never throws.
+const durableFiles = require('./lib/durable-files')
+durableFiles.restoreSync()
+
 const authRoutes        = require('./routes/auth')
 const portfolioRoutes   = require('./routes/portfolios')
 const publicRoutes      = require('./routes/public')
@@ -60,6 +66,7 @@ const filingsRoutes       = require('./routes/filings')
 const strategyLabRoutes   = require('./routes/strategy-lab')
 const evolutionRoutes     = require('./routes/evolution')
 const exposureRoutes   = require('./routes/exposure')
+const researchDeskRoutes = require('./routes/research-desk')
 
 const { seedAdminDB } = require('./db/adminSeed')
 
@@ -253,6 +260,7 @@ app.use('/api/screener',     screenerRoutes)
 app.use('/api/fundamentals', fundamentalsRoutes)
 app.use('/api/filings',      filingsRoutes)
 app.use('/api/strategy-lab', strategyLabRoutes)
+app.use('/api/research-desk', researchDeskRoutes)
 app.use('/api/evolution',    evolutionRoutes)
 app.use('/api/exposure',     exposureRoutes)
 app.use('/api/forecast',          forecastRoutes)
@@ -2405,6 +2413,10 @@ if (PROD) {
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`FinSurf listening on 0.0.0.0:${PORT}`)
+  // Mirror learning-store changes back to Postgres, with a last flush on the
+  // deploy's SIGTERM. Both no-op unless restoreSync() succeeded.
+  durableFiles.startMirror()
+  durableFiles.installShutdownFlush()
   // Start scheduled background jobs after server is ready
   setTimeout(() => {
     try { require('./lib/scheduled-jobs').init() }

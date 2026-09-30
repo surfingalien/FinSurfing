@@ -4,7 +4,7 @@
  * Pure functions only — no HTTP, no Anthropic calls, no file I/O.
  */
 
-const { computeStats, nearestClose, zoneTouched, tripleBarrier, benchmarkFor, checkEntryZones } = require('../lib/brain-learnings')
+const { computeStats, nearestClose, zoneTouched, tripleBarrier, barrierLevels, benchmarkFor, checkEntryZones } = require('../lib/brain-learnings')
 
 const DAY = 86400 * 1000
 
@@ -74,6 +74,8 @@ describe('benchmarkFor', () => {
 })
 
 describe('computeStats', () => {
+  // These fixtures all carry 30d outcomes; pin segments to that horizon.
+  const AT30 = { segmentMin30d: 1 }
   const mkRecord = (over = {}) => ({
     symbol: 'NVDA',
     generatedAt: '2026-05-01T00:00:00.000Z',
@@ -99,7 +101,7 @@ describe('computeStats', () => {
       mkRecord(),                              // +5% @7d → win
       mkRecord({ price7d: 95, benchRet7d: 1 }), // -5% @7d → loss
     ]
-    const s = computeStats(records)
+    const s = computeStats(records, AT30)
     expect(s.h7.n).toBe(2)
     expect(s.h7.winRate).toBe(0.5)
   })
@@ -107,7 +109,7 @@ describe('computeStats', () => {
   test('alpha win rate compares against the benchmark, not zero', () => {
     // +2% return vs +5% benchmark = raw win but alpha loss
     const records = [mkRecord({ price7d: 102, benchRet7d: 5, price30d: null, benchRet30d: null })]
-    const s = computeStats(records)
+    const s = computeStats(records, AT30)
     expect(s.h7.winRate).toBe(1)
     expect(s.h7.alphaWinRate).toBe(0)
   })
@@ -117,7 +119,7 @@ describe('computeStats', () => {
       mkRecord(),                       // entered, +5% win
       mkRecord({ entered: false, price7d: 200 }), // phantom +100% — never tradeable
     ]
-    const s = computeStats(records)
+    const s = computeStats(records, AT30)
     expect(s.h7.n).toBe(2)
     expect(s.h7.nTradeable).toBe(1)
     expect(s.h7.neverEntered).toBe(1)
@@ -130,7 +132,7 @@ describe('computeStats', () => {
       mkRecord({ price30d: 116 }), // above 115 target → hit
       mkRecord({ price30d: 110 }), // below target → miss
     ]
-    const s = computeStats(records)
+    const s = computeStats(records, AT30)
     expect(s.h30.targetHitRate).toBe(0.5)
   })
 
@@ -140,7 +142,7 @@ describe('computeStats', () => {
       mkRecord({ confidence: 'High',  price30d: 90,  benchRet30d: 2 }), // alpha loss
       mkRecord({ confidence: 'Low',   price30d: 130, benchRet30d: 2 }), // alpha win
     ]
-    const s = computeStats(records)
+    const s = computeStats(records, AT30)
     expect(s.calibration.High.n).toBe(2)
     expect(s.calibration.High.alphaWinRate).toBe(0.5)
     expect(s.calibration.Low.n).toBe(1)
@@ -150,7 +152,7 @@ describe('computeStats', () => {
 
   test('legacy records without basePrice fall back to entryZoneMid', () => {
     const records = [mkRecord({ basePrice: undefined, priceAtPrediction: undefined })]
-    const s = computeStats(records)
+    const s = computeStats(records, AT30)
     expect(s.h7.winRate).toBe(1) // (105-100)/100 from entryZoneMid
   })
 
@@ -160,7 +162,7 @@ describe('computeStats', () => {
       mkRecord({ ensembleConfirmed: true,  price30d: 95,  benchRet30d: 2 }), // confirmed alpha loss
       mkRecord({ ensembleConfirmed: false, price30d: 90,  benchRet30d: 2 }), // unconfirmed loss
     ]
-    const s = computeStats(records)
+    const s = computeStats(records, AT30)
     expect(s.ensemble.confirmed.n).toBe(2)
     expect(s.ensemble.confirmed.alphaWinRate).toBe(0.5)
     expect(s.ensemble.unconfirmed.n).toBe(1)
@@ -178,7 +180,7 @@ describe('computeStats', () => {
       ...Array.from({ length: 5 }, () => mkRecord({ taPatterns: ['strong_uptrend'], price30d: 120, benchRet30d: 2 })),
       mkRecord({ taPatterns: ['strong_uptrend'], price30d: 90, benchRet30d: 2 }),
     ]
-    const s = computeStats(records)
+    const s = computeStats(records, AT30)
     expect(s.byPattern).not.toBe(null)
     expect(s.byPattern.strong_uptrend.n).toBe(6)
     expect(s.byPattern.strong_uptrend.winRate).toBeCloseTo(5 / 6, 2)
@@ -188,13 +190,13 @@ describe('computeStats', () => {
     const records = [
       mkRecord({ taPatterns: ['golden_cross'], price30d: 120 }), // only 1 occurrence
     ]
-    const s = computeStats(records)
+    const s = computeStats(records, AT30)
     expect(s.byPattern).toBe(null) // below threshold
   })
 
   test('byPattern is null when no records have taPatterns', () => {
     const records = [mkRecord(), mkRecord()]
-    const s = computeStats(records)
+    const s = computeStats(records, AT30)
     expect(s.byPattern).toBe(null)
   })
 
@@ -205,7 +207,7 @@ describe('computeStats', () => {
       mkRecord({ rsRankAtScan: 85, price30d: 120, benchRet30d: 2 }), // strong, win
       mkRecord({ rsRankAtScan: 90, price30d: 118, benchRet30d: 2 }), // strong, win
     ]
-    const s = computeStats(records)
+    const s = computeStats(records, AT30)
     expect(s.byRsRank.weak.n).toBe(1)
     expect(s.byRsRank.weak.alphaWinRate).toBe(0)
     expect(s.byRsRank.strong.n).toBe(2)
@@ -223,7 +225,7 @@ describe('computeStats', () => {
       mkRecord({ volumeSignal: 'Confirming', price30d: 90,  benchRet30d: 2 }), // loss
       mkRecord({ volumeSignal: 'Weak',       price30d: 90,  benchRet30d: 2 }), // loss
     ]
-    const s = computeStats(records)
+    const s = computeStats(records, AT30)
     expect(s.byVolumeSignal.Confirming.n).toBe(2)
     expect(s.byVolumeSignal.Confirming.alphaWinRate).toBe(0.5)
     expect(s.byVolumeSignal.Weak.n).toBe(1)
@@ -236,7 +238,7 @@ describe('computeStats', () => {
       mkRecord({ daysToEarnings: 15,   price30d: 120, benchRet30d: 2 }), // upcoming, win
       mkRecord({ daysToEarnings: null, price30d: 120, benchRet30d: 2 }), // distant, win
     ]
-    const s = computeStats(records)
+    const s = computeStats(records, AT30)
     expect(s.earningsWindowImpact.imminent.alphaWinRate).toBe(0)
     expect(s.earningsWindowImpact.upcoming.alphaWinRate).toBe(1)
     expect(s.earningsWindowImpact.distant.alphaWinRate).toBe(1)
@@ -248,7 +250,7 @@ describe('computeStats', () => {
       mkRecord({ optionsPcRatio: 0.90, price30d: 90,  benchRet30d: 2 }), // neutral, loss
       mkRecord({ optionsPcRatio: 1.50, price30d: 85,  benchRet30d: 2 }), // bearish, loss
     ]
-    const s = computeStats(records)
+    const s = computeStats(records, AT30)
     expect(s.optionsFlowImpact.bullish.n).toBe(1)
     expect(s.optionsFlowImpact.bullish.alphaWinRate).toBe(1)
     expect(s.optionsFlowImpact.bearish.alphaWinRate).toBe(0)
@@ -259,7 +261,7 @@ describe('computeStats', () => {
       mkRecord({ agentConflict: { exists: true  }, price30d: 90,  benchRet30d: 2 }), // conflict, loss
       mkRecord({ agentConflict: { exists: false }, price30d: 120, benchRet30d: 2 }), // no conflict, win
     ]
-    const s = computeStats(records)
+    const s = computeStats(records, AT30)
     expect(s.conflictImpact.conflict.alphaWinRate).toBe(0)
     expect(s.conflictImpact.noConflict.alphaWinRate).toBe(1)
   })
@@ -271,7 +273,7 @@ describe('computeStats', () => {
       mkRecord({ assetType: 'equity', price30d: 90,  benchRet30d: 2 }), // alpha loss (legacy label)
       mkRecord({ assetType: 'crypto', price30d: 120, benchRet30d: 2 }), // alpha win
     ]
-    const s = computeStats(records)
+    const s = computeStats(records, AT30)
     expect(s.byAssetType.equity).toBeUndefined() // never a separate segment
     expect(s.byAssetType.stock.n).toBe(2)
     expect(s.byAssetType.stock.alphaWinRate).toBe(0.5)
@@ -283,7 +285,7 @@ describe('computeStats', () => {
       mkRecord({ price7d: null, benchRet7d: null, price30d: null, benchRet30d: null, price90d: 130, benchRet90d: 5 }), // +30% vs +5% bench → alpha win
       mkRecord({ price7d: null, benchRet7d: null, price30d: null, benchRet30d: null, price90d: 95,  benchRet90d: 5 }), // -5% vs +5% bench → alpha loss
     ]
-    const s = computeStats(records)
+    const s = computeStats(records, AT30)
     expect(s.h90).not.toBe(null)
     expect(s.h90.n).toBe(2)
     expect(s.h90.winRate).toBe(0.5)
@@ -297,7 +299,7 @@ describe('computeStats', () => {
       mkRecord({ compositeScore: 75, price30d: 120, benchRet30d: 2 }), // high, alpha win
       mkRecord({ compositeScore: 85, price30d: 118, benchRet30d: 2 }), // elite, alpha win
     ]
-    const s = computeStats(records)
+    const s = computeStats(records, AT30)
     expect(s.byCompositeScore.low.n).toBe(1)
     expect(s.byCompositeScore.low.alphaWinRate).toBe(0)
     expect(s.byCompositeScore.mid.n).toBe(1)
@@ -316,7 +318,7 @@ describe('computeStats', () => {
       mkRecord({ highConviction: true,  price30d: 95,  benchRet30d: 2 }), // hc, alpha loss
       mkRecord({ highConviction: false, price30d: 90,  benchRet30d: 2 }), // standard, loss
     ]
-    const s = computeStats(records)
+    const s = computeStats(records, AT30)
     expect(s.byHighConviction.true.n).toBe(2)
     expect(s.byHighConviction.true.alphaWinRate).toBe(0.5)
     expect(s.byHighConviction.false.n).toBe(1)
@@ -328,37 +330,87 @@ describe('computeStats', () => {
     expect(s.byHighConviction).toBe(null)
   })
 
-  test('autoTunedThreshold is null when fewer than 5 benchmark-matched picks at any threshold', () => {
-    // Only 4 records with compositeScore — always below the 5-pick minimum
-    const records = Array.from({ length: 4 }, () =>
+  test('autoTunedThreshold is null without enough picks to choose AND test a cutoff', () => {
+    const records = Array.from({ length: 10 }, () =>
       mkRecord({ compositeScore: 60, price30d: 115, benchRet30d: 2 }))
-    const s = computeStats(records)
+    const s = computeStats(records, AT30)
     expect(s.autoTunedThreshold).toBe(null)
     expect(s.autoTunedThresholdAlphaWinRate).toBe(null)
+    expect(s.autoTune.reason).toMatch(/insufficient data/)
   })
 
-  test('autoTunedThreshold selects the cutoff that maximises alpha win rate', () => {
-    // compositeScore=38 picks all lose to benchmark → drag alpha down when t≤35
-    // compositeScore=60 picks all beat benchmark → t=40 sees only the winners
-    // t=35: 10 picks, 5 alpha wins → 0.5; t=40..60: 5 picks, 5 wins → 1.0
+  test('a cutoff that really separates winners is adopted — validated on NEWER picks', () => {
+    // Low scores lose to the benchmark and high scores beat it, throughout
+    // time, so a cutoff chosen on the older 70% still works on the newest 30%.
+    const t0 = Date.UTC(2026, 0, 1)
+    const records = Array.from({ length: 120 }, (_, i) => {
+      const high = i % 2 === 0
+      return mkRecord({
+        generatedAt: new Date(t0 + i * DAY).toISOString(),
+        compositeScore: high ? 75 : 45,
+        price30d: high ? 115 : 90, benchRet30d: 2,
+      })
+    })
+    const s = computeStats(records, AT30)
+    expect(s.autoTune.validated).toBe(true)
+    expect(s.autoTunedThreshold).toBeGreaterThan(45)
+    expect(s.autoTunedThreshold).toBeLessThanOrEqual(75)
+    expect(s.autoTunedThresholdAlphaWinRate).toBe(1)
+  })
+
+  test('a cutoff that only worked on the older picks is rejected', () => {
+    // High scores won early and lost late: in-sample the cutoff looks perfect,
+    // on the unseen newest picks it is worse than no filter.
+    const t0 = Date.UTC(2026, 0, 1)
+    const records = Array.from({ length: 80 }, (_, i) => {
+      const high = i % 2 === 0
+      const late = i >= 56
+      const win = late ? !high : high
+      return mkRecord({
+        generatedAt: new Date(t0 + i * DAY).toISOString(),
+        compositeScore: high ? 75 : 45,
+        price30d: win ? 115 : 90, benchRet30d: 2,
+      })
+    })
+    const s = computeStats(records, AT30)
+    expect(s.autoTune.candidate).not.toBe(null)
+    expect(s.autoTune.validated).toBe(false)
+    expect(s.autoTunedThreshold).toBe(null)
+  })
+
+  test('segments use ONE horizon — a 7d-only record is not substituted into a 30d segment', () => {
     const records = [
-      ...Array.from({ length: 5 }, () => mkRecord({ compositeScore: 38, price30d: 90,  benchRet30d: 2 })),
-      ...Array.from({ length: 5 }, () => mkRecord({ compositeScore: 60, price30d: 115, benchRet30d: 2 })),
+      mkRecord({ confidence: 'High', price30d: 120, benchRet30d: 2 }),
+      mkRecord({ confidence: 'High', price30d: null, benchRet30d: null, price7d: 90, benchRet7d: 1 }),
     ]
-    const s = computeStats(records)
-    expect(s.autoTunedThreshold).toBe(40)
-    expect(s.autoTunedThresholdAlphaWinRate).toBe(1)
+    const s = computeStats(records, AT30)
+    expect(s.segmentHorizon).toBe(30)
+    expect(s.calibration.High.n).toBe(1)
+    expect(s.calibration.High.horizon).toBe(30)
   })
 
-  test('autoTunedThreshold prefers the lowest threshold when multiple thresholds tie', () => {
-    // 5 picks at compositeScore=50: included at t=35..50, excluded at t=55+
-    // All are alpha wins → alpha win rate is 1.0 at t=35,40,45,50
-    // Strict > comparison means the first (lowest) threshold wins on ties
-    const records = Array.from({ length: 5 }, () =>
-      mkRecord({ compositeScore: 50, price30d: 115, benchRet30d: 2 }))
-    const s = computeStats(records)
-    expect(s.autoTunedThreshold).toBe(35)
-    expect(s.autoTunedThresholdAlphaWinRate).toBe(1)
+  test('segments stay on 7d until enough 30d outcomes exist', () => {
+    const records = [
+      mkRecord({ confidence: 'High', price7d: 105, benchRet7d: 1 }),
+      mkRecord({ confidence: 'High', price7d: 95,  benchRet7d: 1, price30d: null, benchRet30d: null }),
+    ]
+    const s = computeStats(records)        // default floor: 20 thirty-day outcomes
+    expect(s.segmentHorizon).toBe(7)
+    expect(s.calibration.High.n).toBe(2)
+    expect(s.calibration.High.winRate).toBe(0.5)
+  })
+
+  test('every segment rate carries a 95% interval, and the alpha denominator is nBench', () => {
+    const records = [
+      mkRecord({ confidence: 'High', price30d: 120, benchRet30d: 2 }),
+      mkRecord({ confidence: 'High', price30d: 120, benchRet30d: null }),
+    ]
+    const seg = computeStats(records, AT30).calibration.High
+    expect(seg.n).toBe(2)
+    expect(seg.nBench).toBe(1)
+    expect(seg.winRateLo).toBeGreaterThan(0)
+    expect(seg.winRateLo).toBeLessThan(seg.winRate)
+    expect(seg.winRateHi).toBe(1)
   })
 })
 
@@ -473,6 +525,7 @@ describe('tripleBarrier', () => {
 })
 
 describe('computeStats — regime, generator and barrier segments', () => {
+  const AT30 = { segmentMin30d: 1 }   // fixtures carry 30d outcomes
   const mk = (over = {}) => ({
     symbol: 'NVDA', generatedAt: '2026-05-01T00:00:00.000Z', confidence: 'High',
     basePrice: 100, entryZoneMid: 100, targetZoneMid: 115, entered: true,
@@ -485,7 +538,7 @@ describe('computeStats — regime, generator and barrier segments', () => {
       mk({ regimeAtScan: 'Risk-On / Growth Favoured' }),
       mk({ regimeAtScan: 'Risk-On / Growth Favoured', price30d: 120 }),
       mk({ regimeAtScan: 'Risk-Off / Defensive', price30d: 88, benchRet30d: 3 }),
-    ])
+    ], AT30)
     expect(s.byRegime['Risk-On / Growth Favoured'].n).toBe(2)
     expect(s.byRegime['Risk-On / Growth Favoured'].winRate).toBe(1)
     expect(s.byRegime['Risk-Off / Defensive'].winRate).toBe(0)
@@ -501,7 +554,7 @@ describe('computeStats — regime, generator and barrier segments', () => {
     const s = computeStats([
       mk({ modelVersion: 'claude-sonnet-4-6', promptVersion: 1 }),
       mk({ modelVersion: 'claude-sonnet-4-6', promptVersion: 2, price30d: 90, benchRet30d: 3 }),
-    ])
+    ], AT30)
     expect(Object.keys(s.byModelVersion).sort())
       .toEqual(['claude-sonnet-4-6/v1', 'claude-sonnet-4-6/v2'])
     expect(s.byModelVersion['claude-sonnet-4-6/v1'].winRate).toBe(1)
@@ -530,5 +583,47 @@ describe('computeStats — regime, generator and barrier segments', () => {
 
   test('barriers is null until at least one window has been resolved', () => {
     expect(computeStats([mk()]).barriers).toBeNull()
+  })
+})
+
+/**
+ * barrierLevels — the record's stopLoss is a PERCENT, tripleBarrier wants a
+ * PRICE. Passing the percent straight through asked whether a $100 stock fell
+ * below $8, so a 40% crash on day 3 resolved as 'time' instead of 'stop'.
+ */
+describe('barrierLevels', () => {
+  const t0 = Date.UTC(2026, 0, 5)
+  const to = t0 + 30 * DAY
+  const rec = { entryZoneMid: 100, targetZoneMid: 115, stopLoss: 8, targetReturn: 15 }
+
+  test('derives the stop PRICE from the stop percent and the entry anchor', () => {
+    const { target, stop } = barrierLevels(rec)
+    expect(target).toBe(115)
+    expect(stop).toBeCloseTo(92, 6)
+  })
+
+  test('the reported case: a 40% crash on day 3 is a stop, not a timeout', () => {
+    const bars = [{ t: t0 + 3 * DAY, l: 60, h: 99, c: 61 }, { t: t0 + 29 * DAY, l: 60, h: 70, c: 65 }]
+    // The old call site — percent passed as a price — never sees the stop.
+    expect(tripleBarrier(bars, { from: t0, to, target: 115, stop: 8 })).toMatchObject({ label: 'time' })
+    expect(tripleBarrier(bars, { from: t0, to, ...barrierLevels(rec) })).toMatchObject({ label: 'stop', days: 3 })
+  })
+
+  test('prefers the logged stop-zone price when present', () => {
+    expect(barrierLevels({ ...rec, stopZoneMid: 93.5 }).stop).toBe(93.5)
+  })
+
+  test('falls back to targetReturn for the target and flips both for a short', () => {
+    const r = { priceAtPrediction: 50, targetReturn: 10, stopLoss: 5 }
+    const l = barrierLevels(r)
+    expect(l.target).toBeCloseTo(55, 6); expect(l.stop).toBeCloseTo(47.5, 6)
+    const s = barrierLevels(r, false)
+    expect(s.target).toBeCloseTo(45, 6); expect(s.stop).toBeCloseTo(52.5, 6)
+  })
+
+  test('an out-of-range or missing percent yields no stop rather than a wrong one', () => {
+    expect(barrierLevels({ entryZoneMid: 100, stopLoss: 150 }).stop).toBeNull()
+    expect(barrierLevels({ entryZoneMid: 100 }).stop).toBeNull()
+    expect(barrierLevels({ stopLoss: 8 }).stop).toBeNull()      // no anchor to measure from
   })
 })

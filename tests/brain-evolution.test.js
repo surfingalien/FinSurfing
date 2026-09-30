@@ -5,7 +5,7 @@
  * their pure inputs; no HTTP, no AI calls, no disk.
  */
 
-const { rotateUniverse, toSeries, nearestClose, benchmarkFor, EVOLUTION_UNIVERSE } = require('../lib/brain-evolution')
+const { rotateUniverse, toSeries, nearestClose, benchmarkFor, EVOLUTION_UNIVERSE, forwardStartIndex, forwardMetrics, MIN_FORWARD_BARS } = require('../lib/brain-evolution')
 
 describe('rotateUniverse', () => {
   const u = ['A', 'B', 'C', 'D', 'E', 'F', 'G']
@@ -91,5 +91,33 @@ describe('benchmarkFor', () => {
   test('crypto benchmarks against BTC, everything else against SPY', () => {
     expect(benchmarkFor('ETH-USD')).toBe('BTC-USD')
     expect(benchmarkFor('NVDA')).toBe('SPY')
+  })
+})
+
+describe('forward re-validation — only bars after discovery count', () => {
+  const DAY = 86400000
+  const t0 = Date.UTC(2026, 0, 1)
+  const bars = Array.from({ length: 200 }, (_, i) => ({ t: t0 + i * DAY, o: 100 + i * 0.1, h: 101 + i * 0.1, l: 99 + i * 0.1, c: 100 + i * 0.1 + (i % 6 < 3 ? 2 : -2), v: 1000 }))
+  const series = toSeries(bars)
+  const entry = { strategy: 'rsi_threshold', params: { period: 5, oversold: 40, overbought: 60 } }
+
+  test('forwardStartIndex finds the first bar strictly after discovery', () => {
+    const since = new Date(t0 + 150 * DAY).toISOString()
+    expect(forwardStartIndex(series.timestamps, since)).toBe(151)
+    expect(forwardStartIndex(series.timestamps, 'not a date')).toBe(-1)
+  })
+
+  test('too few post-discovery bars is a skip, never a score', () => {
+    const since = new Date(t0 + (200 - MIN_FORWARD_BARS + 1) * DAY).toISOString()
+    expect(forwardMetrics({ ...entry, discoveredAt: since }, series).skip).toMatch(/bars since discovery/)
+  })
+
+  test('scores only the forward slice — no pre-discovery trade can appear', () => {
+    const since = new Date(t0 + 120 * DAY).toISOString()
+    const fw = forwardMetrics({ ...entry, discoveredAt: since }, series, { costBps: 10 })
+    expect(fw.skip).toBeUndefined()
+    expect(fw.from).toBe(new Date(t0 + 121 * DAY).toISOString().slice(0, 10))
+    expect(fw.metrics.costBps).toBe(10)
+    expect(fw.metrics.initialCapital).toBe(10000)
   })
 })

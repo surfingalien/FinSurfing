@@ -21,6 +21,17 @@ const stats = {
   byCompositeScore: { elite: { n: 15, winRate: 0.7, alphaWinRate: 0.72 } },
 }
 
+// Same shape at n=400 — large enough for real differences to be detectable.
+const bigStats = {
+  h30: { alphaWinRate: 0.5 },
+  calibration: {
+    High:   { n: 400, alphaWinRate: 0.65 },
+    Medium: { n: 400, alphaWinRate: 0.48 },
+  },
+  ensemble: { confirmed: { n: 400, alphaWinRate: 0.7 } },
+  byAssetType: { Crypto: { n: 400, alphaWinRate: 0.33 }, stock: { n: 400, alphaWinRate: 0.4 } },
+}
+
 describe('computeEdgeReport', () => {
   test('ranks segments by edge vs overall, best first', () => {
     const r = computeEdgeReport(stats)
@@ -39,11 +50,40 @@ describe('computeEdgeReport', () => {
     expect(strict.segments.find(s => s.segment === 'confirmed')).toBeUndefined()
   })
 
-  test('topEdges positive-only, topDrags most-negative-first', () => {
+  test('at these sample sizes nothing survives the multiple-comparison correction', () => {
+    // 6 segments tested; the best raw p-value (~0.046) would pass alone, but
+    // not once the other five tests are accounted for.
     const r = computeEdgeReport(stats)
-    expect(r.topEdges.every(s => s.edge > 0)).toBe(true)
-    expect(r.topDrags.every(s => s.edge < 0)).toBe(true)
-    expect(r.topDrags[0].segment).toBe('Crypto') // -0.17 is the worst drag
+    expect(r.tested).toBe(6)
+    expect(r.segments.every(s => s.significant === false)).toBe(true)
+    expect(r.topEdges).toEqual([])
+    expect(r.topDrags).toEqual([])
+  })
+
+  test('topEdges/topDrags hold only segments that survive — positive-only, most-negative-first', () => {
+    const r = computeEdgeReport(bigStats)
+    expect(r.topEdges.length).toBeGreaterThan(0)
+    expect(r.topEdges.every(s => s.edge > 0 && s.significant)).toBe(true)
+    expect(r.topDrags.every(s => s.edge < 0 && s.significant)).toBe(true)
+    expect(r.topDrags[0].segment).toBe('Crypto')
+    // A 2pt difference on 400 picks is not an edge, however it ranks.
+    expect(r.segments.find(s => s.segment === 'Medium').significant).toBe(false)
+  })
+
+  test('uses the benchmark-matched count, not n, for the alpha rate', () => {
+    const r = computeEdgeReport({
+      h30: { alphaWinRate: 0.5 }, segmentHorizon: 30,
+      calibration: { High: { n: 100, nBench: 8, alphaWins: 8, alphaWinRate: 1 } },
+    })
+    expect(r.segments).toEqual([])          // 8 benchmark-matched picks < minN
+  })
+
+  test('compares against the overall rate at the SAME horizon as the segments', () => {
+    const r = computeEdgeReport({
+      h7: { alphaWinRate: 0.6 }, h30: { alphaWinRate: 0.4 }, segmentHorizon: 7,
+      calibration: { High: { n: 20, alphaWinRate: 0.6 } },
+    })
+    expect(r.overall).toBe(0.6)
   })
 
   test('empty/missing stats yield an empty report and empty block', () => {
@@ -60,18 +100,25 @@ describe('computeEdgeReport', () => {
 })
 
 describe('edgeBlock', () => {
-  test('renders strongest and weakest lines with percentage points', () => {
-    const text = edgeBlock(computeEdgeReport(stats))
+  test('renders only surviving segments, with their intervals', () => {
+    const text = edgeBlock(computeEdgeReport(bigStats))
     expect(text).toContain('MEASURED EDGE')
     expect(text).toContain('Strongest:')
     expect(text).toContain('Weakest:')
-    expect(text).toContain('composite=score ≥80 72% (+22pt, n=15)')
-    expect(text).toContain('asset=Crypto 33% (-17pt, n=12)')
+    expect(text).toMatch(/ensemble=confirmed 70% \[\d+%–\d+%\] \(\+20pt, n=400\)/)
+    expect(text).toMatch(/asset=Crypto 33% \[\d+%–\d+%\] \(-17pt, n=400\)/)
+    expect(text).not.toContain('Medium')
+  })
+
+  test('says plainly when no segment beats chance, instead of listing the luckiest', () => {
+    const text = edgeBlock(computeEdgeReport(stats))
+    expect(text).toMatch(/^NO MEASURED EDGE: none of 6 segments/)
+    expect(text).not.toContain('Strongest')
   })
 })
 
 describe('scan-time dimensions', () => {
-  const seg = (winRate, n = 20) => ({ n, alphaWinRate: winRate, winRate })
+  const seg = (winRate, n = 200) => ({ n, alphaWinRate: winRate, winRate })
 
   test('regime is a dimension — a rate that only holds risk-on is not one rate', () => {
     const r = computeEdgeReport({

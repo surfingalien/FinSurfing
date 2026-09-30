@@ -17,10 +17,9 @@
 
 const express = require('express')
 const fs      = require('fs')
-const path    = require('path')
 
 const router         = express.Router()
-const PREDICTION_LOG = path.join(__dirname, '../data/ai-brain-predictions.jsonl')
+const { PREDICTION_LOG } = require('../lib/prediction-log-path')
 
 function readPredictions() {
   if (!fs.existsSync(PREDICTION_LOG)) return []

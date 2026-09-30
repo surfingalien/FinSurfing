@@ -60,12 +60,26 @@ describe('scoreValidation', () => {
 })
 
 describe('computeFitness', () => {
-  test('an unproven single validation is discounted vs a repeatedly proven one', () => {
+  test('an unproven single validation is discounted vs one proven on FORWARD bars', () => {
     const once = buildEntry({ symbol: 'AAPL', strategy: 'macd_signal', params: { fast: 12, slow: 26, signal: 9 }, metrics: goodMetrics, verdict: 'validated' })
     let many = once
-    for (let i = 0; i < 3; i++) many = applyValidation(many, { metrics: goodMetrics, verdict: 'validated' })
-    // Identical measured performance — the difference is survival across cycles
+    for (let i = 0; i < 3; i++) many = applyValidation(many, { metrics: goodMetrics, verdict: 'validated', forward: true })
+    // Identical measured performance — the difference is out-of-sample survival
     expect(many.fitness).toBeGreaterThan(once.fitness)
+  })
+
+  test('re-running the SAME history builds no confidence — only forward re-tests do', () => {
+    const once = buildEntry({ symbol: 'AAPL', strategy: 'macd_signal', params: {}, metrics: goodMetrics, verdict: 'validated' })
+    let rerun = once
+    for (let i = 0; i < 5; i++) rerun = applyValidation(rerun, { metrics: goodMetrics, verdict: 'validated' })
+    expect(rerun.fitness).toBe(once.fitness)
+  })
+
+  test('a forward window counts one completed trade as evidence', () => {
+    const e = buildEntry({ symbol: 'AAPL', strategy: 'macd_signal', params: {}, metrics: goodMetrics, verdict: 'validated' })
+    const oneTrade = { ...goodMetrics, totalTrades: 1 }
+    expect(applyValidation(e, { metrics: oneTrade, verdict: 'validated', forward: true }).validations.at(-1).score).toBeGreaterThan(0)
+    expect(applyValidation(e, { metrics: oneTrade, verdict: 'validated' }).validations.at(-1).score).toBe(0)
   })
 
   test('recent validations outweigh old ones (a decayed strategy loses fitness)', () => {
@@ -142,14 +156,20 @@ describe('buildStrategyBlock', () => {
     expect(buildStrategyBlock(weak)).toBe('')
   })
 
-  test('includes proven strategies with their measured numbers', () => {
+  test('includes strategies proven on forward bars, with their measured numbers', () => {
     let entry = buildEntry({ symbol: 'NVDA', strategy: 'sma_crossover', params: { fastPeriod: 10, slowPeriod: 40 }, metrics: goodMetrics, verdict: 'validated' })
-    for (let i = 0; i < 3; i++) entry = applyValidation(entry, { metrics: goodMetrics, verdict: 'validated' })
+    for (let i = 0; i < 3; i++) entry = applyValidation(entry, { metrics: goodMetrics, verdict: 'validated', forward: true })
     const block = buildStrategyBlock([entry])
     expect(block).toContain('NVDA')
     expect(block).toContain('sma_crossover')
     expect(block).toContain('fastPeriod=10')
-    expect(block).toContain('survived')
+    expect(block).toContain('passed 3 forward re-test(s)')
     expect(entry.fitness).toBeGreaterThanOrEqual(PASS_SCORE)
+  })
+
+  test('a strategy with only its in-sample admission backtest is never injected', () => {
+    let entry = buildEntry({ symbol: 'NVDA', strategy: 'sma_crossover', params: { fastPeriod: 10, slowPeriod: 40 }, metrics: goodMetrics, verdict: 'validated' })
+    for (let i = 0; i < 3; i++) entry = applyValidation(entry, { metrics: goodMetrics, verdict: 'validated' })
+    expect(buildStrategyBlock([entry])).toBe('')
   })
 })
