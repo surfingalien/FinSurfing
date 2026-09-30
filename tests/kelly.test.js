@@ -4,7 +4,7 @@
  * empirical-win-probability sourcing from brain-learnings stats.
  */
 
-const { fullKelly, edge, suggestedSize, winProbFromStats } = require('../lib/kelly')
+const { fullKelly, edge, suggestedSize, sizeIfCalibrated, winProbFromStats } = require('../lib/kelly')
 
 // Expected shrunk rate: (wins + 0.5·20) / (n + 20) — see winProbFromStats.
 const shrunk = (rate, n) => +((Math.round(rate * n) + 10) / (n + 20)).toFixed(4)
@@ -178,5 +178,22 @@ describe('winProbFromStats — shrinkage toward the prior', () => {
   test('uses exact win counts when computeStats provides them', () => {
     const r = winProbFromStats({ h30: { winRate: 0.667, wins: 2, nTradeable: 3 } }, { minN: 1 })
     expect(r.p).toBeCloseTo(12 / 23, 4)
+  })
+})
+
+describe('sizeIfCalibrated — no size off an assumed win rate', () => {
+  test('the cold-start fallback gets no size, but keeps the same keys', () => {
+    const s = sizeIfCalibrated(winProbFromStats(null), { winFrac: 0.14, lossFrac: 0.06 })
+    expect(s).toMatchObject({ uncalibrated: true, suggestedPct: null, fullKellyPct: null })
+    expect(s.reason).toMatch(/assumption/)
+    // What it replaced: plain Kelly on the assumed 50% says "bet the cap".
+    expect(suggestedSize({ winProb: 0.5, winFrac: 0.14, lossFrac: 0.06 }).suggestedPct).toBe(20)
+  })
+
+  test('a measured rate is sized normally', () => {
+    const wp = winProbFromStats({ h30: { winRate: 0.6, nTradeable: 200 } })
+    const s = sizeIfCalibrated(wp, { winFrac: 0.14, lossFrac: 0.06 })
+    expect(s.uncalibrated).toBeUndefined()
+    expect(s.suggestedPct).toBeGreaterThan(0)
   })
 })

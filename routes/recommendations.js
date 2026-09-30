@@ -466,10 +466,11 @@ Respond ONLY with a JSON object — no markdown, no explanation, just the JSON:
       citationAudits.push({ symbol: rec.symbol, ...audit })
       const sources = audit.kept
 
-      const { p: winProb, source: winProbSource } = kelly.winProbFromStats(kellyStats, {
+      const winProbInfo = kelly.winProbFromStats(kellyStats, {
         assetType: expectedValue.normalizeAssetType(rec.type),
         fallback:  0.5,
       })
+      const { p: winProb, source: winProbSource } = winProbInfo
       winProbSources.add(winProbSource)
 
       const ev = expectedValue.evaluateTrade({
@@ -485,8 +486,8 @@ Respond ONLY with a JSON object — no markdown, no explanation, just the JSON:
       // evidence against it, and schema validation already bounds the field.
       if (!ev) return { ...rec, sources, citationCheck: pickAudit(audit), expectedValue: null }
 
-      const sizing = kelly.suggestedSize({
-        winProb,
+      // No size off an assumed win rate (see kelly.sizeIfCalibrated).
+      const sizing = kelly.sizeIfCalibrated(winProbInfo, {
         winFrac:     ev.netWinFrac,
         lossFrac:    ev.netLossFrac,
         fraction:    0.5,
