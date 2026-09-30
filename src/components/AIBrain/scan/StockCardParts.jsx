@@ -67,14 +67,16 @@ export function ConflictBanner({ conflict }) {
 
 /* ── PriceZones ────────────────────────────────────────────── */
 export function PriceZones({ stock }) {
-  // A pick the Brain declined carries no levels by design — there is no trade to
-  // price. Rendering nothing made that look like a missing feature, so say it.
+  const plan = stock.tradePlan
+  if (plan) return <TradePlan plan={stock.tradePlan} stock={stock} />
+
+  // Older cached scans predate tradePlan.
   if (stock.actionable === false) {
     return (
       <div className="mt-3 rounded-xl px-3 py-2.5 bg-slate-500/10 border border-slate-400/20">
         <div className="text-[11px] font-semibold text-slate-300">No entry, target or stop</div>
         <div className="text-[10px] text-slate-500 mt-0.5 leading-snug">
-          The Brain does not recommend buying this, so there are no levels to quote.
+          The Brain does not recommend buying this. Run a new scan for reference levels.
         </div>
       </div>
     )
@@ -126,6 +128,54 @@ export function PriceZones({ stock }) {
         <div className="text-[9px] text-red-400 font-medium mb-0.5">Stop</div>
         <div className="text-[11px] font-mono font-bold text-red-400">{fmt(stock.stopLossPrice)}</div>
       </div>
+    </div>
+  )
+}
+
+/* ── TradePlan ──────────────────────────────────────────────
+ * Entry range, stop range and two profit-booking levels, computed by the
+ * server from real prices (lib/trade-levels.js). For a pick the Brain
+ * declined, these are technical reference levels — said plainly on the card.
+ */
+const money = v => (v == null ? '—' : `$${Number(v) >= 1 ? Number(v).toFixed(2) : Number(v).toPrecision(4)}`)
+const range = (lo, hi) => `${money(lo)} – ${money(hi)}`
+
+export function TradePlan({ plan, stock }) {
+  const reference = plan.basis === 'technical'
+  return (
+    <div className={`mt-3 rounded-xl p-2.5 border ${reference ? 'bg-slate-500/5 border-slate-400/20' : 'bg-blue-500/5 border-blue-500/15'}`}>
+      <div className="flex items-center justify-between gap-2 mb-1.5">
+        <span className={`text-[10px] font-semibold ${reference ? 'text-slate-400' : 'text-blue-400'}`}>
+          {reference ? 'Reference levels — not a buy signal' : 'Trade plan'}
+        </span>
+        {stock?.currentPrice != null && (
+          <span className="text-[9px] text-slate-500">
+            {money(stock.currentPrice)} · {stock.priceSource || 'price'}{stock.priceAsOf ? ` ${stock.priceAsOf}` : ''}
+          </span>
+        )}
+      </div>
+      <div className="grid grid-cols-2 gap-1.5 text-[10px]">
+        <div className="rounded-lg p-1.5 bg-blue-500/10 border border-blue-500/20">
+          <div className="text-[9px] text-blue-400 font-medium">Entry range</div>
+          <div className="font-mono font-bold text-white">{range(plan.entry.low, plan.entry.high)}</div>
+        </div>
+        <div className="rounded-lg p-1.5 bg-red-500/10 border border-red-500/20">
+          <div className="text-[9px] text-red-400 font-medium">Stop loss (−{plan.riskPct}%)</div>
+          <div className="font-mono font-bold text-red-400">{range(plan.stop.low, plan.stop.high)}</div>
+        </div>
+        {plan.booking.map(b => (
+          <div key={b.label} className="rounded-lg p-1.5 bg-emerald-500/10 border border-emerald-500/20">
+            <div className="text-[9px] text-emerald-400 font-medium">{b.label} (+{b.pct}%, {b.r}R)</div>
+            <div className="font-mono font-bold text-emerald-400">{range(b.low, b.high)}</div>
+          </div>
+        ))}
+      </div>
+      {reference && (
+        <p className="text-[9px] text-slate-500 mt-1.5 leading-snug">
+          {stock?.actionable === false ? 'The Brain declined this pick. ' : ''}These levels come from price action alone (recent support and the average daily range, ATR {money(plan.atr)}) — where a setup would start, not a recommendation.
+        </p>
+      )}
+      {plan.notes?.map((n, i) => <p key={i} className="text-[9px] text-amber-400 mt-1 leading-snug">⚠ {n}</p>)}
     </div>
   )
 }

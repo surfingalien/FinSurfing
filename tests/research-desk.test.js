@@ -131,6 +131,18 @@ describe('judgeThesis', () => {
     expect(j.reasons.join(' ')).toMatch(/assumed 50%/)
   })
 
+  test('every outcome carries a trade plan: the thesis levels when valid, reference levels otherwise', () => {
+    const levels = { atr: 2, support: facts.last - 1.5, resistance: facts.last + 4 }
+    const yes = judgeThesis({ thesis: base, items, lastPrice: facts.last, assetType: 'stock', winProb: { p: 0.6, n: 100, source: 't' }, levels })
+    expect(yes.tradePlan.basis).toBe('thesis')
+    expect(yes.tradePlan.booking[1].price).toBeCloseTo(facts.last * 1.15, 2)
+    expect(yes.tradePlan.booking[0].price).toBeCloseTo(facts.last * 1.075, 2)   // book part halfway
+    const no = judgeThesis({ thesis: { ...base, stance: 'avoid' }, items, lastPrice: facts.last, assetType: 'stock', winProb: { p: 0.6, n: 100, source: 't' }, levels })
+    expect(no.verdict).toBe('no-trade')
+    expect(no.tradePlan.basis).toBe('technical')
+    expect(no.tradePlan.entry.high).toBeCloseTo(facts.last, 2)
+  })
+
   test('declining is a first-class answer', () => {
     const j = judge({ ...base, stance: 'avoid' })
     expect(j.verdict).toBe('no-trade')

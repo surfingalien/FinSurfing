@@ -37,6 +37,7 @@ const entityGraph              = require('../lib/entity-graph')
 const learningStore            = require('../lib/learning-store')
 const durableFiles             = require('../lib/durable-files')
 const desk                     = require('../lib/research-desk')
+const { evaluateStatus, recordFacts } = require('../lib/system-status')
 
 const router   = express.Router()
 const aiRouter = getRouter('research-desk')
@@ -153,7 +154,9 @@ async function gatherEvidence(sym, req) {
     track:      desk.trackFor(records, { symbol: sym, assetType, horizon }),
   })
   const winProb = kelly.winProbFromStats(stats, { assetType })
-  return { sym, assetType, facts, items, gaps, winProb, company: fundamentals?.company?.name ?? null }
+  const levels = require('../lib/trade-levels').levelInputs(bars)
+  const referenceLevels = levels ? require('../lib/trade-levels').tradeLevels({ price: facts.last, atr: levels.atr, support: levels.support, resistance: levels.resistance }) : null
+  return { sym, assetType, facts, items, gaps, winProb, levels, referenceLevels, company: fundamentals?.company?.name ?? null }
 }
 
 // ── Journal ───────────────────────────────────────────────────────────────────
@@ -207,12 +210,53 @@ router.get('/track-record', requireAuth, (req, res) => {
   })
 })
 
+// "Is it working?" — every moving part of the research pipeline checked live
+// and reported as ok / warn / fail with the reason and the fix. One probe
+// quote is the only quota it spends; it never calls an LLM.
+const STATUS_JOBS = ['pre-market-scan', 'brain-learning-cycle', 'brain-evolution', 'symbol-db-refresh', 'macro-pulse']
+router.get('/system-status', requireAuth, evidenceLimit, async (req, res) => {
+  const headers = fwdKeys(req)
+  const facts = {}
+  try {
+    const port = process.env.PORT || 3001
+    const r = await fetch(`http://127.0.0.1:${port}/api/quote?symbols=SPY`, { headers, signal: AbortSignal.timeout(10_000) })
+    const q = (await r.json())?.quoteResponse?.result?.[0]
+    if (q?.regularMarketPrice > 0 && !q.stale) facts.probeQuote = { symbol: 'SPY', price: q.regularMarketPrice }
+  } catch { /* reported as a failed check */ }
+  if (!facts.probeQuote) {
+    const bars = await fetchDailyBars('SPY', { range: '1mo', headers, timeoutMs: 10_000 })
+    if (bars.length) facts.probeBars = { lastClose: bars.at(-1).c, asOf: new Date(bars.at(-1).t).toISOString().slice(0, 10) }
+  }
+  const { claudePaused } = require('../lib/ai-pause')
+  facts.ai = {
+    claude: !!process.env.ANTHROPIC_API_KEY, groq: !!process.env.GROQ_API_KEY,
+    paused: claudePaused(), pausedUntil: process.env.CLAUDE_PAUSE_UNTIL || null,
+  }
+  facts.keys = { fred: !!process.env.FRED_API_KEY, fmp: !!(process.env.FMP_API_KEY || req.headers['x-fmp-key']) }
+  facts.persistence = durableFiles.status()
+  try { facts.symbolIndex = require('../lib/symbol-db').stats() } catch { facts.symbolIndex = { loaded: false } }
+  try {
+    const last = require('../lib/ai-job-queue').getLatestResult(req.user.userId, 'scan')
+    if (last) {
+      facts.lastScanAt      = last.finishedAt || last.result?.processedAt || null
+      facts.lastScanSymbols = last.result?.universeAnalyzed?.length ?? null
+      facts.lastScanDataAge = last.result?.dataAge ?? null
+    }
+  } catch { /* no scan yet */ }
+  try {
+    const all = require('../lib/scheduler').getStatus()
+    facts.jobs = STATUS_JOBS.map(id => all.find(j => j.id === id)).filter(Boolean)
+  } catch { facts.jobs = [] }
+  try { facts.record = recordFacts(readPredictions()) } catch { facts.record = {} }
+  res.json(evaluateStatus(facts))
+})
+
 router.get('/:symbol/evidence', requireAuth, evidenceLimit, async (req, res) => {
   const sym = cleanSymbol(req.params.symbol)
   if (!sym) return res.status(400).json({ error: 'Invalid symbol' })
   try {
     const ev = await gatherEvidence(sym, req)
-    res.json({ symbol: sym, company: ev.company, assetType: ev.assetType, lastPrice: ev.facts.last, asOf: ev.facts.date, evidence: ev.items, gaps: ev.gaps, winProb: ev.winProb })
+    res.json({ symbol: sym, company: ev.company, assetType: ev.assetType, lastPrice: ev.facts.last, asOf: ev.facts.date, evidence: ev.items, gaps: ev.gaps, winProb: ev.winProb, referenceLevels: ev.referenceLevels })
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message })
   }
@@ -242,7 +286,7 @@ router.post('/:symbol/thesis', requireAuth, thesisLimit, async (req, res) => {
   const thesis = desk.parseThesis(raw)
   if (!thesis) return res.status(502).json({ error: 'The AI returned no usable thesis — please try again' })
 
-  const judgement = desk.judgeThesis({ thesis, items: ev.items, lastPrice: ev.facts.last, assetType: ev.assetType, winProb: ev.winProb })
+  const judgement = desk.judgeThesis({ thesis, items: ev.items, lastPrice: ev.facts.last, assetType: ev.assetType, winProb: ev.winProb, levels: ev.levels })
   const entry = {
     id: crypto.randomBytes(5).toString('hex'),
     userId: req.user.userId,

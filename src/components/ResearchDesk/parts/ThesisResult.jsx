@@ -1,4 +1,5 @@
-import { CheckCircle2, XCircle, ShieldOff, Target, TrendingDown, Scale, Ban } from 'lucide-react'
+import { CheckCircle2, XCircle, ShieldOff, Scale, Ban } from 'lucide-react'
+import { TradePlan } from '../../AIBrain/scan/StockCardParts'
 
 const pct = (v, dp = 1) => (v == null ? '—' : `${(v * 100).toFixed(dp)}%`)
 const px  = v => (v == null ? '—' : `$${Number(v) >= 1 ? Number(v).toFixed(2) : Number(v).toPrecision(4)}`)
@@ -29,7 +30,7 @@ export default function ThesisResult({ data, onCite }) {
   const j = data?.judgement
   if (!j) return null
   const actionable = j.verdict === 'actionable'
-  const z = j.zones, ev = j.expectedValue
+  const ev = j.expectedValue
 
   return (
     <div className="space-y-3">
@@ -71,14 +72,14 @@ export default function ThesisResult({ data, onCite }) {
         </div>
       )}
 
-      {z && (
+      {j.tradePlan && (
         <div className="glass rounded-2xl p-4">
-          <h4 className="text-xs font-semibold mb-2 flex items-center gap-1.5"><Scale className="w-3.5 h-3.5" /> Levels (derived from the price and the percentages — not taken from the model)</h4>
-          <div className="grid grid-cols-3 gap-2 text-[12px]">
-            <div><div className="text-slate-500 text-[10px]">Entry zone</div>{px(z.entryLow)}–{px(z.entryHigh)}</div>
-            <div><div className="text-slate-500 text-[10px] flex items-center gap-1"><Target className="w-3 h-3" />Target +{z.targetReturn}%</div>{px(z.targetLow)}–{px(z.targetHigh)}</div>
-            <div><div className="text-slate-500 text-[10px] flex items-center gap-1"><TrendingDown className="w-3 h-3" />Stop −{z.stopLoss}%</div>{px(z.stopLow)}–{px(z.stopHigh)}</div>
-          </div>
+          <h4 className="text-xs font-semibold mb-1 flex items-center gap-1.5"><Scale className="w-3.5 h-3.5" />
+            {j.tradePlan.basis === 'thesis'
+              ? (actionable ? 'Trade plan — levels derived from the price and the thesis percentages' : 'Levels from the thesis — but the trade did not clear the checks above')
+              : 'Reference levels — no trade was recommended; from price action only'}
+          </h4>
+          <TradePlan plan={j.tradePlan} stock={{ currentPrice: data.lastPrice, priceSource: 'last close', priceAsOf: data.asOf }} />
         </div>
       )}
 

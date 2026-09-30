@@ -10,7 +10,7 @@
  */
 import { useState, useCallback, useEffect, useRef } from 'react'
 import {
-  Microscope, Loader2, FileSearch, PenLine, ListChecks, LineChart, AlertTriangle,
+  Microscope, Loader2, FileSearch, PenLine, ListChecks, LineChart, AlertTriangle, Stethoscope,
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { getApiKeyHeaders } from '../../services/api'
@@ -18,11 +18,14 @@ import EvidenceList from './parts/EvidenceList'
 import ThesisResult from './parts/ThesisResult'
 import ThesesList from './parts/ThesesList'
 import TrackRecord from './parts/TrackRecord'
+import SystemStatus from './parts/SystemStatus'
+import { TradePlan } from '../AIBrain/scan/StockCardParts'
 
 const TABS = [
   { id: 'research', label: 'Research',     icon: FileSearch },
   { id: 'theses',   label: 'My theses',    icon: ListChecks },
   { id: 'record',   label: 'Track record', icon: LineChart },
+  { id: 'status',   label: 'Is it working?', icon: Stethoscope },
 ]
 
 const STEPS = ['Gather measured evidence', 'Write a thesis that cites it', 'Code checks every claim, level and the expected value', 'Track the outcome against the market']
@@ -35,6 +38,7 @@ export default function ResearchDeskView({ defaultSymbol = null, onSymbol }) {
   const [thesis, setThesis]     = useState(null)
   const [theses, setTheses]     = useState(null)
   const [record, setRecord]     = useState(null)
+  const [status, setStatus]     = useState(null)
   const [busy, setBusy]         = useState(null)   // 'evidence' | 'thesis' | 'list' | 'record'
   const [error, setError]       = useState(null)
   const [highlight, setHighlight] = useState(null)
@@ -84,7 +88,13 @@ export default function ResearchDeskView({ defaultSymbol = null, onSymbol }) {
       setBusy('record'); setError(null)
       call('/api/research-desk/track-record').then(setRecord).catch(e => setError(e.message)).finally(() => setBusy(null))
     }
-  }, [tab, isAuthenticated, call])
+    if (tab === 'status') loadStatus()
+  }, [tab, isAuthenticated, call]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const loadStatus = useCallback(() => {
+    setBusy('status'); setError(null)
+    call('/api/research-desk/system-status').then(setStatus).catch(e => setError(e.message)).finally(() => setBusy(null))
+  }, [call])
 
   const cite = id => {
     setHighlight(id)
@@ -143,6 +153,12 @@ export default function ResearchDeskView({ defaultSymbol = null, onSymbol }) {
                 <EvidenceList evidence={dossier.evidence} gaps={dossier.gaps} highlight={highlight} />
               </div>
               <div className="lg:col-span-3 space-y-3">
+                {!thesis && dossier.referenceLevels && (
+                  <div className="glass rounded-2xl p-4">
+                    <h4 className="text-xs font-semibold mb-1">Where a setup would start — from price action, before any thesis</h4>
+                    <TradePlan plan={dossier.referenceLevels} stock={{ currentPrice: dossier.lastPrice, priceSource: 'last close', priceAsOf: dossier.asOf }} />
+                  </div>
+                )}
                 {!thesis && (
                   <div className="glass rounded-2xl p-4 space-y-2">
                     <p className="text-[12px] text-slate-400">
@@ -165,6 +181,11 @@ export default function ResearchDeskView({ defaultSymbol = null, onSymbol }) {
       {isAuthenticated && tab === 'theses' && (
         busy === 'list' ? <Loader2 className="w-5 h-5 animate-spin text-slate-500" />
           : <ThesesList theses={theses || []} onOpen={s => { setTab('research'); setInput(s); gather(s) }} />
+      )}
+
+      {isAuthenticated && tab === 'status' && (
+        busy === 'status' && !status ? <Loader2 className="w-5 h-5 animate-spin text-slate-500" />
+          : <SystemStatus data={status} onRefresh={loadStatus} busy={busy === 'status'} />
       )}
 
       {isAuthenticated && tab === 'record' && (

@@ -102,6 +102,9 @@ describe('GET /:symbol/evidence', () => {
     expect(r.body.lastPrice).toBe(LAST)
     expect(r.body.evidence.map(i => i.kind)).toEqual(expect.arrayContaining(['price', 'technicals', 'factors', 'valuation', 'track']))
     expect(r.body.gaps.join(' ')).toMatch(/FRED_API_KEY/)
+    // Levels before any thesis: entry, stop and two booking levels from the bars
+    expect(r.body.referenceLevels.basis).toBe('technical')
+    expect(r.body.referenceLevels.booking).toHaveLength(2)
   })
 
   test('too little history is a 422, not a thin dossier', async () => {
@@ -125,6 +128,7 @@ describe('POST /:symbol/thesis', () => {
     expect(r.body.error).toBeUndefined()
     expect(r.body.judgement.verdict).toBe('actionable')
     expect(r.body.judgement.zones.target).toBeCloseTo(LAST * 1.15, 3)
+    expect(r.body.judgement.tradePlan.basis).toBe('thesis')
     expect(r.body.userId).toBeUndefined()
     expect(mockRecord).toHaveBeenCalledWith(expect.objectContaining({ surface: 'research', symbol: 'ACME', action: 'buy', price: LAST }))
     const lines = fs.readFileSync(TMP_THESES, 'utf8').trim().split('\n')
@@ -158,5 +162,21 @@ describe('GET /theses', () => {
     expect(a.body.theses).toHaveLength(1)
     expect(a.body.theses[0].status.state).toBeDefined()
     expect(b.body.theses).toHaveLength(0)
+  })
+})
+
+describe('GET /system-status', () => {
+  test('requires auth', async () => {
+    expect((await request(app).get('/api/research-desk/system-status')).status).toBe(401)
+  })
+
+  test('reports every check with a status, and names the market-data fallback', async () => {
+    const r = await request(app).get('/api/research-desk/system-status').set('Authorization', `Bearer ${tokenA}`)
+    expect(r.status).toBe(200)
+    expect(['ok', 'warn', 'fail']).toContain(r.body.overall)
+    const ids = r.body.checks.map(c => c.id)
+    expect(ids).toEqual(expect.arrayContaining(['market-data', 'ai', 'persistence', 'last-scan', 'record']))
+    // The quote probe 404s in this fixture but daily bars work → a warning, not ok.
+    expect(r.body.checks.find(c => c.id === 'market-data').status).toBe('warn')
   })
 })
