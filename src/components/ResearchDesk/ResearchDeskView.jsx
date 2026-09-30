@@ -18,6 +18,7 @@ import EvidenceList from './parts/EvidenceList'
 import ThesisResult from './parts/ThesisResult'
 import ThesesList from './parts/ThesesList'
 import TrackRecord from './parts/TrackRecord'
+import { TradePlan } from '../AIBrain/scan/StockCardParts'
 
 const TABS = [
   { id: 'research', label: 'Research',     icon: FileSearch },
@@ -143,6 +144,12 @@ export default function ResearchDeskView({ defaultSymbol = null, onSymbol }) {
                 <EvidenceList evidence={dossier.evidence} gaps={dossier.gaps} highlight={highlight} />
               </div>
               <div className="lg:col-span-3 space-y-3">
+                {!thesis && dossier.referenceLevels && (
+                  <div className="glass rounded-2xl p-4">
+                    <h4 className="text-xs font-semibold mb-1">Where a setup would start — from price action, before any thesis</h4>
+                    <TradePlan plan={dossier.referenceLevels} stock={{ currentPrice: dossier.lastPrice, priceSource: 'last close', priceAsOf: dossier.asOf }} />
+                  </div>
+                )}
                 {!thesis && (
                   <div className="glass rounded-2xl p-4 space-y-2">
                     <p className="text-[12px] text-slate-400">

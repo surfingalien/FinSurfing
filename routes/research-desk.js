@@ -153,7 +153,9 @@ async function gatherEvidence(sym, req) {
     track:      desk.trackFor(records, { symbol: sym, assetType, horizon }),
   })
   const winProb = kelly.winProbFromStats(stats, { assetType })
-  return { sym, assetType, facts, items, gaps, winProb, company: fundamentals?.company?.name ?? null }
+  const levels = require('../lib/trade-levels').levelInputs(bars)
+  const referenceLevels = levels ? require('../lib/trade-levels').tradeLevels({ price: facts.last, atr: levels.atr, support: levels.support, resistance: levels.resistance }) : null
+  return { sym, assetType, facts, items, gaps, winProb, levels, referenceLevels, company: fundamentals?.company?.name ?? null }
 }
 
 // ── Journal ───────────────────────────────────────────────────────────────────
@@ -212,7 +214,7 @@ router.get('/:symbol/evidence', requireAuth, evidenceLimit, async (req, res) => 
   if (!sym) return res.status(400).json({ error: 'Invalid symbol' })
   try {
     const ev = await gatherEvidence(sym, req)
-    res.json({ symbol: sym, company: ev.company, assetType: ev.assetType, lastPrice: ev.facts.last, asOf: ev.facts.date, evidence: ev.items, gaps: ev.gaps, winProb: ev.winProb })
+    res.json({ symbol: sym, company: ev.company, assetType: ev.assetType, lastPrice: ev.facts.last, asOf: ev.facts.date, evidence: ev.items, gaps: ev.gaps, winProb: ev.winProb, referenceLevels: ev.referenceLevels })
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message })
   }
@@ -242,7 +244,7 @@ router.post('/:symbol/thesis', requireAuth, thesisLimit, async (req, res) => {
   const thesis = desk.parseThesis(raw)
   if (!thesis) return res.status(502).json({ error: 'The AI returned no usable thesis — please try again' })
 
-  const judgement = desk.judgeThesis({ thesis, items: ev.items, lastPrice: ev.facts.last, assetType: ev.assetType, winProb: ev.winProb })
+  const judgement = desk.judgeThesis({ thesis, items: ev.items, lastPrice: ev.facts.last, assetType: ev.assetType, winProb: ev.winProb, levels: ev.levels })
   const entry = {
     id: crypto.randomBytes(5).toString('hex'),
     userId: req.user.userId,

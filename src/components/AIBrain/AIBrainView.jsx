@@ -399,6 +399,7 @@ export default function AIBrainView({ portfolio, onAnalyze }) {
       {/* ── Results ── */}
       {!loading && analysis && (
         <>
+          <ScanAgeBanner processedAt={analysis.processedAt} />
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="glass rounded-xl p-4 border border-white/[0.06]">
               <div className="flex items-center gap-2 mb-1">
@@ -406,10 +407,12 @@ export default function AIBrainView({ portfolio, onAnalyze }) {
                 <span className="text-xs font-semibold text-indigo-400">Market Regime</span>
                 <span className="ml-auto flex items-center gap-2">
                   {analysis.dataAge === 'live'
-                    ? <span className="flex items-center gap-1 text-[10px] text-emerald-400"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />Live data</span>
-                    : <span className="flex items-center gap-1 text-[10px] text-amber-400"><span className="w-1.5 h-1.5 rounded-full bg-amber-400" />Knowledge only</span>
+                    ? <span className="flex items-center gap-1 text-[10px] text-emerald-400"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />Live prices</span>
+                    : analysis.dataAge === 'mixed'
+                      ? <span className="flex items-center gap-1 text-[10px] text-amber-400"><span className="w-1.5 h-1.5 rounded-full bg-amber-400" />Live + last close</span>
+                      : <span className="flex items-center gap-1 text-[10px] text-amber-400"><span className="w-1.5 h-1.5 rounded-full bg-amber-400" />Knowledge only (old scan)</span>
                   }
-                  <span className="text-[10px] text-slate-600">{new Date(analysis.processedAt).toLocaleTimeString()}</span>
+                  <span className="text-[10px] text-slate-600">{new Date(analysis.processedAt).toLocaleString()}</span>
                 </span>
               </div>
               <p className="text-sm font-bold text-white mb-1">{analysis.marketRegime}</p>
@@ -426,7 +429,7 @@ export default function AIBrainView({ portfolio, onAnalyze }) {
                 )}
               </div>
               <p className="text-sm text-slate-200 leading-relaxed">{analysis.agentConsensusTheme}</p>
-              <p className="text-[10px] text-slate-600 mt-2">Universe: {analysis.universeAnalyzed?.join(', ')}</p>
+              <UniverseLine analysis={analysis} />
             </div>
           </div>
 
@@ -501,6 +504,42 @@ export default function AIBrainView({ portfolio, onAnalyze }) {
           </div>
         </>
       )}
+    </div>
+  )
+}
+
+// Which symbols this scan covered and why. Discovery scans build a new list
+// every run (today's movers, a rotating slice of the sector, a few core names).
+const SOURCE_LABEL = { mover: "today's movers", core: 'core list', pool: 'sector rotation', fixed: 'benchmarks' }
+function UniverseLine({ analysis }) {
+  const src = analysis.universeSources
+  const syms = analysis.universeAnalyzed || []
+  if (!src) return <p className="text-[10px] text-slate-600 mt-2">Universe: {syms.join(', ')}</p>
+  const groups = {}
+  for (const s of syms) (groups[src[s] || 'core'] ||= []).push(s)
+  return (
+    <div className="text-[10px] text-slate-600 mt-2 space-y-0.5">
+      <div className="text-slate-500">New list each scan — {syms.length} symbols with live prices:</div>
+      {Object.entries(groups).map(([k, list]) => (
+        <div key={k}><span className="text-slate-500">{SOURCE_LABEL[k] || k}:</span> {list.join(', ')}</div>
+      ))}
+      {analysis.unpricedSymbols?.length > 0 && (
+        <div className="text-amber-500">Skipped (no current price): {analysis.unpricedSymbols.join(', ')}</div>
+      )}
+    </div>
+  )
+}
+
+// A restored scan can be hours or days old; say so instead of letting it pass
+// for today's view.
+function ScanAgeBanner({ processedAt }) {
+  if (!processedAt) return null
+  const hours = (Date.now() - new Date(processedAt).getTime()) / 3600000
+  if (!(hours >= 12)) return null
+  const age = hours >= 48 ? `${Math.round(hours / 24)} days` : `${Math.round(hours)} hours`
+  return (
+    <div className="p-3 rounded-xl border border-amber-500/30 bg-amber-500/10 text-[12px] text-amber-300">
+      This is your last scan, from {age} ago ({new Date(processedAt).toLocaleString()}). Prices and picks have moved since — run a new scan for today's list.
     </div>
   )
 }

@@ -28,7 +28,9 @@ const { getStrategyBlock }  = require('../lib/strategy-library')
 const learningStore         = require('../lib/learning-store')
 const { compactTaLine, detectPatterns, KEY_PATTERNS, computeRsRanks } = require('../lib/technical-indicators')
 const { getOptionsFlowCompact } = require('../lib/options-flow-cache')
-const { auditPicks }        = require('../lib/price-coherence')
+const { auditPicks, midOf } = require('../lib/price-coherence')
+const { levelInputs, tradeLevels } = require('../lib/trade-levels')
+const { MODE_SECTORS, DISCOVERY_MODES, BROAD_FIXED, filterMovers, buildScanUniverse } = require('../lib/scan-universe')
 const { fetchDailyBars }    = require('../lib/internal-api')
 const { tryParseAiJson }    = require('../lib/ai-json')
 const { baselineFromBars }  = require('../lib/ml-baseline')
@@ -56,7 +58,9 @@ const { PREDICTION_LOG } = require('../lib/prediction-log-path')
 // v2: agentVerdict gained "Avoid", so a bearish read no longer leaks out as a
 // negative targetReturn on a buy. That changes which picks appear, so rows
 // before and after must not be pooled in calibration.
-const SCAN_PROMPT_VERSION = 2
+// v3: discovery universes (a new list each scan) and only live-priced symbols —
+// the prompt no longer invites the model to price from memory.
+const SCAN_PROMPT_VERSION = 3
 
 const brainLimit = rateLimit({
   windowMs: 5 * 60 * 1000, max: 4,
@@ -345,6 +349,7 @@ async function fetchTaSnapshot(universe, headers) {
   const baselines  = new Map()
   const patternMap = new Map()
   const ret20dMap  = new Map() // 20-day return per symbol for intra-universe RS ranking
+  const levelMap   = new Map() // price/ATR/support/resistance per symbol (lib/trade-levels.js)
   const queue = [...universe]
   const workers = Array.from({ length: 5 }, async () => {
     while (queue.length) {
@@ -352,6 +357,8 @@ async function fetchTaSnapshot(universe, headers) {
       // Missing TA for one symbol is non-fatal — fetchDailyBars returns [] on failure
       const bars = await fetchDailyBars(sym, { headers, timeoutMs: 12_000 })
       if (bars.length < 30) continue
+      const li = levelInputs(bars)
+      if (li) levelMap.set(sym, li)
       const o = bars.map(b => b.o ?? b.c)
       const h = bars.map(b => b.h ?? b.c)
       const l = bars.map(b => b.l ?? b.c)
@@ -386,7 +393,69 @@ async function fetchTaSnapshot(universe, headers) {
   }
 
   // Preserve universe order for deterministic prompts
-  return { lines: universe.map(s => bySymbol.get(s)).filter(Boolean), baselines, patternMap, rsRankMap }
+  return { lines: universe.map(s => bySymbol.get(s)).filter(Boolean), baselines, patternMap, rsRankMap, levelMap }
+}
+
+// ── Discovery universe ────────────────────────────────────────────────────────
+// Today's most-active and biggest-gaining US stocks, one bulk call each, cached
+// briefly so a burst of scans costs one request. FMP's "stable" API first, the
+// legacy v3 path as a fallback (plans differ in which one they serve).
+let _moversCache = null
+const MOVERS_TTL = 10 * 60 * 1000
+async function getMovers(fmpKey) {
+  if (_moversCache && Date.now() - _moversCache.at < MOVERS_TTL) return _moversCache.rows
+  if (!fmpKey) return []
+  const get = async (url) => {
+    try {
+      const r = await fetch(`${url}${url.includes('?') ? '&' : '?'}apikey=${fmpKey}`, { signal: AbortSignal.timeout(8_000) })
+      if (!r.ok) return null
+      const j = await r.json()
+      return Array.isArray(j) ? j : null
+    } catch { return null }
+  }
+  const pair = async (stable, legacy) => (await get(`https://financialmodelingprep.com/stable/${stable}`))
+    ?? (await get(`https://financialmodelingprep.com/api/v3/stock_market/${legacy}`)) ?? []
+  const [actives, gainers] = await Promise.all([pair('most-actives', 'actives'), pair('biggest-gainers', 'gainers')])
+  const rows = [...actives, ...gainers].map(r => ({ symbol: r.symbol, price: r.price, changePct: r.changesPercentage ?? null }))
+  _moversCache = { at: Date.now(), rows }
+  return rows
+}
+
+// What the previous scan of each mode covered, so the next one looks elsewhere.
+// In-memory by design: losing it on a deploy only means one scan may repeat.
+const _recentByMode = new Map()
+
+/**
+ * The symbols a scan analyses. Explicit symbols win; otherwise discovery modes
+ * build a fresh list every run (lib/scan-universe.js) and the rest use their
+ * curated list. Returns { universe, sources|null }.
+ */
+async function resolveUniverse({ symbols, scanMode, universeMode, fmpKey }) {
+  if (Array.isArray(symbols) && symbols.length) {
+    const list = symbols.map(s => String(s).toUpperCase().replace(/[^A-Z0-9.-]/g, '')).filter(Boolean)
+    return { universe: [...new Set(list)].slice(0, 20), sources: null }
+  }
+  const curated = SCAN_UNIVERSES[scanMode] || SCAN_UNIVERSES.broad
+  if (universeMode === 'curated' || !DISCOVERY_MODES.has(scanMode)) {
+    return { universe: [...new Set(curated)].slice(0, 20), sources: null }
+  }
+  const symbolDb = require('../lib/symbol-db')
+  const sector   = MODE_SECTORS[scanMode] || null
+  const sectorOf = sym => { try { return symbolDb.classify(sym)?.sector || null } catch { return null } }
+  let pool = []
+  try {
+    pool = sector
+      ? symbolDb.sectorUniverse(sector, { size: 150, minCap: 'Large Cap' })
+      : Object.values(MODE_SECTORS).flatMap(sec => symbolDb.sectorUniverse(sec, { size: 15, minCap: 'Large Cap' }))
+  } catch { pool = [] }
+  const movers = filterMovers(await getMovers(fmpKey).catch(() => []), { sector, sectorOf })
+  const { symbols: universe, sources } = buildScanUniverse({
+    curated, movers, pool,
+    recent: _recentByMode.get(scanMode) || [],
+    fixed:  scanMode === 'broad' ? BROAD_FIXED : [],
+    seed:   Date.now(),
+  })
+  return { universe, sources }
 }
 
 // Write a prediction record for future win-rate tracking
@@ -490,16 +559,14 @@ router.post('/analyze', requireAuth, brainLimit, async (req, res) => {
     scanMode = 'broad',
     horizon  = '6m',
     holdings = [],
+    universeMode = 'discover',
   } = req.body
 
   if (!['3m','6m','12m'].includes(horizon))
     return res.status(400).json({ error: 'horizon must be 3m, 6m, or 12m' })
 
-  const baseList = (symbols?.length && Array.isArray(symbols))
-    ? symbols.map(s => String(s).toUpperCase().replace(/[^A-Z0-9.-]/g, '')).filter(Boolean)
-    : (SCAN_UNIVERSES[scanMode] || SCAN_UNIVERSES.broad)
-
-  const universe     = [...new Set(baseList)].slice(0, 20)
+  const fmpKey = (req.headers['x-fmp-key'] || '').trim() || process.env.FMP_API_KEY || null
+  const { universe: requested, sources: universeSources } = await resolveUniverse({ symbols, scanMode, universeMode, fmpKey })
   const holdingStr   = holdings.length ? holdings.join(', ') : 'none'
   const horizonLabel = { '3m': '3-month', '6m': '6-month', '12m': '12-month' }[horizon]
   const generatedAt  = new Date().toISOString()
@@ -513,20 +580,20 @@ router.post('/analyze', requireAuth, brainLimit, async (req, res) => {
   const port = process.env.PORT || 3001
   const isCryptoScan = scanMode.startsWith('crypto')
   const isStockScan  = !isCryptoScan && !scanMode.startsWith('etfs') && !scanMode.startsWith('mutualfunds')
-  const stockSyms    = universe.filter(s => !s.includes('-') && !s.includes('='))
+  const stockSyms    = requested.filter(s => !s.includes('-') && !s.includes('='))
 
   const isOptionsEligible = !isCryptoScan && !scanMode.startsWith('mutualfunds')
 
   const [quoteResult, socialResult, earningsResult, taResult, macroResult, altDataResult, fngResult, btcDomResult, optionsResult] = await Promise.allSettled([
     (async () => {
       const r = await fetch(
-        `http://127.0.0.1:${port}/api/quote?symbols=${universe.join(',')}`,
+        `http://127.0.0.1:${port}/api/quote?symbols=${requested.join(',')}`,
         { headers: fwdKeys(req), signal: AbortSignal.timeout(30_000) }
       )
       const qd = await r.json()
       return qd?.quoteResponse?.result ?? []
     })(),
-    getSocialSentiment(universe.slice(0, 8)),
+    getSocialSentiment(requested.slice(0, 8)),
     // Fetch upcoming earnings dates for stock symbols only (not crypto/ETFs)
     (async () => {
       if (!stockSyms.length) return null
@@ -536,7 +603,7 @@ router.post('/analyze', requireAuth, brainLimit, async (req, res) => {
       )
       return r.json()
     })(),
-    fetchTaSnapshot(universe, fwdKeys(req)),
+    fetchTaSnapshot(requested, fwdKeys(req)),
     // FRED macro indicators — gracefully skipped when FRED_API_KEY not set
     getIndicators().catch(() => null),
     // Alt-data (OpenInsider + FINRA short interest) for stock scans only
@@ -639,18 +706,37 @@ router.post('/analyze', requireAuth, brainLimit, async (req, res) => {
         }).join('\n')
   }
 
+  // ── Live-price gate ──────────────────────────────────────────────────────
+  // Every symbol the model analyses must carry a REAL current price: the live
+  // quote, or failing that the last daily close from the bars (≤5 days old).
+  // The prompt used to say "no live data — use training knowledge" and let the
+  // model price a stock from memory, which is how months-old prices reached
+  // entry zones. A symbol with neither is dropped from the scan and listed.
+  const levelMap    = (taResult.status === 'fulfilled' && taResult.value.levelMap) || new Map()
   const validQuotes = liveQuotes.filter(q => q?.regularMarketPrice != null && q.regularMarketPrice > 0)
-  const missingSyms = universe.filter(s => !validQuotes.find(q => q.symbol === s))
-  const dataAge     = validQuotes.length ? 'live' : 'knowledge'
-
-  if (validQuotes.length > 0) {
-    marketSnippet = '\n\nLIVE SNAPSHOT (prices + volume ratio vs 3-month avg — use as primary source):\n'
-      + validQuotes.map(fmtQuote).join('\n')
-    if (missingSyms.length)
-      marketSnippet += `\n\nNo live data for: ${missingSyms.join(', ')} — use training knowledge.`
-  } else {
-    marketSnippet = '\n\nNote: No live market data available — use training knowledge for prices.'
+  const livePrice   = new Map(validQuotes.map(q => [q.symbol, { price: q.regularMarketPrice, source: 'live quote', asOf: generatedAt.slice(0, 10) }]))
+  for (const [sym, li] of levelMap) {
+    const ageDays = (Date.now() - new Date(li.asOf).getTime()) / 86400000
+    if (!livePrice.has(sym) && li.price > 0 && ageDays <= 5) livePrice.set(sym, { price: li.price, source: 'last close', asOf: li.asOf })
   }
+  const universe    = requested.filter(s => livePrice.has(s))
+  const unpriced    = requested.filter(s => !livePrice.has(s))
+  const dataAge     = unpriced.length || validQuotes.length < universe.length ? 'mixed' : 'live'
+
+  if (!universe.length) {
+    return res.status(503).json({
+      error: 'No current market price for any symbol in this scan, so it was not run — the AI would otherwise be pricing stocks from memory. Check the market-data API keys (API Keys page) and try again.',
+      unpricedSymbols: unpriced,
+    })
+  }
+
+  marketSnippet = '\n\nLIVE SNAPSHOT (prices + volume ratio vs 3-month avg — use as primary source):\n'
+    + validQuotes.filter(q => universe.includes(q.symbol)).map(fmtQuote).join('\n')
+  const closeOnly = universe.filter(s => livePrice.get(s).source === 'last close')
+  if (closeOnly.length)
+    marketSnippet += '\n' + closeOnly.map(s => `${s}: last close $${livePrice.get(s).price} (${livePrice.get(s).asOf}, no live quote)`).join('\n')
+  if (unpriced.length)
+    marketSnippet += `\n\nRemoved from this scan (no current price available): ${unpriced.join(', ')}. Do not include them.`
 
   // ── Step 2: prompt — contradiction engine + zones + assumptions ────────────
   const learningsBlock = getLearningsBlock()
@@ -754,7 +840,8 @@ Rules:
 - highConviction: set true ONLY when ≥3 of these independent confirming signals are present: (1) net insider buying in last 90d, (2) analyst target >15% upside with ≥5 analysts, (3) volumeSignal=Confirming, (4) compositeScore ≥ 80, (5) ensemble cross-model confirmed, (6) macroScore ≥ 75 (clear macro tailwind), (7) OPTIONS FLOW P/C<0.70🟢 with at least 1 unusual-CALL (smart-money bullish positioning); otherwise false
 - catalyst: the single most time-sensitive trigger for this pick (e.g. "earnings beat expected next week", "Fed pivot boosts rate-sensitive sector", "breakout above 200-day MA"); required for all picks
 - thesisAssumptions: 3 specific, falsifiable conditions that must hold for the bull case to play out
-- dataSource: "live" if snapshot provided, else "knowledge"
+- dataSource: always "live" — every symbol above carries a current price; use those prices, never remembered ones
+- Only rank symbols from the Universe list above
 - STRICTLY respect all ≤N word limits`
 
   // ── Sub-agent 2: signal generation ───────────────────────────────────────────
@@ -822,9 +909,14 @@ Rules:
     // incoherent pick that reaches those stores is resolved against real bars
     // weeks later and counted as measured evidence, which corrupts the
     // calibration the whole Brain steers by.
-    const coherencePrices = Object.fromEntries(
-      validQuotes.map(q => [q.symbol, q.regularMarketPrice]))
+    // Anchor on the real price: the live quote, else the last close. A pick for
+    // a symbol that was not in the priced universe has no real price at all,
+    // so it is dropped here rather than displayed with one the model made up.
+    const offUniverse = data.rankedStocks.filter(p => !livePrice.has(String(p?.symbol || '').toUpperCase()))
+    data.rankedStocks = data.rankedStocks.filter(p => livePrice.has(String(p?.symbol || '').toUpperCase()))
+    const coherencePrices = Object.fromEntries([...livePrice].map(([sym, lp]) => [sym, lp.price]))
     const coherence = auditPicks(data.rankedStocks, coherencePrices)
+    for (const p of offUniverse) coherence.audit.droppedPicks.push({ symbol: p?.symbol ?? null, reason: 'not in the priced scan universe' })
 
     // An empty slate is a REAL ANSWER, never a 500. The old hard failure was
     // wrong twice over: it told the user the system had broken when the truth
@@ -854,6 +946,26 @@ Rules:
           ? ` — dropped ${coherence.audit.droppedPicks.map(d => `${d.symbol} (${d.reason})`).join(', ')}`
           : ''))
     data.rankedStocks = coherence.picks
+
+    // Real price + entry / stop / profit-booking plan on EVERY card. Actionable
+    // picks get levels from their own target/stop percentages (plus a first
+    // booking level halfway); declined picks get technical reference levels
+    // from the bars, clearly labelled — never logged as a prediction.
+    for (const stock of data.rankedStocks) {
+      const lp = livePrice.get(String(stock.symbol).toUpperCase())
+      const li = levelMap.get(String(stock.symbol).toUpperCase())
+      stock.currentPrice = +Number(lp.price).toFixed(lp.price >= 1 ? 2 : 5)
+      stock.priceSource  = lp.source
+      stock.priceAsOf    = lp.asOf
+      stock.tradePlan    = stock.actionable === false
+        ? tradeLevels({ price: lp.price, atr: li?.atr, support: li?.support, resistance: li?.resistance })
+        : tradeLevels({
+            price: lp.price, atr: li?.atr, support: li?.support, resistance: li?.resistance,
+            targetReturn: stock.targetReturn, stopLoss: stock.stopLoss,
+            entryMid: midOf(stock.entryZoneLow, stock.entryZoneHigh),
+          })
+      if (universeSources?.[stock.symbol]) stock.universeSource = universeSources[stock.symbol]
+    }
 
     // ── Cross-model agreement — annotate each pick with the second opinion ────
     let ensemble = null
@@ -986,6 +1098,8 @@ Rules:
       }
     }
 
+    if (!symbols?.length) _recentByMode.set(scanMode, requested)
+
     return res.json({
       ...data,
       horizon,
@@ -993,6 +1107,9 @@ Rules:
       processedAt:      generatedAt,
       dataAge,
       universeAnalyzed: universe,
+      universeRequested: requested,
+      universeSources,
+      unpricedSymbols:  unpriced,
       liveDataSymbols:  liveQuotes.map(q => q.symbol),
       llmUsed,
       modelUsed: llmUsed === 'claude' ? 'claude-sonnet-4-6' : GROQ_MODEL,
@@ -1029,11 +1146,12 @@ mountJobRoutes(router, {
   // Validate here rather than at run time — a job that can only fail should
   // never reach the queue.
   buildParams: (req) => {
-    const { symbols, scanMode = 'broad', horizon = '6m', holdings = [] } = req.body || {}
+    const { symbols, scanMode = 'broad', horizon = '6m', holdings = [], universeMode = 'discover' } = req.body || {}
     if (!['3m', '6m', '12m'].includes(horizon))
       return { error: 'horizon must be 3m, 6m, or 12m' }
 
     const params = { horizon, holdings: Array.isArray(holdings) ? holdings.slice(0, 50) : [] }
+    if (universeMode === 'curated') params.universeMode = 'curated'
     if (Array.isArray(symbols) && symbols.length) {
       params.symbols = symbols.map(s => String(s).toUpperCase().replace(/[^A-Z0-9.-]/g, '')).filter(Boolean).slice(0, 20)
       if (!params.symbols.length) return { error: 'no valid symbols provided' }

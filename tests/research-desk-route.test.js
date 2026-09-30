@@ -102,6 +102,9 @@ describe('GET /:symbol/evidence', () => {
     expect(r.body.lastPrice).toBe(LAST)
     expect(r.body.evidence.map(i => i.kind)).toEqual(expect.arrayContaining(['price', 'technicals', 'factors', 'valuation', 'track']))
     expect(r.body.gaps.join(' ')).toMatch(/FRED_API_KEY/)
+    // Levels before any thesis: entry, stop and two booking levels from the bars
+    expect(r.body.referenceLevels.basis).toBe('technical')
+    expect(r.body.referenceLevels.booking).toHaveLength(2)
   })
 
   test('too little history is a 422, not a thin dossier', async () => {
@@ -125,6 +128,7 @@ describe('POST /:symbol/thesis', () => {
     expect(r.body.error).toBeUndefined()
     expect(r.body.judgement.verdict).toBe('actionable')
     expect(r.body.judgement.zones.target).toBeCloseTo(LAST * 1.15, 3)
+    expect(r.body.judgement.tradePlan.basis).toBe('thesis')
     expect(r.body.userId).toBeUndefined()
     expect(mockRecord).toHaveBeenCalledWith(expect.objectContaining({ surface: 'research', symbol: 'ACME', action: 'buy', price: LAST }))
     const lines = fs.readFileSync(TMP_THESES, 'utf8').trim().split('\n')

@@ -66,11 +66,38 @@ beforeAll(() => {
     process.env.JWT_SECRET, { algorithm: 'HS256', expiresIn: '5m' })
 })
 
+// Live prices + daily bars the route fetches over loopback. Everything else
+// fails, which the route already treats as best-effort. The scan now REFUSES
+// to run on remembered prices, so a quote feed is part of the fixture.
+const LIVE = { AVAX: 11.5, DOGE: 0.2 }
+const DAY = 86400
+function barsFor(price) {
+  const t0 = Math.floor(Date.now() / 1000) - 80 * DAY
+  const n = 80, ts = [], o = [], h = [], l = [], c = [], v = []
+  for (let i = 0; i < n; i++) {
+    const px = price * (0.9 + 0.1 * (i / (n - 1)))
+    ts.push(t0 + i * DAY); o.push(px); h.push(px * 1.02); l.push(px * 0.98); c.push(px); v.push(1e6)
+  }
+  c[n - 1] = price
+  return { chart: { result: [{ timestamp: ts, indicators: { quote: [{ open: o, high: h, low: l, close: c, volume: v }] } }] } }
+}
+let offline = false
 beforeEach(() => {
   mockCall.mockReset()
-  // Every internal data fetch is a loopback call; failing them is realistic and
-  // the route already treats each as best-effort.
-  global.fetch = jest.fn(async () => { throw new Error('offline in test') })
+  offline = false
+  global.fetch = jest.fn(async (url) => {
+    const u = String(url)
+    if (!offline && u.includes('/api/quote?')) {
+      const syms = new URL(u).searchParams.get('symbols').split(',')
+      const result = syms.filter(s => LIVE[s]).map(s => ({ symbol: s, regularMarketPrice: LIVE[s] }))
+      return { ok: true, json: async () => ({ quoteResponse: { result } }) }
+    }
+    if (!offline && u.includes('/api/chart?')) {
+      const sym = new URL(u).searchParams.get('symbol')
+      if (LIVE[sym]) return { ok: true, json: async () => barsFor(LIVE[sym]) }
+    }
+    throw new Error('offline in test')
+  })
 })
 afterAll(() => {
   global.fetch = realFetch
@@ -148,7 +175,7 @@ describe('POST /api/ai-brain/analyze — the AVAX regression', () => {
       stock(),
       stock({ rank: 2, symbol: 'DOGE', agentVerdict: 'Avoid', targetReturn: 0, stopLoss: 0 }),
     ))
-    const res = await scan()
+    const res = await scan({ symbols: ['AVAX', 'DOGE'] })
 
     expect(res.body.rankedStocks.map(p => p.symbol)).toEqual(['AVAX', 'DOGE'])
     expect(res.body.coherenceAudit).toMatchObject({ checked: 2, kept: 2, actionable: 1 })
@@ -181,5 +208,65 @@ describe('POST /api/ai-brain/analyze — the AVAX regression', () => {
     const prompt = mockCall.mock.calls[0][0].prompt
     expect(prompt).toMatch(/Strong Buy\|Buy\|Moderate Buy\|Avoid/)
     expect(prompt).toMatch(/Do NOT express a bearish view as a negative targetReturn/)
+  })
+})
+
+describe('POST /api/ai-brain/analyze — real prices and levels on every card', () => {
+  test('with no current price anywhere the scan is refused, not run from memory', async () => {
+    offline = true
+    mockCall.mockResolvedValue(reply(stock()))
+    const res = await scan()
+    const body = JSON.parse(res.text.trim())
+    expect(body.error).toMatch(/pricing stocks from memory/)
+    expect(body.unpricedSymbols).toEqual(['AVAX'])
+    expect(mockCall).not.toHaveBeenCalled()
+  })
+
+  test("the card shows the live price, not the model's", async () => {
+    mockCall.mockResolvedValue(reply(stock({ currentPrice: 99, entryZoneLow: 97, entryZoneHigh: 101 })))
+    const res = await scan()
+    const p = res.body.rankedStocks[0]
+    expect(p.currentPrice).toBe(11.5)
+    expect(p.priceSource).toBe('live quote')
+    // entry re-anchored to the live price, so the derived target follows it
+    expect(p.targetZoneLow).toBeCloseTo(13.386, 2)
+  })
+
+  test('an actionable pick carries entry, stop and two profit-booking levels', async () => {
+    mockCall.mockResolvedValue(reply(stock()))
+    const res = await scan()
+    const plan = res.body.rankedStocks[0].tradePlan
+    expect(plan.basis).toBe('thesis')
+    expect(plan.stop.price).toBeCloseTo(11.5 * 0.9, 3)
+    expect(plan.booking.map(b => b.label)).toEqual(['T1 — book partial profit', 'T2 — target'])
+    expect(plan.booking[1].price).toBeCloseTo(11.5 * 1.2, 3)
+  })
+
+  test('a declined pick still gets clearly-labelled technical reference levels', async () => {
+    mockCall.mockResolvedValue(reply(stock({ agentVerdict: 'Avoid', targetReturn: 0, stopLoss: 0 })))
+    const res = await scan()
+    const p = res.body.rankedStocks[0]
+    expect(p.actionable).toBe(false)
+    expect(p.tradePlan.basis).toBe('technical')
+    expect(p.tradePlan.entry.high).toBe(11.5)
+    expect(p.tradePlan.stop.price).toBeLessThan(p.tradePlan.entry.low)
+  })
+
+  test('a pick for a symbol outside the priced universe is dropped, not shown with an invented price', async () => {
+    mockCall.mockResolvedValue(reply(stock(), stock({ rank: 2, symbol: 'ZZZZ', currentPrice: 42 })))
+    const res = await scan()
+    expect(res.body.rankedStocks.map(p => p.symbol)).toEqual(['AVAX'])
+    expect(res.body.coherenceAudit.droppedPicks).toEqual(expect.arrayContaining([
+      { symbol: 'ZZZZ', reason: 'not in the priced scan universe' },
+    ]))
+  })
+
+  test('the prompt never tells the model to use remembered prices', async () => {
+    mockCall.mockResolvedValue(reply(stock()))
+    await scan({ symbols: ['AVAX', 'NOPRICE'] })
+    const prompt = mockCall.mock.calls[0][0].prompt
+    expect(prompt).not.toMatch(/training knowledge/)
+    expect(prompt).toMatch(/Universe: AVAX\n/)
+    expect(prompt).toMatch(/Removed from this scan \(no current price available\): NOPRICE/)
   })
 })
