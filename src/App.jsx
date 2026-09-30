@@ -65,6 +65,7 @@ const ProbabilityLatticeView = lazy(() => import('./components/Lattice/Probabili
 const TailProbabilityRidgeView = lazy(() => import('./components/Ridge/TailProbabilityRidgeView'))
 const RelationshipGraphView  = lazy(() => import('./components/Graph/RelationshipGraphView'))
 const ExposureView           = lazy(() => import('./components/Exposure/ExposureView'))
+const ResearchDeskView       = lazy(() => import('./components/ResearchDesk/ResearchDeskView'))
 
 // ── Shared loading spinner ────────────────────────────────────────────────────
 function LoadingScreen({ label = 'Loading…', fullScreen = false }) {
@@ -249,6 +250,12 @@ function MainApp({ onSignIn }) {
     'tail-ridge':      () => <TailProbabilityRidgeView portfolio={portfolio} />,
     'relationship-graph': () => <RelationshipGraphView portfolio={portfolio} />,
     'exposure':        () => <ExposureView onAnalyze={navigateToAnalyze} />,
+    'research-desk':   () => (
+      <ResearchDeskView
+        defaultSymbol={route.tab === 'research-desk' ? route.param : null}
+        onSymbol={s => navigate('research-desk', s)}
+      />
+    ),
     'admin':          () => <AdminDashboard />,
   }
 

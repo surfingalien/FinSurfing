@@ -14,7 +14,7 @@ import {
   Network, Clock, Radio, BrainCircuit, FolderOpen,
   Search, DollarSign, LayoutGrid, CalendarDays, Zap, FileText, Boxes, Mountain,
   Share2,
-  Filter,
+  Filter, Microscope,
 } from 'lucide-react'
 
 // ── Sidebar nav groups ────────────────────────────────────────────────────────
@@ -31,39 +31,52 @@ export const NAV_GROUPS = [
   {
     label: 'Markets',
     items: [
-      { id: 'analyze',     label: 'Analyze',     icon: LineChart    },
-      { id: 'tradingview', label: 'TradingView', icon: Monitor      },
-      { id: 'heatmap',     label: 'Heatmap',       icon: LayoutGrid   },
-      { id: 'calendar',    label: 'Econ Calendar', icon: CalendarDays },
-      { id: 'sentiment',   label: 'Sentiment',     icon: Zap          },
+      { id: 'analyze',      label: 'Analyze',       icon: LineChart    },
+      { id: 'market-focus', label: 'Market Focus',  icon: Radio, tag: 'LIVE' },
+      { id: 'tradingview',  label: 'TradingView',   icon: Monitor      },
+      { id: 'heatmap',      label: 'Heatmap',       icon: LayoutGrid   },
+      { id: 'calendar',     label: 'Econ Calendar', icon: CalendarDays },
+      { id: 'sentiment',    label: 'Sentiment',     icon: Zap          },
+      { id: 'macro',        label: 'Macro',         icon: Globe        },
+    ],
+  },
+  // The research application: find candidates, gather evidence, form and check
+  // a thesis. The Research Desk runs that whole flow for one symbol; the rest
+  // are the specialised instruments it draws on.
+  {
+    label: 'Research',
+    items: [
+      { id: 'research-desk',   label: 'Research Desk',   icon: Microscope, tag: 'NEW' },
+      { id: 'screener',        label: 'Screener',        icon: Filter },
+      { id: 'ai-brain',        label: 'AI Brain Scan',   icon: Brain },
+      { id: 'recommendations', label: 'Advisory',        icon: Lightbulb },
+      { id: 'buy-signals',     label: 'AI Buy Signals',  icon: Sparkles },
+      { id: 'filings',         label: 'Filing Research', icon: FileText },
+      { id: 'exposure',        label: 'Exposure Map',    icon: Network },
+      { id: 'dcf-valuation',   label: 'DCF Valuation',   icon: TrendingUp },
+      { id: 'pattern-finder',  label: 'Pattern Finder',  icon: Search },
+      { id: 'dividend-screen', label: 'Dividend Screen', icon: DollarSign },
+    ],
+  },
+  // What the AI actually got right, measured against the market.
+  {
+    label: 'Track Record',
+    items: [
+      { id: 'brain-activity',      label: 'Brain Activity',      icon: Activity },
+      { id: 'trade-timeline',      label: 'Trade Timeline',      icon: Clock },
+      { id: 'probability-lattice', label: 'Probability Lattice', icon: Boxes },
     ],
   },
   {
-    label: 'AI Tools',
+    label: 'Agents & Labs',
     items: [
-      { id: 'market-focus',    label: 'Market Focus',   icon: Radio, tag: 'LIVE' },
-      { id: 'ai-brain',        label: 'AI Brain',       icon: Brain },
-      { id: 'brain-activity',  label: 'Brain Activity', icon: Activity },
-      { id: 'probability-lattice', label: 'Probability Lattice', icon: Boxes },
-      { id: 'tail-ridge',      label: 'Tail Probability Ridge', icon: Mountain },
-      { id: 'relationship-graph', label: 'Relationship Graph', icon: Share2 },
-      { id: 'buy-signals',     label: 'AI Buy Signals', icon: Sparkles },
-      { id: 'ai-watchlist',    label: 'AI Watchlist',   icon: Bookmark },
-      { id: 'agent-hub',       label: 'Agent Hub',      icon: Network },
-      { id: 'agentic-os',      label: 'Agentic OS',     icon: BrainCircuit },
-      { id: 'trade-timeline',  label: 'Trade Timeline', icon: Clock },
-      { id: 'research',        label: 'AI Agent',       icon: Bot },
-      { id: 'second-brain',    label: 'Second Brain',   icon: BookOpen },
-      { id: 'quantmind',       label: 'QuantMind',      icon: FlaskConical },
-      { id: 'recommendations', label: 'Advisory',       icon: Lightbulb },
-      { id: 'filings',         label: 'Filing Research', icon: FileText },
-      { id: 'exposure',    label: 'Exposure Map',  icon: Network      },
-      { id: 'macro',           label: 'Macro',          icon: Globe },
-      { id: 'polymarket',      label: 'Polymarket',     icon: TrendingUp },
-      { id: 'dcf-valuation',   label: 'DCF Valuation',  icon: TrendingUp },
-      { id: 'pattern-finder',  label: 'Pattern Finder', icon: Search },
-      { id: 'dividend-screen', label: 'Dividend Screen', icon: DollarSign },
-      { id: 'screener',        label: 'Screener',       icon: Filter },
+      { id: 'research',     label: 'AI Agent',     icon: Bot },
+      { id: 'agent-hub',    label: 'Agent Hub',    icon: Network },
+      { id: 'agentic-os',   label: 'Agentic OS',   icon: BrainCircuit },
+      { id: 'second-brain', label: 'Second Brain', icon: BookOpen },
+      { id: 'quantmind',    label: 'QuantMind',    icon: FlaskConical },
+      { id: 'ai-watchlist', label: 'AI Watchlist', icon: Bookmark },
+      { id: 'polymarket',   label: 'Polymarket',   icon: TrendingUp },
     ],
   },
   {
@@ -78,6 +91,8 @@ export const NAV_GROUPS = [
     items: [
       { id: 'goals',        label: 'Goals',          icon: Target },
       { id: 'analytics',    label: 'Risk Analytics', icon: Activity },
+      { id: 'tail-ridge',   label: 'Tail Probability Ridge', icon: Mountain },
+      { id: 'relationship-graph', label: 'Relationship Graph', icon: Share2 },
       { id: 'risk-rules',   label: 'Risk Rules',     icon: ShieldCheck },
       { id: 'trade-setups', label: 'Trade Setups',   icon: SlidersHorizontal },
       { id: 'montecarlo',   label: 'Retirement',     icon: TrendingUp },
