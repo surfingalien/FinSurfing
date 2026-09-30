@@ -30,9 +30,22 @@ describe('prediction log path', () => {
 
   test('defaults to data/ai-brain-predictions.jsonl', () => {
     delete process.env.AI_BRAIN_PREDICTION_LOG
+    const dataDir = process.env.FINSURF_DATA_DIR
+    delete process.env.FINSURF_DATA_DIR
+    try {
+      jest.isolateModules(() => {
+        const { PREDICTION_LOG } = require('../lib/prediction-log-path')
+        expect(PREDICTION_LOG).toBe(path.join(__dirname, '..', 'data', 'ai-brain-predictions.jsonl'))
+      })
+    } finally { process.env.FINSURF_DATA_DIR = dataDir }
+  })
+
+  test('the whole suite runs against a temp data dir, never the real one', () => {
+    expect(process.env.FINSURF_DATA_DIR).toBeTruthy()
+    expect(path.resolve(process.env.FINSURF_DATA_DIR)).not.toBe(path.join(__dirname, '..', 'data'))
     jest.isolateModules(() => {
       const { PREDICTION_LOG } = require('../lib/prediction-log-path')
-      expect(PREDICTION_LOG).toBe(path.join(__dirname, '..', 'data', 'ai-brain-predictions.jsonl'))
+      expect(PREDICTION_LOG.startsWith(path.resolve(process.env.FINSURF_DATA_DIR))).toBe(true)
     })
   })
 })
