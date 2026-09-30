@@ -268,6 +268,9 @@ export default function BacktestView() {
             <span>
               {result.symbol} · {result.strategy.replace('_', ' ')} · {result.range} ·{' '}
               {result.dataPoints} days · ${result.initialCapital.toLocaleString()} capital
+              {m.costBps != null && (
+                <> · {m.fill === 'close' ? 'same-bar fills' : 'next-bar fills'} · {m.costBps}bps round-trip costs (${(m.costPaid ?? 0).toLocaleString()} paid)</>
+              )}
             </span>
           </div>
 
@@ -296,7 +299,7 @@ export default function BacktestView() {
             <MetricCard
               label="Sharpe Ratio"
               value={m.sharpeRatio}
-              sub="annualised, rf=5%"
+              sub="annualised, rf=4.5%"
               positive={m.sharpeRatio > 1}
               icon={BarChart3}
             />

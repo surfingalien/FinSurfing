@@ -24,6 +24,7 @@ const { CircuitOpenError } = require('../lib/circuit-breaker')
 const { fetchDailyBars } = require('../lib/internal-api')
 const { compactTaLine } = require('../lib/technical-indicators')
 const { buildProposalPrompt, parseProposals, evaluateProposals, MAX_PROPOSALS } = require('../lib/strategy-lab')
+const { costBpsForSymbol } = require('../utils/backtest')
 const { startJsonHeartbeat } = require('../lib/http-heartbeat')
 
 const router = express.Router()
@@ -87,7 +88,12 @@ router.post('/propose', requireAuth, async (req, res) => {
     return res.status(502).json({ error: 'AI returned no valid strategy proposals — please try again' })
   }
 
-  const evaluated = evaluateProposals(proposals, timestamps, closes, capital)
+  // Next-bar fills at the open, charged the asset class's round-trip cost —
+  // the same cost the Advisory EV gate assumes (utils/backtest.js).
+  const evaluated = evaluateProposals(proposals, timestamps, closes, capital, {
+    costBps: costBpsForSymbol(sym),
+    opens:   bars.map(b => b.o),
+  })
 
   return res.json({
     symbol: sym,
