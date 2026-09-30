@@ -164,3 +164,19 @@ describe('GET /theses', () => {
     expect(b.body.theses).toHaveLength(0)
   })
 })
+
+describe('GET /system-status', () => {
+  test('requires auth', async () => {
+    expect((await request(app).get('/api/research-desk/system-status')).status).toBe(401)
+  })
+
+  test('reports every check with a status, and names the market-data fallback', async () => {
+    const r = await request(app).get('/api/research-desk/system-status').set('Authorization', `Bearer ${tokenA}`)
+    expect(r.status).toBe(200)
+    expect(['ok', 'warn', 'fail']).toContain(r.body.overall)
+    const ids = r.body.checks.map(c => c.id)
+    expect(ids).toEqual(expect.arrayContaining(['market-data', 'ai', 'persistence', 'last-scan', 'record']))
+    // The quote probe 404s in this fixture but daily bars work → a warning, not ok.
+    expect(r.body.checks.find(c => c.id === 'market-data').status).toBe('warn')
+  })
+})
