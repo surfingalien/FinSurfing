@@ -219,9 +219,7 @@ async function getAVNewsSentiment(symbols, key) {
 // ── 3. FMP stock_news — headlines for Claude to score ────────────────────────
 async function getFMPNewsForSentiment(symbols, key, from, to) {
   if (!key) return null
-  const tickers = symbols.join(',')
-  const url = `https://financialmodelingprep.com/api/v3/stock_news?tickers=${encodeURIComponent(tickers)}&limit=50&apikey=${key}`
-  const data = await httpsGet(url)
+  const data = await require('../lib/fmp').stockNews(symbols, { key, limit: 50 }).catch(() => null)
   if (!Array.isArray(data) || !data.length) return null
   return symbols.map(sym => {
     const articles = data

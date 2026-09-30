@@ -18,6 +18,8 @@ const { getRouter } = require('../lib/ai-router')
 
 const aiRouter = getRouter('pattern-finder')
 
+const fmp = require('../lib/fmp')
+const { insiderSide } = fmp
 const FMP_KEY = () => process.env.FMP_API_KEY || null
 
 const patternLimit = rateLimit({
@@ -97,21 +99,20 @@ function summarizeInsiders(rows) {
 
   const recentTransactions = []
   for (const t of list) {
-    const typeRaw = String(t.transactionType || t.acquistionOrDisposition || '').toUpperCase()
-    const isBuy = typeRaw.includes('P') || typeRaw.includes('A') || typeRaw.includes('BUY')
-    const isSell = typeRaw.includes('S') || typeRaw.includes('D') || typeRaw.includes('SELL')
+    // The SEC code decides the side. The old substring test read "S-Sale" as a
+    // buy (it contains an A), so heavy insider selling reported as "Buying".
+    // Grants, exercises and gifts are not market trades and are not tallied.
+    const type = insiderSide(t)
     const shares = num(t.securitiesTransacted) ?? num(t.shares) ?? 0
     const pricePer = num(t.price) ?? 0
     const value = Math.abs(shares * pricePer)
     const date = t.transactionDate || t.filingDate || t.date || null
 
-    const type = isBuy && !isSell ? 'buy' : isSell && !isBuy ? 'sell' : (isBuy ? 'buy' : 'sell')
-
     if (date) {
       const ts = new Date(date).getTime()
       if (Number.isFinite(ts) && now - ts <= NINETY_DAYS) {
         if (type === 'buy') buyValue90 += value
-        else sellValue90 += value
+        else if (type === 'sell') sellValue90 += value
       }
     }
 
@@ -236,9 +237,11 @@ router.get('/:symbol', patternLimit, async (req, res) => {
 
     const v3 = 'https://financialmodelingprep.com/api/v3'
     const v4 = 'https://financialmodelingprep.com/api/v4'
+    // Institutional holders and short interest have no stable-API equivalent on
+    // most plans; they stay on the legacy paths and degrade to empty.
 
     const [insiderRaw, institutionalRaw, shortRaw, chartData] = await Promise.all([
-      fmpJson(`${v4}/insider-trading?symbol=${sym}&limit=30&apikey=${fmpKey}`),
+      fmp.insiderTrades(sym, { key: fmpKey, limit: 30, timeoutMs: 10000 }).catch(() => null),
       fmpJson(`${v3}/institutional-holder/${sym}?apikey=${fmpKey}`),
       fmpJson(`${v4}/short-of-float?symbol=${sym}&apikey=${fmpKey}`),
       (async () => {

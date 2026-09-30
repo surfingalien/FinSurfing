@@ -40,6 +40,19 @@ describe('evaluateStatus', () => {
     expect(s.checks.find(c => c.id === 'persistence')).toMatchObject({ status: 'fail' })
   })
 
+  test('an FMP key that FMP refuses is a failure with the reason, not "Configured"', () => {
+    const s = evaluateStatus({ ...healthy, keys: { ...healthy.keys, fmp: true }, fmpProbe: { ok: false, error: 'Legacy Endpoint : …' } }, NOW)
+    const c = s.checks.find(x => x.id === 'fundamentals')
+    expect(c.status).toBe('fail')
+    expect(c.detail).toMatch(/Legacy Endpoint/)
+    expect(c.fix).toBeTruthy()
+  })
+
+  test('an FMP key that answers the probe is ok', () => {
+    const s = evaluateStatus({ ...healthy, keys: { ...healthy.keys, fmp: true }, fmpProbe: { ok: true } }, NOW)
+    expect(s.checks.find(x => x.id === 'fundamentals').status).toBe('ok')
+  })
+
   test('a failed scheduled job is reported with its error', () => {
     const s = evaluateStatus({ ...healthy, jobs: [{ id: 'x', name: 'Nightly learning', result: { status: 'error', error: 'boom', failedAt: NOW - 3600000 } }] }, NOW)
     expect(s.checks.find(c => c.id === 'job:x')).toMatchObject({ status: 'fail' })

@@ -15,6 +15,7 @@
  */
 
 const express = require('express')
+const fmpClient = require('../lib/fmp')
 const router  = express.Router()
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -57,19 +58,16 @@ router.get('/insider', async (req, res) => {
   // scraping SEC EDGAR full-text search.
   if (fmp) {
     try {
-      const data = await safeFetch(
-        `https://financialmodelingprep.com/api/v4/insider-trading?symbol=${encodeURIComponent(symbol)}&page=0&apikey=${fmp}`
-      )
+      const data = await fmpClient.insiderTrades(symbol, { key: fmp, limit: Math.max(limit, 20) })
       if (Array.isArray(data) && data.length) {
         const transactions = data.slice(0, limit).map(t => {
-          const type = String(t.transactionType || '').toUpperCase()
-          const isBuy = type.includes('P') || type.includes('A') || type.includes('BUY')
           return {
             filingDate:  t.filingDate || null,
             period:      t.transactionDate || null,
             filerName:   t.reportingName || 'Unknown',
             role:        t.typeOfOwner || null,
-            type:        isBuy ? 'buy' : 'sell',
+            // 'buy' | 'sell' | 'other' (grant, exercise, gift — not a market trade)
+            type:        fmpClient.insiderSide(t),
             shares:      Number(t.securitiesTransacted) || null,
             price:       Number(t.price) || null,
             formType:    '4',
@@ -122,13 +120,13 @@ router.get('/analyst', async (req, res) => {
   // Try FMP first
   if (fmp) {
     try {
-      const data = await safeFetch(
-        `https://financialmodelingprep.com/api/v3/analyst-stock-recommendations/${symbol}?limit=10&apikey=${fmp}`
-      )
-      if (Array.isArray(data) && data.length) {
-        const summary = summariseRatings(data)
-        return res.json({ symbol, source: 'FMP', summary, ratings: data.slice(0, 10) })
-      }
+      // Summary = the CURRENT counts. The old code summed ten monthly
+      // snapshots, reporting each analyst about ten times.
+      const [summary, ratings] = await Promise.all([
+        fmpClient.analystConsensus(symbol, { key: fmp }),
+        fmpClient.analystHistory(symbol, { key: fmp, limit: 10 }).catch(() => []),
+      ])
+      if (summary) return res.json({ symbol, source: 'FMP', summary, ratings })
     } catch {}
   }
 
@@ -210,18 +208,6 @@ function daysAgo(n) {
   const d = new Date()
   d.setDate(d.getDate() - n)
   return d.toISOString().slice(0, 10)
-}
-
-function summariseRatings(data) {
-  const counts = { strongBuy: 0, buy: 0, hold: 0, sell: 0, strongSell: 0 }
-  for (const r of data) {
-    counts.strongBuy  += r.analystRatingsStrongBuy  || 0
-    counts.buy        += r.analystRatingsbuy        || 0
-    counts.hold       += r.analystRatingsHold       || 0
-    counts.sell       += r.analystRatingsSell       || 0
-    counts.strongSell += r.analystRatingsStrongSell || 0
-  }
-  return counts
 }
 
 module.exports = router

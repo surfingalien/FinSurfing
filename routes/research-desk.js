@@ -212,7 +212,7 @@ router.get('/track-record', requireAuth, (req, res) => {
 
 // "Is it working?" — every moving part of the research pipeline checked live
 // and reported as ok / warn / fail with the reason and the fix. One probe
-// quote is the only quota it spends; it never calls an LLM.
+// quote and one FMP profile are the only quota it spends; it never calls an LLM.
 const STATUS_JOBS = ['pre-market-scan', 'brain-learning-cycle', 'brain-evolution', 'symbol-db-refresh', 'macro-pulse']
 router.get('/system-status', requireAuth, evidenceLimit, async (req, res) => {
   const headers = fwdKeys(req)
@@ -233,6 +233,14 @@ router.get('/system-status', requireAuth, evidenceLimit, async (req, res) => {
     paused: claudePaused(), pausedUntil: process.env.CLAUDE_PAUSE_UNTIL || null,
   }
   facts.keys = { fred: !!process.env.FRED_API_KEY, fmp: !!(process.env.FMP_API_KEY || req.headers['x-fmp-key']) }
+  // A key that is set is not a key that works: FMP refuses retired endpoints
+  // and plan-limited ones in the response body. One profile call proves it.
+  if (facts.keys.fmp) {
+    try {
+      const prof = await require('../lib/fmp').profile('AAPL', { key: req.headers['x-fmp-key'] || process.env.FMP_API_KEY, timeoutMs: 8_000 })
+      facts.fmpProbe = prof ? { ok: true } : { ok: false, error: 'no data returned for AAPL' }
+    } catch (e) { facts.fmpProbe = { ok: false, error: e.message } }
+  }
   facts.persistence = durableFiles.status()
   try { facts.symbolIndex = require('../lib/symbol-db').stats() } catch { facts.symbolIndex = { loaded: false } }
   try {

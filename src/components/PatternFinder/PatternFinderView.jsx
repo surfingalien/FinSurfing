@@ -264,7 +264,7 @@ export default function PatternFinderView({ onAnalyze }) {
                         <tr key={i} className="border-b border-white/[0.03]">
                           <td className="py-1.5 pr-3 text-slate-400">{t.date}</td>
                           <td className="py-1.5 pr-3 text-slate-300">{t.name || t.insider}</td>
-                          <td className={`py-1.5 pr-3 ${String(t.type).toLowerCase().includes('buy') ? 'text-emerald-400' : 'text-red-400'}`}>{t.type}</td>
+                          <td className={`py-1.5 pr-3 ${String(t.type).toLowerCase().includes('buy') ? 'text-emerald-400' : String(t.type).toLowerCase().includes('sell') ? 'text-red-400' : 'text-slate-400'}`} title={t.type === 'other' ? 'Grant, option exercise or gift — not a trade on the market' : undefined}>{t.type}</td>
                           <td className="py-1.5 pr-3 text-right font-mono text-slate-300">{Number(t.shares || 0).toLocaleString()}</td>
                           <td className="py-1.5 text-right font-mono text-white">{fmtMoneyShort(t.value)}</td>
                         </tr>

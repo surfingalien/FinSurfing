@@ -33,12 +33,10 @@ function fmpKey(req) {
 
 // ── Sub-agent: fetch transcript from FMP ──────────────────────────────────────
 async function transcriptSubAgent(symbol, key) {
-  const url = `https://financialmodelingprep.com/api/v3/earning_call_transcript/${encodeURIComponent(symbol)}?limit=3&apikey=${key}`
-  const r   = await fetch(url, { signal: AbortSignal.timeout(12000) })
-  if (!r.ok) throw new Error(`FMP transcript API error ${r.status}`)
-  const data = await r.json()
-  if (!Array.isArray(data)) return []
-  return data
+  // Newest first. Stable needs year+quarter per transcript; lib/fmp looks the
+  // dates up first and falls back to the legacy list endpoint.
+  const data = await require('../lib/fmp').transcripts(symbol, { key, limit: 3, timeoutMs: 12000 })
+  return Array.isArray(data) ? data : []
 }
 
 // ── Sub-agent: analyze transcript with Claude ─────────────────────────────────

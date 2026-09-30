@@ -19,6 +19,7 @@ const { getRouter } = require('../lib/ai-router')
 
 const aiRouter = getRouter('dividend')
 
+const fmp     = require('../lib/fmp')
 const FMP_KEY = () => process.env.FMP_API_KEY || null
 
 const dividendLimit = rateLimit({
@@ -41,21 +42,10 @@ const SYSTEM_PROMPT =
 // arrive as HTTP 200 with an {"Error Message": ...} body).
 let _lastFmpError = null
 
-async function fmpJson(url) {
-  try {
-    const r = await fetch(url, { signal: AbortSignal.timeout(10000) })
-    if (!r.ok) {
-      if (r.status === 401 || r.status === 403) _lastFmpError = 'FMP API key invalid or lacks access to this data'
-      else if (r.status === 429) _lastFmpError = 'FMP rate limit reached — try again shortly'
-      return null
-    }
-    const d = await r.json()
-    if (d && !Array.isArray(d) && (d['Error Message'] || d.error)) {
-      _lastFmpError = d['Error Message'] || d.error
-      return null
-    }
-    return d
-  } catch {
+// Awaits one lib/fmp call; on failure records why and yields null.
+async function fmpSoft(promise) {
+  try { return await promise } catch (e) {
+    _lastFmpError = e?.status === 429 ? 'FMP rate limit reached — try again shortly' : (e?.message || 'FMP request failed')
     return null
   }
 }
@@ -205,16 +195,14 @@ router.post('/screen', dividendLimit, async (req, res) => {
 
   _lastFmpError = null
   try {
-    const v3 = 'https://financialmodelingprep.com/api/v3'
-
+    const o = { key: fmpKey, timeoutMs: 10000 }
     const settled = await Promise.allSettled(symbols.map(async sym => {
-      const [profileArr, dividendData] = await Promise.all([
-        fmpJson(`${v3}/profile/${sym}?apikey=${fmpKey}`),
-        fmpJson(`${v3}/historical-price-full/stock_dividend/${sym}?apikey=${fmpKey}`),
+      const [profileRow, history] = await Promise.all([
+        fmpSoft(fmp.profile(sym, o)),
+        fmpSoft(fmp.dividends(sym, o)),
       ])
-      const profileRow = Array.isArray(profileArr) ? profileArr[0] : null
       if (!profileRow) return null
-      return computeMetrics(sym, profileRow, dividendData)
+      return computeMetrics(sym, profileRow, { historical: history || [] })
     }))
 
     const stocks = settled

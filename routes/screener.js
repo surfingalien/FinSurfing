@@ -42,8 +42,8 @@ const { rankCandidates, DEFAULT_WEIGHTS, looksLikeFraction } = require('../lib/f
 const router   = express.Router()
 const aiRouter = getRouter('screener')
 
+const fmp     = require('../lib/fmp')
 const FMP_KEY = () => process.env.FMP_API_KEY || null
-const FMP_V3  = 'https://financialmodelingprep.com/api/v3'
 
 /** How many candidates get the expensive per-symbol enrichment. */
 const ENRICH_LIMIT   = 40
@@ -80,27 +80,18 @@ function pick(obj, ...names) {
   return null
 }
 
-async function fmpGet(url, timeoutMs = 10_000) {
-  const r = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) })
-  if (!r.ok) throw new Error(`FMP ${r.status}`)
-  const d = await r.json()
-  // FMP signals plan/rate problems in a 200 body; surfacing it beats an empty screen.
-  if (d && !Array.isArray(d) && d['Error Message']) throw new Error(d['Error Message'])
-  return Array.isArray(d) ? d : []
-}
-
 /** Stage 1a — the bulk screener call. */
 async function fmpCandidates({ sector, minMarketCap, minYield }, key) {
-  const params = new URLSearchParams({
-    marketCapMoreThan: String(minMarketCap),
-    isActivelyTrading: 'true',
-    isEtf:             'false',
-    limit:             String(CANDIDATE_LIMIT),
-    apikey:            key,
-  })
-  if (sector) params.set('sector', sector)
-
-  const rows = await fmpGet(`${FMP_V3}/stock-screener?${params}`, 15_000)
+  const params = {
+    marketCapMoreThan: minMarketCap,
+    isActivelyTrading: true,
+    isEtf:             false,
+    limit:             CANDIDATE_LIMIT,
+    sector:            sector || null,
+  }
+  // FMP signals plan/rate problems in the body; lib/fmp throws them, which
+  // surfaces the reason instead of an empty screen.
+  const rows = await fmp.screener(params, { key, timeoutMs: 15_000 })
   return rows
     .filter(r => r?.symbol && num(r.price) > 0)
     .map(r => {
@@ -138,12 +129,10 @@ async function enrich(rows, key) {
   const out = []
   await Promise.all(rows.map(async row => {
     try {
-      const [kmArr, ratArr] = await Promise.all([
-        fmpGet(`${FMP_V3}/key-metrics-ttm/${encodeURIComponent(row.symbol)}?apikey=${key}`),
-        fmpGet(`${FMP_V3}/ratios-ttm/${encodeURIComponent(row.symbol)}?apikey=${key}`).catch(() => []),
-      ])
-      const km  = kmArr[0]  || {}
-      const rat = ratArr[0] || {}
+      // key-metrics-ttm + ratios-ttm, merged with both stable and legacy
+      // field names — so every `pick` below finds its field on either object.
+      const km  = await fmp.metricsTtm(row.symbol, { key, timeoutMs: 10_000 })
+      const rat = km
 
       const dividendYield = row.dividendYield != null
         ? row.dividendYield

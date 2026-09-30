@@ -416,8 +416,8 @@ async function getMovers(fmpKey) {
   const pair = async (stable, legacy) => (await get(`https://financialmodelingprep.com/stable/${stable}`))
     ?? (await get(`https://financialmodelingprep.com/api/v3/stock_market/${legacy}`)) ?? []
   const [actives, gainers] = await Promise.all([pair('most-actives', 'actives'), pair('biggest-gainers', 'gainers')])
-  const rows = [...actives, ...gainers].map(r => ({ symbol: r.symbol, price: r.price, changePct: r.changesPercentage ?? null }))
-  _moversCache = { at: Date.now(), rows }
+  const rows = [...actives, ...gainers].map(r => ({ symbol: r.symbol, price: r.price, changePct: r.changesPercentage ?? r.changePercentage ?? null }))
+  if (rows.length) _moversCache = { at: Date.now(), rows }
   return rows
 }
 
@@ -432,26 +432,24 @@ async function getLivePool(fmpKey, fmpSector = null) {
   const hit = _poolCache.get(key)
   if (hit && Date.now() - hit.at < POOL_TTL) return hit.symbols
   if (!fmpKey) return []
-  const params = new URLSearchParams({
-    marketCapMoreThan: fmpSector ? '5000000000' : '20000000000',
-    isActivelyTrading: 'true', isEtf: 'false', isFund: 'false', limit: '200', exchange: 'NASDAQ,NYSE',
-  })
-  if (fmpSector) params.set('sector', fmpSector)
-  const get = async (url) => {
-    try {
-      const r = await fetch(`${url}?${params}&apikey=${fmpKey}`, { signal: AbortSignal.timeout(10_000) })
-      if (!r.ok) return null
-      const j = await r.json()
-      return Array.isArray(j) && j.length ? j : null
-    } catch { return null }
+  const params = {
+    marketCapMoreThan: fmpSector ? 5_000_000_000 : 20_000_000_000,
+    isActivelyTrading: true, isEtf: false, isFund: false, country: 'US', limit: 300,
+    sector: fmpSector,
   }
-  const rows = (await get('https://financialmodelingprep.com/stable/company-screener'))
-    ?? (await get('https://financialmodelingprep.com/api/v3/stock-screener')) ?? []
+  // One exchange per call is all the stable screener documents, so the US
+  // listing filter is applied here rather than passed as a list it may ignore.
+  const US_EXCHANGES = new Set(['NASDAQ', 'NYSE', 'AMEX'])
+  let rows = []
+  try { rows = await require('../lib/fmp').screener(params, { key: fmpKey, timeoutMs: 10_000 }) } catch { rows = [] }
+  rows = rows.filter(r => !r.exchangeShortName || US_EXCHANGES.has(String(r.exchangeShortName).toUpperCase()))
   const symbols = rows
     .filter(r => isPlainTicker(String(r.symbol || '')))
     .sort((a, b) => (Number(b.volume) || 0) - (Number(a.volume) || 0))
     .map(r => r.symbol)
-  _poolCache.set(key, { at: Date.now(), symbols })
+  // A failed call is not cached: an hour of empty pools would pin every scan
+  // to the fallback list.
+  if (symbols.length) _poolCache.set(key, { at: Date.now(), symbols })
   return symbols
 }
 
