@@ -30,7 +30,7 @@ const { compactTaLine, detectPatterns, KEY_PATTERNS, computeRsRanks } = require(
 const { getOptionsFlowCompact } = require('../lib/options-flow-cache')
 const { auditPicks, midOf } = require('../lib/price-coherence')
 const { levelInputs, tradeLevels } = require('../lib/trade-levels')
-const { MODE_SECTORS, DISCOVERY_MODES, BROAD_FIXED, filterMovers, buildScanUniverse } = require('../lib/scan-universe')
+const { MODE_SECTORS, FMP_SECTORS, DISCOVERY_MODES, BROAD_FIXED, filterMovers, buildScanUniverse, isPlainTicker } = require('../lib/scan-universe')
 const { fetchDailyBars }    = require('../lib/internal-api')
 const { tryParseAiJson }    = require('../lib/ai-json')
 const { baselineFromBars }  = require('../lib/ml-baseline')
@@ -421,6 +421,40 @@ async function getMovers(fmpKey) {
   return rows
 }
 
+// Liquid large caps in a sector (or the whole market), most-traded first — one
+// bulk screener call, cached for an hour. This is the discovery pool whenever
+// it is reachable; the local symbol index is a fallback, because that index is
+// downloaded after boot and may not be loaded yet.
+const _poolCache = new Map()
+const POOL_TTL = 60 * 60 * 1000
+async function getLivePool(fmpKey, fmpSector = null) {
+  const key = fmpSector || '*'
+  const hit = _poolCache.get(key)
+  if (hit && Date.now() - hit.at < POOL_TTL) return hit.symbols
+  if (!fmpKey) return []
+  const params = new URLSearchParams({
+    marketCapMoreThan: fmpSector ? '5000000000' : '20000000000',
+    isActivelyTrading: 'true', isEtf: 'false', isFund: 'false', limit: '200', exchange: 'NASDAQ,NYSE',
+  })
+  if (fmpSector) params.set('sector', fmpSector)
+  const get = async (url) => {
+    try {
+      const r = await fetch(`${url}?${params}&apikey=${fmpKey}`, { signal: AbortSignal.timeout(10_000) })
+      if (!r.ok) return null
+      const j = await r.json()
+      return Array.isArray(j) && j.length ? j : null
+    } catch { return null }
+  }
+  const rows = (await get('https://financialmodelingprep.com/stable/company-screener'))
+    ?? (await get('https://financialmodelingprep.com/api/v3/stock-screener')) ?? []
+  const symbols = rows
+    .filter(r => isPlainTicker(String(r.symbol || '')))
+    .sort((a, b) => (Number(b.volume) || 0) - (Number(a.volume) || 0))
+    .map(r => r.symbol)
+  _poolCache.set(key, { at: Date.now(), symbols })
+  return symbols
+}
+
 // What the previous scan of each mode covered, so the next one looks elsewhere.
 // In-memory by design: losing it on a deploy only means one scan may repeat.
 const _recentByMode = new Map()
@@ -441,13 +475,22 @@ async function resolveUniverse({ symbols, scanMode, universeMode, fmpKey }) {
   }
   const symbolDb = require('../lib/symbol-db')
   const sector   = MODE_SECTORS[scanMode] || null
-  const sectorOf = sym => { try { return symbolDb.classify(sym)?.sector || null } catch { return null } }
-  let pool = []
-  try {
-    pool = sector
-      ? symbolDb.sectorUniverse(sector, { size: 150, minCap: 'Large Cap' })
-      : Object.values(MODE_SECTORS).flatMap(sec => symbolDb.sectorUniverse(sec, { size: 15, minCap: 'Large Cap' }))
-  } catch { pool = [] }
+  // Pool: the live sector screen first, the local index as a fallback.
+  let pool = await getLivePool(fmpKey, sector ? FMP_SECTORS[sector] : null).catch(() => [])
+  if (!pool.length) {
+    try {
+      pool = sector
+        ? symbolDb.sectorUniverse(sector, { size: 150, minCap: 'Large Cap' })
+        : [...new Set(Object.values(MODE_SECTORS)).values()].flatMap(sec => symbolDb.sectorUniverse(sec, { size: 15, minCap: 'Large Cap' }))
+    } catch { pool = [] }
+  }
+  // A mover belongs to the sector if the index says so, or if the sector's
+  // own screen contains it (works when the index is not loaded).
+  const poolSet  = new Set(pool)
+  const sectorOf = sym => {
+    try { const s = symbolDb.classify(sym)?.sector; if (s) return s } catch { /* index optional */ }
+    return poolSet.has(sym) ? sector : null
+  }
   const movers = filterMovers(await getMovers(fmpKey).catch(() => []), { sector, sectorOf })
   const { symbols: universe, sources } = buildScanUniverse({
     curated, movers, pool,
