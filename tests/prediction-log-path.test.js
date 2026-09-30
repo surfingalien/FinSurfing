@@ -28,7 +28,7 @@ describe('prediction log path', () => {
     })
   })
 
-  test('defaults to the tracked data/ai-brain-predictions.jsonl', () => {
+  test('defaults to data/ai-brain-predictions.jsonl', () => {
     delete process.env.AI_BRAIN_PREDICTION_LOG
     jest.isolateModules(() => {
       const { PREDICTION_LOG } = require('../lib/prediction-log-path')

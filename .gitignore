@@ -18,3 +18,7 @@ data/brain-learnings-overrides.json
 data/scan-jobs.jsonl
 data/brain-refinements.jsonl
 data/entity-graph.jsonl
+# The calibration record. Persisted via lib/durable-files.js (Postgres), never
+# git: the tracked copy shipped six fake test rows that would have been scored
+# against real bars as evidence.
+data/ai-brain-predictions.jsonl

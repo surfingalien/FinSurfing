@@ -43,11 +43,12 @@ jest.mock('../routes/macro',           () => ({ getIndicators: async () => null 
 process.env.NODE_ENV   = 'test'
 process.env.JWT_SECRET = 'test-secret-for-jest-only-32chars!!'
 
-// data/ai-brain-predictions.jsonl is tracked in git and is the real calibration
-// record. An actionable pick in this suite calls logPrediction, so without this
-// redirect the tests append fake AVAX predictions to it — which would then be
-// resolved against real bars and scored as evidence. Set BEFORE the route is
-// required, since it reads the path once at module load.
+// data/ai-brain-predictions.jsonl is the real calibration record (mirrored to
+// Postgres in production). An actionable pick in this suite calls
+// logPrediction, so without this redirect the tests append fake AVAX
+// predictions to it — which is exactly how six of them were once committed and
+// would have been resolved against real bars and scored as evidence. Set
+// BEFORE the route is required, since it reads the path once at module load.
 const os   = require('os')
 const fsp  = require('fs')
 const pathp = require('path')
