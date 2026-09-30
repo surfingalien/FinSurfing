@@ -72,7 +72,11 @@ export default function StockCard({ stock, onAnalyze, horizon, byCompositeScore 
 
         <div className={`flex items-start gap-3 ${stock.agentConflict?.exists ? 'mt-2.5' : ''}`}>
           <div className="flex flex-col items-center gap-1 shrink-0">
-            <span className="text-[10px] text-slate-600 font-mono">#{stock.rank}</span>
+            {/* A declined pick is not ranked among the buys — "#1 Avoid" reads
+                as the top recommendation, which is the opposite of the verdict. */}
+            {stock.actionable === false
+              ? <span className="text-[10px] text-slate-500 font-mono">—</span>
+              : <span className="text-[10px] text-slate-600 font-mono">#{stock.rank}</span>}
             <CompositeRing score={stock.compositeScore} />
             {alphaWin != null && (
               <span className={`text-[9px] font-mono font-semibold ${BAND_COLOR[band]}`} title={`Historical alpha win rate for ${BAND_LABEL[band]} score band (${bandCalib.n} predictions)`}>
@@ -110,14 +114,24 @@ export default function StockCard({ stock, onAnalyze, horizon, byCompositeScore 
               </div>
             )}
             <div className="flex gap-2 mb-3 flex-wrap">
-              <div className="flex items-center gap-1 text-[11px]">
-                <Target className="w-3 h-3 text-emerald-400" />
-                <span className="text-emerald-400 font-mono font-bold">{signedPct(stock.targetReturn)}</span>
-              </div>
-              <div className="flex items-center gap-1 text-[11px]">
-                <Shield className="w-3 h-3 text-red-400" />
-                <span className="text-red-400 font-mono font-bold">{drawdownPct(stock.stopLoss)}</span>
-              </div>
+              {/* An Avoid has no target or stop. Showing "0%" / "-0%" read as a
+                  flat trade rather than no trade, so the chips are replaced. */}
+              {stock.actionable === false ? (
+                <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-slate-500/20 text-slate-300">
+                  No trade — declined
+                </span>
+              ) : (
+                <>
+                  <div className="flex items-center gap-1 text-[11px]">
+                    <Target className="w-3 h-3 text-emerald-400" />
+                    <span className="text-emerald-400 font-mono font-bold">{signedPct(stock.targetReturn)}</span>
+                  </div>
+                  <div className="flex items-center gap-1 text-[11px]">
+                    <Shield className="w-3 h-3 text-red-400" />
+                    <span className="text-red-400 font-mono font-bold">{drawdownPct(stock.stopLoss)}</span>
+                  </div>
+                </>
+              )}
               {stock.volumeSignal && stock.volumeSignal !== 'Unknown' && (
                 <span className={`text-[9px] font-medium px-1.5 py-0.5 rounded ${volSig.bg} ${volSig.color}`}>
                   {volSig.label}
