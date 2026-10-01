@@ -247,7 +247,9 @@ router.get('/:symbol', patternLimit, async (req, res) => {
       (async () => {
         try {
           const r = await fetch(
-            `http://127.0.0.1:${port}/api/chart?symbol=${encodeURIComponent(sym)}&interval=1d&range=3y`,
+            // 5y: '3y' is not a range the chart providers know, and fell back to
+            // ~100 bars — a "seasonality" table with four empty months.
+            `http://127.0.0.1:${port}/api/chart?symbol=${encodeURIComponent(sym)}&interval=1d&range=5y`,
             { headers: fwdHeaders, signal: AbortSignal.timeout(30000) }
           )
           return await r.json()
