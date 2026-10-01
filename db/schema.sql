@@ -111,12 +111,16 @@ CREATE INDEX IF NOT EXISTS idx_auth_logs_created ON auth_logs(created_at DESC);
 -- ─────────────────────────────────────────────────
 --  PORTFOLIOS  (one user → many portfolios)
 -- ─────────────────────────────────────────────────
-CREATE TYPE portfolio_type AS ENUM (
+DO $$ BEGIN
+  CREATE TYPE portfolio_type AS ENUM (
   'brokerage', 'roth_ira', 'traditional_ira', '401k', '403b',
   'mutual_fund', 'crypto', 'hsa', 'paper', 'cash', 'other'
 );
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
-CREATE TYPE tax_status AS ENUM ('taxable', 'tax_deferred', 'tax_exempt');
+DO $$ BEGIN
+  CREATE TYPE tax_status AS ENUM ('taxable', 'tax_deferred', 'tax_exempt');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 CREATE TABLE IF NOT EXISTS portfolios (
   id                  UUID           PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -181,23 +185,6 @@ CREATE INDEX IF NOT EXISTS idx_access_logs_portfolio ON access_logs(target_portf
 CREATE INDEX IF NOT EXISTS idx_access_logs_actor     ON access_logs(actor_user_id, created_at DESC);
 
 -- ─────────────────────────────────────────────────
---  PUBLIC PORTFOLIO VIEW
--- ─────────────────────────────────────────────────
-CREATE OR REPLACE VIEW public_portfolio_view AS
-SELECT
-  p.id, p.name, p.description, p.visibility, p.copy_trade_enabled,
-  p.color, p.is_featured, p.created_at, p.updated_at,
-  u.id   AS user_id,
-  u.username,
-  u.display_name,
-  COUNT(h.id) AS holding_count
-FROM portfolios p
-JOIN  users    u ON u.id = p.user_id
-LEFT JOIN holdings h ON h.portfolio_id = p.id
-WHERE p.visibility = 'public' AND p.is_archived = FALSE AND u.is_active = TRUE
-GROUP BY p.id, u.id;
-
--- ─────────────────────────────────────────────────
 --  HOLDINGS  (one portfolio → many holdings)
 -- ─────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS holdings (
@@ -217,12 +204,31 @@ CREATE TABLE IF NOT EXISTS holdings (
 CREATE INDEX IF NOT EXISTS idx_holdings_portfolio ON holdings(portfolio_id);
 
 -- ─────────────────────────────────────────────────
+--  PUBLIC PORTFOLIO VIEW  (after holdings: it joins that table)
+-- ─────────────────────────────────────────────────
+CREATE OR REPLACE VIEW public_portfolio_view AS
+SELECT
+  p.id, p.name, p.description, p.visibility, p.copy_trade_enabled,
+  p.color, p.is_featured, p.created_at, p.updated_at,
+  u.id   AS user_id,
+  u.username,
+  u.display_name,
+  COUNT(h.id) AS holding_count
+FROM portfolios p
+JOIN  users    u ON u.id = p.user_id
+LEFT JOIN holdings h ON h.portfolio_id = p.id
+WHERE p.visibility = 'public' AND p.is_archived = FALSE AND u.is_active = TRUE
+GROUP BY p.id, u.id;
+
+-- ─────────────────────────────────────────────────
 --  TRANSACTIONS  (audit trail for every trade)
 -- ─────────────────────────────────────────────────
-CREATE TYPE tx_type AS ENUM (
+DO $$ BEGIN
+  CREATE TYPE tx_type AS ENUM (
   'BUY', 'SELL', 'DIVIDEND', 'CONTRIBUTION', 'WITHDRAWAL',
   'FEE', 'TRANSFER_IN', 'TRANSFER_OUT', 'SPLIT'
 );
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 CREATE TABLE IF NOT EXISTS transactions (
   id           UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -377,9 +383,11 @@ CREATE INDEX IF NOT EXISTS idx_research_notes_symbol  ON research_notes(user_id,
 CREATE INDEX IF NOT EXISTS idx_research_notes_fts     ON research_notes
   USING GIN (to_tsvector('english', coalesce(title,'') || ' ' || coalesce(content,'')));
 
-CREATE TRIGGER research_notes_updated_at
-  BEFORE UPDATE ON research_notes
-  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+DO $$ BEGIN
+  CREATE TRIGGER research_notes_updated_at
+    BEFORE UPDATE ON research_notes
+    FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- ─────────────────────────────────────────────────
 --  AI MEMORY  (per-user per-symbol analysis history)

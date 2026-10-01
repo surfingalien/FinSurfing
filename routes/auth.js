@@ -274,7 +274,7 @@ router.post('/register', async (req, res) => {
       // Store OTP in DB
       await query('DELETE FROM email_verifications WHERE user_id = $1', [user.id])
       await query(
-        'INSERT INTO email_verifications (user_id, code_hash, expires_at) VALUES ($1,$2,$3)',
+        'INSERT INTO email_verifications (user_id, token_hash, expires_at) VALUES ($1,$2,$3)',
         [user.id, sha256(code), exp]
       )
       await auditLog(user.id, 'register', req)
@@ -353,7 +353,7 @@ router.post('/verify-email', async (req, res) => {
 
       const otpRes = await query(
         `SELECT id, expires_at FROM email_verifications
-         WHERE user_id = $1 AND code_hash = $2`,
+         WHERE user_id = $1 AND token_hash = $2`,
         [userId, sha256(code)]
       )
       const otp = otpRes.rows[0]
@@ -428,7 +428,7 @@ router.post('/resend-verification', async (req, res) => {
       if (!r.rows[0]) return res.json({ ok: true }) // silent
       await query('DELETE FROM email_verifications WHERE user_id = $1', [r.rows[0].id])
       await query(
-        'INSERT INTO email_verifications (user_id, code_hash, expires_at) VALUES ($1,$2,$3)',
+        'INSERT INTO email_verifications (user_id, token_hash, expires_at) VALUES ($1,$2,$3)',
         [r.rows[0].id, sha256(code), new Date(Date.now() + 10 * 60000)]
       )
     } catch {}
