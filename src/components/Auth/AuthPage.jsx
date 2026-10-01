@@ -1,5 +1,5 @@
 /**
- * AuthPage — login, register, verify-email, forgot-password flows.
+ * AuthPage — login, register, verify-email, forgot-password and reset-password flows.
  * No credentials are displayed to users.
  */
 import { useState, useRef } from 'react'
@@ -398,11 +398,87 @@ function ForgotForm({ onBack }) {
   )
 }
 
+// ── Reset password form (opened from the emailed link) ───────────────────────
+// The email links to /reset-password?token=…; App reads the token and opens
+// this view. Until it existed the link landed on the home page, so a reset
+// could never be completed.
+function ResetForm({ token, onDone }) {
+  const { resetPassword } = useAuth()
+  const [password, setPassword] = useState('')
+  const [confirm,  setConfirm]  = useState('')
+  const [error,    setError]    = useState(null)
+  const [done,     setDone]     = useState(false)
+  const [loading,  setLoading]  = useState(false)
+
+  const weak = password && !(password.length >= 8 && /[a-zA-Z]/.test(password) && /\d/.test(password))
+  const mismatch = confirm && confirm !== password
+
+  const submit = async (e) => {
+    e.preventDefault()
+    if (weak || mismatch || !password) return
+    setLoading(true); setError(null)
+    try { await resetPassword(token, password); setDone(true) }
+    catch (err) { setError(err.message) }
+    finally { setLoading(false) }
+  }
+
+  if (!token) {
+    return (
+      <div className="text-center space-y-3 py-2">
+        <p className="text-sm text-slate-300">This reset link is incomplete.</p>
+        <button onClick={onDone} className="text-xs text-[#00ffcc] hover:underline">Back to sign in</button>
+      </div>
+    )
+  }
+
+  if (done) {
+    return (
+      <div className="text-center space-y-4 py-4">
+        <CheckCircle className="w-12 h-12 text-[#00ffcc] mx-auto" />
+        <div>
+          <h3 className="text-sm font-semibold text-white">Password updated</h3>
+          <p className="text-xs text-slate-500 mt-1">Sign in with your new password.</p>
+        </div>
+        <button onClick={onDone} className="text-xs text-[#00ffcc] hover:underline">Sign in</button>
+      </div>
+    )
+  }
+
+  return (
+    <form onSubmit={submit} className="space-y-4">
+      <Field label="New password" type="password" value={password} onChange={setPassword}
+        autoComplete="new-password" hint="8+ characters, with a letter and a number"
+        error={weak ? 'Use 8+ characters with a letter and a number' : null} />
+      <Field label="Confirm new password" type="password" value={confirm} onChange={setConfirm}
+        autoComplete="new-password" error={mismatch ? 'Passwords do not match' : null} />
+      {error && (
+        <p className="text-xs text-red-400">
+          {error}{/invalid|expired/i.test(error) ? ' — request a new link from “Forgot password?”.' : ''}
+        </p>
+      )}
+      <button
+        type="submit"
+        disabled={loading || !password || !confirm || weak || mismatch}
+        className="w-full py-2.5 rounded-lg font-semibold text-sm text-[#0a0e1a]
+                   bg-[#00ffcc] hover:bg-[#00e6b8] disabled:opacity-40 transition-all
+                   flex items-center justify-center gap-2"
+      >
+        {loading && <Loader2 size={15} className="animate-spin" />}
+        Set new password
+      </button>
+      <button type="button" onClick={onDone}
+        className="w-full text-xs text-slate-500 hover:text-slate-300 transition-colors">
+        Back to sign in
+      </button>
+    </form>
+  )
+}
+
 // ── Main AuthPage ─────────────────────────────────────────────────────────────
-export default function AuthPage({ onContinueWithoutAccount, onBack, initialView = 'login' }) {
+export default function AuthPage({ onContinueWithoutAccount, onBack, initialView = 'login', resetToken = null }) {
   const { login } = useAuth()
 
-  // view: 'login' | 'register' | 'forgot' | 'verify'
+  // view: 'login' | 'register' | 'forgot' | 'verify' | 'reset'
   const [view,      setView]      = useState(initialView)
   const [verifyEmail, setVerifyEmail] = useState('')
   const [demoCode,  setDemoCode]  = useState(null)
@@ -412,6 +488,7 @@ export default function AuthPage({ onContinueWithoutAccount, onBack, initialView
     register: { h: 'Create your account', sub: 'Free forever — no credit card needed' },
     forgot:   { h: 'Reset password',    sub: 'We\'ll send a link to your email'   },
     verify:   { h: 'Verify your email', sub: 'Enter the 6-digit code we sent you' },
+    reset:    { h: 'Choose a new password', sub: 'This link works once and expires after an hour' },
   }
   const { h, sub } = TITLES[view] || TITLES.login
 
@@ -505,6 +582,9 @@ export default function AuthPage({ onContinueWithoutAccount, onBack, initialView
           )}
           {view === 'forgot' && (
             <ForgotForm onBack={() => setView('login')} />
+          )}
+          {view === 'reset' && (
+            <ResetForm token={resetToken} onDone={() => setView('login')} />
           )}
           {view === 'verify' && (
             <VerifyEmailStep

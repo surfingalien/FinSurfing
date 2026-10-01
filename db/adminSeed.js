@@ -48,15 +48,20 @@ async function seedAdminDB(query) {
   if (!ADMIN_EMAIL || !ADMIN_PASSWORD) return
 
   try {
-    // 1. Upsert admin user
+    // 1. Upsert admin user. The column is `is_verified` (db/schema.sql) — this
+    // wrote `email_verified`, so the insert failed into the catch below and the
+    // admin account never existed in DB mode. ADMIN_PASSWORD is authoritative
+    // on every boot: it is the operator's way back in when email cannot be sent.
     const hash = await bcrypt.hash(ADMIN_PASSWORD, 12)
     const username = ADMIN_EMAIL.split('@')[0].replace(/[^a-z0-9_]/gi, '_').toLowerCase()
 
     await query(`
-      INSERT INTO users (email, username, display_name, password_hash, role, email_verified, created_at, updated_at)
+      INSERT INTO users (email, username, display_name, password_hash, role, is_verified, created_at, updated_at)
       VALUES ($1, $2, 'Admin', $3, 'admin', TRUE, NOW(), NOW())
       ON CONFLICT (email) DO UPDATE
-        SET role = 'admin', email_verified = TRUE, updated_at = NOW()
+        SET role = 'admin', is_verified = TRUE, is_active = TRUE,
+            password_hash = EXCLUDED.password_hash,
+            failed_login_attempts = 0, locked_until = NULL, updated_at = NOW()
     `, [ADMIN_EMAIL, username, hash])
 
     // 2. Get admin user id

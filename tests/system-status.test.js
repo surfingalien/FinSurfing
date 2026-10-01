@@ -53,6 +53,23 @@ describe('evaluateStatus', () => {
     expect(s.checks.find(x => x.id === 'fundamentals').status).toBe('ok')
   })
 
+  test('no email provider fails, with the admin-login workaround in the fix', () => {
+    const c = evaluateStatus({ ...healthy, email: { provider: 'none' } }, NOW).checks.find(x => x.id === 'email')
+    expect(c.status).toBe('fail')
+    expect(c.fix).toMatch(/ADMIN_EMAIL/)
+  })
+
+  test('Resend on the default sender domain is a warning', () => {
+    const c = evaluateStatus({ ...healthy, email: { provider: 'resend', from: 'FinSurf <noreply@finsurf.app>', fromDefault: true }, appUrl: true }, NOW).checks.find(x => x.id === 'email')
+    expect(c.status).toBe('warn')
+    expect(c.fix).toMatch(/RESEND_FROM/)
+  })
+
+  test('a configured sender with APP_URL set is ok', () => {
+    const c = evaluateStatus({ ...healthy, email: { provider: 'smtp', from: 'me@x.com', fromDefault: false }, appUrl: true }, NOW).checks.find(x => x.id === 'email')
+    expect(c.status).toBe('ok')
+  })
+
   test('a failed scheduled job is reported with its error', () => {
     const s = evaluateStatus({ ...healthy, jobs: [{ id: 'x', name: 'Nightly learning', result: { status: 'error', error: 'boom', failedAt: NOW - 3600000 } }] }, NOW)
     expect(s.checks.find(c => c.id === 'job:x')).toMatchObject({ status: 'fail' })
