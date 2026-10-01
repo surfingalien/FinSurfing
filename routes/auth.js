@@ -37,7 +37,19 @@ const { query }     = require('../db/db')
 const { requireAuth, SECRET } = require('../middleware/auth')
 const { MEM, persistMem } = require('../db/memstore')
 const { makeAdminHoldings } = require('../db/adminSeed')
-const { sendEmail } = require('../lib/email')
+const { sendEmail: rawSendEmail } = require('../lib/email')
+
+// A provider rejection (unverified sender domain, bad key, quota) must not
+// throw out of register/forgot-password: register had already inserted the
+// user, so it answered 500, the retry said "already exists", and the account
+// was stuck unverified. Log the provider's reason and report "not sent".
+async function sendEmail(msg) {
+  try { return await rawSendEmail(msg) }
+  catch (e) {
+    console.error(`[EMAIL] send failed (${msg.subject}): ${e.message}`)
+    return false
+  }
+}
 
 const router = express.Router()
 

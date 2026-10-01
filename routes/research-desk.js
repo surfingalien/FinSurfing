@@ -241,6 +241,8 @@ router.get('/system-status', requireAuth, evidenceLimit, async (req, res) => {
       facts.fmpProbe = prof ? { ok: true } : { ok: false, error: 'no data returned for AAPL' }
     } catch (e) { facts.fmpProbe = { ok: false, error: e.message } }
   }
+  facts.email = require('../lib/email').emailConfig()
+  facts.appUrl = !!process.env.APP_URL
   facts.persistence = durableFiles.status()
   try { facts.symbolIndex = require('../lib/symbol-db').stats() } catch { facts.symbolIndex = { loaded: false } }
   try {

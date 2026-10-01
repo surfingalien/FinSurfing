@@ -83,12 +83,35 @@ function LoadingScreen({ label = 'Loading…', fullScreen = false }) {
 function AppInner() {
   const { isAuthenticated, loading: authLoading } = useAuth()
 
-  // 'landing' | 'login' | 'register' | 'app'
-  const [screen, setScreen] = useState('landing')
+  // The password-reset email links to /reset-password?token=…. Read the token
+  // once, then take it out of the address bar so it is not left in history.
+  const [resetToken] = useState(() => {
+    try {
+      const { pathname, search, hash } = window.location
+      const isReset = pathname.replace(/\/+$/, '') === '/reset-password' || hash.startsWith('#/reset-password')
+      if (!isReset) return null
+      const qs = search || (hash.includes('?') ? hash.slice(hash.indexOf('?')) : '')
+      const token = new URLSearchParams(qs).get('token') || ''
+      window.history.replaceState(null, '', '/')
+      return token
+    } catch { return null }
+  })
+
+  // 'landing' | 'login' | 'register' | 'reset' | 'app'
+  const [screen, setScreen] = useState(resetToken != null ? 'reset' : 'landing')
 
   // Show spinner while restoring session (only briefly)
   if (authLoading) {
     return <LoadingScreen label="Restoring session…" fullScreen />
+  }
+
+  // A reset link wins even over a signed-in session: the user asked to change it.
+  if (screen === 'reset') {
+    return (
+      <Suspense fallback={<LoadingScreen fullScreen />}>
+        <AuthPage initialView="reset" resetToken={resetToken} onBack={() => setScreen('landing')} />
+      </Suspense>
+    )
   }
 
   // Authenticated — go straight to app regardless of screen state
