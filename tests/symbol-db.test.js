@@ -54,6 +54,23 @@ describe('buildClass', () => {
     ])
   })
 
+  test("US companies keep only their US common-share listings", () => {
+    // The real file lists Apple on a dozen exchanges, all with country "United States".
+    const csv = [
+      'symbol,name,sector,industry,country,market_cap,mic,delisted',
+      'AAPL,Apple Inc.,Information Technology,Hardware,United States,Mega Cap,XNAS,False',
+      'AAPL.BA,Apple Inc.,Information Technology,Hardware,United States,Mega Cap,XBUE,False',
+      'AAPL.MI,Apple Inc.,Information Technology,Hardware,United States,Mega Cap,XMIL,False',
+      'BRK-B,Berkshire Hathaway,Financials,Insurance,United States,Mega Cap,XNYS,False',
+      'BAC-PA,Bank of America Pref A,Financials,Banks,United States,Large Cap,XNYS,False',
+      'GONE,Gone Corp,Energy,Oil,United States,Large Cap,XNYS,True',
+      'SAP.DE,SAP SE,Information Technology,Software,Germany,Large Cap,XETR,False',
+    ].join('\n')
+    expect(buildClass('equity', csv, new Set(['United States'])).map(r => r.symbol)).toEqual(['AAPL', 'BRK-B'])
+    // A non-US company opted in keeps its own listings.
+    expect(buildClass('equity', csv, new Set(['Germany'])).map(r => r.symbol)).toEqual(['SAP.DE'])
+  })
+
   test('null country filter keeps all rows with a symbol', () => {
     const recs = buildClass('equity', equitiesCsv, null)
     expect(recs.map(r => r.symbol)).toEqual(['AAPL', 'SAP'])
@@ -140,5 +157,15 @@ describe('query layer (injected store)', () => {
 
   test('stats reports counts per class', () => {
     expect(stats()).toMatchObject({ loaded: true, counts: { equity: 6, etf: 1, fund: 1, crypto: 1 } })
+  })
+})
+
+describe('bz2 sources', () => {
+  test('the compressed source decodes off the main thread to the original CSV', async () => {
+    const { _decodeBz2 } = require('../lib/symbol-db')
+    // "symbol,name\nAAPL,Apple\n" compressed with bzip2 -9.
+    const fixture = Buffer.from(
+      'QlpoOTFBWSZTWWW00XkAAArXgAAQAAQgBEAAMgfIICAAIgBMBCmAAPAsIzOdUD3nZOrN98XckU4UJBltNF5A', 'base64')
+    expect((await _decodeBz2(fixture)).toString('utf8')).toBe('symbol,name\nAAPL,Apple\n')
   })
 })
