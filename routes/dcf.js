@@ -19,6 +19,7 @@ const { getRouter } = require('../lib/ai-router')
 
 const aiRouter = getRouter('dcf')
 
+const fmp     = require('../lib/fmp')
 const FMP_KEY = () => process.env.FMP_API_KEY || null
 
 const dcfLimit = rateLimit({
@@ -39,22 +40,11 @@ const SYSTEM_PROMPT =
 // return HTTP 200 with an {"Error Message": ...} body).
 let _lastFmpError = null
 
-async function fmpJson(url) {
-  try {
-    const r = await fetch(url, { signal: AbortSignal.timeout(10000) })
-    if (!r.ok) {
-      if (r.status === 401 || r.status === 403) _lastFmpError = 'FMP API key invalid or lacks access to this data'
-      else if (r.status === 429) _lastFmpError = 'FMP rate limit reached — try again shortly'
-      return null
-    }
-    const d = await r.json()
-    // FMP signals plan/rate errors as a 200 with an Error Message field
-    if (d && !Array.isArray(d) && (d['Error Message'] || d.error)) {
-      _lastFmpError = d['Error Message'] || d.error
-      return null
-    }
-    return d
-  } catch {
+// Awaits one lib/fmp call; on failure records why (for the 502 below) and
+// yields null so the other three calls can still answer.
+async function fmpSoft(promise) {
+  try { return await promise } catch (e) {
+    _lastFmpError = e?.status === 429 ? 'FMP rate limit reached — try again shortly' : (e?.message || 'FMP request failed')
     return null
   }
 }
@@ -144,18 +134,17 @@ router.post('/', dcfLimit, async (req, res) => {
 
   _lastFmpError = null
   try {
-    const base = 'https://financialmodelingprep.com/api/v3'
-    const [income, cashflow, balance, profileArr] = await Promise.all([
-      fmpJson(`${base}/income-statement/${sym}?limit=5&apikey=${fmpKey}`),
-      fmpJson(`${base}/cash-flow-statement/${sym}?limit=5&apikey=${fmpKey}`),
-      fmpJson(`${base}/balance-sheet-statement/${sym}?limit=1&apikey=${fmpKey}`),
-      fmpJson(`${base}/profile/${sym}?apikey=${fmpKey}`),
+    const o = { key: fmpKey, timeoutMs: 10000 }
+    const [income, cashflow, balance, profileRow] = await Promise.all([
+      fmpSoft(fmp.statements('income-statement',        sym, { limit: 5, ...o })),
+      fmpSoft(fmp.statements('cash-flow-statement',     sym, { limit: 5, ...o })),
+      fmpSoft(fmp.statements('balance-sheet-statement', sym, { limit: 1, ...o })),
+      fmpSoft(fmp.profile(sym, o)),
     ])
 
     const incomeArr   = Array.isArray(income) ? income : []
     const cashflowArr = Array.isArray(cashflow) ? cashflow : []
     const balanceRow  = Array.isArray(balance) ? balance[0] : null
-    const profileRow  = Array.isArray(profileArr) ? profileArr[0] : null
 
     // No usable data → distinguish an FMP error from a genuinely unknown symbol
     if (!incomeArr.length && !cashflowArr.length && !profileRow) {

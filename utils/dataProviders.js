@@ -16,7 +16,7 @@
 'use strict'
 
 const AV_BASE      = 'https://www.alphavantage.co/query'
-const FMP_BASE     = 'https://financialmodelingprep.com/api'
+const fmp          = require('../lib/fmp')
 const FINNHUB_BASE = 'https://finnhub.io/api/v1'
 
 // ── Helper: timed fetch with abort ───────────────────────────────────────────
@@ -89,17 +89,16 @@ async function fetchFMPFundamentals(symbol) {
   const key = process.env.FMP_API_KEY
   if (!key) return { source: 'fmp', available: false, reason: 'FMP_API_KEY not set' }
 
-  const base = `${FMP_BASE}/v3`
-  const q    = `apikey=${key}`
-
-  // Fire all requests in parallel
+  // Fire all requests in parallel. lib/fmp: stable API first, legacy second,
+  // legacy field names back (so the mapping below reads either).
+  const o = { key, timeoutMs: 10000 }
   const [profile, metrics, income, estimates, dcf, peers] = await Promise.allSettled([
-    timedFetch(`${base}/profile/${symbol}?${q}`),
-    timedFetch(`${base}/key-metrics-ttm/${symbol}?${q}`),
-    timedFetch(`${base}/income-statement/${symbol}?limit=4&${q}`),
-    timedFetch(`${base}/analyst-estimates/${symbol}?limit=4&${q}`),
-    timedFetch(`${base}/discounted-cash-flow/${symbol}?${q}`),
-    timedFetch(`${base}/stock_peers?symbol=${symbol}&${q}`),
+    fmp.profile(symbol, o).then(p => (p ? [p] : [])),
+    fmp.metricsTtm(symbol, o).then(m => [m]),
+    fmp.statements('income-statement', symbol, { limit: 4, ...o }),
+    fmp.analystEstimates(symbol, { limit: 4, ...o }),
+    fmp.dcf(symbol, o).then(d => (d ? [d] : [])),
+    fmp.peers(symbol, o),
   ])
 
   const p  = profile.value?.[0]   || {}
@@ -136,7 +135,7 @@ async function fetchFMPFundamentals(symbol) {
     : null
 
   // Peers list
-  const peersList = peers.value?.peers || []
+  const peersList = Array.isArray(peers.value) ? peers.value : []
 
   return {
     source:    'fmp',
@@ -156,7 +155,7 @@ async function fetchFMPFundamentals(symbol) {
     },
     valuation: {
       marketCap:      p.mktCap,
-      pe:             p.pe,
+      pe:             p.pe ?? m.peRatioTTM ?? null,
       priceToBook:    m.priceToBookRatioTTM,
       priceToSales:   m.priceToSalesRatioTTM,
       evToEbitda:     m.enterpriseValueOverEBITDATTM,
@@ -200,8 +199,7 @@ async function fetchFMPNews(symbol) {
   const key = process.env.FMP_API_KEY
   if (!key) return { source: 'fmp_news', available: false, reason: 'FMP_API_KEY not set' }
 
-  const url  = `${FMP_BASE}/v3/stock_news?tickers=${symbol}&limit=8&apikey=${key}`
-  const data = await timedFetch(url, 10000)
+  const data = await fmp.stockNews([symbol], { key, limit: 8, timeoutMs: 10000 }).catch(() => null)
 
   if (!Array.isArray(data)) return { source: 'fmp_news', available: false, reason: 'Unexpected response' }
 
@@ -244,8 +242,7 @@ async function fetchFMPInsiderActivity(symbol) {
   const key = process.env.FMP_API_KEY
   if (!key) return { source: 'fmp_insider', available: false, reason: 'FMP_API_KEY not set' }
 
-  const url  = `${FMP_BASE}/v4/insider-trading?symbol=${symbol}&limit=10&apikey=${key}`
-  const data = await timedFetch(url, 10000)
+  const data = await fmp.insiderTrades(symbol, { key, limit: 10, timeoutMs: 10000 }).catch(() => null)
 
   if (!Array.isArray(data)) return { source: 'fmp_insider', available: false, reason: 'Unexpected response' }
 
@@ -259,8 +256,8 @@ async function fetchFMPInsiderActivity(symbol) {
     role:        t.typeOfOwner,
   }))
 
-  const buys  = transactions.filter(t => t.type?.toLowerCase().includes('purchase') || t.type === 'P-Purchase')
-  const sells = transactions.filter(t => t.type?.toLowerCase().includes('sale') || t.type === 'S-Sale')
+  const buys  = data.filter(t => fmp.insiderSide(t) === 'buy')
+  const sells = data.filter(t => fmp.insiderSide(t) === 'sell')
 
   return {
     source: 'fmp_insider',

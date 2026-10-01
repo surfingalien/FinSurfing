@@ -70,11 +70,7 @@ async function fetchFMPEarnings(symbols) {
     const today = new Date()
     const from  = today.toISOString().slice(0, 10)
     const to    = new Date(today.getTime() + 90 * 24 * 3600 * 1000).toISOString().slice(0, 10)
-    const r = await fetch(
-      `https://financialmodelingprep.com/api/v3/earning_calendar?from=${from}&to=${to}&apikey=${key}`,
-      { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(12000) }
-    )
-    const data = await r.json()
+    const data = await require('../lib/fmp').earningsCalendar(from, to, { key, timeoutMs: 12000 })
     if (!Array.isArray(data) || !data.length) return null
 
     const symSet = new Set(symbols.map(s => s.toUpperCase()))

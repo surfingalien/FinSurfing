@@ -60,7 +60,9 @@ const { PREDICTION_LOG } = require('../lib/prediction-log-path')
 // before and after must not be pooled in calibration.
 // v3: discovery universes (a new list each scan) and only live-priced symbols —
 // the prompt no longer invites the model to price from memory.
-const SCAN_PROMPT_VERSION = 3
+// v4: the units of targetReturn/stopLoss are stated (percent, never a price) —
+// a live scan wrote stop PRICES there for 15 of 20 picks.
+const SCAN_PROMPT_VERSION = 4
 
 const brainLimit = rateLimit({
   windowMs: 5 * 60 * 1000, max: 4,
@@ -416,8 +418,8 @@ async function getMovers(fmpKey) {
   const pair = async (stable, legacy) => (await get(`https://financialmodelingprep.com/stable/${stable}`))
     ?? (await get(`https://financialmodelingprep.com/api/v3/stock_market/${legacy}`)) ?? []
   const [actives, gainers] = await Promise.all([pair('most-actives', 'actives'), pair('biggest-gainers', 'gainers')])
-  const rows = [...actives, ...gainers].map(r => ({ symbol: r.symbol, price: r.price, changePct: r.changesPercentage ?? null }))
-  _moversCache = { at: Date.now(), rows }
+  const rows = [...actives, ...gainers].map(r => ({ symbol: r.symbol, price: r.price, changePct: r.changesPercentage ?? r.changePercentage ?? null }))
+  if (rows.length) _moversCache = { at: Date.now(), rows }
   return rows
 }
 
@@ -432,26 +434,24 @@ async function getLivePool(fmpKey, fmpSector = null) {
   const hit = _poolCache.get(key)
   if (hit && Date.now() - hit.at < POOL_TTL) return hit.symbols
   if (!fmpKey) return []
-  const params = new URLSearchParams({
-    marketCapMoreThan: fmpSector ? '5000000000' : '20000000000',
-    isActivelyTrading: 'true', isEtf: 'false', isFund: 'false', limit: '200', exchange: 'NASDAQ,NYSE',
-  })
-  if (fmpSector) params.set('sector', fmpSector)
-  const get = async (url) => {
-    try {
-      const r = await fetch(`${url}?${params}&apikey=${fmpKey}`, { signal: AbortSignal.timeout(10_000) })
-      if (!r.ok) return null
-      const j = await r.json()
-      return Array.isArray(j) && j.length ? j : null
-    } catch { return null }
+  const params = {
+    marketCapMoreThan: fmpSector ? 5_000_000_000 : 20_000_000_000,
+    isActivelyTrading: true, isEtf: false, isFund: false, country: 'US', limit: 300,
+    sector: fmpSector,
   }
-  const rows = (await get('https://financialmodelingprep.com/stable/company-screener'))
-    ?? (await get('https://financialmodelingprep.com/api/v3/stock-screener')) ?? []
+  // One exchange per call is all the stable screener documents, so the US
+  // listing filter is applied here rather than passed as a list it may ignore.
+  const US_EXCHANGES = new Set(['NASDAQ', 'NYSE', 'AMEX'])
+  let rows = []
+  try { rows = await require('../lib/fmp').screener(params, { key: fmpKey, timeoutMs: 10_000 }) } catch { rows = [] }
+  rows = rows.filter(r => !r.exchangeShortName || US_EXCHANGES.has(String(r.exchangeShortName).toUpperCase()))
   const symbols = rows
     .filter(r => isPlainTicker(String(r.symbol || '')))
     .sort((a, b) => (Number(b.volume) || 0) - (Number(a.volume) || 0))
     .map(r => r.symbol)
-  _poolCache.set(key, { at: Date.now(), symbols })
+  // A failed call is not cached: an hour of empty pools would pin every scan
+  // to the fallback list.
+  if (symbols.length) _poolCache.set(key, { at: Date.now(), symbols })
   return symbols
 }
 
@@ -869,6 +869,7 @@ Respond ONLY with valid JSON (no markdown, no text outside the JSON object):
 Rules:
 - Include up to 20 top picks ranked by compositeScore; prefer symbols NOT already in holdings
 - agentVerdict: use "Avoid" when the setup is genuinely unattractive or the evidence points DOWN. Do NOT express a bearish view as a negative targetReturn on a buy verdict — say "Avoid" and explain why in the analyses. For "Avoid", set targetReturn and stopLoss to 0 and leave the price zones at 0; there is no trade to price. Never pad the list with buys you do not believe
+- UNITS: targetReturn and stopLoss are PERCENTAGES measured from the entry, never prices. targetReturn 12 means the target is 12% above entry; stopLoss 8 means the stop is 8% below entry (a $100 entry with stopLoss 8 stops at $92). Dollar levels go ONLY in the *Zone* fields
 - compositeScore = weighted avg (fundamental 25%, technical 20%, sentiment 15%, macro 20%, risk 20%)
 - RSRank in COMPUTED TECHNICALS = intra-universe relative-strength percentile over 20 days (100=top, 0=weakest in this scan). Boost technicalScore +8 when RSRank ≥ 70 with uptrend; cut -8 when RSRank ≤ 30 (chronic underperformer) unless thesis is explicit turnaround
 - All scores 0-100; riskScore: higher = safer

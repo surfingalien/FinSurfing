@@ -13,28 +13,12 @@
 
 const express  = require('express')
 const router   = express.Router()
+const fmp      = require('../lib/fmp')
 
 const FMP_KEY     = () => process.env.FMP_API_KEY || null
 const CACHE_TTL   = 4 * 60 * 60_000
 const _cache      = new Map()
 const VALID_SYM   = /^[A-Z0-9.\-]{1,10}$/
-
-function fmpUrl(sym, path, key) {
-  const sep = path.includes('?') ? '&' : '?'
-  return `https://financialmodelingprep.com/api/v3/${path}${sep}apikey=${key}`
-}
-
-async function fmpGet(url) {
-  const r = await fetch(url, { signal: AbortSignal.timeout(12_000) })
-  if (!r.ok) {
-    const body = await r.json().catch(() => ({}))
-    if (body?.['Error Message']) throw new Error(body['Error Message'])
-    throw new Error(`FMP HTTP ${r.status}`)
-  }
-  const data = await r.json()
-  if (data?.['Error Message']) throw new Error(data['Error Message'])
-  return Array.isArray(data) ? data : [data]
-}
 
 function n(v) {
   const x = parseFloat(v)
@@ -67,28 +51,31 @@ router.get('/:symbol', async (req, res) => {
   const hit = _cache.get(raw)
   if (hit && Date.now() - hit.ts < CACHE_TTL) return res.json({ ...hit.data, cached: true })
 
-  const B = 'https://financialmodelingprep.com/api/v3'
-
   try {
-    const [incArr, balArr, cfArr, kmArr, profArr, recArr, surArr] = await Promise.all([
-      fmpGet(`${B}/income-statement/${raw}?period=quarter&limit=5&apikey=${key}`),
-      fmpGet(`${B}/balance-sheet-statement/${raw}?period=quarter&limit=2&apikey=${key}`),
-      fmpGet(`${B}/cash-flow-statement/${raw}?period=quarter&limit=5&apikey=${key}`),
-      fmpGet(`${B}/key-metrics-ttm/${raw}?apikey=${key}`),
-      fmpGet(`${B}/profile/${raw}?apikey=${key}`),
-      fmpGet(`${B}/analyst-stock-recommendations/${raw}?limit=5&apikey=${key}`).catch(() => []),
-      fmpGet(`${B}/earnings-surprises/${raw}?limit=4&apikey=${key}`).catch(() => []),
+    // Five quarters: four for TTM sums, the fifth is the same quarter a year
+    // earlier for YoY. Analyst counts and surprises are optional extras.
+    // Each part degrades on its own (plans differ in what they serve); the
+    // first provider error is kept so an all-empty answer can say why.
+    const o = { key }
+    let firstErr = null
+    const soft = (p, empty) => p.catch(e => { firstErr = firstErr || e; return empty })
+    const [incArr, balArr, cfArr, km, prof, consensus, surArr] = await Promise.all([
+      soft(fmp.statements('income-statement',        raw, { period: 'quarter', limit: 5, ...o }), []),
+      soft(fmp.statements('balance-sheet-statement', raw, { period: 'quarter', limit: 2, ...o }), []),
+      soft(fmp.statements('cash-flow-statement',     raw, { period: 'quarter', limit: 5, ...o }), []),
+      soft(fmp.metricsTtm(raw, o), {}),
+      soft(fmp.profile(raw, o), null),
+      fmp.analystConsensus(raw, o).catch(() => null),
+      fmp.earningsSurprises(raw, { limit: 4, ...o }).catch(() => []),
     ])
 
     const incRows = incArr.slice(0, 4)
     const bsRow   = balArr[0] || {}
     const cfRows  = cfArr.slice(0, 4)
-    const km      = kmArr[0]  || {}
-    const prof    = profArr[0] || null
-    const recRows = recArr
     const surRows = surArr
 
     if (!incRows.length && !prof) {
+      if (firstErr) return res.status(502).json({ error: `FMP: ${firstErr.message}` })
       return res.status(404).json({
         error: `No fundamental data for ${raw} — FMP does not cover this symbol (crypto, most international equities, ETFs)`,
       })
@@ -120,9 +107,12 @@ router.get('/:symbol', async (req, res) => {
 
     // TTM = sum of last 4 quarters
     const ttmRevenue = quarters.reduce((s, q) => s + (q.revenue ?? 0), 0) || null
-    // YoY: compare most recent quarter vs same quarter prior year (index 3)
-    const yoyRevGrowth = (quarters.length >= 4 && quarters[0].revenue && quarters[3].revenue)
-      ? pct((quarters[0].revenue - quarters[3].revenue) / Math.abs(quarters[3].revenue))
+    // YoY: most recent quarter vs the SAME quarter a year earlier — four
+    // quarters back (index 4). Index 3 is only three quarters back, which
+    // mixed seasonality into a number labelled year-over-year.
+    const yearAgoRev = n(incArr[4]?.revenue)
+    const yoyRevGrowth = (quarters[0]?.revenue && yearAgoRev)
+      ? pct((quarters[0].revenue - yearAgoRev) / Math.abs(yearAgoRev))
       : null
 
     // ── Balance sheet ─────────────────────────────────────────────────────────
@@ -197,8 +187,8 @@ router.get('/:symbol', async (req, res) => {
 
     // ── Analyst distribution ──────────────────────────────────────────────────
     let analyst_dist = null
-    if (recRows.length) {
-      const r = recRows[0]
+    if (consensus) {
+      const r = consensus
       const buy  = (n(r.buy) ?? 0) + (n(r.strongBuy) ?? 0)
       const hold = n(r.hold) ?? 0
       const sell = (n(r.sell) ?? 0) + (n(r.strongSell) ?? 0)
@@ -216,7 +206,7 @@ router.get('/:symbol', async (req, res) => {
 
     // ── EPS surprise history ──────────────────────────────────────────────────
     const eps_surprises = surRows.slice(0, 4).map(s => {
-      const est = n(s.estimatedEps)
+      const est = n(s.estimatedEps) ?? n(s.estimatedEarning)
       const act = n(s.actualEarningResult)
       return {
         date:     s.date,
@@ -248,7 +238,7 @@ router.get('/:symbol', async (req, res) => {
     return res.json({ ...data, cached: false })
 
   } catch (err) {
-    return res.status(502).json({ error: err.message })
+    return res.status(502).json({ error: `FMP: ${err.message}` })
   }
 })
 

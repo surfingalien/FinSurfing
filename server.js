@@ -49,6 +49,7 @@ const heatmapRoutes         = require('./routes/heatmap')
 const adanosRoutes          = require('./routes/sentiment-adanos')
 const symbolDb              = require('./lib/symbol-db')
 const { mergeQuotes, fromSymbolDb, DEFAULT_LIMIT, MAX_LIMIT } = require('./lib/symbol-search')
+const fmp                   = require('./lib/fmp')
 // MCP endpoint depends on @modelcontextprotocol/sdk — a load failure here
 // (runtime/version mismatch) must degrade to a 503 on /api/mcp, never crash
 // the server: a boot crash fails Railway's healthcheck and silently pins
@@ -684,17 +685,13 @@ async function getFMPStockNews(symbol, keys = {}, limit = 8) {
   const key = keys.fmp || FMP_KEY()
   if (!key) return null
   try {
-    const tickerParam = symbol ? `&tickers=${encodeURIComponent(symbol)}` : ''
-    const data = await apiFetch(
-      fmpUrl(`/stock_news?limit=${limit}${tickerParam}`, key),
-      10000
-    )
+    const data = await fmp.stockNews(symbol ? [symbol] : null, { key, limit, timeoutMs: 10000 })
     if (!Array.isArray(data) || !data.length) return null
     return {
       news: data.map(a => ({
         title:               a.title,
         link:                a.url,
-        publisher:           a.site,
+        publisher:           a.publisher || a.site,
         providerPublishTime: a.publishedDate ? Math.floor(new Date(a.publishedDate).getTime() / 1000) : null,
         thumbnail:           a.image ? { resolutions: [{ url: a.image }] } : null,
       }))
@@ -703,18 +700,16 @@ async function getFMPStockNews(symbol, keys = {}, limit = 8) {
 }
 
 // ── FMP helpers ───────────────────────────────────────────────────────────────
+// All FMP traffic goes through lib/fmp.js: current "stable" API first, legacy
+// v3 second, legacy response shape back (v3 is refused for post-2025 keys).
 const FMP_KEY = () => process.env.FMP_API_KEY
-function fmpUrl(path, key = FMP_KEY()) {
-  const sep = path.includes('?') ? '&' : '?'
-  return `https://financialmodelingprep.com/api/v3${path}${sep}apikey=${key}`
-}
 
 // Batch quote
 async function getFMPQuotes(symbols, keys = {}) {
   const key = keys.fmp || FMP_KEY()
   if (!key) return null
   try {
-    const data = await apiFetch(fmpUrl(`/quote/${symbols.join(',')}`, key), 10000)
+    const data = await fmp.quotes(symbols, { key, timeoutMs: 10000 })
     if (!Array.isArray(data) || !data.length) return null
     return data.map(q => ({
       symbol:                     q.symbol,
@@ -746,14 +741,13 @@ async function getFMPChart(symbol, interval = '1d', range = '1y', keys = {}) {
     const days  = { '1d':1,'5d':5,'1mo':30,'3mo':90,'6mo':180,'1y':365,'2y':730,'5y':1825,'max':7300 }[range] || 365
     const from  = new Date(today.getTime() - days * 86400000).toISOString().slice(0, 10)
     const isDailyPlus = ['1d','1wk','1mo'].includes(interval)
-    let url, historical
+    let historical
     if (isDailyPlus) {
-      const data = await apiFetch(fmpUrl(`/historical-price-full/${encodeURIComponent(symbol)}?from=${from}&to=${to}`, key), 15000)
-      historical = data?.historical
+      historical = await fmp.dailyHistory(symbol, { from, to, key, timeoutMs: 15000 })
     } else {
       const intMap = { '1m':'1min','5m':'5min','15m':'15min','30m':'30min','60m':'1hour','1h':'1hour' }
       const fi = intMap[interval] || '1hour'
-      historical = await apiFetch(fmpUrl(`/historical-chart/${fi}/${encodeURIComponent(symbol)}?from=${from}&to=${to}`, key), 15000)
+      historical = await fmp.intradayHistory(fi, symbol, { from, to, key, timeoutMs: 15000 })
     }
     if (!Array.isArray(historical) || !historical.length) return null
     const hist = [...historical].reverse()  // FMP returns newest-first
@@ -772,26 +766,32 @@ async function getFMPChart(symbol, interval = '1d', range = '1y', keys = {}) {
   } catch (e) { console.warn('[FMP] chart error:', e.message); return null }
 }
 
+// FMP profile `range` is "low-high" for 52 weeks, e.g. "201.5-344.57".
+function rangeEnd(range, i) {
+  const m = /^\s*([\d.]+)\s*-\s*([\d.]+)\s*$/.exec(String(range || ''))
+  return m ? Number(m[i + 1]) : null
+}
+
 // Fundamentals summary — returns Yahoo quoteSummary-compatible envelope
 async function getFMPSummary(symbol, keys = {}) {
   const key = keys.fmp || FMP_KEY()
   if (!key) return null
   try {
     const [profileR, metricsR] = await Promise.allSettled([
-      apiFetch(fmpUrl(`/profile/${encodeURIComponent(symbol)}`, key), 10000),
-      apiFetch(fmpUrl(`/key-metrics-ttm/${encodeURIComponent(symbol)}`, key), 10000),
+      fmp.profile(symbol, { key, timeoutMs: 10000 }),
+      fmp.metricsTtm(symbol, { key, timeoutMs: 10000 }),
     ])
-    const p = profileR.status  === 'fulfilled' ? (profileR.value?.[0]  || {}) : {}
-    const m = metricsR.status  === 'fulfilled' ? (metricsR.value?.[0]  || {}) : {}
+    const p = profileR.status  === 'fulfilled' ? (profileR.value || {}) : {}
+    const m = metricsR.status  === 'fulfilled' ? (metricsR.value || {}) : {}
     if (!p.symbol) return null
     return { quoteSummary: { result: [{
       summaryDetail: {
-        trailingPE:      p.pe           ?? null,
+        trailingPE:      p.pe ?? m.peRatioTTM ?? null,
         marketCap:       p.mktCap       ?? null,
         dividendYield:   p.lastDiv && p.price ? p.lastDiv / p.price : null,
         beta:            p.beta          ?? null,
-        fiftyTwoWeekHigh: p['52WeekHigh'] ?? null,
-        fiftyTwoWeekLow:  p['52WeekLow']  ?? null,
+        fiftyTwoWeekHigh: p['52WeekHigh'] ?? rangeEnd(p.range, 1),
+        fiftyTwoWeekLow:  p['52WeekLow']  ?? rangeEnd(p.range, 0),
         averageVolume:   p.volAvg        ?? null,
       },
       financialData: {
@@ -826,7 +826,7 @@ async function getFMPSearch(q, keys = {}) {
   const key = keys.fmp || FMP_KEY()
   if (!key) return null
   try {
-    const data = await apiFetch(fmpUrl(`/search?query=${encodeURIComponent(q)}&limit=${SEARCH_PROVIDER_CAP}`, key), 8000)
+    const data = await fmp.search(q, { key, limit: SEARCH_PROVIDER_CAP, timeoutMs: 8000 })
     if (!Array.isArray(data) || !data.length) return null
     return { quotes: data.map(r => {
       // FMP search doesn't return a type field in v3 — infer from exchange and name
@@ -2066,7 +2066,10 @@ app.get('/api/health/providers', async (req, res) => {
   const probes = [
     ['aisa',       !!keys.aisa,    () => wrap(getAISAQuotes([SYM], keys))],
     ['finnhub',    !!keys.finnhub, () => wrap(getFinnhubQuotes([SYM], keys))],
-    ['fmp',        !!keys.fmp,     () => wrap(getFMPQuotes([SYM], keys))],
+    // Called directly rather than via getFMPQuotes, which swallows errors: FMP
+    // explains a refusal in its body (plan limits, retired endpoints) and that
+    // message is the whole point of a health check.
+    ['fmp',        !!keys.fmp,     () => fmp.quotes([SYM], { key: keys.fmp, timeoutMs: 7000 }).then(rows => rows.map(q => ({ regularMarketPrice: q.price ?? null })))],
     ['twelvedata', !!keys.td,      () => wrap(getTwelveDataQuote(SYM, keys))],
     ['tiingo',     !!keys.tiingo,  () => wrap(getTiingoQuote(SYM, keys))],
     ['nasdaq',     true,           () => wrap(getNasdaqQuotes([SYM]))],

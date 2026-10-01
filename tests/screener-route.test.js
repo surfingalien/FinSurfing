@@ -65,12 +65,13 @@ const ratios = (over = {}) => [{
 }]
 
 /** Route fetch by URL shape, so tests declare data rather than call order. */
+const reply = (ok, status, body) => ({ ok, status, json: async () => body, text: async () => JSON.stringify(body) })
 function mockFetch(routes) {
   global.fetch = jest.fn(async (url) => {
     for (const [pattern, body] of routes) {
-      if (url.includes(pattern)) return { ok: true, json: async () => body }
+      if (url.includes(pattern)) return reply(true, 200, body)
     }
-    return { ok: false, status: 404, json: async () => ({}) }
+    return reply(false, 404, {})
   })
 }
 
@@ -88,7 +89,7 @@ afterAll(() => { global.fetch = realFetch })
 describe('POST /api/screener/run', () => {
   test('ranks on measured fundamentals and converts FMP decimals to percent', async () => {
     mockFetch([
-      ['stock-screener',  [candidate('SOLID', 100, 3)]],
+      ['stable/company-screener',  [candidate('SOLID', 100, 3)]],
       ['key-metrics-ttm', metrics()],
       ['ratios-ttm',      ratios()],
     ])
@@ -106,11 +107,11 @@ describe('POST /api/screener/run', () => {
 
   test('the uncovered high yielder ranks below the covered low yielder', async () => {
     mockFetch([
-      ['stock-screener', [candidate('TRAP', 50, 6), candidate('SOLID', 100, 3)]],
-      ['key-metrics-ttm/TRAP',  metrics({ roeTTM: 0.04, roicTTM: 0.02, freeCashFlowPerShareTTM: 1, dividendPerShareTTM: 6 })],
-      ['ratios-ttm/TRAP',       ratios({ payoutRatioTTM: 1.4, debtEquityRatioTTM: 2.6, netProfitMarginTTM: 0.02, operatingProfitMarginTTM: 0.03, freeCashFlowOperatingCashFlowRatioTTM: 0.01 })],
-      ['key-metrics-ttm/SOLID', metrics()],
-      ['ratios-ttm/SOLID',      ratios()],
+      ['stable/company-screener', [candidate('TRAP', 50, 6), candidate('SOLID', 100, 3)]],
+      ['key-metrics-ttm?symbol=TRAP',  metrics({ roeTTM: 0.04, roicTTM: 0.02, freeCashFlowPerShareTTM: 1, dividendPerShareTTM: 6 })],
+      ['ratios-ttm?symbol=TRAP',       ratios({ payoutRatioTTM: 1.4, debtEquityRatioTTM: 2.6, netProfitMarginTTM: 0.02, operatingProfitMarginTTM: 0.03, freeCashFlowOperatingCashFlowRatioTTM: 0.01 })],
+      ['key-metrics-ttm?symbol=SOLID', metrics()],
+      ['ratios-ttm?symbol=SOLID',      ratios()],
     ])
     const res = await run({ explain: false })
 
@@ -121,7 +122,7 @@ describe('POST /api/screener/run', () => {
   // ── the LLM annotates; it does not rank ───────────────────────────────────
   test('an explanation for a symbol not in the ranking is discarded', async () => {
     mockFetch([
-      ['stock-screener',  [candidate('SOLID', 100, 3)]],
+      ['stable/company-screener',  [candidate('SOLID', 100, 3)]],
       ['key-metrics-ttm', metrics()],
       ['ratios-ttm',      ratios()],
     ])
@@ -138,7 +139,7 @@ describe('POST /api/screener/run', () => {
 
   test('a failed or unparseable explanation never costs the ranking', async () => {
     mockFetch([
-      ['stock-screener',  [candidate('SOLID', 100, 3)]],
+      ['stable/company-screener',  [candidate('SOLID', 100, 3)]],
       ['key-metrics-ttm', metrics()],
       ['ratios-ttm',      ratios()],
     ])
@@ -152,7 +153,7 @@ describe('POST /api/screener/run', () => {
 
   test('the model is told the ranking is already computed and it may not reorder', async () => {
     mockFetch([
-      ['stock-screener',  [candidate('SOLID', 100, 3)]],
+      ['stable/company-screener',  [candidate('SOLID', 100, 3)]],
       ['key-metrics-ttm', metrics()],
       ['ratios-ttm',      ratios()],
     ])
@@ -168,7 +169,7 @@ describe('POST /api/screener/run', () => {
     mockFetch([
       ['key-metrics-ttm', metrics()],
       ['ratios-ttm',      ratios()],
-    ])   // stock-screener 404s
+    ])   // the bulk screener 404s
     const res = await run({ sector: 'Technology', explain: false })
 
     expect(res.body.candidateSource).toBe('symbol-db')
@@ -177,28 +178,51 @@ describe('POST /api/screener/run', () => {
   })
 
   test('no candidates returns an explicit reason, not a bare empty list', async () => {
-    mockFetch([['stock-screener', []]])
+    mockFetch([['stable/company-screener', []]])
     const res = await run({ sector: 'Nowhere', explain: false })
     expect(res.body.ranked).toEqual([])
     expect(res.body.error).toMatch(/No candidates/)
   })
 
   test('candidates with no usable fundamentals report why', async () => {
-    mockFetch([['stock-screener', [candidate('X', 10, 1)]]])   // enrichment 404s
+    mockFetch([['stable/company-screener', [candidate('X', 10, 1)]]])   // enrichment 404s
     const res = await run({ explain: false })
     expect(res.body.error).toMatch(/Fundamentals were unavailable/)
   })
 
   test('an FMP plan error in a 200 body is surfaced, not swallowed', async () => {
-    global.fetch = jest.fn(async () => ({ ok: true, json: async () => ({ 'Error Message': 'Exclusive Endpoint' }) }))
+    global.fetch = jest.fn(async () => reply(true, 200, { 'Error Message': 'Exclusive Endpoint' }))
     const res = await run({ explain: false })
     expect(res.body.notes.join(' ')).toMatch(/Exclusive Endpoint/)
+  })
+
+  test('the stable API refusing (a legacy-only key) falls back to the v3 paths', async () => {
+    global.fetch = jest.fn(async (url) => {
+      if (url.includes('/stable/')) return reply(true, 200, { 'Error Message': 'Restricted Endpoint' })
+      if (url.includes('api/v3/stock-screener'))       return reply(true, 200, [candidate('SOLID', 100, 3)])
+      if (url.includes('api/v3/key-metrics-ttm/SOLID')) return reply(true, 200, metrics())
+      if (url.includes('api/v3/ratios-ttm/SOLID'))      return reply(true, 200, ratios())
+      return reply(false, 404, {})
+    })
+    const res = await run({ explain: false })
+    expect(res.body.ranked.map(r => r.symbol)).toEqual(['SOLID'])
+  })
+
+  test('a current key is served by the stable API alone — no legacy call is made', async () => {
+    mockFetch([
+      ['stable/company-screener', [candidate('SOLID', 100, 3)]],
+      ['stable/key-metrics-ttm',  metrics()],
+      ['stable/ratios-ttm',       ratios()],
+    ])
+    const res = await run({ explain: false })
+    expect(res.body.ranked.map(r => r.symbol)).toEqual(['SOLID'])
+    expect(global.fetch.mock.calls.map(c => c[0]).filter(u => u.includes('/api/v3/'))).toEqual([])
   })
 
   // ── inputs ────────────────────────────────────────────────────────────────
   test('weights are normalised, so the scale a caller used does not matter', async () => {
     mockFetch([
-      ['stock-screener',  [candidate('SOLID', 100, 3)]],
+      ['stable/company-screener',  [candidate('SOLID', 100, 3)]],
       ['key-metrics-ttm', metrics()],
       ['ratios-ttm',      ratios()],
     ])
@@ -210,7 +234,7 @@ describe('POST /api/screener/run', () => {
 
   test('nonsense weights fall back to the default rather than dividing by zero', async () => {
     mockFetch([
-      ['stock-screener',  [candidate('SOLID', 100, 3)]],
+      ['stable/company-screener',  [candidate('SOLID', 100, 3)]],
       ['key-metrics-ttm', metrics()],
       ['ratios-ttm',      ratios()],
     ])
