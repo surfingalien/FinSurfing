@@ -60,7 +60,9 @@ const { PREDICTION_LOG } = require('../lib/prediction-log-path')
 // before and after must not be pooled in calibration.
 // v3: discovery universes (a new list each scan) and only live-priced symbols —
 // the prompt no longer invites the model to price from memory.
-const SCAN_PROMPT_VERSION = 3
+// v4: the units of targetReturn/stopLoss are stated (percent, never a price) —
+// a live scan wrote stop PRICES there for 15 of 20 picks.
+const SCAN_PROMPT_VERSION = 4
 
 const brainLimit = rateLimit({
   windowMs: 5 * 60 * 1000, max: 4,
@@ -867,6 +869,7 @@ Respond ONLY with valid JSON (no markdown, no text outside the JSON object):
 Rules:
 - Include up to 20 top picks ranked by compositeScore; prefer symbols NOT already in holdings
 - agentVerdict: use "Avoid" when the setup is genuinely unattractive or the evidence points DOWN. Do NOT express a bearish view as a negative targetReturn on a buy verdict — say "Avoid" and explain why in the analyses. For "Avoid", set targetReturn and stopLoss to 0 and leave the price zones at 0; there is no trade to price. Never pad the list with buys you do not believe
+- UNITS: targetReturn and stopLoss are PERCENTAGES measured from the entry, never prices. targetReturn 12 means the target is 12% above entry; stopLoss 8 means the stop is 8% below entry (a $100 entry with stopLoss 8 stops at $92). Dollar levels go ONLY in the *Zone* fields
 - compositeScore = weighted avg (fundamental 25%, technical 20%, sentiment 15%, macro 20%, risk 20%)
 - RSRank in COMPUTED TECHNICALS = intra-universe relative-strength percentile over 20 days (100=top, 0=weakest in this scan). Boost technicalScore +8 when RSRank ≥ 70 with uptrend; cut -8 when RSRank ≤ 30 (chronic underperformer) unless thesis is explicit turnaround
 - All scores 0-100; riskScore: higher = safer

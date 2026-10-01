@@ -8,7 +8,7 @@
  */
 
 const {
-  roundPrice, midOf, zone, looksLikePercentAsPrice, recomputeComposite,
+  roundPrice, midOf, zone, valueUnit, looksLikePercentAsPrice, recomputeComposite,
   coherentZones, auditPicks,
   ENTRY_BAND, TARGET_BAND, STOP_BAND, ANCHOR_TOLERANCE,
 } = require('../lib/price-coherence')
@@ -97,9 +97,12 @@ describe('the DXYZ card', () => {
     expect(drop).toMatch(/negative targetReturn \(-15%\)/)
   })
 
-  test('the stop zone is reproducible from the PERCENTAGE — proving the unit confusion', () => {
+  test('the stop zone is ±1.5% around the number 27.5 — the stop field holds a PRICE', () => {
     // ±1.5% around the number 27.5 gives exactly the zone that was displayed
     // (the card renders at 2dp; the stored values carry the sub-$100 precision).
+    // This was first read as "27.5% used as a price". A live scan settled it the
+    // other way: the model writes the stop PRICE into stopLoss (BTC 74000,
+    // NVDA 210), and the zone it gives agrees with that price.
     const s = zone(27.5, STOP_BAND)
     expect(s).toEqual({ low: 27.0875, high: 27.9125 })
     expect([s.low.toFixed(2), s.high.toFixed(2)]).toEqual(['27.09', '27.91'])
@@ -107,17 +110,20 @@ describe('the DXYZ card', () => {
     expect(roundPrice(30.27 * (1 - 0.275))).toBeCloseTo(21.95, 2)
   })
 
-  test('with the sign corrected, every level is rebuilt and the confusion reported', () => {
+  test('with the sign corrected, the $27.50 stop PRICE is kept and expressed as a percent', () => {
     const { pick, repairs, drop } = coherentZones({ ...DXYZ, targetReturn: 15 })
     expect(drop).toBeNull()
 
-    // Entry mid 30.27 → target 34.8105, stop 21.9458. Nothing survives from the model.
+    // Entry mid 30.27 → target 34.8105; the stop stays at the model's $27.50,
+    // which is 9.151% below entry — not a 27.5% stop at $21.95.
     expect(pick.targetZoneLow).toBe(33.7662)    // 34.8105 × 0.97
     expect(pick.targetZoneHigh).toBe(35.8548)   // 34.8105 × 1.03
-    expect(pick.stopZoneLow).toBe(21.6166)      // 21.9458 × 0.985
-    expect(pick.stopZoneHigh).toBe(22.2749)     // 21.9458 × 1.015
+    expect(pick.stopLoss).toBeCloseTo(9.151, 3)
+    expect(pick.stopLossPrice).toBe(27.5)
+    expect(pick.stopZoneLow).toBeCloseTo(27.0875, 3)
+    expect(pick.stopZoneHigh).toBeCloseTo(27.9125, 3)
 
-    expect(repairs.join(' | ')).toMatch(/stop zone was centred on the stopLoss PERCENTAGE \(27\.5\)/)
+    expect(repairs.join(' | ')).toMatch(/stopLoss 27\.5 is a PRICE/)
     expect(repairs.join(' | ')).toMatch(/compositeScore recomputed 22 → 26/)
   })
 
@@ -128,6 +134,69 @@ describe('the DXYZ card', () => {
     const stop = midOf(pick.stopZoneLow, pick.stopZoneHigh)
     expect(target).toBeGreaterThan(entry)
     expect(stop).toBeLessThan(entry)
+  })
+})
+
+describe('stopLoss / targetReturn units — a price in a percent field', () => {
+  // Shapes taken from a live broad scan, where 11 of 20 picks carried a stop PRICE.
+  const pick = (over) => ({ ...GOOD, ...over })
+
+  test('a stop price ≥ 100 below the entry is converted, not dropped', () => {
+    const { pick: p, drop, repairs } = coherentZones(pick({
+      symbol: 'NVDA', currentPrice: 228, entryZoneLow: 223.44, entryZoneHigh: 232.56,
+      targetReturn: 15, targetZoneLow: 254.3, targetZoneHigh: 270.0,
+      stopLoss: 210, stopZoneLow: 206.85, stopZoneHigh: 213.15,
+    }), { livePrice: 228 })
+    expect(drop).toBeNull()
+    expect(p.stopLoss).toBeCloseTo((228 - 210) / 228 * 100, 3)    // 7.89%
+    expect(p.stopLossPrice).toBe(210)
+    expect(midOf(p.stopZoneLow, p.stopZoneHigh)).toBeCloseTo(210, 1)
+    expect(repairs.join(' ')).toMatch(/stopLoss 210 is a PRICE/)
+  })
+
+  test('a stop price under 100 that its zone agrees with is a price — ARKK $82, not an 82% stop', () => {
+    const { pick: p, drop } = coherentZones(pick({
+      currentPrice: 89.1, entryZoneLow: 87.32, entryZoneHigh: 90.88,
+      targetReturn: 12, targetZoneLow: 96.8, targetZoneHigh: 102.8,
+      stopLoss: 82, stopZoneLow: 80.77, stopZoneHigh: 83.23,
+    }), { livePrice: 89.1 })
+    expect(drop).toBeNull()
+    expect(p.stopLoss).toBeCloseTo((89.1 - 82) / 89.1 * 100, 3)     // 7.97%, not 82%
+    expect(midOf(p.stopZoneLow, p.stopZoneHigh)).toBeCloseTo(82, 1)
+  })
+
+  test('a real percent stays a percent (zone sits at the derived price)', () => {
+    const { pick: p, repairs } = coherentZones(GOOD, { livePrice: 100 })
+    expect(p.stopLoss).toBe(10)
+    expect(p.stopLossPrice).toBeUndefined()
+    expect(repairs.join(' ')).not.toMatch(/PRICE/)
+  })
+
+  test('a small percent with no zone stays a percent', () => {
+    const { pick: p } = coherentZones(pick({ stopZoneLow: null, stopZoneHigh: null, stopLoss: 8 }), { livePrice: 100 })
+    expect(p.stopLoss).toBe(8)
+  })
+
+  test('a "stop" above the entry has no price reading and ≥100 is still dropped', () => {
+    expect(coherentZones(pick({ stopLoss: 120, stopZoneLow: 118.2, stopZoneHigh: 121.8 }), { livePrice: 100 }).drop)
+      .toMatch(/stopLoss out of range/)
+  })
+
+  test('a target PRICE in targetReturn is converted when its zone agrees', () => {
+    const { pick: p, drop } = coherentZones(pick({ targetReturn: 250, targetZoneLow: 242.5, targetZoneHigh: 257.5,
+      currentPrice: 200, entryZoneLow: 196, entryZoneHigh: 204, stopLoss: 8, stopZoneLow: 181.2, stopZoneHigh: 186.8 }), { livePrice: 200 })
+    expect(drop).toBeNull()
+    expect(p.targetReturn).toBeCloseTo(25, 3)                       // not 250%
+    expect(p.targetPrice).toBe(250)
+  })
+
+  test('valueUnit decides from the evidence', () => {
+    expect(valueUnit(74000, 74000, 76000, 'below')).toBe('price')
+    expect(valueUnit(210, null, 228, 'below')).toBe('price')         // ≥100 below entry: no percent reading
+    expect(valueUnit(27, 27.01, 30.95, 'below')).toBe('price')       // zone agrees
+    expect(valueUnit(8, 92, 100, 'below')).toBe('percent')           // zone at the derived price
+    expect(valueUnit(8, null, 100, 'below')).toBe('percent')
+    expect(valueUnit(20, 120, 100, 'above')).toBe('percent')
   })
 })
 
