@@ -96,17 +96,17 @@ async function seedAdminDB(query) {
     for (const h of ADMIN_HOLDINGS) {
       const { rowCount } = await query(`
         INSERT INTO holdings
-          (portfolio_id, symbol, name, shares, avg_cost, sector, asset_class, created_at, updated_at)
+          (portfolio_id, symbol, name, shares, avg_cost_basis, sector, asset_class, created_at, updated_at)
         VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
         ON CONFLICT (portfolio_id, symbol)
         DO UPDATE SET
           name        = EXCLUDED.name,
           shares      = EXCLUDED.shares,
-          avg_cost    = EXCLUDED.avg_cost,
+          avg_cost_basis = EXCLUDED.avg_cost_basis,
           sector      = EXCLUDED.sector,
           asset_class = EXCLUDED.asset_class,
           updated_at  = NOW()
-        WHERE holdings.shares != EXCLUDED.shares OR holdings.avg_cost != EXCLUDED.avg_cost
+        WHERE holdings.shares != EXCLUDED.shares OR holdings.avg_cost_basis != EXCLUDED.avg_cost_basis
       `, [portfolioId, h.symbol, h.name, h.shares, h.avgCost, h.sector, h.assetClass])
       if (rowCount > 0) updated++
       else added++

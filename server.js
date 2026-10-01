@@ -88,12 +88,10 @@ const { seedAdminDB } = require('./db/adminSeed')
       return
     }
     const sql = fs.readFileSync(schemaPath, 'utf8')
-    // Split on semicolons but keep multi-statement blocks intact.
-    // Filter blank / comment-only lines.
-    const statements = sql
-      .split(/;\s*(\n|$)/)
-      .map(s => s.trim())
-      .filter(s => s.length > 0 && !s.startsWith('--'))
+    // Comment-, quote- and $$-aware split (lib/sql-split.js). The old split
+    // dropped every statement that began with a comment — most CREATE TABLEs,
+    // users included — and cut the plpgsql function body in half.
+    const statements = require('./lib/sql-split').splitSql(sql)
     for (const stmt of statements) {
       await query(stmt).catch(err => {
         // Log but continue — some statements may fail on partial schemas
