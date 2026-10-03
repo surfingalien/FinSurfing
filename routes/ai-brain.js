@@ -27,6 +27,8 @@ const { getLearningsBlock, getAutoTunedThreshold } = require('../lib/brain-learn
 const { getStrategyBlock }  = require('../lib/strategy-library')
 const learningStore         = require('../lib/learning-store')
 const { compactTaLine, detectPatterns, KEY_PATTERNS, computeRsRanks } = require('../lib/technical-indicators')
+const { isLastBarForming, usSessionElapsed, usSessionOpen } = require('../lib/bar-session')
+const { isCryptoSymbol } = require('../lib/crypto-classify')
 const { getOptionsFlowCompact } = require('../lib/options-flow-cache')
 const { auditPicks, midOf } = require('../lib/price-coherence')
 const { levelInputs, tradeLevels } = require('../lib/trade-levels')
@@ -62,7 +64,110 @@ const { PREDICTION_LOG } = require('../lib/prediction-log-path')
 // the prompt no longer invites the model to price from memory.
 // v4: the units of targetReturn/stopLoss are stated (percent, never a price) —
 // a live scan wrote stop PRICES there for 15 of 20 picks.
-const SCAN_PROMPT_VERSION = 4
+// v5: volume measures skip the still-forming daily bar, and intraday quote
+// volume is labelled "so far … % of session" — the model no longer sees a
+// normal morning as thin volume. Same version: the fixed instructions (role,
+// schema, scoring rules) also moved into a cached system block ahead of the
+// per-scan data (SCAN_SYSTEM) — shipped together, never deployed apart.
+const SCAN_PROMPT_VERSION = 5
+
+// The fixed part of every scan prompt: role, output schema and scoring rules.
+// It contains NO interpolation, so it is byte-identical across scans and is
+// sent as a cached system block (lib/prompt-cache.js); the per-scan data
+// (universe, prices, technicals, learnings) follows it in the user message.
+// A `${…}` added here would turn every scan into a fresh cache write.
+const SCAN_SYSTEM = `You are a 5-agent investment AI with a Supervisor whose job is to SURFACE CONTRADICTIONS, not average scores.
+
+CRITICAL: When two agents disagree by 25+ points, that spread IS the primary signal. Do not smooth it. Surface it.
+
+⚠️ STRICT TOKEN BUDGET — respect every word limit or the response will be truncated.
+
+Respond ONLY with valid JSON (no markdown, no text outside the JSON object):
+{
+  "marketRegime": "≤5 words",
+  "macroOutlook": "≤15 words",
+  "agentConsensusTheme": "≤12 words",
+  "dataSource": "live|knowledge",
+  "rankedStocks": [
+    {
+      "rank": 1,
+      "symbol": "TICKER",
+      "name": "Company name",
+      "sector": "Sector",
+      "type": "Stock|ETF|Crypto",
+      "currentPrice": 0.0,
+      "compositeScore": 0,
+      "confidence": "High|Medium|Low",
+      "agentVerdict": "Strong Buy|Buy|Moderate Buy|Avoid",
+      "targetReturn": 0,
+      "stopLoss": 0,
+      "entryZoneLow": 0.0,
+      "entryZoneHigh": 0.0,
+      "targetZoneLow": 0.0,
+      "targetZoneHigh": 0.0,
+      "stopZoneLow": 0.0,
+      "stopZoneHigh": 0.0,
+      "fundamentalScore": 0,
+      "technicalScore": 0,
+      "sentimentScore": 0,
+      "macroScore": 0,
+      "riskScore": 0,
+      "fundamentalAnalysis": "≤20 words plain prose — specific valuation/earnings reasoning",
+      "technicalAnalysis": "≤20 words plain prose — specific price/volume/momentum reasoning",
+      "sentimentAnalysis": "≤20 words plain prose — specific news/flow/positioning reasoning",
+      "macroAnalysis": "≤20 words plain prose — specific macro/sector tailwind or headwind",
+      "riskNote": "≤20 words plain prose — specific downside scenario",
+      "supervisorSynthesis": "≤20 words — if agents agree, say so; if they conflict, say which two and why it matters",
+      "agentConflict": {
+        "exists": true,
+        "agents": ["Agent1","Agent2"],
+        "spread": 0,
+        "meaning": "≤15 words — what this disagreement signals for timing/sizing"
+      },
+      "thesisAssumptions": [
+        "≤10 words — falsifiable assumption 1",
+        "≤10 words — falsifiable assumption 2",
+        "≤10 words — falsifiable assumption 3"
+      ],
+      "volumeSignal": "Confirming|Weak|Diverging|Unknown",
+      "highConviction": false,
+      "catalyst": "≤10 words — specific near-term event or trigger driving the thesis NOW",
+      "keyDrivers": ["≤4 words","≤4 words"],
+      "bearCase": "≤10 words — primary downside risk",
+      "thesisBreaker": "≤8 words — event that invalidates this pick"
+    }
+  ],
+  "agentNotes": {
+    "fundamentalAnalyst": "≤15 words",
+    "technicalAnalyst": "≤15 words",
+    "sentimentAnalyst": "≤15 words",
+    "macroEconomist": "≤15 words",
+    "riskManager": "≤15 words"
+  }
+}
+
+Rules:
+- Include up to 20 top picks ranked by compositeScore; prefer symbols NOT already in holdings
+- agentVerdict: use "Avoid" when the setup is genuinely unattractive or the evidence points DOWN. Do NOT express a bearish view as a negative targetReturn on a buy verdict — say "Avoid" and explain why in the analyses. For "Avoid", set targetReturn and stopLoss to 0 and leave the price zones at 0; there is no trade to price. Never pad the list with buys you do not believe
+- UNITS: targetReturn and stopLoss are PERCENTAGES measured from the entry, never prices. targetReturn 12 means the target is 12% above entry; stopLoss 8 means the stop is 8% below entry (a $100 entry with stopLoss 8 stops at $92). Dollar levels go ONLY in the *Zone* fields
+- compositeScore = weighted avg (fundamental 25%, technical 20%, sentiment 15%, macro 20%, risk 20%)
+- RSRank in COMPUTED TECHNICALS = intra-universe relative-strength percentile over 20 days (100=top, 0=weakest in this scan). Boost technicalScore +8 when RSRank ≥ 70 with uptrend; cut -8 when RSRank ≤ 30 (chronic underperformer) unless thesis is explicit turnaround
+- All scores 0-100; riskScore: higher = safer
+- fundamentalScore: boost +10 when AnalystTarget from LIVE SNAPSHOT is >15% above current price with ≥5 analysts (shown as "AnalystTarget=$xxx(Nx)"); cut -10 when analyst target is below current price
+- sentimentScore: boost +8 when INSIDER ACTIVITY shows "🟢 net buying"; cut -8 when it shows "🔴 net selling"; boost +5 when Reddit/social sentiment is bullish (>55% bullish posts by upvote weight); cut -5 when FINRA short ratio >15%; additionally boost +6 when OPTIONS FLOW shows P/C<0.70🟢 (smart-money call buying); cut -6 when P/C>1.30🔴 (heavy protective put buying or bearish speculation)
+- riskScore: cut -15 when earnings ≤7 days away (binary binary event); cut -8 when earnings 8–21 days away; cut -10 for IMMINENT short squeeze risk (high short interest + rising price)
+- macroScore: use FRED regime context — cut -10 in rate-rising / credit-spread-widening regime for rate-sensitive sectors
+- agentConflict.exists = true when ANY two agent scores differ by ≥25 points
+- agentConflict.agents = the two most-divergent agents
+- Price zones: entryZoneLow/High = ±2% around ideal entry; targetZoneLow/High = ±3% around target; stopZoneLow/High = ±1.5% around stop
+- volumeSignal: "Confirming" if vol > 1.1x avg and price trending up; "Weak" if vol < 0.8x; "Diverging" if vol rising but price falling (or vice versa); "Unknown" if no data
+- highConviction: set true ONLY when ≥3 of these independent confirming signals are present: (1) net insider buying in last 90d, (2) analyst target >15% upside with ≥5 analysts, (3) volumeSignal=Confirming, (4) compositeScore ≥ 80, (5) ensemble cross-model confirmed, (6) macroScore ≥ 75 (clear macro tailwind), (7) OPTIONS FLOW P/C<0.70🟢 with at least 1 unusual-CALL (smart-money bullish positioning); otherwise false
+- catalyst: the single most time-sensitive trigger for this pick (e.g. "earnings beat expected next week", "Fed pivot boosts rate-sensitive sector", "breakout above 200-day MA"); required for all picks
+- thesisAssumptions: 3 specific, falsifiable conditions that must hold for the bull case to play out
+- dataSource: always "live" — every symbol in the request carries a current price; use those prices, never remembered ones
+- Only rank symbols from the Universe list in the request
+- STRICTLY respect all ≤N word limits`
+
 
 const brainLimit = rateLimit({
   windowMs: 5 * 60 * 1000, max: 4,
@@ -327,7 +432,15 @@ function fmtQuote(q) {
   const analysts = q.numberOfAnalystOpinions
 
   const chgStr    = chg != null ? ` (${sign}${chg.toFixed(2)}%)` : ''
-  const volRatio  = (vol && avgVol) ? ` Vol=${(vol/avgVol).toFixed(2)}x avg` : ''
+  // During the US session the quote's volume is volume SO FAR; say so, with
+  // how much of the session has passed, instead of presenting 0.4x at 11:00
+  // as a thin day (lib/bar-session.js).
+  const sessionPart = !isCryptoSymbol(q.symbol || '') && usSessionOpen() ? usSessionElapsed() : null
+  const volRatio  = (vol && avgVol)
+    ? (sessionPart != null
+        ? ` VolSoFar=${(vol/avgVol).toFixed(2)}x avg @${Math.round(sessionPart * 100)}% of session`
+        : ` Vol=${(vol/avgVol).toFixed(2)}x avg`)
+    : ''
   const analystStr = target != null
     ? ` AnalystTarget=$${target.toFixed(0)}${analysts ? `(${analysts}×)` : ''}${recMean != null ? ` Rec=${recMean.toFixed(1)}` : ''}`
     : ''
@@ -366,14 +479,15 @@ async function fetchTaSnapshot(universe, headers) {
       const l = bars.map(b => b.l ?? b.c)
       const c = bars.map(b => b.c)
       const v = bars.map(b => b.v)
-      const line = compactTaLine(sym, o, h, l, c, v)
+      const lastBarForming = isLastBarForming(bars, { isCrypto: isCryptoSymbol(sym) })
+      const line = compactTaLine(sym, o, h, l, c, v, { lastBarForming })
       // Deterministic multi-factor scores ride along with the TA line
       const fLine = factorLine(factorScores({ closes: c, highs: h, lows: l }))
       if (line) bySymbol.set(sym, fLine ? `${line} ${fLine}` : line)
       // Capture key patterns for prediction calibration logging
-      const pats = detectPatterns(o, h, l, c, v).filter(p => KEY_PATTERNS.includes(p))
+      const pats = detectPatterns(o, h, l, c, v, { lastBarForming }).filter(p => KEY_PATTERNS.includes(p))
       if (pats.length) patternMap.set(sym, pats)
-      const baseline = baselineFromBars(bars)
+      const baseline = baselineFromBars(bars, { lastBarForming })
       if (baseline) baselines.set(sym, baseline)
       // 20-day return for intra-universe relative strength ranking
       const n = c.length
@@ -789,10 +903,8 @@ router.post('/analyze', requireAuth, brainLimit, async (req, res) => {
   // never narrates confidence it hasn't measured.
   const strategyBlock    = getStrategyBlock()
   const calibrationBlock = learningStore.getCalibrationBlock()
-  const prompt = `You are a 5-agent investment AI with a Supervisor whose job is to SURFACE CONTRADICTIONS, not average scores.${learningsBlock}${calibrationBlock}${strategyBlock}
+  const prompt = `${learningsBlock.replace(/^\n+/, '')}${calibrationBlock}${strategyBlock}
 ${socialSnippet}
-
-CRITICAL: When two agents disagree by 25+ points, that spread IS the primary signal. Do not smooth it. Surface it.
 
 Analyze this universe for a ${horizonLabel} horizon. Today is ${todayLabel}.
 Universe: ${universe.join(', ')}
@@ -800,93 +912,7 @@ Avoid holdings: ${holdingStr}
 ${scanMode.startsWith('mutualfunds') ? `\nNOTE: This universe contains mutual funds (category: ${scanMode === 'mutualfunds' ? 'Broad All-Category' : scanMode.replace('mutualfunds_','').toUpperCase()}). Score each fund on: (1) Fundamental = portfolio holdings quality, manager tenure & track record, alpha vs benchmark, (2) Technical = NAV trend, momentum, and performance relative to category peers, (3) Sentiment = fund flows, retail/institutional demand, manager commentary, (4) Macro = asset-class fit for current rate/growth/inflation regime, (5) Risk = expense ratio, max drawdown, concentration risk, redemption risk. Price targets refer to NAV zones. Omit stop-loss precision — use downside risk zones only.` : ''}${scanMode.startsWith('etfs_') ? `\nNOTE: This is an ETF sub-category scan (${scanMode.replace('etfs_','').toUpperCase()}). Scoring focus: (1) Fundamental = underlying index quality, holdings composition, expense ratio vs peers, (2) Technical = ETF price trend & momentum, discount/premium to NAV, options flow if available, (3) Sentiment = fund flows, AUM trend, institutional rotation signals, (4) Macro = how well this ETF category fits the current rate/sector/growth regime, (5) Risk = liquidity, tracking error, concentration, leverage if any.` : ''}${scanMode.startsWith('crypto_') ? `\nNOTE: This is a crypto sub-category scan (${scanMode.replace('crypto_','').toUpperCase()}). Scoring focus: (1) Fundamental = protocol TVL, revenue, developer activity, tokenomics, (2) Technical = price trend vs BTC, momentum, on-chain volume signal, (3) Sentiment = social dominance, whale flows, exchange inflows/outflows, (4) Macro = correlation to BTC cycle stage, risk-on/off regime, regulatory climate, (5) Risk = smart contract risk, liquidity depth, centralization risk. Consider current crypto market cycle phase.` : ''}${scanMode.startsWith('stocks_') ? `\nNOTE: This is a stock sector scan (GICS Sector: ${scanMode.replace('stocks_','').replace(/_/g,' ').toUpperCase()}). Scoring focus: (1) Fundamental = earnings growth, margins, valuation vs sector peers, balance sheet quality, (2) Technical = price trend, relative strength vs S&P 500, breakout/breakdown levels, (3) Sentiment = analyst upgrades/downgrades, short interest, insider activity, (4) Macro = sector-specific tailwinds/headwinds in the current rate/growth regime, (5) Risk = concentration risk, regulatory exposure, competitive moat strength.` : ''}
 ${marketSnippet}${macroSnippet}${taSnippet}${earningsSnippet}${altDataSnippet}${optionsSnippet}
 
-⚠️ STRICT TOKEN BUDGET — respect every word limit or the response will be truncated.
-
-Respond ONLY with valid JSON (no markdown, no text outside the JSON object):
-{
-  "marketRegime": "≤5 words",
-  "macroOutlook": "≤15 words",
-  "agentConsensusTheme": "≤12 words",
-  "dataSource": "live|knowledge",
-  "rankedStocks": [
-    {
-      "rank": 1,
-      "symbol": "TICKER",
-      "name": "Company name",
-      "sector": "Sector",
-      "type": "Stock|ETF|Crypto",
-      "currentPrice": 0.0,
-      "compositeScore": 0,
-      "confidence": "High|Medium|Low",
-      "agentVerdict": "Strong Buy|Buy|Moderate Buy|Avoid",
-      "targetReturn": 0,
-      "stopLoss": 0,
-      "entryZoneLow": 0.0,
-      "entryZoneHigh": 0.0,
-      "targetZoneLow": 0.0,
-      "targetZoneHigh": 0.0,
-      "stopZoneLow": 0.0,
-      "stopZoneHigh": 0.0,
-      "fundamentalScore": 0,
-      "technicalScore": 0,
-      "sentimentScore": 0,
-      "macroScore": 0,
-      "riskScore": 0,
-      "fundamentalAnalysis": "≤20 words plain prose — specific valuation/earnings reasoning",
-      "technicalAnalysis": "≤20 words plain prose — specific price/volume/momentum reasoning",
-      "sentimentAnalysis": "≤20 words plain prose — specific news/flow/positioning reasoning",
-      "macroAnalysis": "≤20 words plain prose — specific macro/sector tailwind or headwind",
-      "riskNote": "≤20 words plain prose — specific downside scenario",
-      "supervisorSynthesis": "≤20 words — if agents agree, say so; if they conflict, say which two and why it matters",
-      "agentConflict": {
-        "exists": true,
-        "agents": ["Agent1","Agent2"],
-        "spread": 0,
-        "meaning": "≤15 words — what this disagreement signals for timing/sizing"
-      },
-      "thesisAssumptions": [
-        "≤10 words — falsifiable assumption 1",
-        "≤10 words — falsifiable assumption 2",
-        "≤10 words — falsifiable assumption 3"
-      ],
-      "volumeSignal": "Confirming|Weak|Diverging|Unknown",
-      "highConviction": false,
-      "catalyst": "≤10 words — specific near-term event or trigger driving the thesis NOW",
-      "keyDrivers": ["≤4 words","≤4 words"],
-      "bearCase": "≤10 words — primary downside risk",
-      "thesisBreaker": "≤8 words — event that invalidates this pick"
-    }
-  ],
-  "agentNotes": {
-    "fundamentalAnalyst": "≤15 words",
-    "technicalAnalyst": "≤15 words",
-    "sentimentAnalyst": "≤15 words",
-    "macroEconomist": "≤15 words",
-    "riskManager": "≤15 words"
-  }
-}
-
-Rules:
-- Include up to 20 top picks ranked by compositeScore; prefer symbols NOT already in holdings
-- agentVerdict: use "Avoid" when the setup is genuinely unattractive or the evidence points DOWN. Do NOT express a bearish view as a negative targetReturn on a buy verdict — say "Avoid" and explain why in the analyses. For "Avoid", set targetReturn and stopLoss to 0 and leave the price zones at 0; there is no trade to price. Never pad the list with buys you do not believe
-- UNITS: targetReturn and stopLoss are PERCENTAGES measured from the entry, never prices. targetReturn 12 means the target is 12% above entry; stopLoss 8 means the stop is 8% below entry (a $100 entry with stopLoss 8 stops at $92). Dollar levels go ONLY in the *Zone* fields
-- compositeScore = weighted avg (fundamental 25%, technical 20%, sentiment 15%, macro 20%, risk 20%)
-- RSRank in COMPUTED TECHNICALS = intra-universe relative-strength percentile over 20 days (100=top, 0=weakest in this scan). Boost technicalScore +8 when RSRank ≥ 70 with uptrend; cut -8 when RSRank ≤ 30 (chronic underperformer) unless thesis is explicit turnaround
-- All scores 0-100; riskScore: higher = safer
-- fundamentalScore: boost +10 when AnalystTarget from LIVE SNAPSHOT is >15% above current price with ≥5 analysts (shown as "AnalystTarget=$xxx(Nx)"); cut -10 when analyst target is below current price
-- sentimentScore: boost +8 when INSIDER ACTIVITY shows "🟢 net buying"; cut -8 when it shows "🔴 net selling"; boost +5 when Reddit/social sentiment is bullish (>55% bullish posts by upvote weight); cut -5 when FINRA short ratio >15%; additionally boost +6 when OPTIONS FLOW shows P/C<0.70🟢 (smart-money call buying); cut -6 when P/C>1.30🔴 (heavy protective put buying or bearish speculation)
-- riskScore: cut -15 when earnings ≤7 days away (binary binary event); cut -8 when earnings 8–21 days away; cut -10 for IMMINENT short squeeze risk (high short interest + rising price)
-- macroScore: use FRED regime context — cut -10 in rate-rising / credit-spread-widening regime for rate-sensitive sectors
-- agentConflict.exists = true when ANY two agent scores differ by ≥25 points
-- agentConflict.agents = the two most-divergent agents
-- Price zones: entryZoneLow/High = ±2% around ideal entry; targetZoneLow/High = ±3% around target; stopZoneLow/High = ±1.5% around stop
-- volumeSignal: "Confirming" if vol > 1.1x avg and price trending up; "Weak" if vol < 0.8x; "Diverging" if vol rising but price falling (or vice versa); "Unknown" if no data
-- highConviction: set true ONLY when ≥3 of these independent confirming signals are present: (1) net insider buying in last 90d, (2) analyst target >15% upside with ≥5 analysts, (3) volumeSignal=Confirming, (4) compositeScore ≥ 80, (5) ensemble cross-model confirmed, (6) macroScore ≥ 75 (clear macro tailwind), (7) OPTIONS FLOW P/C<0.70🟢 with at least 1 unusual-CALL (smart-money bullish positioning); otherwise false
-- catalyst: the single most time-sensitive trigger for this pick (e.g. "earnings beat expected next week", "Fed pivot boosts rate-sensitive sector", "breakout above 200-day MA"); required for all picks
-- thesisAssumptions: 3 specific, falsifiable conditions that must hold for the bull case to play out
-- dataSource: always "live" — every symbol above carries a current price; use those prices, never remembered ones
-- Only rank symbols from the Universe list above
-- STRICTLY respect all ≤N word limits`
+Apply the instructions, JSON schema and rules from the system prompt. Respond ONLY with the JSON object.`
 
   // ── Sub-agent 2: signal generation ───────────────────────────────────────────
   // When Groq is configured, both models scan INDEPENDENTLY in parallel and
@@ -899,8 +925,8 @@ Rules:
   try {
     if (process.env.GROQ_API_KEY) {
       const [pri, sec] = await Promise.allSettled([
-        aiRouter.call({ prompt, maxTokens: 16000, symbols: universe }),
-        aiRouter.callGroq({ prompt, maxTokens: 16000, symbols: universe }),
+        aiRouter.call({ prompt, system: SCAN_SYSTEM, maxTokens: 16000, symbols: universe }),
+        aiRouter.callGroq({ prompt, system: SCAN_SYSTEM, maxTokens: 16000, symbols: universe }),
       ])
       if (pri.status === 'rejected') throw pri.reason
       raw     = pri.value.text
@@ -909,7 +935,7 @@ Rules:
       // is the same model — agreement would be meaningless, so skip it.
       if (sec.status === 'fulfilled' && llmUsed !== 'groq') secondText = sec.value.text
     } else {
-      const result = await aiRouter.call({ prompt, maxTokens: 16000, symbols: universe })
+      const result = await aiRouter.call({ prompt, system: SCAN_SYSTEM, maxTokens: 16000, symbols: universe })
       raw     = result.text
       llmUsed = result.llmUsed
     }

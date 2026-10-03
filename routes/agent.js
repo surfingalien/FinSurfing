@@ -31,6 +31,7 @@ const { computeAll }           = require('../utils/technicals')
 const { fetchAllFundamentals } = require('../utils/dataProviders')
 const { getChatHistory, saveChatSummary } = require('../db/ai_memory')
 const { GROQ_MODEL }           = require('../lib/ai-router')
+const { cachedSystem, markConversationTail } = require('../lib/prompt-cache')
 
 // ── Lazy-load Anthropic SDK ───────────────────────────────────────────────────
 let _client = null
@@ -480,9 +481,11 @@ router.post('/analyze', async (req, res) => {
 
   // Build system prompt — inject prior analyses if the user has history for this symbol
   const priorChats = userId && sym ? await getChatHistory(userId, sym) : []
-  let systemPromptFull = SYSTEM_PROMPT
+  // SYSTEM_PROMPT (with TOOLS ahead of it) is the cached prefix; the user's
+  // prior analyses are per-user, so they follow the cache mark.
+  let priorBlock = ''
   if (priorChats.length > 0) {
-    systemPromptFull +=
+    priorBlock +=
       '\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n' +
       `PRIOR ANALYSES FOR ${sym} (most recent first — note any thesis changes):\n` +
       priorChats
@@ -508,9 +511,9 @@ router.post('/analyze', async (req, res) => {
       const stream = client.messages.stream({
         model,
         max_tokens: 8192,
-        system:     systemPromptFull,
+        system:     cachedSystem(SYSTEM_PROMPT, priorBlock),
         tools:      TOOLS,
-        messages,
+        messages:   markConversationTail(messages),
       })
 
       let fullText = ''

@@ -24,3 +24,5 @@ data/research-theses.jsonl
 # against real bars as evidence.
 data/ai-brain-predictions.jsonl
 data/symbol-db.json
+data/*.damaged-*
+data/.*.tmp

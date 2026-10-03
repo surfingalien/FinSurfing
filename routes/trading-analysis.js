@@ -541,8 +541,10 @@ router.post('/analyze', requireAuth, async (req, res) => {
     const vwap     = computeVWAP(highs, lows, closes, volumes)
     const obv      = computeOBV(closes, volumes)
     const sr       = findSR(highs, lows, closes)
-    const patterns = detectPatterns(opens, highs, lows, closes, volumes)
-    const vol      = volumeAnalysis(volumes)
+    // Volume measures skip a still-forming final bar (its volume is "so far").
+    const lastBarForming = require('../lib/bar-session').isLastBarForming(bars, { interval: yInterval, isCrypto: isCryptoSymbol(sym) })
+    const patterns = detectPatterns(opens, highs, lows, closes, volumes, { lastBarForming })
+    const vol      = volumeAnalysis(volumes, { lastBarForming })
     const adx      = computeADX(highs, lows, closes)
 
     const indicators = { rsi, macd, ema9, ema21, ema50, ema200, bb, atr, stochRsi, vwap, obv, sr, patterns, volume: vol, adx }
@@ -699,17 +701,18 @@ router.post('/chat', requireAuth, async (req, res) => {
   res.setHeader('Cache-Control',    'no-cache')
   res.setHeader('X-Accel-Buffering', 'no')
 
-  // Build system prompt with chart context
-  let systemPrompt = CHAT_SYSTEM_PROMPT
+  // Chart context varies per request, so it rides AFTER the cached system
+  // block (lib/prompt-cache.js) rather than inside it.
+  let systemContext = ''
   if (symbol || interval || price != null) {
     const contextLines = []
     if (symbol)        contextLines.push(`Symbol: ${symbol}`)
     if (interval)      contextLines.push(`Timeframe: ${interval}`)
     if (price != null) contextLines.push(`Current price: ${price}`)
-    systemPrompt += `\n\nCurrent chart context:\n${contextLines.join('\n')}`
+    systemContext += `\n\nCurrent chart context:\n${contextLines.join('\n')}`
   }
   if (analysisContext && typeof analysisContext === 'object') {
-    systemPrompt += `\n\nLatest analysis context:\n${JSON.stringify(analysisContext, null, 2)}`
+    systemContext += `\n\nLatest analysis context:\n${JSON.stringify(analysisContext, null, 2)}`
   }
 
   // Build full prompt including conversation history
@@ -719,7 +722,7 @@ router.post('/chat', requireAuth, async (req, res) => {
   const fullPrompt = historyBlock ? `${historyBlock}\nUser: ${message}` : message
 
   try {
-    const stream = aiRouter.stream({ prompt: fullPrompt, maxTokens: 1024, system: systemPrompt })
+    const stream = aiRouter.stream({ prompt: fullPrompt, maxTokens: 1024, system: CHAT_SYSTEM_PROMPT, systemVolatile: systemContext })
 
     stream.on('text', (text) => {
       res.write(`data: ${JSON.stringify({ text })}\n\n`)

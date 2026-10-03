@@ -37,6 +37,8 @@ const { computeEdgeReport, edgeBlock } = require('../lib/edge-report')
 const { claudePaused, pauseMessage } = require('../lib/ai-pause')
 const { INTERNAL_SECRET } = require('../lib/internal-secret')
 const { GROQ_MODEL } = require('../lib/ai-router')
+const { cachedSystem, markConversationTail, cacheUsage } = require('../lib/prompt-cache')
+const { logCall } = require('../lib/ai-audit')
 
 // Use warm cache from scheduled-jobs if available, fall back to live fetch
 async function getAltData(symbol) {
@@ -1495,7 +1497,7 @@ router.post('/chat', requireAuth, chatLimit, async (req, res) => {
       // Use Reporter system prompt for synthesis pass
       const stream = await anthropic.messages.stream({
         model, max_tokens: 4096,
-        system: REPORTER_SYSTEM + contextBlock,
+        system: cachedSystem(REPORTER_SYSTEM, contextBlock),
         messages: [{ role: 'user', content: contextMsg }],
       })
       for await (const event of stream) {
@@ -1513,20 +1515,28 @@ router.post('/chat', requireAuth, chatLimit, async (req, res) => {
     while (iterations < MAX_ITER) {
       iterations++
 
+      // Tools + COPILOT_SYSTEM are identical for every user and every round,
+      // so they are the cached prefix; the user's portfolio/watchlist rides
+      // after the mark. The conversation tail is marked too, so round N reads
+      // what round N-1 wrote (tool results included) instead of re-paying it.
+      const t0 = Date.now()
       const stream = await anthropic.messages.stream({
         model,
         max_tokens: 4096,
-        system: systemPrompt,
+        system: cachedSystem(COPILOT_SYSTEM, contextBlock),
         tools: TOOLS,
-        messages: loopMessages,
+        messages: markConversationTail(loopMessages),
       })
+      let usage = null
 
       let assistantContent = []
       let currentText = ''
       let toolUseBlocks = []
 
       for await (const event of stream) {
-        if (event.type === 'content_block_start') {
+        if (event.type === 'message_start') {
+          usage = { ...(event.message?.usage || {}) }
+        } else if (event.type === 'content_block_start') {
           if (event.content_block.type === 'text') {
             currentText = ''
           } else if (event.content_block.type === 'tool_use') {
@@ -1545,6 +1555,7 @@ router.post('/chat', requireAuth, chatLimit, async (req, res) => {
             currentText = ''
           }
         } else if (event.type === 'message_delta') {
+          if (usage && event.usage?.output_tokens != null) usage.output_tokens = event.usage.output_tokens
           if (event.delta.stop_reason === 'end_turn' || event.delta.stop_reason === 'tool_use') {
             for (const tb of toolUseBlocks) {
               let parsed = {}
@@ -1554,6 +1565,10 @@ router.post('/chat', requireAuth, chatLimit, async (req, res) => {
           }
         }
       }
+
+      const { cacheRead, cacheWrite } = cacheUsage(usage)
+      logCall({ route: 'copilot', model, llm: 'claude', success: true, tokensIn: usage?.input_tokens ?? null,
+        tokensOut: usage?.output_tokens ?? null, cacheRead, cacheWrite, durationMs: Date.now() - t0 })
 
       loopMessages.push({ role: 'assistant', content: assistantContent })
 

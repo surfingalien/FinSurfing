@@ -70,6 +70,17 @@ describe('evaluateStatus', () => {
     expect(c.status).toBe('ok')
   })
 
+  test('a store held back from the mirror because it is damaged is a warning that names it', () => {
+    const s = evaluateStatus({ ...healthy, persistence: { enabled: true, files: [
+      { name: 'ai-brain-predictions.jsonl', note: 'has 2 unreadable line(s) (first: 14) — not mirrored over the stored copy' },
+      { name: 'learning-store.jsonl', note: null },
+    ] } }, NOW)
+    const c = s.checks.find(x => x.id === 'persistence')
+    expect(c.status).toBe('warn')
+    expect(c.detail).toMatch(/ai-brain-predictions\.jsonl/)
+    expect(c.detail).not.toMatch(/learning-store/)
+  })
+
   test('a failed scheduled job is reported with its error', () => {
     const s = evaluateStatus({ ...healthy, jobs: [{ id: 'x', name: 'Nightly learning', result: { status: 'error', error: 'boom', failedAt: NOW - 3600000 } }] }, NOW)
     expect(s.checks.find(c => c.id === 'job:x')).toMatchObject({ status: 'fail' })
