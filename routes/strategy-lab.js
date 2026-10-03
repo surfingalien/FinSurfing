@@ -65,7 +65,8 @@ router.post('/propose', requireAuth, async (req, res) => {
   const taLine     = compactTaLine(
     sym,
     bars.map(b => b.o), bars.map(b => b.h), bars.map(b => b.l),
-    closes, bars.map(b => b.v)
+    closes, bars.map(b => b.v),
+    { lastBarForming: require('../lib/bar-session').isLastBarForming(bars, { isCrypto: require('../lib/crypto-classify').isCryptoSymbol(sym) }) },
   )
 
   const prompt = buildProposalPrompt({ symbol: sym, range, taLine, count: n })

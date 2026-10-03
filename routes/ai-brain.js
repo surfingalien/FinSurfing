@@ -27,6 +27,8 @@ const { getLearningsBlock, getAutoTunedThreshold } = require('../lib/brain-learn
 const { getStrategyBlock }  = require('../lib/strategy-library')
 const learningStore         = require('../lib/learning-store')
 const { compactTaLine, detectPatterns, KEY_PATTERNS, computeRsRanks } = require('../lib/technical-indicators')
+const { isLastBarForming, usSessionElapsed, usSessionOpen } = require('../lib/bar-session')
+const { isCryptoSymbol } = require('../lib/crypto-classify')
 const { getOptionsFlowCompact } = require('../lib/options-flow-cache')
 const { auditPicks, midOf } = require('../lib/price-coherence')
 const { levelInputs, tradeLevels } = require('../lib/trade-levels')
@@ -62,7 +64,10 @@ const { PREDICTION_LOG } = require('../lib/prediction-log-path')
 // the prompt no longer invites the model to price from memory.
 // v4: the units of targetReturn/stopLoss are stated (percent, never a price) —
 // a live scan wrote stop PRICES there for 15 of 20 picks.
-const SCAN_PROMPT_VERSION = 4
+// v5: volume measures skip the still-forming daily bar, and intraday quote
+// volume is labelled "so far … % of session" — the model no longer sees a
+// normal morning as thin volume.
+const SCAN_PROMPT_VERSION = 5
 
 const brainLimit = rateLimit({
   windowMs: 5 * 60 * 1000, max: 4,
@@ -327,7 +332,15 @@ function fmtQuote(q) {
   const analysts = q.numberOfAnalystOpinions
 
   const chgStr    = chg != null ? ` (${sign}${chg.toFixed(2)}%)` : ''
-  const volRatio  = (vol && avgVol) ? ` Vol=${(vol/avgVol).toFixed(2)}x avg` : ''
+  // During the US session the quote's volume is volume SO FAR; say so, with
+  // how much of the session has passed, instead of presenting 0.4x at 11:00
+  // as a thin day (lib/bar-session.js).
+  const sessionPart = !isCryptoSymbol(q.symbol || '') && usSessionOpen() ? usSessionElapsed() : null
+  const volRatio  = (vol && avgVol)
+    ? (sessionPart != null
+        ? ` VolSoFar=${(vol/avgVol).toFixed(2)}x avg @${Math.round(sessionPart * 100)}% of session`
+        : ` Vol=${(vol/avgVol).toFixed(2)}x avg`)
+    : ''
   const analystStr = target != null
     ? ` AnalystTarget=$${target.toFixed(0)}${analysts ? `(${analysts}×)` : ''}${recMean != null ? ` Rec=${recMean.toFixed(1)}` : ''}`
     : ''
@@ -366,14 +379,15 @@ async function fetchTaSnapshot(universe, headers) {
       const l = bars.map(b => b.l ?? b.c)
       const c = bars.map(b => b.c)
       const v = bars.map(b => b.v)
-      const line = compactTaLine(sym, o, h, l, c, v)
+      const lastBarForming = isLastBarForming(bars, { isCrypto: isCryptoSymbol(sym) })
+      const line = compactTaLine(sym, o, h, l, c, v, { lastBarForming })
       // Deterministic multi-factor scores ride along with the TA line
       const fLine = factorLine(factorScores({ closes: c, highs: h, lows: l }))
       if (line) bySymbol.set(sym, fLine ? `${line} ${fLine}` : line)
       // Capture key patterns for prediction calibration logging
-      const pats = detectPatterns(o, h, l, c, v).filter(p => KEY_PATTERNS.includes(p))
+      const pats = detectPatterns(o, h, l, c, v, { lastBarForming }).filter(p => KEY_PATTERNS.includes(p))
       if (pats.length) patternMap.set(sym, pats)
-      const baseline = baselineFromBars(bars)
+      const baseline = baselineFromBars(bars, { lastBarForming })
       if (baseline) baselines.set(sym, baseline)
       // 20-day return for intra-universe relative strength ranking
       const n = c.length

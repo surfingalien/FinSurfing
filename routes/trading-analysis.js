@@ -541,8 +541,10 @@ router.post('/analyze', requireAuth, async (req, res) => {
     const vwap     = computeVWAP(highs, lows, closes, volumes)
     const obv      = computeOBV(closes, volumes)
     const sr       = findSR(highs, lows, closes)
-    const patterns = detectPatterns(opens, highs, lows, closes, volumes)
-    const vol      = volumeAnalysis(volumes)
+    // Volume measures skip a still-forming final bar (its volume is "so far").
+    const lastBarForming = require('../lib/bar-session').isLastBarForming(bars, { interval: yInterval, isCrypto: isCryptoSymbol(sym) })
+    const patterns = detectPatterns(opens, highs, lows, closes, volumes, { lastBarForming })
+    const vol      = volumeAnalysis(volumes, { lastBarForming })
     const adx      = computeADX(highs, lows, closes)
 
     const indicators = { rsi, macd, ema9, ema21, ema50, ema200, bb, atr, stochRsi, vwap, obv, sr, patterns, volume: vol, adx }

@@ -26,6 +26,7 @@ const { getRouter }            = require('../lib/ai-router')
 const { CircuitOpenError }     = require('../lib/circuit-breaker')
 const { fetchDailyBars }       = require('../lib/internal-api')
 const { compactTaLine }        = require('../lib/technical-indicators')
+const { isLastBarForming }     = require('../lib/bar-session')
 const { startJsonHeartbeat }   = require('../lib/http-heartbeat')
 const { INTERNAL_SECRET }      = require('../lib/internal-secret')
 const { isCryptoSymbol }       = require('../lib/crypto-classify')
@@ -142,7 +143,8 @@ async function gatherEvidence(sym, req) {
     throw err
   }
 
-  const taLine = compactTaLine(sym, bars.map(b => b.o ?? b.c), bars.map(b => b.h ?? b.c), bars.map(b => b.l ?? b.c), bars.map(b => b.c), bars.map(b => b.v ?? 0))
+  const taLine = compactTaLine(sym, bars.map(b => b.o ?? b.c), bars.map(b => b.h ?? b.c), bars.map(b => b.l ?? b.c), bars.map(b => b.c), bars.map(b => b.v ?? 0),
+    { lastBarForming: isLastBarForming(bars, { isCrypto: isCryptoSymbol(sym) }) })
   let records = [], stats = null
   try { records = readPredictions(); stats = computeStats(records) } catch { /* calibration optional */ }
   const horizon = stats?.segmentHorizon ?? 7
