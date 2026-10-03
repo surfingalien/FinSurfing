@@ -70,22 +70,22 @@ describe('payload sizing', () => {
 describe('restoreFromDb', () => {
   test('the stored snapshot wins over the local seed', async () => {
     const db = fakeDb()
-    fs.writeFileSync(files[0].path, 'seed\n')
-    put(db, 'preds.jsonl', 'seed\ngrown\n', 4)
+    fs.writeFileSync(files[0].path, '"seed"\n')
+    put(db, 'preds.jsonl', '"seed"\n"grown"\n', 4)
     const out = await df.restoreFromDb(db.query, files)
-    expect(fs.readFileSync(files[0].path, 'utf8')).toBe('seed\ngrown\n')
+    expect(fs.readFileSync(files[0].path, 'utf8')).toBe('"seed"\n"grown"\n')
     expect(out.files['preds.jsonl']).toMatchObject({ status: 'restored', version: 4 })
     expect(out.files['lib.jsonl']).toMatchObject({ status: 'absent', version: 0 })
   })
 
   test('a row failing its checksum is reported corrupt and the disk left alone', async () => {
     const db = fakeDb()
-    fs.writeFileSync(files[0].path, 'local\n')
-    put(db, 'preds.jsonl', 'stored\n')
+    fs.writeFileSync(files[0].path, '"local"\n')
+    put(db, 'preds.jsonl', '"stored"\n')
     db.rows.get('preds.jsonl').sha256 = 'deadbeef'
     const out = await df.restoreFromDb(db.query, files)
     expect(out.files['preds.jsonl'].status).toBe('corrupt')
-    expect(fs.readFileSync(files[0].path, 'utf8')).toBe('local\n')
+    expect(fs.readFileSync(files[0].path, 'utf8')).toBe('"local"\n')
   })
 })
 
@@ -97,53 +97,74 @@ describe('flushing', () => {
 
   test('seeds an absent row, then skips when nothing changed', async () => {
     const db = fakeDb()
-    fs.writeFileSync(files[1].path, 'one\n')
+    fs.writeFileSync(files[1].path, '"one"\n')
     await boot(db)
     expect((await df.flushChanged({ query: db.query, files }))['lib.jsonl']).toBe('flushed')
-    expect(df.decode(db.rows.get('lib.jsonl').content).toString()).toBe('one\n')
+    expect(df.decode(db.rows.get('lib.jsonl').content).toString()).toBe('"one"\n')
     expect((await df.flushChanged({ query: db.query, files }))['lib.jsonl']).toBe('unchanged')
+  })
+
+  test('a file damaged on disk is held back — the stored copy is never overwritten with it', async () => {
+    jest.spyOn(console, 'error').mockImplementation(() => {})
+    const db = fakeDb()
+    put(db, 'preds.jsonl', '"good-1"\n"good-2"\n', 3)
+    await boot(db)
+    fs.writeFileSync(files[0].path, '"good-1"\n{"half-writ\n"good-2"\n')   // corrupt middle line
+    expect((await df.flushChanged({ query: db.query, files }))['preds.jsonl']).toBe('damaged')
+    expect(df.decode(db.rows.get('preds.jsonl').content).toString()).toBe('"good-1"\n"good-2"\n')
+    expect(df.status().files.find(f => f.name === 'preds.jsonl').note).toMatch(/not mirrored/)
+    console.error.mockRestore()
+  })
+
+  test('an unfinished final line is mirrored up to the last complete line', async () => {
+    const db = fakeDb()
+    put(db, 'preds.jsonl', '"a"\n', 1)
+    await boot(db)
+    fs.appendFileSync(files[0].path, '"b"\n{"cut-of')
+    expect((await df.flushChanged({ query: db.query, files }))['preds.jsonl']).toBe('flushed')
+    expect(df.decode(db.rows.get('preds.jsonl').content).toString()).toBe('"a"\n"b"\n')
   })
 
   test('a restored file is not re-written until it actually changes', async () => {
     const db = fakeDb()
-    put(db, 'preds.jsonl', 'a\n', 2)
+    put(db, 'preds.jsonl', '"a"\n', 2)
     await boot(db)
     expect((await df.flushChanged({ query: db.query, files }))['preds.jsonl']).toBe('unchanged')
-    fs.appendFileSync(files[0].path, 'b\n')
+    fs.appendFileSync(files[0].path, '"b"\n')
     expect((await df.flushChanged({ query: db.query, files }))['preds.jsonl']).toBe('flushed')
     expect(db.rows.get('preds.jsonl').version).toBe(3)
   })
 
   test('a missing file never deletes the stored copy', async () => {
     const db = fakeDb()
-    put(db, 'preds.jsonl', 'keep\n')
+    put(db, 'preds.jsonl', '"keep"\n')
     await boot(db)
     fs.unlinkSync(files[0].path)
     expect((await df.flushChanged({ query: db.query, files }))['preds.jsonl']).toBe('missing')
-    expect(df.decode(db.rows.get('preds.jsonl').content).toString()).toBe('keep\n')
+    expect(df.decode(db.rows.get('preds.jsonl').content).toString()).toBe('"keep"\n')
   })
 
   test('a version conflict adopts the newer version, then the running process wins', async () => {
     const db = fakeDb()
-    put(db, 'preds.jsonl', 'a\n', 1)
+    put(db, 'preds.jsonl', '"a"\n', 1)
     await boot(db)
-    put(db, 'preds.jsonl', 'other-instance\n', 2)        // another instance wrote meanwhile
-    fs.appendFileSync(files[0].path, 'mine\n')
+    put(db, 'preds.jsonl', '"other-instance"\n', 2)        // another instance wrote meanwhile
+    fs.appendFileSync(files[0].path, '"mine"\n')
     expect((await df.flushChanged({ query: db.query, files }))['preds.jsonl']).toBe('conflict')
-    expect(df.decode(db.rows.get('preds.jsonl').content).toString()).toBe('other-instance\n')
-    fs.appendFileSync(files[0].path, 'more\n')
+    expect(df.decode(db.rows.get('preds.jsonl').content).toString()).toBe('"other-instance"\n')
+    fs.appendFileSync(files[0].path, '"more"\n')
     expect((await df.flushChanged({ query: db.query, files }))['preds.jsonl']).toBe('flushed')
-    expect(df.decode(db.rows.get('preds.jsonl').content).toString()).toBe('a\nmine\nmore\n')
+    expect(df.decode(db.rows.get('preds.jsonl').content).toString()).toBe('"a"\n"mine"\n"more"\n')
     expect(df.status().files.find(f => f.name === 'preds.jsonl').conflicts).toBe(1)
   })
 
   test('a corrupt row is never overwritten by the local seed', async () => {
     const db = fakeDb()
-    fs.writeFileSync(files[0].path, 'seed\n')
-    put(db, 'preds.jsonl', 'real history\n', 7)
+    fs.writeFileSync(files[0].path, '"seed"\n')
+    put(db, 'preds.jsonl', '"real history"\n', 7)
     db.rows.get('preds.jsonl').sha256 = 'bad'
     await boot(db)
-    fs.appendFileSync(files[0].path, 'new\n')
+    fs.appendFileSync(files[0].path, '"new"\n')
     expect((await df.flushChanged({ query: db.query, files }))['preds.jsonl']).toBe('skipped')
     expect(db.rows.get('preds.jsonl').version).toBe(7)
   })
@@ -168,7 +189,7 @@ describe('restoreSync', () => {
     const exec = () => { throw new Error('connect ECONNREFUSED') }
     expect(df.restoreSync({ env: { DATABASE_URL: 'x' }, exec })).toMatchObject({ enabled: false })
     const db = fakeDb()
-    fs.writeFileSync(files[0].path, 'seed\n')
+    fs.writeFileSync(files[0].path, '"seed"\n')
     expect(await df.flushChanged({ query: db.query, files })).toEqual({})
     expect(db.calls).toEqual([])
     expect(df.startMirror()).toBe(false)
