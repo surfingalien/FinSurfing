@@ -205,9 +205,21 @@ describe('POST /api/ai-brain/analyze — the AVAX regression', () => {
   test('the prompt offers the model a way to decline', async () => {
     mockCall.mockResolvedValue(reply(stock()))
     await scan()
-    const prompt = mockCall.mock.calls[0][0].prompt
-    expect(prompt).toMatch(/Strong Buy\|Buy\|Moderate Buy\|Avoid/)
-    expect(prompt).toMatch(/Do NOT express a bearish view as a negative targetReturn/)
+    // The rules live in the cached system block (SCAN_SYSTEM), not the per-scan prompt.
+    const { system } = mockCall.mock.calls[0][0]
+    expect(system).toMatch(/Strong Buy\|Buy\|Moderate Buy\|Avoid/)
+    expect(system).toMatch(/Do NOT express a bearish view as a negative targetReturn/)
+  })
+
+  test('the cached instruction block is byte-identical across scans; the data is not in it', async () => {
+    mockCall.mockResolvedValue(reply(stock()))
+    await scan()
+    await scan()
+    const [a, b] = mockCall.mock.calls.map(c => c[0])
+    expect(a.system).toBe(b.system)
+    expect(a.system).not.toMatch(/AVAX/)              // universe, prices and dates stay out of the cached prefix
+    expect(a.system).not.toMatch(/Today is/)
+    expect(a.prompt).toMatch(/Universe: AVAX/)
   })
 })
 
