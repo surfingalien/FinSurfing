@@ -160,3 +160,63 @@ describe('getQueue', () => {
     expect(typeof q.completed).toBe('number')
   })
 })
+
+describe('surviving a restart', () => {
+  const fs = require('fs')
+  const line = o => JSON.stringify(o) + '\n'
+  const iso = msAgo => new Date(Date.now() - msAgo).toISOString()
+  const write = (...rows) => fs.writeFileSync(queue.JOBS_FILE, rows.map(line).join(''))
+  afterEach(() => { try { fs.unlinkSync(queue.JOBS_FILE) } catch { /* absent */ } })
+
+  test('enqueue journals the request, so it exists on disk before it finishes', () => {
+    const { id } = queue.enqueue({ userId: 'u1', params })
+    const rows = fs.readFileSync(queue.JOBS_FILE, 'utf8').trim().split('\n').map(JSON.parse)
+    expect(rows.find(r => r.id === id)).toMatchObject({ status: 'queued', userId: 'u1', attempt: 1 })
+  })
+
+  test('a job queued or running at shutdown is resumed under the SAME id — the polling page just sees it queued', () => {
+    write({ id: 'scan-1', userId: 'u1', kind: 'scan', params, status: 'queued', enqueuedAt: iso(120_000), attempt: 1 })
+    const out = queue._loadPersistedForTests()
+    expect(out.resumed).toBe(1)
+    expect(queue.getJob('scan-1', 'u1')).toMatchObject({ status: 'queued' })
+    expect(queue.getJob('scan-1', 'u2')).toBeNull()          // still owner-scoped
+  })
+
+  test('a finished job is not resumed — its result is restored instead', () => {
+    write(
+      { id: 'scan-2', userId: 'u1', kind: 'scan', params, status: 'queued', enqueuedAt: iso(300_000), attempt: 1 },
+      { id: 'scan-2', userId: 'u1', kind: 'scan', params, status: 'done', result: { ok: 1 }, finishedAt: iso(60_000) },
+    )
+    expect(queue._loadPersistedForTests().resumed).toBe(0)
+    expect(queue.getLatestResult('u1', 'scan')).toMatchObject({ id: 'scan-2', result: { ok: 1 } })
+  })
+
+  test('a job already retried once, or asked for over an hour ago, fails with the reason instead of a 404', () => {
+    write(
+      { id: 'scan-3', userId: 'u1', kind: 'scan', params, status: 'queued', enqueuedAt: iso(60_000), attempt: queue.MAX_ATTEMPTS },
+      { id: 'scan-4', userId: 'u1', kind: 'scan', params, status: 'queued', enqueuedAt: iso(2 * 3600_000), attempt: 1 },
+    )
+    const out = queue._loadPersistedForTests()
+    expect(out).toMatchObject({ resumed: 0, abandoned: 2 })
+    for (const id of ['scan-3', 'scan-4']) {
+      expect(queue.getJob(id, 'u1')).toMatchObject({ status: 'failed', error: expect.stringMatching(/server restarted/i) })
+    }
+  })
+
+  test('a cancelled job stays cancelled', () => {
+    write(
+      { id: 'scan-5', userId: 'u1', kind: 'scan', params, status: 'queued', enqueuedAt: iso(60_000), attempt: 1 },
+      { id: 'scan-5', userId: 'u1', kind: 'scan', status: 'cancelled', finishedAt: iso(30_000) },
+    )
+    expect(queue._loadPersistedForTests()).toMatchObject({ resumed: 0, abandoned: 0 })
+    expect(queue.getJob('scan-5', 'u1')).toBeNull()
+  })
+
+  test('cancel() journals it, so a restart does not resurrect the job', () => {
+    queue.enqueue({ userId: 'u1', params })                   // occupies the worker slot
+    const { id } = queue.enqueue({ userId: 'u1', params })
+    expect(queue.cancel(id, 'u1')).toBe(true)
+    const rows = fs.readFileSync(queue.JOBS_FILE, 'utf8').trim().split('\n').map(JSON.parse)
+    expect(rows.filter(r => r.id === id).map(r => r.status)).toEqual(['queued', 'cancelled'])
+  })
+})

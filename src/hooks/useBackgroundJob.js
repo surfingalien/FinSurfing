@@ -85,8 +85,12 @@ export function useBackgroundJob({
   const poll = useCallback(async (jobId) => {
     try {
       const res = await call(`${pollPath}/${encodeURIComponent(jobId)}`)
-      if (res.status === 404) {   // lost to a restart — stop chasing it
-        finish({ status: 'failed', error: `This ${noun} is no longer available (the server may have restarted).` })
+      // The server now resumes jobs interrupted by a restart under the same id
+      // (lib/ai-job-queue.js), and one it cannot resume comes back as a
+      // failed job with the reason. A 404 is left only for a job whose record
+      // never reached storage — say what happened and what to do.
+      if (res.status === 404) {
+        finish({ status: 'failed', error: `This ${noun} was lost when the server restarted (usually a new version being deployed) and could not be resumed. Please run it again.` })
         return
       }
       const { job } = await res.json()
