@@ -128,10 +128,13 @@ describe('brain-learnings white-box overrides', () => {
       fs.writeFileSync(LEARNINGS, JSON.stringify({
         updatedAt: new Date().toISOString(),
         totalResolved: 12,
-        keyLearnings: ['Measured finding A', 'Stale finding B'],
+        // Each finding cites the statistic it rests on — uncited ones are dropped
+        // before injection (lib/learning-health.js).
+        keyLearnings: ['Measured finding A [h7]', 'Stale finding B [h7]'],
+        stats: { h7: { n: 20, wins: 11, winRate: 0.55 } },
         scoreWeightAdjustments: {},
       }))
-      bl.writeOverrides({ pinned: ['My own hunch'], suppressed: ['Stale finding B'], note: 'Be cautious on small caps' })
+      bl.writeOverrides({ pinned: ['My own hunch'], suppressed: ['Stale finding B [h7]'], note: 'Be cautious on small caps' })
 
       const block = bl.getLearningsBlock()
       const measuredIdx = block.indexOf('KEY LEARNINGS FROM PAST PREDICTIONS')
