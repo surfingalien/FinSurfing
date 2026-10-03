@@ -26,7 +26,7 @@ jest.mock('../lib/ai-router', () => ({
   GROQ_MODEL: 'openai/gpt-oss-120b',
 }))
 jest.mock('../lib/brain-learnings', () => ({
-  getLearningsBlock: () => '', getAutoTunedThreshold: () => null,
+  buildLearnings: () => ({ block: '', version: 'none' }), getAutoTunedThreshold: () => null,
   computeStats: () => ({}), readPredictions: () => [],
 }))
 jest.mock('../lib/strategy-library',  () => ({ getStrategyBlock: () => '' }))

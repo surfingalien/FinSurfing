@@ -30,7 +30,7 @@ const { isLastBarForming }     = require('../lib/bar-session')
 const { startJsonHeartbeat }   = require('../lib/http-heartbeat')
 const { INTERNAL_SECRET }      = require('../lib/internal-secret')
 const { isCryptoSymbol }       = require('../lib/crypto-classify')
-const { readPredictions, computeStats } = require('../lib/brain-learnings')
+const { readPredictions, computeStats, getLearningHealth } = require('../lib/brain-learnings')
 const { computeEdgeReport }    = require('../lib/edge-report')
 const kelly                    = require('../lib/kelly')
 const library                  = require('../lib/strategy-library')
@@ -205,7 +205,11 @@ router.get('/track-record', requireAuth, (req, res) => {
       h7: stats.h7, h30: stats.h30, barriers: stats.barriers,
       byAssetType: stats.byAssetType, calibration: stats.calibration,
       autoTune: stats.autoTune, baseline: stats.baseline,
+      exitQuality: stats.exitQuality,
     },
+    // Do the self-learned findings hold up against the stats, and do picks
+    // made with them beat picks made without (lib/learning-health.js)?
+    learningHealth: (() => { try { return getLearningHealth() } catch { return null } })(),
     edges: edge && { overall: edge.overall, tested: edge.tested, topEdges: edge.topEdges, topDrags: edge.topDrags },
     decisions: learningStore.getCalibration(),
     strategies: library.libraryStats(),
@@ -260,6 +264,7 @@ router.get('/system-status', requireAuth, evidenceLimit, async (req, res) => {
     facts.jobs = STATUS_JOBS.map(id => all.find(j => j.id === id)).filter(Boolean)
   } catch { facts.jobs = [] }
   try { facts.record = recordFacts(readPredictions()) } catch { facts.record = {} }
+  try { facts.learningHealth = getLearningHealth() } catch { facts.learningHealth = null }
   res.json(evaluateStatus(facts))
 })
 

@@ -23,7 +23,7 @@ const { getSocialSentiment, getCryptoFearGreed, getBtcDominance } = require('../
 const { getAltDataSnippet, getGeopoliticalRiskSnippet } = require('../lib/alt-data')
 const { getIndicators }      = require('./macro')
 const { requireAuth }     = require('../middleware/auth')
-const { getLearningsBlock, getAutoTunedThreshold } = require('../lib/brain-learnings')
+const { buildLearnings, getAutoTunedThreshold } = require('../lib/brain-learnings')
 const { getStrategyBlock }  = require('../lib/strategy-library')
 const learningStore         = require('../lib/learning-store')
 const { compactTaLine, detectPatterns, KEY_PATTERNS, computeRsRanks } = require('../lib/technical-indicators')
@@ -618,7 +618,7 @@ async function resolveUniverse({ symbols, scanMode, universeMode, fmpKey }) {
 // Write a prediction record for future win-rate tracking
 function logPrediction(symbol, agents, zones, generatedAt, {
   baseline = null, optionsPcRatio = null, taPatterns = null, rsRankAtScan = null,
-  regimeAtScan = null, modelVersion = null,
+  regimeAtScan = null, modelVersion = null, learningsVersion = null,
 } = {}) {
   try {
     const dir = path.dirname(PREDICTION_LOG)
@@ -683,6 +683,9 @@ function logPrediction(symbol, agents, zones, generatedAt, {
       // the old one's yields an average that describes neither.
       modelVersion:      modelVersion ?? null,
       promptVersion:     SCAN_PROMPT_VERSION,
+      // Which self-learned block steered it ('none' = none injected), so
+      // lib/learning-health.js can compare picks made with and without it.
+      learningsVersion:  learningsVersion ?? null,
       // Barrier levels, so the nightly resolver can ask which came FIRST —
       // the target, the stop, or the clock. Scoring only the +30d close counts
       // a pick that hit its target on day 3 and round-tripped as a loss.
@@ -896,7 +899,12 @@ router.post('/analyze', requireAuth, brainLimit, async (req, res) => {
     marketSnippet += `\n\nRemoved from this scan (no current price available): ${unpriced.join(', ')}. Do not include them.`
 
   // ── Step 2: prompt — contradiction engine + zones + assumptions ────────────
-  const learningsBlock = getLearningsBlock()
+  // The learnings block after its deterministic audit (lib/learning-health.js);
+  // its version is stamped on every pick so "do the learnings help?" can be
+  // measured — 'none' when nothing was injected (absent, stale or withheld).
+  const learningsState   = buildLearnings()
+  const learningsBlock   = learningsState.block
+  const learningsVersion = learningsState.version
   // Evolved context: strategies that survived repeated real backtests, and
   // calibration measured across EVERY AI surface (not just this one). Both
   // return '' until they have earned something to say, so an unproven system
@@ -1121,6 +1129,7 @@ Apply the instructions, JSON schema and rules from the system prompt. Respond ON
         rsRankAtScan:   taRsRankMap.get(stock.symbol) ?? null,
         regimeAtScan,
         modelVersion,
+        learningsVersion,
       })
     }
 
