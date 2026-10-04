@@ -25,8 +25,13 @@ jest.mock('../lib/ai-router', () => ({
   getRouter: () => ({ call: (...a) => mockCall(...a) }),
   GROQ_MODEL: 'openai/gpt-oss-120b',
 }))
+// buildLearnings is the REAL one, over an empty data dir (tests/setup-env.js) —
+// exactly production right after a deploy, with no learnings file yet. A stub
+// here hid a crash: the real function returned '' on a missing file, and the
+// scan read ''.block, threw, and took the whole server down on every scan.
 jest.mock('../lib/brain-learnings', () => ({
-  buildLearnings: () => ({ block: '', version: 'none' }), getAutoTunedThreshold: () => null,
+  ...jest.requireActual('../lib/brain-learnings'),
+  getAutoTunedThreshold: () => null,
   computeStats: () => ({}), readPredictions: () => [],
 }))
 jest.mock('../lib/strategy-library',  () => ({ getStrategyBlock: () => '' }))

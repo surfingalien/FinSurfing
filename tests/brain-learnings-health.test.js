@@ -66,3 +66,10 @@ test('computeStats splits picks by whether learnings were injected; unstamped re
   expect(s.byLearnings.on.n).toBe(2)
   expect(s.byLearnings.off.n).toBe(1)
 })
+
+test('with no learnings file at all (a fresh deploy), it returns an empty block — never a bare string', () => {
+  try { fs.unlinkSync(LEARNINGS) } catch { /* absent */ }
+  const out = bl.buildLearnings()
+  expect(out).toMatchObject({ block: '', version: 'none', withheld: false })
+  expect(bl.getLearningsBlock()).toBe('')
+})
