@@ -150,11 +150,15 @@ app.use(helmet({
     directives: {
       defaultSrc:  ["'self'"],
       scriptSrc:   ["'self'", "'unsafe-inline'", 'https://s3.tradingview.com', 'https://*.tradingview.com'],
-      styleSrc:    ["'self'", "'unsafe-inline'"],
+      // index.html loads Inter / JetBrains Mono from Google Fonts: the
+      // stylesheet from fonts.googleapis.com, the font files from
+      // fonts.gstatic.com. Without both, the browser blocked them and the
+      // whole app fell back to system fonts.
+      styleSrc:    ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
       imgSrc:      ["'self'", 'data:', 'https:'],
       frameSrc:    ["'self'", 'https://*.tradingview.com', 'https://www.tradingview.com'],
       connectSrc:  ["'self'", 'https://finnhub.io', 'https://financialmodelingprep.com', 'https://api.aisa.one', 'https://www.alphavantage.co', 'https://api.twelvedata.com', 'https://*.tradingview.com', 'wss://*.tradingview.com'],
-      fontSrc:     ["'self'", 'data:'],
+      fontSrc:     ["'self'", 'data:', 'https://fonts.gstatic.com'],
       objectSrc:   ["'none'"],
       upgradeInsecureRequests: PROD ? [] : null,
     },
@@ -1165,6 +1169,7 @@ const { isCryptoSymbol, toBinancePair, cgId } = require('./lib/crypto-classify')
 // Disk-persisted last-known quotes — final /api/quote fallback (lib/last-quotes.js)
 const { record: recordLastQuotes, recall: recallLastQuote, size: lastQuotesSize } = require('./lib/last-quotes')
 const { fetchStooqQuotes } = require('./lib/stooq')
+const { nasdaqAssetClasses } = require('./lib/nasdaq-asset-classes')
 
 async function getBinanceChart(symbol, interval = '1d', range = '1y') {
   if (!isCryptoSymbol(symbol)) return null
@@ -1379,10 +1384,12 @@ async function getNasdaqQuotes(symbols) {
     'Referer':         'https://www.nasdaq.com/',
     'Origin':          'https://www.nasdaq.com',
   }
-  // Each symbol probes up to 3 asset classes serially; cap concurrency so a
+  // Each symbol probes a few asset classes serially; cap concurrency so a
   // large portfolio doesn't burst dozens of requests at Nasdaq and get throttled.
+  // Mutual funds are asked as `mutualfunds` (lib/nasdaq-asset-classes.js) —
+  // without it fund NAVs had no keyless fallback at all.
   const results = await mapLimit(symbols, 5, async (sym) => {
-    for (const assetclass of ['stocks', 'etf', 'index']) {
+    for (const assetclass of nasdaqAssetClasses(sym)) {
       try {
         const url = `https://api.nasdaq.com/api/quote/${encodeURIComponent(sym)}/info?assetClass=${assetclass}`
         const r = await fetch(url, { headers, signal: AbortSignal.timeout(8000) })

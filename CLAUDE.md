@@ -44,8 +44,9 @@ A long request that writes no bytes gets dropped by mobile networks, and the bro
 **Neither** — SSE surfaces (`copilot`, `agent/analyze`, `rebalancer/suggest`) already stream bytes continuously; do not add a heartbeat to them, it corrupts the event stream and overwrites the `text/event-stream` content type.
 
 ## Market Data Pipeline (`server.js`)
+**CSP** (helmet in `server.js`): `index.html` loads Google Fonts, so `style-src` must allow `https://fonts.googleapis.com` and `font-src` `https://fonts.gstatic.com` — without them the browser blocked the fonts and the app fell back to system fonts.
 - `KNOWN_CRYPTO` (~80) → Binance → CoinGecko (`COINGECKO_IDS` map) — classifiers in `lib/crypto-classify.js` (`isCryptoSymbol`, `toBinancePair`, `cgId`; tests in `tests/crypto-classify.test.js`)
-- `KNOWN_MUTUAL_FUNDS` (~120) → FMP only (NAV quotes)
+- Mutual funds (`KNOWN_MUTUAL_FUNDS` ~120) → the stock cascade below; FMP gives NAV on plans that allow fund symbols, and the keyless **Nasdaq** step asks `assetclass=mutualfunds` (`lib/nasdaq-asset-classes.js` — fund-style tickers, 5 letters ending in X, ask it first). Before this, Nasdaq was only asked stocks/etf/index, so on an FMP plan that refuses funds VFIAX/FXAIX had no price at all
 - Else → Finnhub → AISA → FMP → AlphaVantage → Nasdaq → TwelveData → Tiingo → Polygon → `lib/stooq.js` (keyless CSV, delayed, price-only) → cache → `lib/last-quotes.js` (disk-persisted last-known quote, served with `stale: true`; survives deploys)
 - `GET /api/health/providers` live-probes every provider (`?useEnvKeys=1` ignores browser keys); NOTE browser-saved keys (`finsurf_api_keys` headers) override env keys in `extractKeys`
 
