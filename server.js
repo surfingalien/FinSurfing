@@ -13,6 +13,15 @@ const rateLimit    = require('express-rate-limit')
 const durableFiles = require('./lib/durable-files')
 durableFiles.restoreSync()
 
+// An async route that throws produces an unhandled rejection, and Node exits on
+// one — taking every user's in-flight request and queued AI job down with it.
+// Log it instead. (Synchronous uncaught exceptions still exit: the process
+// state after one is not trustworthy.) Routes should also use
+// lib/async-route.js:guardAsync so the request itself gets an error answer.
+process.on('unhandledRejection', (reason) => {
+  console.error('[server] unhandled rejection (kept running):', reason?.stack || reason)
+})
+
 const authRoutes        = require('./routes/auth')
 const portfolioRoutes   = require('./routes/portfolios')
 const publicRoutes      = require('./routes/public')

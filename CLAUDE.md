@@ -39,6 +39,8 @@ A long request that writes no bytes gets dropped by mobile networks, and the bro
 
 **Heartbeat** (`lib/http-heartbeat.js`) — trickles a space every 15s so the connection never idles. For long requests the queue would make *worse*: auto-triggered or per-symbol surfaces (a queue would hit the per-user cap while browsing and restore the wrong symbol's result), and anonymous ones (job ownership needs a user). Applied to `trading-analysis/analyze`, `dividend/screen`, `dcf`, `patterns/:symbol`, `strategy-lab/propose`. **Once heartbeating starts the status pins to 200, so clients MUST check `data.error` as well as `res.ok`.**
 
+**An async route must never take the server down.** Express 4 does not catch a rejected async handler, and Node exits on an unhandled rejection — on 2026-10-03 one TypeError in the AI Brain scan restarted the whole server on every scan (and the job queue's resume re-ran it into the same crash until `MAX_ATTEMPTS` stopped it). Wrap long async handlers in `lib/async-route.js:guardAsync(name, fn)` (answers with an `error` body, heartbeat-safe; applied to `ai-brain/analyze`), and `server.js` logs unhandled rejections instead of exiting. Route tests must not stub the module under change: `tests/ai-brain-abstain.test.js` now runs the REAL `buildLearnings` over an empty data dir (production right after a deploy) — the stub is what let this crash through. Tests: `tests/async-route.test.js`.
+
 **Neither** — SSE surfaces (`copilot`, `agent/analyze`, `rebalancer/suggest`) already stream bytes continuously; do not add a heartbeat to them, it corrupts the event stream and overwrites the `text/event-stream` content type.
 
 ## Market Data Pipeline (`server.js`)

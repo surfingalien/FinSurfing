@@ -38,6 +38,7 @@ const { tryParseAiJson }    = require('../lib/ai-json')
 const { baselineFromBars }  = require('../lib/ml-baseline')
 const { factorScores, factorLine } = require('../lib/factor-model')
 const { startJsonHeartbeat } = require('../lib/http-heartbeat')
+const { guardAsync } = require('../lib/async-route')
 const { mountJobRoutes }    = require('../lib/ai-job-routes')
 
 const router   = express.Router()
@@ -703,7 +704,7 @@ function logPrediction(symbol, agents, zones, generatedAt, {
   } catch { /* non-fatal */ }
 }
 
-router.post('/analyze', requireAuth, brainLimit, async (req, res) => {
+router.post('/analyze', requireAuth, brainLimit, guardAsync('ai-brain/analyze', async (req, res) => {
   // A scan runs 2–4 minutes writing nothing; mobile browsers and edge proxies
   // drop an idle connection and the client sees a bare "Load failed" with no
   // HTTP response. Trickle whitespace so the connection stays warm — invisible
@@ -902,9 +903,9 @@ router.post('/analyze', requireAuth, brainLimit, async (req, res) => {
   // The learnings block after its deterministic audit (lib/learning-health.js);
   // its version is stamped on every pick so "do the learnings help?" can be
   // measured — 'none' when nothing was injected (absent, stale or withheld).
-  const learningsState   = buildLearnings()
-  const learningsBlock   = learningsState.block
-  const learningsVersion = learningsState.version
+  const learningsState   = buildLearnings() || {}
+  const learningsBlock   = String(learningsState.block ?? '')
+  const learningsVersion = learningsState.version ?? 'none'
   // Evolved context: strategies that survived repeated real backtests, and
   // calibration measured across EVERY AI surface (not just this one). Both
   // return '' until they have earned something to say, so an unproven system
@@ -1201,7 +1202,7 @@ Apply the instructions, JSON schema and rules from the system prompt. Respond ON
     console.error('[ai-brain]', err.message)
     return res.status(500).json({ error: 'AI Brain analysis failed: ' + err.message })
   }
-})
+}))
 
 // ── Background scans ─────────────────────────────────────────────────────────
 // A scan takes 2–4 minutes. POST /analyze holds the connection for all of it,
