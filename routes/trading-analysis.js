@@ -10,6 +10,8 @@
 
 const express   = require('express')
 const { getRouter } = require('../lib/ai-router')
+const { TRADING_ANALYSIS_SCHEMA } = require('../lib/ai-schemas')
+const { canonicalizeEnums }       = require('../lib/output-schema')
 const { optionalAuth, requireAuth } = require('../middleware/auth')
 const { recallMemory, saveMemory, searchMemory } = require('../db/ai_memory')
 const {
@@ -593,6 +595,8 @@ router.post('/analyze', requireAuth, async (req, res) => {
       prompt:    analysisPrompt,
       maxTokens: 2048,
       symbols:   [sym],
+      schema:     TRADING_ANALYSIS_SCHEMA,
+      schemaName: 'trading-analysis',
     })
 
     // Strip any accidental markdown fences
@@ -614,6 +618,8 @@ router.post('/analyze', requireAuth, async (req, res) => {
         return res.status(500).json({ error: 'AI analysis response was malformed — please try again' })
       }
     }
+
+    analysis = canonicalizeEnums(TRADING_ANALYSIS_SCHEMA, analysis)
 
     // Persist analysis to memory (fire-and-forget — never blocks response)
     if (req.user?.userId) saveMemory(req.user.userId, sym, yInterval, price, analysis)
