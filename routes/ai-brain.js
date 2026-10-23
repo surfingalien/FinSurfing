@@ -35,6 +35,8 @@ const { levelInputs, tradeLevels } = require('../lib/trade-levels')
 const { MODE_SECTORS, FMP_SECTORS, DISCOVERY_MODES, BROAD_FIXED, filterMovers, buildScanUniverse, isPlainTicker } = require('../lib/scan-universe')
 const { fetchDailyBars }    = require('../lib/internal-api')
 const { tryParseAiJson }    = require('../lib/ai-json')
+const { SCAN_SCHEMA }       = require('../lib/ai-schemas')
+const { canonicalizeEnums } = require('../lib/output-schema')
 const { baselineFromBars }  = require('../lib/ml-baseline')
 const { factorScores, factorLine } = require('../lib/factor-model')
 const { startJsonHeartbeat } = require('../lib/http-heartbeat')
@@ -70,7 +72,10 @@ const { PREDICTION_LOG } = require('../lib/prediction-log-path')
 // normal morning as thin volume. Same version: the fixed instructions (role,
 // schema, scoring rules) also moved into a cached system block ahead of the
 // per-scan data (SCAN_SYSTEM) — shipped together, never deployed apart.
-const SCAN_PROMPT_VERSION = 5
+// v6: constrained decoding — the scan is decoded against SCAN_SCHEMA
+// (lib/ai-schemas.js), so verdict/confidence/volumeSignal can only be the
+// declared values. Same prompt text; a different decoder is a different system.
+const SCAN_PROMPT_VERSION = 6
 
 // The fixed part of every scan prompt: role, output schema and scoring rules.
 // It contains NO interpolation, so it is byte-identical across scans and is
@@ -934,8 +939,8 @@ Apply the instructions, JSON schema and rules from the system prompt. Respond ON
   try {
     if (process.env.GROQ_API_KEY) {
       const [pri, sec] = await Promise.allSettled([
-        aiRouter.call({ prompt, system: SCAN_SYSTEM, maxTokens: 16000, symbols: universe }),
-        aiRouter.callGroq({ prompt, system: SCAN_SYSTEM, maxTokens: 16000, symbols: universe }),
+        aiRouter.call({ prompt, system: SCAN_SYSTEM, maxTokens: 16000, symbols: universe, schema: SCAN_SCHEMA, schemaName: 'ai-brain-scan' }),
+        aiRouter.callGroq({ prompt, system: SCAN_SYSTEM, maxTokens: 16000, symbols: universe, schema: SCAN_SCHEMA, schemaName: 'ai-brain-scan' }),
       ])
       if (pri.status === 'rejected') throw pri.reason
       raw     = pri.value.text
@@ -944,7 +949,7 @@ Apply the instructions, JSON schema and rules from the system prompt. Respond ON
       // is the same model — agreement would be meaningless, so skip it.
       if (sec.status === 'fulfilled' && llmUsed !== 'groq') secondText = sec.value.text
     } else {
-      const result = await aiRouter.call({ prompt, system: SCAN_SYSTEM, maxTokens: 16000, symbols: universe })
+      const result = await aiRouter.call({ prompt, system: SCAN_SYSTEM, maxTokens: 16000, symbols: universe, schema: SCAN_SCHEMA, schemaName: 'ai-brain-scan' })
       raw     = result.text
       llmUsed = result.llmUsed
     }
@@ -972,6 +977,10 @@ Apply the instructions, JSON schema and rules from the system prompt. Respond ON
         return res.status(500).json({ error: 'AI Brain response was truncated — reduce symbols or try again' })
       }
     }
+
+    // Constrained decoding fixes the shape; Claude may still vary an enum's
+    // capitalisation, which would slip past every verdict lookup downstream.
+    data = canonicalizeEnums(SCAN_SCHEMA, data)
 
     if (!Array.isArray(data.rankedStocks) || !data.rankedStocks.length)
       return res.status(500).json({ error: 'AI Brain returned no ranked stocks — try again' })
@@ -1049,7 +1058,7 @@ Apply the instructions, JSON schema and rules from the system prompt. Respond ON
     // ── Cross-model agreement — annotate each pick with the second opinion ────
     let ensemble = null
     if (secondText) {
-      const second = tryParseAiJson(secondText)
+      const second = canonicalizeEnums(SCAN_SCHEMA, tryParseAiJson(secondText))
       if (Array.isArray(second?.rankedStocks) && second.rankedStocks.length) {
         const secMap = new Map(second.rankedStocks.map(s => [s.symbol, s]))
         let overlap = 0

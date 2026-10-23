@@ -23,6 +23,7 @@ const rateLimit = require('express-rate-limit')
 
 const { requireAuth }          = require('../middleware/auth')
 const { getRouter }            = require('../lib/ai-router')
+const { THESIS_SCHEMA }        = require('../lib/ai-schemas')
 const { CircuitOpenError }     = require('../lib/circuit-breaker')
 const { fetchDailyBars }       = require('../lib/internal-api')
 const { compactTaLine }        = require('../lib/technical-indicators')
@@ -293,7 +294,7 @@ router.post('/:symbol/thesis', requireAuth, thesisLimit, async (req, res) => {
 
   let raw = '', llmUsed = null
   try {
-    const out = await aiRouter.call({ prompt: desk.buildThesisPrompt({ symbol: sym, items: ev.items, gaps: ev.gaps }), maxTokens: 2500, symbols: [sym] })
+    const out = await aiRouter.call({ prompt: desk.buildThesisPrompt({ symbol: sym, items: ev.items, gaps: ev.gaps }), maxTokens: 2500, symbols: [sym], schema: THESIS_SCHEMA, schemaName: 'research-thesis' })
     raw = out.text; llmUsed = out.llmUsed
   } catch (err) {
     if (err instanceof CircuitOpenError) return res.status(503).json({ error: err.message, circuitOpen: true })

@@ -35,6 +35,8 @@ const kelly = require('../lib/kelly')
 const expectedValue = require('../lib/expected-value')
 const { computeStats, readPredictions } = require('../lib/brain-learnings')
 const { extractArrayObjects } = require('../lib/ai-json')
+const { RECOMMENDATIONS_SCHEMA } = require('../lib/ai-schemas')
+const { canonicalizeEnums }      = require('../lib/output-schema')
 const { startJsonHeartbeat } = require('../lib/http-heartbeat')
 const recJournal = require('../lib/rec-journal')
 
@@ -333,7 +335,7 @@ Respond ONLY with a JSON object — no markdown, no explanation, just the JSON:
     // sources runs well past 8k and was truncating mid-JSON → the parser saw a
     // broken object and failed with "Unexpected end of JSON input". Matches the
     // ai-brain budget for a comparable ranked-list response.
-    const result = await aiRouter.call({ prompt, maxTokens: 16000, symbols: allSymbols })
+    const result = await aiRouter.call({ prompt, maxTokens: 16000, symbols: allSymbols, schema: RECOMMENDATIONS_SCHEMA, schemaName: 'recommendations' })
     raw     = result.text
     llmUsed = result.llmUsed
   } catch (err) {
@@ -364,6 +366,8 @@ Respond ONLY with a JSON object — no markdown, no explanation, just the JSON:
         console.warn(`[recommendations] response incomplete — salvaged ${salvaged.length} complete picks`)
       }
     }
+
+    if (data) data = canonicalizeEnums(RECOMMENDATIONS_SCHEMA, data)
 
     if (!data) {
       console.error('[recommendations] Non-JSON response:', raw.slice(0, 200))
