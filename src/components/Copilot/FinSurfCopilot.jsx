@@ -53,6 +53,12 @@ function ToolBadge({ name }) {
     get_macro: '🌐 Reading macro indicators...',
     get_earnings_catalyst: '📅 Fetching earnings catalyst...',
     get_options_flow: '📊 Reading options flow...',
+    code_execution: '🧮 Running analysis code...',
+    sector_universe: '🗂️ Listing sector names...',
+    get_fundamentals: '📑 Reading fundamentals...',
+    get_analyst_consensus: '🎯 Reading valuation...',
+    get_insider_activity: '🕵️ Checking insider activity...',
+    find_exposure: '🕸️ Reading exposure map...',
   }
   return (
     <div className="flex items-center gap-2 text-xs text-[#00ffcc]/70 mb-2 pl-9">
