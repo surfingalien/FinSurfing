@@ -32,6 +32,7 @@ const { requireAuth } = require('../middleware/auth')
 const { getSocialSentiment } = require('../lib/social-sentiment')
 const { getAltDataSnippet, getInsiderActivity, getShortInterest } = require('../lib/alt-data')
 const codeMode = require('../lib/code-mode')
+const { auditAnswer } = require('../lib/answer-audit')
 const symbolDb = require('../lib/symbol-db')
 const { computeStats, readPredictions } = require('../lib/brain-learnings')
 const { computeEdgeReport, edgeBlock } = require('../lib/edge-report')
@@ -1323,7 +1324,7 @@ You can write Python with the code_execution tool. Tools marked callable from co
  * Returns false when the API refused code mode before anything was sent, so
  * the caller can rerun the turn on the classic loop.
  */
-async function runCodeModeTurn({ model, contextBlock, messages, send, req, maxRounds = 12 }) {
+async function runCodeModeTurn({ model, contextBlock, messages, send, req, maxRounds = 12, onEvidence = () => {} }) {
   const loopMessages = messages.map(m => ({ role: m.role, content: m.content }))
   const budget = codeMode.newBudget()
   let container = null
@@ -1360,6 +1361,8 @@ async function runCodeModeTurn({ model, contextBlock, messages, send, req, maxRo
 
     for (const b of msg.content || []) {
       if (b.type === 'text' && b.text) { send({ type: 'text', delta: b.text }); sentAnything = true }
+      // What the program printed is what the answer is built from.
+      if (b.type === 'code_execution_tool_result' && b.content?.stdout) onEvidence(String(b.content.stdout))
     }
     loopMessages.push({ role: 'assistant', content: msg.content })
 
@@ -1386,6 +1389,7 @@ async function runCodeModeTurn({ model, contextBlock, messages, send, req, maxRo
         return { type: 'tool_result', tool_use_id: tu.id, content: `Error: ${err.message}`, is_error: true }
       }
     }))
+    for (const r of results) onEvidence(String(r.content))
     send({ type: 'tool_results', results: results.map(r => ({ tool: r.tool_use_id, preview: String(r.content).slice(0, 120) })) })
     loopMessages.push({ role: 'user', content: results })
   }
@@ -1618,9 +1622,25 @@ router.post('/chat', requireAuth, chatLimit, async (req, res) => {
     if (!res.writableEnded) { try { res.write(': hb\n\n') } catch {} }
   }, 15_000)
 
+  // What the answer said and what the tools returned, so every figure in the
+  // answer can be checked against the data before 'done' (lib/answer-audit.js).
+  const transcript = { text: '', evidence: messages.filter(m => m.role === 'user' && typeof m.content === 'string').map(m => m.content) }
   const send = (payload) => {
     if (res.writableEnded) return
+    if (payload?.type === 'text' && payload.delta) transcript.text += payload.delta
     res.write(`data: ${JSON.stringify(payload)}\n\n`)
+  }
+  const recordingDispatch = async (name, input, r) => {
+    const out = await dispatchTool(name, input, r)
+    transcript.evidence.push(String(out ?? ''))
+    return out
+  }
+  const finish = () => {
+    try {
+      const audit = auditAnswer(transcript.text, transcript.evidence)
+      if (audit.verdict === 'unsupported-figures') send({ type: 'audit', ...audit })
+    } catch (e) { console.warn('[copilot] answer audit failed:', e.message) }
+    send({ type: 'done' })
   }
 
   try {
@@ -1650,9 +1670,9 @@ router.post('/chat', requireAuth, chatLimit, async (req, res) => {
       await runOpenAITurn({
         model: g.model, baseUrl: g.baseUrl, apiKey: process.env.GROQ_API_KEY, system: systemPrompt,
         messages: messages.map(m => ({ role: m.role, content: m.content })),
-        tools: TOOLS, send, dispatchFn: dispatchTool, req, maxIter: 5,
+        tools: TOOLS, send, dispatchFn: recordingDispatch, req, maxIter: 5,
       })
-      send({ type: 'done' })
+      finish()
       res.end(); return
     }
 
@@ -1665,9 +1685,9 @@ router.post('/chat', requireAuth, chatLimit, async (req, res) => {
       await runOpenAITurn({
         model, baseUrl, apiKey, system: systemPrompt,
         messages: messages.map(m => ({ role: m.role, content: m.content })),
-        tools: TOOLS, send, dispatchFn: dispatchTool, req, maxIter: 5,
+        tools: TOOLS, send, dispatchFn: recordingDispatch, req, maxIter: 5,
       })
-      send({ type: 'done' })
+      finish()
       res.end(); return
     }
 
@@ -1684,14 +1704,15 @@ router.post('/chat', requireAuth, chatLimit, async (req, res) => {
     // otherwise latch code mode off for every user of this process.
     const fanOut = model === PROVIDER_DEFAULTS.claude.model && codeMode.codeModeEnabled() && codeMode.wantsCodeMode(lastUserText)
     if (fanOut) {
-      const handled = await runCodeModeTurn({ model, contextBlock, messages, send, req })
-      if (handled) { send({ type: 'done' }); res.end(); return }
+      const handled = await runCodeModeTurn({ model, contextBlock, messages, send, req, onEvidence: t => transcript.evidence.push(t) })
+      if (handled) { finish(); res.end(); return }
     }
 
     let loopMessages = messages.map(m => ({ role: m.role, content: m.content }))
     const plannerTicker = fanOut ? null : detectTickerQuery(messages)
     if (plannerTicker) {
       const data = await runPlannerPrefetch(plannerTicker, req, send)
+      transcript.evidence.push(...Object.values(data).filter(Boolean).map(String))
       const contextMsg = [
         `LIVE PRE-FETCHED DATA FOR ${plannerTicker} (all tools already executed in parallel):`,
         data.technical  ? `\n=== TECHNICAL ANALYSIS ===\n${data.technical}`        : '',
@@ -1715,7 +1736,7 @@ router.post('/chat', requireAuth, chatLimit, async (req, res) => {
           send({ type: 'text', delta: event.delta.text })
         }
       }
-      send({ type: 'done' })
+      finish()
       res.end(); return
     }
 
@@ -1792,7 +1813,7 @@ router.post('/chat', requireAuth, chatLimit, async (req, res) => {
       const toolResults = await Promise.all(
         toolUses.map(async (tu) => {
           try {
-            const output = await dispatchTool(tu.name, tu.input, req)
+            const output = await recordingDispatch(tu.name, tu.input, req)
             return { type: 'tool_result', tool_use_id: tu.id, content: output }
           } catch (err) {
             return { type: 'tool_result', tool_use_id: tu.id, content: `Error: ${err.message}`, is_error: true }
@@ -1804,7 +1825,7 @@ router.post('/chat', requireAuth, chatLimit, async (req, res) => {
       loopMessages.push({ role: 'user', content: toolResults })
     }
 
-    send({ type: 'done' })
+    finish()
   } catch (err) {
     console.error('[copilot]', err.message)
     send({ type: 'error', message: err.message })

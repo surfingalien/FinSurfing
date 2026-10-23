@@ -39,6 +39,12 @@ function MessageBubble({ msg }) {
         }`}
       >
         <FormattedText text={msg.content} />
+        {msg.audit?.unsupportedCount > 0 && (
+          <div className="mt-2 pt-2 border-t border-amber-500/20 text-[11px] text-amber-400 leading-snug">
+            ⚠ {msg.audit.unsupportedCount} figure{msg.audit.unsupportedCount > 1 ? 's' : ''} in this answer {msg.audit.unsupportedCount > 1 ? 'were' : 'was'} not found in the data the tools returned
+            {' '}({[...new Set(msg.audit.unsupported.flatMap(u => u.figures))].slice(0, 6).join(', ')}) — {msg.audit.unsupportedCount > 1 ? 'they may be' : 'it may be'} derived or wrong; check before relying on {msg.audit.unsupportedCount > 1 ? 'them' : 'it'}.
+          </div>
+        )}
       </div>
     </div>
   )
@@ -184,6 +190,12 @@ export default function FinSurfCopilot({ portfolio = [], watchlist = [] }) {
               setActiveTools(event.tools.map(t => t.name))
             } else if (event.type === 'tool_results') {
               setActiveTools([])
+            } else if (event.type === 'audit') {
+              setMessages(m => {
+                const copy = [...m]
+                copy[copy.length - 1] = { ...copy[copy.length - 1], audit: event }
+                return copy
+              })
             } else if (event.type === 'done') {
               setActiveTools([])
             } else if (event.type === 'error') {

@@ -136,3 +136,15 @@ describe('runCodeModeTurn', () => {
     expect(JSON.stringify(out)).not.toContain('untrusted filing text')
   })
 })
+
+test('code mode hands every served result and the program output to the answer audit', async () => {
+  const caller = { type: 'code_execution_20260120', tool_id: 'srvtoolu_9' }
+  mockCreate.mockReset()
+  mockCreate
+    .mockResolvedValueOnce({ content: [{ type: 'tool_use', id: 't1', name: 'get_insider_activity', input: { symbol: 'AMD' }, caller }], container: { id: 'c9' }, stop_reason: 'tool_use', usage: {} })
+    .mockResolvedValueOnce({ content: [{ type: 'code_execution_tool_result', tool_use_id: 'srvtoolu_9', content: { stdout: 'AMD net buying 5000 shares' } }, { type: 'text', text: 'done' }], stop_reason: 'end_turn', usage: {} })
+  const evidence = []
+  await copilot._runCodeModeTurnForTests({ model: 'm', contextBlock: '', messages: [{ role: 'user', content: 'which names have insider buying' }], send: () => {}, req: { headers: {}, body: {} }, onEvidence: e => evidence.push(e) })
+  expect(evidence.some(e => /"buyShares":5000/.test(e))).toBe(true)
+  expect(evidence).toContain('AMD net buying 5000 shares')
+})
