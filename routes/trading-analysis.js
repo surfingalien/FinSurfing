@@ -11,6 +11,7 @@
 const express   = require('express')
 const { getRouter } = require('../lib/ai-router')
 const { TRADING_ANALYSIS_SCHEMA } = require('../lib/ai-schemas')
+const settledMemory = require('../lib/settled-memory')
 const { canonicalizeEnums }       = require('../lib/output-schema')
 const { optionalAuth, requireAuth } = require('../middleware/auth')
 const { recallMemory, saveMemory, searchMemory } = require('../db/ai_memory')
@@ -300,7 +301,7 @@ function tvToChartParams(tvInterval) {
 
 // ── Analysis prompt builder ────────────────────────────────────────────────────
 
-function buildAnalysisPrompt(symbol, interval, price, indicators, patterns, vol, priceLabel = 'last bar close', sentiment = null, priorMemories = [], socialSnippet = '', analystSnippet = '') {
+function buildAnalysisPrompt(symbol, interval, price, indicators, patterns, vol, priceLabel = 'last bar close', sentiment = null, priorMemories = [], socialSnippet = '', analystSnippet = '', brainTrack = null) {
   const { rsi, macd, ema9, ema21, ema50, ema200, bb, atr, stochRsi, vwap, obv, sr } = indicators
 
   const rsiInterp = rsi == null ? 'N/A'
@@ -338,13 +339,9 @@ function buildAnalysisPrompt(symbol, interval, price, indicators, patterns, vol,
     ? `\nRETAIL SENTIMENT (StockTwits — last ${sentiment.total} posts): Bullish ${sentiment.bullish} | Bearish ${sentiment.bearish} | Neutral ${sentiment.neutral}${sentiment.snippets.length ? '\nSample posts:\n' + sentiment.snippets.join('\n') : ''}`
     : ''
 
-  const memoryBlock = priorMemories.length
-    ? `\nPRIOR ANALYSES FOR ${symbol} (your past signals — note any trend changes):\n` +
-      priorMemories.map(m => {
-        const date = new Date(m.created_at).toLocaleDateString()
-        return `• [${date}] ${m.signal ?? '—'} @ $${m.price ?? '?'} (${m.confidence ?? '?'}% conf) — ${m.summary?.slice(0, 150) ?? 'no summary'}`
-      }).join('\n') + '\n'
-    : ''
+  // Past calls settled against today's price, plus the Brain's resolved record
+  // on this symbol (lib/settled-memory.js) — the memory now says what HAPPENED.
+  const memoryBlock = settledMemory.memoryBlock(symbol, settledMemory.settleMemories(priorMemories, price), brainTrack, price)
 
   const adxInterp = indicators.adx != null
     ? `${indicators.adx} — ${indicators.adx >= 25 ? 'strong trend (ADX≥25, follow-trend signals more reliable)' : indicators.adx < 20 ? 'weak/ranging market (ADX<20, mean-reversion setups more reliable)' : 'moderate trend'}`
@@ -589,7 +586,12 @@ router.post('/analyze', requireAuth, async (req, res) => {
     // Build prompt and call Claude
     const insiderSnippet  = insiderRaw  ? `\nINSIDER ACTIVITY & SHORT INTEREST (OpenInsider 90d + FINRA):\n${insiderRaw}\n` : ''
     const optionsSnippet  = optionsRaw  ? `\nOPTIONS FLOW: ${optionsRaw}\n` : ''
-    const analysisPrompt = buildAnalysisPrompt(sym, interval, price, indicators, patterns, vol, priceLabel, sentiment, priorMemories, socialSnippetRaw, analystSnippet + earningsSnippet + insiderSnippet + optionsSnippet)
+    let brainTrack = null
+    try {
+      const recs = require('../lib/brain-learnings').readPredictions()
+      brainTrack = require('../lib/research-desk').trackFor(recs, { symbol: sym, assetType: isCryptoSymbol(sym) ? 'crypto' : 'stock' }).symbol
+    } catch { /* no record yet */ }
+    const analysisPrompt = buildAnalysisPrompt(sym, interval, price, indicators, patterns, vol, priceLabel, sentiment, priorMemories, socialSnippetRaw, analystSnippet + earningsSnippet + insiderSnippet + optionsSnippet, brainTrack)
 
     const { text: rawText } = await aiRouter.call({
       prompt:    analysisPrompt,
