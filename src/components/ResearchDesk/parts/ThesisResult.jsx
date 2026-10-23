@@ -41,7 +41,7 @@ export default function ThesisResult({ data, onCite }) {
             : <Ban className="w-5 h-5 text-slate-400" />}
           <span className="font-semibold">{actionable ? 'Actionable long' : 'No trade'}</span>
           <span className="text-[11px] text-slate-500 ml-auto">
-            {data.symbol} · ${Number(data.lastPrice).toFixed(2)} on {data.asOf} · {j.horizonDays}-day horizon
+            {data.symbol} · ${Number(data.lastPrice).toFixed(2)} on {data.asOf} · {j.horizonDays}-day horizon{data.method === 'debate' ? ' · bull vs bear debate' : ''}
           </span>
         </div>
         <ul className="mt-2 space-y-0.5">
@@ -89,7 +89,7 @@ export default function ThesisResult({ data, onCite }) {
           <div>Needs a <b>{pct(ev.breakEvenWinProb, 0)}</b> win rate to break even; this system is calibrated at <b>{pct(ev.winProb, 0)}</b> <span className="text-slate-500">({ev.winProbSource})</span>.</div>
           <div>Net edge per unit risked: <b className={ev.netEdge > 0 ? 'text-emerald-400' : 'text-red-400'}>{(ev.netEdge * 100).toFixed(2)}%</b></div>
           {j.sizing?.uncalibrated && <div className="text-amber-400">No position size suggested: {j.sizing.reason}.</div>}
-          {j.sizing && !j.sizing.uncalibrated && <div>Suggested size (half-Kelly, capped at {j.sizing.maxPct}%): <b>{j.sizing.suggestedPct}%</b> of the portfolio. A suggestion — nothing is executed.</div>}
+          {j.sizing && !j.sizing.uncalibrated && <div>Suggested size (half-Kelly, capped at {j.sizing.maxPct}%{j.sizing.limitedBy === 'risk' ? `, limited so a stop-out costs ≤1% of the portfolio` : j.sizing.limitedBy === 'volatility' ? `, limited by this name's daily volatility` : ''}): <b>{j.sizing.suggestedPct}%</b> of the portfolio. A suggestion — nothing is executed.</div>}
         </div>
       )}
 

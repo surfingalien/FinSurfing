@@ -36,6 +36,7 @@ export default function ResearchDeskView({ defaultSymbol = null, onSymbol }) {
   const [input, setInput]       = useState(defaultSymbol || '')
   const [dossier, setDossier]   = useState(null)
   const [thesis, setThesis]     = useState(null)
+  const [debate, setDebate]     = useState(false)
   const [theses, setTheses]     = useState(null)
   const [record, setRecord]     = useState(null)
   const [status, setStatus]     = useState(null)
@@ -69,9 +70,9 @@ export default function ResearchDeskView({ defaultSymbol = null, onSymbol }) {
   const writeThesis = useCallback(async () => {
     if (!dossier) return
     setBusy('thesis'); setError(null)
-    try { setThesis(await call(`/api/research-desk/${encodeURIComponent(dossier.symbol)}/thesis`, { method: 'POST', body: {} })) }
+    try { setThesis(await call(`/api/research-desk/${encodeURIComponent(dossier.symbol)}/thesis`, { method: 'POST', body: { method: debate ? 'debate' : 'single' } })) }
     catch (e) { setError(e.message) } finally { setBusy(null) }
-  }, [call, dossier])
+  }, [call, dossier, debate])
 
   useEffect(() => {
     const s = defaultSymbol?.toUpperCase()
@@ -166,6 +167,10 @@ export default function ResearchDeskView({ defaultSymbol = null, onSymbol }) {
                       item, or state a figure the cited evidence does not contain are removed and shown to you. It is scored at a
                       calibrated win rate of <b>{Math.round(dossier.winProb.p * 100)}%</b> <span className="text-slate-500">({dossier.winProb.source})</span>.
                     </p>
+                    <label className="flex items-center gap-2 text-[12px] text-slate-400 cursor-pointer">
+                      <input type="checkbox" checked={debate} onChange={e => setDebate(e.target.checked)} disabled={!!busy} />
+                      Bull vs bear debate — separate bull and bear researchers, then a decision (3 AI calls instead of 1; which method does better is measured)
+                    </label>
                     <button onClick={writeThesis} disabled={!!busy} className="btn-primary px-4 py-2 rounded-xl text-sm flex items-center gap-1.5 disabled:opacity-50">
                       {busy === 'thesis' ? <Loader2 className="w-4 h-4 animate-spin" /> : <PenLine className="w-4 h-4" />} Write &amp; check a thesis
                     </button>
