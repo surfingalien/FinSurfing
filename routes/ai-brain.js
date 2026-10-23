@@ -37,6 +37,7 @@ const { fetchDailyBars }    = require('../lib/internal-api')
 const { tryParseAiJson }    = require('../lib/ai-json')
 const { SCAN_SCHEMA }       = require('../lib/ai-schemas')
 const { canonicalizeEnums } = require('../lib/output-schema')
+const shadowBaseline        = require('../lib/shadow-baseline')
 const { baselineFromBars }  = require('../lib/ml-baseline')
 const { factorScores, factorLine } = require('../lib/factor-model')
 const { startJsonHeartbeat } = require('../lib/http-heartbeat')
@@ -1142,6 +1143,19 @@ Apply the instructions, JSON schema and rules from the system prompt. Respond ON
         learningsVersion,
       })
     }
+
+    // Shadow picks: as many random names from the SAME priced list as the
+    // model picked, logged to their own file (lib/shadow-baseline.js) so the
+    // track record can say whether the picks beat chance on the list — not
+    // just SPY, which a list of today's movers can beat on its own.
+    shadowBaseline.logShadows({
+      universe:        [...livePrice.keys()],
+      picked:          data.rankedStocks.map(p => p.symbol),
+      actionableCount: data.rankedStocks.filter(p => p.actionable !== false).length,
+      prices:          Object.fromEntries([...livePrice].map(([sym, lp]) => [sym, lp.price])),
+      generatedAt,
+      promptVersion:   SCAN_PROMPT_VERSION,
+    })
 
     // Also record picks in the SHARED cross-surface learning store, so Brain
     // outcomes calibrate alongside Advisory/paper-broker decisions instead of

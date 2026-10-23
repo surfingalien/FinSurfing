@@ -199,6 +199,17 @@ describe('POST /api/ai-brain/analyze — the AVAX regression', () => {
     expect(fsp.readFileSync(TMP_LOG, 'utf8')).toMatch(/"symbol":"AVAX"/)
   })
 
+  test('a scan logs random shadow picks from its own priced list — to their own file, never the prediction log', async () => {
+    const { SHADOW_LOG } = require('../lib/shadow-baseline')
+    try { fsp.unlinkSync(SHADOW_LOG) } catch { /* absent */ }
+    mockCall.mockResolvedValue(reply(stock()))
+    await scan({ symbols: ['AVAX', 'DOGE'] })
+
+    const shadows = fsp.readFileSync(SHADOW_LOG, 'utf8').trim().split('\n').map(l => JSON.parse(l))
+    expect(shadows).toEqual([expect.objectContaining({ symbol: 'DOGE', shadow: true, priceAtPrediction: expect.any(Number) })])
+    expect(fsp.readFileSync(TMP_LOG, 'utf8')).not.toMatch(/"shadow"/)
+  })
+
   test('an abstain writes no prediction at all', async () => {
     // An "Avoid" is not a trade, so it must never reach the calibration record.
     try { fsp.unlinkSync(TMP_LOG) } catch { /* fine */ }

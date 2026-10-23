@@ -496,6 +496,8 @@ Respond ONLY with a JSON object — no markdown, no explanation, just the JSON:
         lossFrac:    ev.netLossFrac,
         fraction:    0.5,
         maxFraction: 0.2,
+        // A stop-out may cost at most 1% of the portfolio (kelly.RISK_BUDGET).
+        riskBudget:  kelly.RISK_BUDGET,
       })
       return { ...rec, sources, citationCheck: pickAudit(audit), expectedValue: ev, sizing: { ...sizing, winProbSource, netOfCosts: true } }
     })

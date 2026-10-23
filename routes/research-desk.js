@@ -211,6 +211,9 @@ router.get('/track-record', requireAuth, (req, res) => {
     // Do the self-learned findings hold up against the stats, and do picks
     // made with them beat picks made without (lib/learning-health.js)?
     learningHealth: (() => { try { return getLearningHealth() } catch { return null } })(),
+    // The picks vs random picks from the SAME priced list (lib/shadow-baseline.js):
+    // beating SPY can be the list; beating these is the model.
+    vsRandom: (() => { try { const sb = require('../lib/shadow-baseline'); return sb.compareToShadows(readPredictions(), sb.readShadows()) } catch { return null } })(),
     edges: edge && { overall: edge.overall, tested: edge.tested, topEdges: edge.topEdges, topDrags: edge.topDrags },
     decisions: learningStore.getCalibration(),
     strategies: library.libraryStats(),
