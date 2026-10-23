@@ -121,6 +121,12 @@ export function RecCard({ rec, onAnalyze, liveQuote }) {
         </div>
       )}
 
+      {rec.slateWeightPct != null && (
+        <div className="text-[10px] text-slate-400 mb-2" title="Hierarchical Risk Parity across the whole slate: correlated picks share one risk budget. Separate from this pick's own Kelly size.">
+          Slate weight <span className="font-mono font-bold text-white">{rec.slateWeightPct}%</span> <span className="text-slate-500">(if you take the whole slate — HRP)</span>
+        </div>
+      )}
+
       {/* Thesis */}
       <p className="text-xs text-slate-400 leading-relaxed mb-2">{rec.thesis}</p>
 
