@@ -41,6 +41,8 @@ A long request that writes no bytes gets dropped by mobile networks, and the bro
 
 **An async route must never take the server down.** Express 4 does not catch a rejected async handler, and Node exits on an unhandled rejection — on 2026-10-03 one TypeError in the AI Brain scan restarted the whole server on every scan (and the job queue's resume re-ran it into the same crash until `MAX_ATTEMPTS` stopped it). Wrap long async handlers in `lib/async-route.js:guardAsync(name, fn)` (answers with an `error` body, heartbeat-safe; applied to `ai-brain/analyze`), and `server.js` logs unhandled rejections instead of exiting. Route tests must not stub the module under change: `tests/ai-brain-abstain.test.js` now runs the REAL `buildLearnings` over an empty data dir (production right after a deploy) — the stub is what let this crash through. Tests: `tests/async-route.test.js`.
 
+**Scheduled scans** (`lib/scheduled-jobs.js`: pre-market, hourly, morning brief) call the same route over loopback with `SCAN_TIMEOUT_MS` (600s, the queue's scan budget). It was 120s while a broad scan takes 3–4 min in production, so every pre-market run failed with "The operation was aborted due to timeout" and every hourly run aborted too but reported "done" with no picks. `internalGet`/`internalPost` throw on a `200 {error}` body (`checkBody`) instead of caching it, and an hourly run whose broad scan failed now fails. Tests: `tests/scheduled-scan-jobs.test.js`.
+
 **Neither** — SSE surfaces (`copilot`, `agent/analyze`, `rebalancer/suggest`) already stream bytes continuously; do not add a heartbeat to them, it corrupts the event stream and overwrites the `text/event-stream` content type.
 
 ## Market Data Pipeline (`server.js`)
