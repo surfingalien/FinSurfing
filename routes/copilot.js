@@ -30,7 +30,8 @@ const rateLimit = require('express-rate-limit')
 const Anthropic = require('@anthropic-ai/sdk')
 const { requireAuth } = require('../middleware/auth')
 const { getSocialSentiment } = require('../lib/social-sentiment')
-const { getAltDataSnippet }  = require('../lib/alt-data')
+const { getAltDataSnippet, getInsiderActivity, getShortInterest } = require('../lib/alt-data')
+const codeMode = require('../lib/code-mode')
 const symbolDb = require('../lib/symbol-db')
 const { computeStats, readPredictions } = require('../lib/brain-learnings')
 const { computeEdgeReport, edgeBlock } = require('../lib/edge-report')
@@ -442,14 +443,51 @@ const TOOLS = [
 
 // ── Internal tool dispatcher ──────────────────────────────────────────────────
 
-async function dispatchTool(name, input, req) {
-  const port = process.env.PORT || 3001
+function internalHeaders(req) {
   const fwdHeaders = { 'Content-Type': 'application/json', 'x-internal': '1', 'x-internal-secret': INTERNAL_SECRET }
   // Forward auth token so internal loopback calls to protected routes pass requireAuth
   if (req.headers.authorization) fwdHeaders['authorization'] = req.headers.authorization
   for (const k of ['x-aisa-key', 'x-finnhub-key', 'x-fmp-key', 'x-td-key', 'x-av-key']) {
     if (req.headers[k]) fwdHeaders[k] = req.headers[k]
   }
+  return fwdHeaders
+}
+
+const cleanSym = s => String(s || '').toUpperCase().replace(/[^A-Z0-9.-]/g, '')
+
+/** Price + valuation snapshot behind get_analyst_consensus (text and code forms). */
+async function fetchAnalystSnapshot(sym, port, fwdHeaders) {
+  // /api/summary returns FMP fundamentals (PE, margins, DCF target, sector)
+  // /api/quote returns live price
+  const [sumR, qR] = await Promise.all([
+    fetch(`http://127.0.0.1:${port}/api/summary?symbol=${encodeURIComponent(sym)}`,
+      { headers: fwdHeaders, signal: AbortSignal.timeout(12_000) }),
+    fetch(`http://127.0.0.1:${port}/api/quote?symbols=${encodeURIComponent(sym)}`,
+      { headers: fwdHeaders, signal: AbortSignal.timeout(8_000) }),
+  ])
+  const [sumD, qD] = await Promise.all([sumR.json(), qR.json()])
+  const r0 = sumD?.quoteSummary?.result?.[0]
+  if (!r0) return null
+  const fd = r0.financialData || {}, sd = r0.summaryDetail || {}, ks = r0.defaultKeyStatistics || {}, ap = r0.assetProfile || {}
+  return {
+    symbol:        sym,
+    price:         qD?.quoteResponse?.result?.[0]?.regularMarketPrice ?? null,
+    dcfTarget:     fd.targetMeanPrice   ?? null,   // FMP DCF value, not sell-side
+    signal:        fd.recommendationKey ?? null,
+    trailingPE:    sd.trailingPE        ?? null,
+    marketCap:     sd.marketCap         ?? null,
+    roe:           fd.returnOnEquity    ?? null,
+    profitMargin:  fd.profitMargins     ?? null,
+    revenueGrowth: fd.revenueGrowth     ?? null,
+    trailingEps:   ks.trailingEps       ?? null,
+    sector:        ap.sector            ?? null,
+    country:       ap.country           ?? null,
+  }
+}
+
+async function dispatchTool(name, input, req) {
+  const port = process.env.PORT || 3001
+  const fwdHeaders = internalHeaders(req)
 
   switch (name) {
     case 'scan_market': {
@@ -757,41 +795,12 @@ async function dispatchTool(name, input, req) {
     }
 
     case 'get_analyst_consensus': {
-      const sym = (input.symbol || '').toUpperCase().replace(/[^A-Z0-9.-]/g, '')
+      const sym = cleanSym(input.symbol)
       if (!sym) return 'No symbol provided.'
       try {
-        // /api/summary returns FMP fundamentals (PE, margins, DCF target, sector)
-        // /api/quote returns live price
-        const [sumR, qR] = await Promise.all([
-          fetch(`http://127.0.0.1:${port}/api/summary?symbol=${encodeURIComponent(sym)}`,
-            { headers: fwdHeaders, signal: AbortSignal.timeout(12_000) }),
-          fetch(`http://127.0.0.1:${port}/api/quote?symbols=${encodeURIComponent(sym)}`,
-            { headers: fwdHeaders, signal: AbortSignal.timeout(8_000) }),
-        ])
-        const [sumD, qD] = await Promise.all([sumR.json(), qR.json()])
-
-        const qs = qD?.quoteResponse?.result?.[0]
-        const price = qs?.regularMarketPrice ?? null
-
-        const r0 = sumD?.quoteSummary?.result?.[0]
-        const fd  = r0?.financialData     || {}
-        const sd  = r0?.summaryDetail     || {}
-        const ks  = r0?.defaultKeyStatistics || {}
-        const ap  = r0?.assetProfile      || {}
-
-        // DCF intrinsic value from FMP (serves as a price target proxy)
-        const dcfTarget   = fd.targetMeanPrice  ?? null
-        const recKey      = fd.recommendationKey ?? null
-        const trailPE     = sd.trailingPE       ?? null
-        const mktCap      = sd.marketCap        ?? null
-        const roe         = fd.returnOnEquity   ?? null
-        const margins     = fd.profitMargins    ?? null
-        const revenueGrow = fd.revenueGrowth    ?? null
-        const trailEps    = ks.trailingEps      ?? null
-        const sector      = ap.sector           ?? null
-        const country     = ap.country          ?? null
-
-        if (!r0) return `No fundamental data available for ${sym} — not covered by FMP (common for crypto, ETFs, non-US equities).`
+        const a = await fetchAnalystSnapshot(sym, port, fwdHeaders)
+        if (!a) return `No fundamental data available for ${sym} — not covered by FMP (common for crypto, ETFs, non-US equities).`
+        const { price, dcfTarget, signal: recKey, trailingPE: trailPE, marketCap: mktCap, roe, profitMargin: margins, revenueGrowth: revenueGrow, trailingEps: trailEps, sector, country } = a
 
         const upside = (dcfTarget != null && price != null && price > 0)
           ? ((dcfTarget - price) / price * 100).toFixed(1)
@@ -1195,6 +1204,195 @@ async function dispatchTool(name, input, req) {
   }
 }
 
+// ── Code mode: structured results for tools called from Claude's code ──────────
+// The text forms above are written for a reader; a program needs fields. Each
+// shape is documented in the tool description (lib/code-mode.js:withCodeMode)
+// because Claude parses these in code. Exposure quotes are deliberately left
+// out: they are untrusted filing text, and the direct call still returns them.
+const CODE_SHAPES = {
+  sector_universe:       '{"sector": str, "symbols": [str]} or {"error": str, "availableSectors": [str]}',
+  classify_symbol:       '{"symbol", "name", "assetClass", "sector", "industry", "country", "marketCap"} or {"error": str}',
+  get_fundamentals:      '{"symbol", "name", "sector", "industry", "marketCap": number, "valuation": {"pe_ttm", "ps_ttm", "pb_ttm", "peg_ttm", "ev_ebitda", "fcf_yield", "roe", "roic"}, "yoyRevenueGrowthPct", "fcfMarginPct", "debtToEquity", "analysts": {"total", "buy_pct", "hold_pct", "sell_pct"} | null} — percentages are percent values (12.5 means 12.5%); any field may be null',
+  get_analyst_consensus: '{"symbol", "price", "trailingPE", "dcfTarget" (FMP DCF value, NOT a sell-side target), "signal", "marketCap", "roe", "profitMargin", "revenueGrowth" (fractions: 0.12 means 12%), "trailingEps", "sector", "country"} or {"error": str}',
+  get_insider_activity:  '{"symbol", "window": "90d", "buys": int, "sells": int, "buyShares": int, "sellShares": int, "net": "buying"|"selling"|"none", "shortRatioPct": number|null, "transactions": [{"date", "name", "title", "type": "BUY"|"SELL", "qty"}]} or {"error": str}',
+  find_exposure:         '{"anchor", "edges": [{"symbol", "relation": "supplier"|"customer"|"partner"|"holder"|"peer"|"competitor", "score", "materialityPct"|null, "form", "filedAt"}], "universe": [str]} — reads the stored map only, never rebuilds; competitors are excluded from "universe"',
+}
+
+// A program fans out with asyncio.gather — 25 insider scrapes at once would
+// trip OpenInsider's throttling, so the upstream-heavy forms are queued.
+function limiter(max) {
+  let active = 0
+  const waiting = []
+  const next = () => { if (active < max && waiting.length) { active++; waiting.shift()() } }
+  return fn => new Promise((resolve, reject) => {
+    waiting.push(() => Promise.resolve().then(fn).then(resolve, reject).finally(() => { active--; next() }))
+    next()
+  })
+}
+const CODE_LIMITS = { get_insider_activity: limiter(4), get_fundamentals: limiter(6), get_analyst_consensus: limiter(6) }
+
+function dispatchToolData(name, input, req) {
+  const run = CODE_LIMITS[name]
+  return run ? run(() => toolData(name, input, req)) : toolData(name, input, req)
+}
+
+async function toolData(name, input, req) {
+  const port = process.env.PORT || 3001
+  const fwdHeaders = internalHeaders(req)
+  const sym = cleanSym(input.symbol)
+  switch (name) {
+    case 'sector_universe': {
+      if (!symbolDb.stats().loaded) return { error: 'symbol catalog not loaded yet' }
+      const size = Math.min(Math.max(parseInt(input.size) || 25, 1), 50)
+      const symbols = symbolDb.sectorUniverse(input.sector || '', { size })
+      return symbols.length
+        ? { sector: input.sector, symbols }
+        : { error: `no equities for sector "${input.sector}"`, availableSectors: symbolDb.listSectors().map(x => x.sector).filter(Boolean) }
+    }
+    case 'classify_symbol': {
+      if (!sym) return { error: 'no symbol' }
+      if (!symbolDb.stats().loaded) return { error: 'symbol catalog not loaded yet' }
+      const rec = symbolDb.classify(sym)
+      return rec ? { symbol: rec.symbol, name: rec.name, assetClass: rec.assetClass, sector: rec.sector ?? null, industry: rec.industry ?? null, country: rec.country ?? null, marketCap: rec.marketCap ?? null }
+                 : { error: `${sym} not in the symbol catalog` }
+    }
+    case 'get_fundamentals': {
+      if (!sym) return { error: 'no symbol' }
+      const r = await fetch(`http://127.0.0.1:${port}/api/fundamentals/${sym}`, { headers: fwdHeaders, signal: AbortSignal.timeout(20_000) })
+      const d = await r.json().catch(() => ({}))
+      if (!r.ok || d?.error) return { error: d?.error || `fundamentals unavailable (HTTP ${r.status})` }
+      return {
+        symbol: sym, name: d.company?.name ?? null, sector: d.company?.sector ?? null, industry: d.company?.industry ?? null,
+        marketCap: d.company?.mkt_cap ?? null, valuation: d.valuation ?? null,
+        yoyRevenueGrowthPct: d.yoy_rev_growth ?? null, fcfMarginPct: d.cashflow?.fcf_margin ?? null,
+        debtToEquity: d.balance?.debt_to_equity ?? null,
+        analysts: d.analyst_dist ? { total: d.analyst_dist.total, buy_pct: d.analyst_dist.buy_pct, hold_pct: d.analyst_dist.hold_pct, sell_pct: d.analyst_dist.sell_pct } : null,
+      }
+    }
+    case 'get_analyst_consensus': {
+      if (!sym) return { error: 'no symbol' }
+      return (await fetchAnalystSnapshot(sym, port, fwdHeaders)) || { error: `no fundamental data for ${sym}` }
+    }
+    case 'get_insider_activity': {
+      if (!sym) return { error: 'no symbol' }
+      if (sym.includes('-USD')) return { error: 'crypto — insider data not applicable' }
+      const [tx, si] = await Promise.all([getInsiderActivity(sym), getShortInterest(sym)])
+      const list = Array.isArray(tx) ? tx : []
+      const sum = type => list.filter(t => t.type === type).reduce((a, t) => a + (t.qty || 0), 0)
+      const buyShares = sum('BUY'), sellShares = sum('SELL')
+      return {
+        symbol: sym, window: '90d',
+        buys: list.filter(t => t.type === 'BUY').length, sells: list.filter(t => t.type === 'SELL').length,
+        buyShares, sellShares,
+        net: buyShares > sellShares ? 'buying' : sellShares > buyShares ? 'selling' : 'none',
+        shortRatioPct: Array.isArray(si) && si[0]?.shortRatio != null ? si[0].shortRatio : null,
+        transactions: list.slice(0, 10).map(t => ({ date: t.date, name: t.name, title: t.title, type: t.type, qty: t.qty })),
+      }
+    }
+    case 'find_exposure': {
+      const anchor = String(input.anchor || '').toUpperCase().replace(/[^A-Z0-9.-]/g, '').slice(0, 24)
+      if (!anchor) return { error: 'no anchor' }
+      // Stored map only: a rebuild is minutes of EDGAR plus a model call per
+      // candidate — never something a loop in code may trigger.
+      const r = await fetch(`http://127.0.0.1:${port}/api/exposure/${anchor}/graph`, { headers: fwdHeaders, signal: AbortSignal.timeout(15_000) })
+      const d = await r.json().catch(() => ({}))
+      if (d?.error) return { error: d.error }
+      if (!d?.edges?.length) return { error: `no stored exposure map for ${anchor} — ask the user to build one (find_exposure with refresh=true, called directly)` }
+      return {
+        anchor,
+        edges: d.edges.slice(0, 40).map(e => ({ symbol: e.symbol, relation: e.relation, score: e.score, materialityPct: e.materialityPct ?? null, form: e.evidence?.form ?? null, filedAt: e.evidence?.filedAt ?? null })),
+        universe: d.universe || [],
+      }
+    }
+    default:
+      return { error: `${name} has no code form` }
+  }
+}
+
+const CODE_MODE_TOOLS = codeMode.withCodeMode(TOOLS, CODE_SHAPES)
+const CODE_MODE_SYSTEM = `
+
+## Code mode
+You can write Python with the code_execution tool. Tools marked callable from code are async functions there: \`json.loads(await get_insider_activity({"symbol": "NVDA"}))\`. Use code when a question fans out over many symbols (screens, sector lists, exposure maps): fetch in parallel with asyncio.gather, filter in code, and print ONLY the compact result you need — never print whole tool outputs. Code may make at most ${codeMode.MAX_CODE_CALLS} tool calls per question. scan_market, get_recommendations, analyze_symbol, propose_strategies, critique_risk, analyze_filing and read_url are NOT callable from code; call them directly. Every number you state must come from a tool result. When a field is null, say the data was unavailable — never fill it in.`
+
+/**
+ * One copilot turn with code mode. Non-streaming on purpose: the installed SDK
+ * does not assemble server_tool_use blocks from a stream, and the paused
+ * assistant content must be sent back VERBATIM for the code to resume. Text
+ * is forwarded block by block; the SSE heartbeat keeps the connection alive.
+ * Returns false when the API refused code mode before anything was sent, so
+ * the caller can rerun the turn on the classic loop.
+ */
+async function runCodeModeTurn({ model, contextBlock, messages, send, req, maxRounds = 12 }) {
+  const loopMessages = messages.map(m => ({ role: m.role, content: m.content }))
+  const budget = codeMode.newBudget()
+  let container = null
+  let sentAnything = false
+
+  for (let round = 0; round < maxRounds; round++) {
+    const t0 = Date.now()
+    const params = {
+      model, max_tokens: 4096,
+      system: cachedSystem(COPILOT_SYSTEM + CODE_MODE_SYSTEM, contextBlock),
+      tools: CODE_MODE_TOOLS,
+      // Only the opening request carries a tail cache mark. Later rounds resume
+      // paused code (a reply that may hold ONLY tool_result blocks) or a
+      // paused server turn — both sent exactly as the API returned them.
+      messages: round === 0 ? markConversationTail(loopMessages) : [...loopMessages],
+    }
+    if (container) params.container = container
+
+    let msg
+    try {
+      msg = await anthropic.messages.create(params)
+    } catch (err) {
+      logCall({ route: 'copilot:code', model, llm: 'claude', success: false, error: err.message, durationMs: Date.now() - t0 })
+      if (!sentAnything && codeMode.noteRefusal(err)) {
+        console.warn(`[copilot] code mode refused by the API — classic tool loop from now on: ${err.message}`)
+        return false
+      }
+      throw err
+    }
+    container = msg.container?.id || container
+    const { cacheRead, cacheWrite } = cacheUsage(msg.usage)
+    logCall({ route: 'copilot:code', model, llm: 'claude', success: true, tokensIn: msg.usage?.input_tokens ?? null,
+      tokensOut: msg.usage?.output_tokens ?? null, cacheRead, cacheWrite, durationMs: Date.now() - t0 })
+
+    for (const b of msg.content || []) {
+      if (b.type === 'text' && b.text) { send({ type: 'text', delta: b.text }); sentAnything = true }
+    }
+    loopMessages.push({ role: 'assistant', content: msg.content })
+
+    const toolUses = (msg.content || []).filter(b => b.type === 'tool_use')
+    if (!toolUses.length) {
+      if (msg.stop_reason === 'pause_turn') continue   // server tool still working — resend as is
+      return true
+    }
+
+    const programmatic = toolUses.filter(codeMode.isProgrammatic)
+    const names = [...new Set(toolUses.map(t => t.name))]
+    send({ type: 'tool_start', tools: (programmatic.length ? [{ name: 'code_execution' }] : []).concat(names.map(n => ({ name: n }))) })
+    sentAnything = true
+
+    const results = await Promise.all(toolUses.map(async tu => {
+      try {
+        if (codeMode.isProgrammatic(tu)) {
+          const gate = codeMode.admitCall(tu.name, budget)
+          if (!gate.ok) return { type: 'tool_result', tool_use_id: tu.id, content: JSON.stringify({ error: gate.error }), is_error: true }
+          return { type: 'tool_result', tool_use_id: tu.id, content: JSON.stringify(await dispatchToolData(tu.name, tu.input || {}, req)) }
+        }
+        return { type: 'tool_result', tool_use_id: tu.id, content: await dispatchTool(tu.name, tu.input || {}, req) }
+      } catch (err) {
+        return { type: 'tool_result', tool_use_id: tu.id, content: `Error: ${err.message}`, is_error: true }
+      }
+    }))
+    send({ type: 'tool_results', results: results.map(r => ({ tool: r.tool_use_id, preview: String(r.content).slice(0, 120) })) })
+    loopMessages.push({ role: 'user', content: results })
+  }
+  send({ type: 'text', delta: '\n\n_Stopped: this question needed more steps than one answer allows — try narrowing it._' })
+  return true
+}
+
 // ── Planner: detect ticker deep-analysis queries ──────────────────────────────
 // Returns the ticker symbol if the last user message is a deep-analysis request,
 // null otherwise. Used to trigger the parallel pre-fetch fast path.
@@ -1478,8 +1676,20 @@ router.post('/chat', requireAuth, chatLimit, async (req, res) => {
     // Planner fast-path: for single-ticker deep analysis, pre-fetch all tools in
     // parallel (DeerFlow-style), inject results as context so Claude synthesises
     // in one shot rather than 3-4 sequential tool-use rounds.
+    // Code mode first, for fan-out questions (lib/code-mode.js): "SPACEX"
+    // typed in capitals would otherwise send an exposure question down the
+    // single-ticker report. A refusal before anything was sent falls through.
+    const lastUserText = typeof messages.at(-1)?.content === 'string' ? messages.at(-1).content : ''
+    // Default model only: a user-chosen model without code execution would
+    // otherwise latch code mode off for every user of this process.
+    const fanOut = model === PROVIDER_DEFAULTS.claude.model && codeMode.codeModeEnabled() && codeMode.wantsCodeMode(lastUserText)
+    if (fanOut) {
+      const handled = await runCodeModeTurn({ model, contextBlock, messages, send, req })
+      if (handled) { send({ type: 'done' }); res.end(); return }
+    }
+
     let loopMessages = messages.map(m => ({ role: m.role, content: m.content }))
-    const plannerTicker = detectTickerQuery(messages)
+    const plannerTicker = fanOut ? null : detectTickerQuery(messages)
     if (plannerTicker) {
       const data = await runPlannerPrefetch(plannerTicker, req, send)
       const contextMsg = [
@@ -1608,3 +1818,7 @@ module.exports = router
 // Shared with routes/mcp.js so the MCP endpoint exposes the same registry
 module.exports.TOOLS = TOOLS
 module.exports.dispatchTool = dispatchTool
+module.exports.dispatchToolData = dispatchToolData
+module.exports.CODE_SHAPES = CODE_SHAPES
+module.exports.CODE_MODE_TOOLS = CODE_MODE_TOOLS
+module.exports._runCodeModeTurnForTests = runCodeModeTurn
