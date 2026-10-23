@@ -176,6 +176,12 @@ export function TradePlan({ plan, stock }) {
         </p>
       )}
       {plan.notes?.map((n, i) => <p key={i} className="text-[9px] text-amber-400 mt-1 leading-snug">⚠ {n}</p>)}
+      {stock?.outcomeRange && (
+        <p className={`text-[9px] mt-1.5 leading-snug ${stock.outcomeRange.reliable === false ? 'text-amber-400' : 'text-slate-400'}`}>
+          Measured range — {stock.outcomeRange.text}
+          {stock.outcomeRange.reliable === false ? ' — this range has NOT held up recently; treat it as a rough guide' : ''}
+        </p>
+      )}
     </div>
   )
 }

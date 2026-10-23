@@ -197,3 +197,24 @@ describe('sizeIfCalibrated — no size off an assumed win rate', () => {
     expect(s.suggestedPct).toBeGreaterThan(0)
   })
 })
+
+describe('risk caps — size falls as risk rises', () => {
+  const { riskCaps, RISK_BUDGET } = require('../lib/kelly')
+
+  test('a wide stop caps the size so a stop-out costs at most the risk budget', () => {
+    const s = suggestedSize({ winProb: 0.6, winFrac: 0.3, lossFrac: 0.2, riskBudget: RISK_BUDGET })
+    expect(s).toMatchObject({ limitedBy: 'risk', suggestedPct: 5, riskCapPct: 5 })   // 1% ÷ 20%
+  })
+
+  test('a volatile name caps the size so an average day moves the portfolio at most the vol budget', () => {
+    const s = suggestedSize({ winProb: 0.6, winFrac: 0.1, lossFrac: 0.04, riskBudget: RISK_BUDGET, volFrac: 0.05 })
+    expect(s).toMatchObject({ limitedBy: 'volatility', suggestedPct: 5, volCapPct: 5 })   // 0.25% ÷ 5% ATR
+  })
+
+  test('caps are opt-in: without them the old Kelly / hard-cap behaviour is unchanged', () => {
+    const s = suggestedSize({ winProb: 0.6, winFrac: 0.25, lossFrac: 0.12 })
+    expect(s).toMatchObject({ suggestedPct: 20, limitedBy: 'max' })
+    expect(s.riskCapPct).toBeUndefined()
+    expect(riskCaps({})).toEqual({ risk: null, volatility: null })
+  })
+})

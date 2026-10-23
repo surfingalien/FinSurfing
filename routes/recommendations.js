@@ -35,6 +35,7 @@ const kelly = require('../lib/kelly')
 const expectedValue = require('../lib/expected-value')
 const { computeStats, readPredictions } = require('../lib/brain-learnings')
 const { extractArrayObjects } = require('../lib/ai-json')
+const hrp = require('../lib/hrp')
 const { RECOMMENDATIONS_SCHEMA } = require('../lib/ai-schemas')
 const { canonicalizeEnums }      = require('../lib/output-schema')
 const { startJsonHeartbeat } = require('../lib/http-heartbeat')
@@ -496,6 +497,8 @@ Respond ONLY with a JSON object — no markdown, no explanation, just the JSON:
         lossFrac:    ev.netLossFrac,
         fraction:    0.5,
         maxFraction: 0.2,
+        // A stop-out may cost at most 1% of the portfolio (kelly.RISK_BUDGET).
+        riskBudget:  kelly.RISK_BUDGET,
       })
       return { ...rec, sources, citationCheck: pickAudit(audit), expectedValue: ev, sizing: { ...sizing, winProbSource, netOfCosts: true } }
     })
@@ -516,6 +519,33 @@ Respond ONLY with a JSON object — no markdown, no explanation, just the JSON:
       const heldSet = new Set(holdings.map(s => String(s).toUpperCase()))
       data.recommendations = data.recommendations.filter(r => !heldSet.has(String(r.symbol).toUpperCase()))
     }
+
+    // How to split the slate if you take all of it (lib/hrp.js): correlated
+    // picks share one risk budget instead of each taking a full one. Six
+    // months of daily bars; names without enough history are left out and
+    // listed. Best-effort — a failure never costs the recommendations.
+    let allocation = null
+    try {
+      const syms = [...new Set(data.recommendations.map(r => String(r.symbol).toUpperCase()))]
+      if (syms.length >= 2) {
+        const { fetchDailyBars } = require('../lib/internal-api')
+        const got = await Promise.allSettled(syms.map(sym => fetchDailyBars(sym, { range: '6mo', headers: fwdHeaders, timeoutMs: 8000 })))
+        const bars = {}
+        got.forEach((g, i) => { if (g.status === 'fulfilled' && g.value?.length > hrp.MIN_OBS) bars[syms[i]] = g.value })
+        const result = hrp.hrpWeights(hrp.alignReturns(bars))
+        if (result) {
+          for (const r of data.recommendations) {
+            const w = result.weights[String(r.symbol).toUpperCase()]
+            if (w != null) r.slateWeightPct = +(w * 100).toFixed(1)
+          }
+          allocation = {
+            method: 'HRP', observations: result.n, order: result.order,
+            excluded: syms.filter(sym => result.weights[sym] == null),
+            note: 'how to split money across the WHOLE slate so correlated picks share one risk budget — separate from each pick\'s own Kelly size',
+          }
+        }
+      }
+    } catch (e) { console.warn('[recommendations] HRP allocation failed:', e.message) }
 
     // Built AFTER the holdings strip so `kept` always equals what the caller
     // actually receives — otherwise a gate-passing pick that is then stripped
@@ -589,6 +619,7 @@ Respond ONLY with a JSON object — no markdown, no explanation, just the JSON:
       // picks the math says are not worth the friction.
       abstained: data.recommendations.length === 0,
       edgeGate,
+      allocation,
       // What the model claimed as evidence vs what the evidence actually said.
       citationAudit: claimSupport.summarizeAudits(
         citationAudits.filter(a => data.recommendations.some(r => r.symbol === a.symbol))),

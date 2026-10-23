@@ -23,7 +23,8 @@ const rateLimit = require('express-rate-limit')
 
 const { requireAuth }          = require('../middleware/auth')
 const { getRouter }            = require('../lib/ai-router')
-const { THESIS_SCHEMA }        = require('../lib/ai-schemas')
+const { THESIS_SCHEMA, BULL_SCHEMA, BEAR_SCHEMA, DECISION_SCHEMA } = require('../lib/ai-schemas')
+const { tryParseAiJson }       = require('../lib/ai-json')
 const { CircuitOpenError }     = require('../lib/circuit-breaker')
 const { fetchDailyBars }       = require('../lib/internal-api')
 const { compactTaLine }        = require('../lib/technical-indicators')
@@ -211,6 +212,9 @@ router.get('/track-record', requireAuth, (req, res) => {
     // Do the self-learned findings hold up against the stats, and do picks
     // made with them beat picks made without (lib/learning-health.js)?
     learningHealth: (() => { try { return getLearningHealth() } catch { return null } })(),
+    // The picks vs random picks from the SAME priced list (lib/shadow-baseline.js):
+    // beating SPY can be the list; beating these is the model.
+    vsRandom: (() => { try { const sb = require('../lib/shadow-baseline'); return sb.compareToShadows(readPredictions(), sb.readShadows()) } catch { return null } })(),
     edges: edge && { overall: edge.overall, tested: edge.tested, topEdges: edge.topEdges, topDrags: edge.topDrags },
     decisions: learningStore.getCalibration(),
     strategies: library.libraryStats(),
@@ -292,16 +296,32 @@ router.post('/:symbol/thesis', requireAuth, thesisLimit, async (req, res) => {
   try { ev = await gatherEvidence(sym, req) }
   catch (e) { return res.status(e.status || 500).json({ error: e.message }) }
 
-  let raw = '', llmUsed = null
+  // 'debate': separate bull → bear (sees the bull) → decision calls; 'single':
+  // one call writes both sides. Same judge either way; the method is recorded
+  // so which one produces better outcomes is measured, not assumed.
+  const method = req.body?.method === 'debate' ? 'debate' : 'single'
+  let thesis = null, llmUsed = null
   try {
-    const out = await aiRouter.call({ prompt: desk.buildThesisPrompt({ symbol: sym, items: ev.items, gaps: ev.gaps }), maxTokens: 2500, symbols: [sym], schema: THESIS_SCHEMA, schemaName: 'research-thesis' })
-    raw = out.text; llmUsed = out.llmUsed
+    if (method === 'debate') {
+      const ask = async (prompt, schema, schemaName, maxTokens = 1800) => {
+        const out = await aiRouter.call({ prompt, maxTokens, symbols: [sym], schema, schemaName })
+        llmUsed = out.llmUsed
+        return tryParseAiJson(out.text)
+      }
+      const bull = await ask(desk.buildBullPrompt({ symbol: sym, items: ev.items, gaps: ev.gaps }), BULL_SCHEMA, 'research-bull')
+      const bear = await ask(desk.buildBearPrompt({ symbol: sym, items: ev.items, gaps: ev.gaps, bull: bull?.bull }), BEAR_SCHEMA, 'research-bear')
+      const decision = await ask(desk.buildDecisionPrompt({ symbol: sym, bull: bull?.bull, bear: bear?.bear, targetReturn: bull?.targetReturn, stopLoss: bull?.stopLoss, horizonDays: bull?.horizonDays }), DECISION_SCHEMA, 'research-decision', 600)
+      if (bull && bear && decision) thesis = desk.assembleDebate(bull, bear, decision)
+    } else {
+      const out = await aiRouter.call({ prompt: desk.buildThesisPrompt({ symbol: sym, items: ev.items, gaps: ev.gaps }), maxTokens: 2500, symbols: [sym], schema: THESIS_SCHEMA, schemaName: 'research-thesis' })
+      llmUsed = out.llmUsed
+      thesis = desk.parseThesis(out.text)
+    }
   } catch (err) {
     if (err instanceof CircuitOpenError) return res.status(503).json({ error: err.message, circuitOpen: true })
     return res.status(err.status === 503 ? 503 : 502).json({ error: `AI unavailable: ${err.message}` })
   }
 
-  const thesis = desk.parseThesis(raw)
   if (!thesis) return res.status(502).json({ error: 'The AI returned no usable thesis — please try again' })
 
   const judgement = desk.judgeThesis({ thesis, items: ev.items, lastPrice: ev.facts.last, assetType: ev.assetType, winProb: ev.winProb, levels: ev.levels })
@@ -312,7 +332,7 @@ router.post('/:symbol/thesis', requireAuth, thesisLimit, async (req, res) => {
     at: new Date().toISOString(),
     lastPrice: ev.facts.last, asOf: ev.facts.date,
     evidence: ev.items, gaps: ev.gaps,
-    thesis, judgement, llmUsed,
+    thesis, judgement, llmUsed, method,
   }
   try { appendThesis(entry) } catch (e) { console.warn('[research-desk] journal write failed:', e.message) }
 
@@ -322,7 +342,7 @@ router.post('/:symbol/thesis', requireAuth, thesisLimit, async (req, res) => {
     try {
       learningStore.recordDecision({
         surface: 'research', symbol: sym, action: 'buy', price: ev.facts.last,
-        meta: { assetType: ev.assetType, targetReturn: judgement.zones.targetReturn, stopLoss: judgement.zones.stopLoss, horizonDays: judgement.horizonDays, thesisId: entry.id },
+        meta: { assetType: ev.assetType, targetReturn: judgement.zones.targetReturn, stopLoss: judgement.zones.stopLoss, horizonDays: judgement.horizonDays, thesisId: entry.id, method },
       })
     } catch (e) { console.warn('[research-desk] learning-store write failed:', e.message) }
   }

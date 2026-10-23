@@ -152,6 +152,47 @@ describe('POST /:symbol/thesis', () => {
   })
 })
 
+describe('POST /:symbol/thesis — bull vs bear debate', () => {
+  const reply = obj => ({ text: JSON.stringify(obj), llmUsed: 'claude' })
+
+  test('three separate calls: the bear sees the bull, the decision sees both; the same judge decides; the method is recorded', async () => {
+    const id = await valId()
+    mockCall
+      .mockResolvedValueOnce(reply({ bull: [{ claim: 'ROIC of 19.1% on a P/E of 24.3', cites: [id] }], targetReturn: 15, stopLoss: 6, horizonDays: 30, invalidation: 'Growth turns negative' }))
+      .mockResolvedValueOnce(reply({ bear: [{ claim: 'P/S of 6.1 is demanding', cites: [id] }] }))
+      .mockResolvedValueOnce(reply({ stance: 'long', summary: 'Profitable grower at a fair multiple.' }))
+    const r = await request(app).post('/api/research-desk/ACME/thesis').set('Authorization', `Bearer ${tokenA}`).send({ method: 'debate' })
+    expect(r.status).toBe(200)
+    expect(mockCall).toHaveBeenCalledTimes(3)
+    const [bullCall, bearCall, decisionCall] = mockCall.mock.calls.map(c => c[0])
+    expect(bullCall.schemaName).toBe('research-bull')
+    expect(bearCall.prompt).toMatch(/The bull researcher argued:\n1\. ROIC of 19\.1%/)
+    expect(decisionCall.prompt).toMatch(/BEAR:\n1\. P\/S of 6\.1/)
+    expect(r.body.method).toBe('debate')
+    expect(r.body.judgement.verdict).toBe('actionable')
+    expect(mockRecord).toHaveBeenCalledWith(expect.objectContaining({ meta: expect.objectContaining({ method: 'debate' }) }))
+  })
+
+  test('the decision call cannot rescue a bull case whose claims failed verification', async () => {
+    const id = await valId()
+    mockCall
+      .mockResolvedValueOnce(reply({ bull: [{ claim: 'Revenue grew 45% last quarter', cites: [id] }], targetReturn: 15, stopLoss: 6, horizonDays: 30, invalidation: 'x' }))
+      .mockResolvedValueOnce(reply({ bear: [] }))
+      .mockResolvedValueOnce(reply({ stance: 'long', summary: 'Strong growth.' }))
+    const r = await request(app).post('/api/research-desk/ACME/thesis').set('Authorization', `Bearer ${tokenA}`).send({ method: 'debate' })
+    expect(r.body.judgement.verdict).toBe('no-trade')
+    expect(mockRecord).not.toHaveBeenCalled()
+  })
+
+  test('without the flag it is still one call', async () => {
+    const id = await valId()
+    mockCall.mockResolvedValue(withIds(thesisReply(), id))
+    const r = await request(app).post('/api/research-desk/ACME/thesis').set('Authorization', `Bearer ${tokenA}`)
+    expect(mockCall).toHaveBeenCalledTimes(1)
+    expect(r.body.method).toBe('single')
+  })
+})
+
 describe('GET /theses', () => {
   test("lists only the caller's theses, with a live status", async () => {
     const id = await valId()

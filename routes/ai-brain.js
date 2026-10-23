@@ -37,6 +37,8 @@ const { fetchDailyBars }    = require('../lib/internal-api')
 const { tryParseAiJson }    = require('../lib/ai-json')
 const { SCAN_SCHEMA }       = require('../lib/ai-schemas')
 const { canonicalizeEnums } = require('../lib/output-schema')
+const shadowBaseline        = require('../lib/shadow-baseline')
+const { outcomeRange }      = require('../lib/outcome-range')
 const { baselineFromBars }  = require('../lib/ml-baseline')
 const { factorScores, factorLine } = require('../lib/factor-model')
 const { startJsonHeartbeat } = require('../lib/http-heartbeat')
@@ -1055,6 +1057,21 @@ Apply the instructions, JSON schema and rules from the system prompt. Respond ON
       if (universeSources?.[stock.symbol]) stock.universeSource = universeSources[stock.symbol]
     }
 
+    // How wide the real outcomes of picks like this have been (lib/outcome-range.js):
+    // a conformal range from this system's own resolved record, checked
+    // walk-forward — the honest companion to the model's single target.
+    try {
+      const records = require('../lib/brain-learnings').readPredictions()
+      const ASSET = { crypto: 'crypto', etf: 'etf', fund: 'fund' }
+      const byAsset = new Map()   // one range per asset class per scan
+      for (const stock of data.rankedStocks) {
+        if (stock.actionable === false) continue
+        const assetType = ASSET[String(stock.type || '').toLowerCase()] || 'stock'
+        if (!byAsset.has(assetType)) byAsset.set(assetType, outcomeRange(records, { assetType }))
+        stock.outcomeRange = byAsset.get(assetType)
+      }
+    } catch (e) { console.warn('[ai-brain] outcome range unavailable:', e.message) }
+
     // ── Cross-model agreement — annotate each pick with the second opinion ────
     let ensemble = null
     if (secondText) {
@@ -1142,6 +1159,19 @@ Apply the instructions, JSON schema and rules from the system prompt. Respond ON
         learningsVersion,
       })
     }
+
+    // Shadow picks: as many random names from the SAME priced list as the
+    // model picked, logged to their own file (lib/shadow-baseline.js) so the
+    // track record can say whether the picks beat chance on the list — not
+    // just SPY, which a list of today's movers can beat on its own.
+    shadowBaseline.logShadows({
+      universe:        [...livePrice.keys()],
+      picked:          data.rankedStocks.map(p => p.symbol),
+      actionableCount: data.rankedStocks.filter(p => p.actionable !== false).length,
+      prices:          Object.fromEntries([...livePrice].map(([sym, lp]) => [sym, lp.price])),
+      generatedAt,
+      promptVersion:   SCAN_PROMPT_VERSION,
+    })
 
     // Also record picks in the SHARED cross-surface learning store, so Brain
     // outcomes calibrate alongside Advisory/paper-broker decisions instead of
