@@ -30,6 +30,7 @@
  *   POST /api/auth/reset-password
  */
 const express       = require('express')
+const { resetLink } = require('../lib/app-url')
 const bcrypt        = require('bcryptjs')
 const jwt           = require('jsonwebtoken')
 const crypto        = require('crypto')
@@ -701,7 +702,7 @@ router.post('/forgot-password', async (req, res) => {
     if (!user) return res.json(ok)
     const token = crypto.randomBytes(32).toString('hex')
     MEM.resets.set(sha256(token), { userId: uid, expiresAt: Date.now() + 3600000, used: false })
-    const link = `${process.env.APP_URL || 'http://localhost:5173'}/reset-password?token=${token}`
+    const link = resetLink(token)
     const html = `<p>Reset your FinSurf password: <a href="${link}">${link}</a></p><p>Expires in 1 hour.</p>`
     const sent = await sendEmail({ to: lEmail, subject: 'FinSurf — Password reset', html })
     if (!sent) console.log(`[AUTH] Password reset email not sent (no SMTP); token issued for user ${uid}`)
@@ -717,7 +718,7 @@ router.post('/forgot-password', async (req, res) => {
     await query('INSERT INTO password_resets (user_id,token_hash,expires_at) VALUES($1,$2,$3)',
       [userId, sha256(token), new Date(Date.now() + 3600000)])
     await auditLog(userId, 'password_reset_request', req)
-    const link = `${process.env.APP_URL || 'http://localhost:5173'}/reset-password?token=${token}`
+    const link = resetLink(token)
     const html = `<p>Reset your FinSurf password: <a href="${link}">${link}</a></p><p>Expires in 1 hour.</p>`
     const sent = await sendEmail({ to: lEmail, subject: 'FinSurf — Password reset', html })
     if (!sent) console.log(`[AUTH] Password reset email not sent (no SMTP); token issued for user ${userId}`)

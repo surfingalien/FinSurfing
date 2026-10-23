@@ -88,7 +88,11 @@ function AppInner() {
   const [resetToken] = useState(() => {
     try {
       const { pathname, search, hash } = window.location
-      const isReset = pathname.replace(/\/+$/, '') === '/reset-password' || hash.startsWith('#/reset-password')
+      // Collapse repeated slashes too: an APP_URL saved with a trailing slash
+      // produced "//reset-password" links (the server now strips it, but links
+      // already sitting in inboxes still carry the double slash).
+      const path = pathname.replace(/\/{2,}/g, '/').replace(/\/+$/, '')
+      const isReset = path === '/reset-password' || hash.startsWith('#/reset-password')
       if (!isReset) return null
       const qs = search || (hash.includes('?') ? hash.slice(hash.indexOf('?')) : '')
       const token = new URLSearchParams(qs).get('token') || ''
