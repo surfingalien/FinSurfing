@@ -134,6 +134,11 @@ describe('scan-time dimensions', () => {
     expect(r.topDrags[0].edge).toBeCloseTo(-0.2, 5)
   })
 
+  test('the price regime at scan time is a dimension', () => {
+    const r = computeEdgeReport({ h30: { alphaWinRate: 0.5 }, byPriceRegime: { 'up-calm': seg(0.68), 'down-stressed': seg(0.33) } })
+    expect(r.segments.filter(s => s.dimension === 'price-regime').map(s => s.segment).sort()).toEqual(['down-stressed', 'up-calm'])
+  })
+
   test('model version is a dimension — a swap is a new system, not more data', () => {
     const r = computeEdgeReport({
       h30: { alphaWinRate: 0.5 },

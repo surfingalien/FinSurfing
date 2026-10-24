@@ -548,6 +548,18 @@ describe('computeStats — regime, generator and barrier segments', () => {
     expect(computeStats([mk()]).byRegime).toBeNull()
   })
 
+  test('byPriceRegime splits picks by the benchmark trend/volatility state at scan time; unstamped rows are excluded', () => {
+    const s = computeStats([
+      mk({ priceRegimeAtScan: 'up-calm' }),
+      mk({ priceRegimeAtScan: 'down-stressed', price30d: 88 }),
+      mk(),
+    ], AT30)
+    expect(Object.keys(s.byPriceRegime).sort()).toEqual(['down-stressed', 'up-calm'])
+    expect(s.byPriceRegime['up-calm'].winRate).toBe(1)
+    expect(s.byPriceRegime['down-stressed'].winRate).toBe(0)
+    expect(computeStats([mk()]).byPriceRegime).toBeNull()
+  })
+
   test('byModelVersion keys on model AND prompt version together', () => {
     // Either changing makes a new system; pooling them yields a number that
     // describes neither.

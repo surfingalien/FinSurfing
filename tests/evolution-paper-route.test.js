@@ -32,3 +32,20 @@ test('only an admin can do it; the bracket comes from the bars and is valid agai
   expect(b.adopted).toBe(true)
   expect(pb.unmanagedPositions(pb.loadPortfolio())).toEqual([])
 })
+
+test('factor library: readable when signed in, without the stored cross-sections; mining is admin-only', async () => {
+  const fm = require('../lib/factor-mining')
+  fm.saveLibrary({ ranAt: '2026-10-24T09:15:00Z', universe: 3, tested: 1, admitted: ['mom_12_1'],
+    factors: [{ name: 'mom_12_1', verdict: 'admitted', latest: { asOf: '2026-10-23', values: [1, 2, 3] } }] })
+  expect((await request(app).get('/api/evolution/factors')).status).toBe(401)
+  const r = await request(app).get('/api/evolution/factors').set('Authorization', `Bearer ${sign('user')}`)
+  expect(r.body.library.factors[0]).toEqual({ name: 'mom_12_1', verdict: 'admitted', latestAsOf: '2026-10-23' })
+  expect((await request(app).post('/api/evolution/factors/run').set('Authorization', `Bearer ${sign('user')}`)).status).toBe(403)
+})
+
+test('drift study: readable when signed in; running it is admin-only', async () => {
+  require('../lib/pead').saveStudy({ ranAt: '2026-10-25T09:30:00Z', events: 3, strategy: { verdict: 'insufficient' } })
+  const r = await request(app).get('/api/evolution/pead').set('Authorization', `Bearer ${sign('user')}`)
+  expect(r.body.study).toMatchObject({ events: 3, strategy: { verdict: 'insufficient' } })
+  expect((await request(app).post('/api/evolution/pead/run').set('Authorization', `Bearer ${sign('user')}`)).status).toBe(403)
+})

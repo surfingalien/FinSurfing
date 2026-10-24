@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { AlertTriangle, Database, Loader2, Shuffle, Wallet } from 'lucide-react'
+import { Activity, AlertTriangle, CalendarClock, Database, Layers, Loader2, Shuffle, Wallet } from 'lucide-react'
 
 const pc = v => (v == null ? '—' : `${Math.round(v * 100)}%`)
 const ci = (lo, hi) => (lo == null || hi == null ? '' : ` [${pc(lo)}–${pc(hi)}]`)
@@ -25,6 +25,59 @@ const VS_RANDOM = {
   'below-random':  ['text-red-400',     'The picks did WORSE than random names from the same list'],
   'insufficient':  ['text-slate-500',   'Not enough resolved picks on both sides to compare yet'],
 }
+const ordinal = n => { const k = Math.abs(n) % 100; return `${n}${k >= 11 && k <= 13 ? 'th' : ({ 1: 'st', 2: 'nd', 3: 'rd' }[k % 10] || 'th')}` }
+const FACTOR_VERDICT = {
+  admitted:         ['text-emerald-400', 'admitted'],
+  'failed-holdout': ['text-amber-400',   'failed on newer data'],
+  luck:             ['text-slate-400',   'within luck'],
+  insufficient:     ['text-slate-500',   'too little data'],
+}
+const signed = (v, d = 3) => (v == null ? '—' : `${v >= 0 ? '+' : ''}${Number(v).toFixed(d)}`)
+
+const DRIFT_VERDICT = {
+  validated:    ['text-emerald-400', 'Validated — beats kept drifting ahead of SPY on both older and newer events'],
+  mixed:        ['text-amber-400',   'Mixed — positive on only part of the history, or not beyond chance'],
+  rejected:     ['text-red-400',     'Rejected — beats did not drift ahead of SPY after costs'],
+  insufficient: ['text-slate-500',   'Not enough events yet'],
+}
+const TONE_VERDICT = { adds: 'adds to a beat', 'no-evidence': 'no evidence it adds to a beat', insufficient: 'not enough calls to judge' }
+
+function DriftRow({ label, g }) {
+  if (!g?.n) return null
+  return (
+    <tr className="text-slate-300">
+      <td>{label}</td><td>{g.meanAbn >= 0 ? '+' : ''}{g.meanAbn}%</td><td>{pc(g.beatBench)}{ci(g.beatBenchLo, g.beatBenchHi)}</td><td>{g.t ?? '—'}</td><td>{g.n}</td>
+    </tr>
+  )
+}
+
+const TREND = { up: 'Uptrend', down: 'Downtrend', range: 'No clear trend' }
+const regimeName = label => { const [t, v] = String(label).split('-'); return `${TREND[t] || t}, ${v}` }
+
+function PriceRegime({ regime, title }) {
+  if (!regime) return null
+  const prof = Object.entries(regime.profile || {}).sort((a, b) => b[1].n - a[1].n)
+  return (
+    <div className="glass rounded-xl p-3 space-y-1.5">
+      <div className="text-[10px] text-slate-500">{title} — {regime.symbol}, as of {regime.asOf}</div>
+      <div className="text-sm font-semibold">{regimeName(regime.label)}</div>
+      <div className="text-[11px] text-slate-400">20-day volatility {regime.vol20}% ({ordinal(regime.volPct)} percentile of its past year) · {regime.vsSma200 >= 0 ? '+' : ''}{regime.vsSma200}% vs 200-day average</div>
+      {prof.length > 0 && (
+        <table className="w-full text-[11px] mt-1">
+          <thead><tr className="text-slate-500 text-left"><th className="font-normal">After this state</th><th className="font-normal">next 20 days</th><th className="font-normal">up</th><th className="font-normal">n</th></tr></thead>
+          <tbody>
+            {prof.map(([label, p]) => (
+              <tr key={label} className={label === regime.label ? 'text-slate-100' : 'text-slate-400'}>
+                <td>{regimeName(label)}</td><td>{p.meanFwdRet >= 0 ? '+' : ''}{p.meanFwdRet}%</td><td>{pc(p.upShare)}</td><td>{p.n}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  )
+}
+
 const EXIT_LABEL = { stop: 'Stopped out', 'breakeven-stop': 'Exited at breakeven', t1: 'Half booked at T1', target: 'Target hit', time: 'Time limit', manual: 'Other' }
 
 export default function TrackRecord({ data, onAdoptBrackets }) {
@@ -87,6 +140,81 @@ export default function TrackRecord({ data, onAdoptBrackets }) {
             <p className="text-[11px] text-slate-500">Beating SPY can come from the list a scan is given (today's movers in a momentum market). Beating random names from that same list is the model's own contribution.</p>
           </div>
         ) : <p className="text-[12px] text-slate-500">No scans with a random comparison yet — every scan from now on logs one.</p>}
+      </section>
+
+      <section>
+        <h3 className="text-sm font-semibold mb-2 flex items-center gap-1.5"><Activity className="w-3.5 h-3.5" /> Market regime from prices</h3>
+        {data.priceRegime?.equity || data.priceRegime?.crypto ? (
+          <div className="grid md:grid-cols-2 gap-2">
+            <PriceRegime regime={data.priceRegime.equity} title="Stocks" />
+            <PriceRegime regime={data.priceRegime.crypto} title="Crypto" />
+          </div>
+        ) : <p className="text-[12px] text-slate-500">Not read yet — the next scan or Research Desk dossier reads it from SPY and BTC daily bars.</p>}
+        {b?.byPriceRegime && (
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mt-2">
+            {Object.entries(b.byPriceRegime).map(([label, c]) => (
+              <Rate key={label} label={`AI picks made in: ${regimeName(label)}`} rate={c.alphaWinRate} lo={c.alphaWinRateLo} hi={c.alphaWinRateHi} n={c.nBench} k={c.alphaWins} />
+            ))}
+          </div>
+        )}
+        <p className="text-[11px] text-slate-500 mt-1">Trend from the 200- and 50-day averages; volatility against the market's own past year. Each state uses only the bars up to that day. The table counts non-overlapping 20-day windows.</p>
+      </section>
+
+      <section>
+        <h3 className="text-sm font-semibold mb-2 flex items-center gap-1.5"><Layers className="w-3.5 h-3.5" /> Factors that rank stocks</h3>
+        {data.factors ? (
+          <div className="space-y-2">
+            <p className="text-[12px] text-slate-400">
+              {data.factors.admitted.length
+                ? `${data.factors.admitted.length} of ${data.factors.tested} price factors ranked next-month returns beyond chance`
+                : `None of ${data.factors.tested} price factors ranked next-month returns beyond chance`}
+              {' '}across {data.factors.universe} large caps ({data.factors.periods} non-overlapping {data.factors.horizon}-day periods, run {String(data.factors.ranAt).slice(0, 10)}).
+            </p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-[11px]">
+                <thead><tr className="text-slate-500 text-left"><th className="font-normal">Factor</th><th className="font-normal">IC older 70%</th><th className="font-normal">IC newest 30%</th><th className="font-normal">deflated</th><th className="font-normal">verdict</th></tr></thead>
+                <tbody>
+                  {data.factors.factors.map(f => (
+                    <tr key={f.name} className="text-slate-300">
+                      <td>{f.label}{f.direction === 'inverted' ? ' (inverted)' : ''}</td>
+                      <td>{signed(f.train?.meanIc)}{f.train?.t != null ? ` t=${f.train.t}` : ''}</td>
+                      <td>{signed(f.holdout?.meanIc)}{f.holdout?.t != null ? ` t=${f.holdout.t}` : ''}</td>
+                      <td>{f.dsr ?? '—'}</td>
+                      <td className={FACTOR_VERDICT[f.verdict]?.[0]}>{FACTOR_VERDICT[f.verdict]?.[1] || f.verdict}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="text-[11px] text-slate-500">IC is the rank correlation between a factor and the next {data.factors.horizon} days' return across the list. The direction is chosen on the older periods; the newest are untouched until then. Deflated = the chance the factor beats the luckiest of every candidate tried in both directions, admitted at ≥ 0.9. {data.factors.caveats?.[0]}</p>
+          </div>
+        ) : <p className="text-[12px] text-slate-500">No factor-mining run yet — it runs weekly (Saturday 5:15 AM ET).</p>}
+      </section>
+
+      <section>
+        <h3 className="text-sm font-semibold mb-2 flex items-center gap-1.5"><CalendarClock className="w-3.5 h-3.5" /> Post-earnings drift</h3>
+        {data.pead?.strategy ? (
+          <div className="space-y-2">
+            <p className={`text-[12px] ${DRIFT_VERDICT[data.pead.strategy.verdict]?.[0] || 'text-slate-400'}`}>
+              {DRIFT_VERDICT[data.pead.strategy.verdict]?.[1] || data.pead.strategy.verdict} ({data.pead.strategy.reason}).
+            </p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-[11px]">
+                <thead><tr className="text-slate-500 text-left"><th className="font-normal">After the report</th><th className="font-normal">vs SPY, {data.pead.params?.holdDays} sessions</th><th className="font-normal">beat SPY</th><th className="font-normal">t (by month)</th><th className="font-normal">events</th></tr></thead>
+                <tbody>
+                  <DriftRow label={`Beat ≥ ${data.pead.params?.beatPct}% — older 70%`} g={data.pead.strategy.train} />
+                  <DriftRow label="Beat — newest 30%" g={data.pead.strategy.holdout} />
+                  <DriftRow label={`Miss ≤ ${data.pead.params?.missPct}% (control)`} g={data.pead.groups?.miss} />
+                  <DriftRow label="Beat + call tone improved" g={data.pead.tone?.improved} />
+                  <DriftRow label="Beat + call tone worsened" g={data.pead.tone?.worsened} />
+                </tbody>
+              </table>
+            </div>
+            <p className="text-[11px] text-slate-500">
+              {data.pead.universe} large caps, {data.pead.events} reported quarters, run {String(data.pead.ranAt).slice(0, 10)}. Entry the open after the report, net of costs. Call tone (a word count, compared with the previous call): {TONE_VERDICT[data.pead.tone?.verdict] || '—'}. {data.pead.caveats?.join(' ')}
+            </p>
+          </div>
+        ) : <p className="text-[12px] text-slate-500">No drift study yet — it runs weekly (Sunday 5:30 AM ET) and needs FMP_API_KEY.</p>}
       </section>
 
       <section>

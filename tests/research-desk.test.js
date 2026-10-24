@@ -48,6 +48,43 @@ describe('buildEvidence', () => {
     expect(items.find(i => i.kind === 'strategies').text).toMatch(/No rule-based strategy on ACME has yet passed a forward re-test/)
   })
 
+  test('the price regime is a measured evidence item with what followed it; missing bars are a gap', () => {
+    const priceRegime = { symbol: 'SPY', label: 'up-calm', trend: 'up', vol: 'calm', vol20: 11.2, volPct: 40, vsSma200: 4.1, asOf: '2026-10-23',
+      profile: { 'up-calm': { n: 23, meanFwdRet: 1.4, upShare: 0.65, meanFwdVol: 12 } } }
+    const item = evidence({ priceRegime }).items.find(i => i.kind === 'price-regime')
+    expect(item.measured).toBe(true)
+    expect(item.text).toMatch(/SPY: uptrend, calm volatility \(20-day vol 11.2%, 40th percentile/)
+    expect(item.text).toMatch(/averaged \+1.4% and were up 65% of the time \(23 non-overlapping windows\)/)
+    expect(evidence().gaps.join(' ')).toMatch(/price regime: benchmark bars unavailable/)
+  })
+
+  test('mined factors: survivors with the symbol\'s percentile; none admitted is said plainly; no run is a gap', () => {
+    const library = { ranAt: '2026-10-24T09:15:00Z', universe: 68, horizon: 21, tested: 12, admitted: ['mom_12_1'] }
+    const ranks = [{ name: 'mom_12_1', label: '12-1 month momentum', percentile: 82, holdoutIc: 0.041, holdoutPeriods: 15 }]
+    const item = evidence({ minedFactors: { library, ranks } }).items.find(i => i.kind === 'mined-factors')
+    expect(item.text).toMatch(/1 of 12 candidates admitted across 68 large caps, 21-day horizon, run 2026-10-24/)
+    expect(item.text).toMatch(/12-1 month momentum — ACME in the 82nd percentile \(holdout IC \+0.041 over 15 periods\)/)
+    const none = evidence({ minedFactors: { library: { ...library, admitted: [] }, ranks: [] } }).items.find(i => i.kind === 'mined-factors')
+    expect(none.text).toMatch(/None of the 12 price-factor candidates ranked next-month returns beyond chance/)
+    expect(evidence({ minedFactors: { library: null, ranks: [] } }).gaps.join(' ')).toMatch(/mined factors: no mining run yet/)
+    expect(evidence().items.some(i => i.kind === 'mined-factors')).toBe(false)
+  })
+
+  test('post-earnings drift: the last report, the window, and the pooled study verdict', () => {
+    const earningsDrift = {
+      event: { date: '2026-10-15', surprisePct: 8.2, group: 'beat', estimate: 1.1, actual: 1.19, toneChange: 0.06 },
+      window: { sessionsSince: 6, inWindow: true, remaining: 14 },
+      study: { universe: 68, events: 1210, strategy: { verdict: 'mixed' }, groups: { beat: { n: 640, meanAbn: 0.42, t: 1.6 } } },
+    }
+    const item = evidence({ earningsDrift }).items.find(i => i.kind === 'earnings-drift')
+    expect(item.text).toMatch(/Last report 2026-10-15: EPS \$1.19 vs \$1.1 expected \(\+8.2% surprise, a beat\)/)
+    expect(item.text).toMatch(/Call tone improved/)
+    expect(item.text).toMatch(/6 of 20 sessions into the post-earnings window/)
+    expect(item.text).toMatch(/beats averaged \+0.42% vs SPY over 640 events \(month-clustered t=1.6\); verdict mixed/)
+    expect(evidence({ earningsDrift: { event: { ...earningsDrift.event, toneChange: null }, window: null, study: null } }).items.find(i => i.kind === 'earnings-drift').text)
+      .toMatch(/No post-earnings drift study has run yet/)
+  })
+
   test('price facts come from the bars', () => {
     const f = priceFacts(bars)
     expect(f.last).toBe(bars.at(-1).c)

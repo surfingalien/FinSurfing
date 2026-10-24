@@ -210,6 +210,28 @@ describe('POST /api/ai-brain/analyze — the AVAX regression', () => {
     expect(fsp.readFileSync(TMP_LOG, 'utf8')).not.toMatch(/"shadow"/)
   })
 
+  test('each logged pick carries the price regime of its asset class (BTC for crypto), read from past bars only', async () => {
+    require('../lib/price-regime')._resetForTests()
+    const longBars = n => {
+      const t0 = Math.floor(Date.now() / 1000) - n * DAY, ts = [], c = []
+      for (let i = 0; i < n; i++) { ts.push(t0 + i * DAY); c.push(100 * (1 + 0.002 * i) * (1 + 0.004 * Math.sin(i))) }
+      return { chart: { result: [{ timestamp: ts, indicators: { quote: [{ open: c, high: c, low: c, close: c, volume: c.map(() => 1e6) }] } }] } }
+    }
+    const base = global.fetch
+    global.fetch = jest.fn(async url => {
+      const u = String(url)
+      if (u.includes('/api/chart?') && new URL(u).searchParams.get('symbol') === 'BTC-USD') return { ok: true, json: async () => longBars(400) }
+      return base(url)
+    })
+    try { fsp.unlinkSync(TMP_LOG) } catch { /* fine */ }
+    mockCall.mockResolvedValue(reply(stock()))
+    await scan()
+    const rec = JSON.parse(fsp.readFileSync(TMP_LOG, 'utf8').trim().split('\n').at(-1))
+    expect(rec.symbol).toBe('AVAX')
+    expect(rec.priceRegimeAtScan).toMatch(/^up-(calm|stressed)$/)
+    require('../lib/price-regime')._resetForTests()
+  })
+
   test('an abstain writes no prediction at all', async () => {
     // An "Avoid" is not a trade, so it must never reach the calibration record.
     try { fsp.unlinkSync(TMP_LOG) } catch { /* fine */ }
