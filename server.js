@@ -1188,11 +1188,11 @@ async function getBinanceChart(symbol, interval = '1d', range = '1y') {
   const perDay = { '1m':1440,'5m':288,'15m':96,'30m':48,'60m':24,'1h':24,'1d':1,'1wk':1/7,'1mo':1/30 }
   const limit  = Math.min(Math.ceil(days * (perDay[interval] ?? 1)), 1000)
 
-  const url = `${BINANCE_REST}/api/v3/klines?symbol=${binSym}&interval=${bInterval}&limit=${limit}`
   try {
-    const r = await fetch(url, { signal: AbortSignal.timeout(15000) })
-    if (!r.ok) throw new Error(`HTTP ${r.status}`)
-    const d = await r.json()
+    // Pages backwards past Binance's 1,000-candle cap, so a 5-year range is
+    // five years (lib/crypto-history.js).
+    const need = Math.ceil(days * (perDay[interval] ?? 1))
+    const d = await require('./lib/crypto-history').binanceKlines({ base: BINANCE_REST, pair: binSym, interval: bInterval, need: Math.max(limit, Math.min(need, 4000)) })
     if (!Array.isArray(d) || d.length < 5) return null
 
     const timestamps = d.map(k => Math.floor(k[0] / 1000))
@@ -1248,6 +1248,19 @@ async function getBinanceSingleQuote(symbol) {
     cacheSet(`pc:${symbol}`, prev)
     return q
   } catch (e) { console.warn('[Binance] quote error:', e.message); return null }
+}
+
+// ── Coinbase (free, no key, daily only) — the second crypto source ───────────
+async function getCoinbaseChart(symbol, interval = '1d', range = '1y') {
+  if (!isCryptoSymbol(symbol) || interval !== '1d') return null
+  const days = { '1d':2,'5d':7,'1mo':30,'3mo':92,'6mo':184,'1y':365,'2y':730,'5y':1825,'max':1825 }[range] || 365
+  try {
+    const ch = require('./lib/crypto-history')
+    const bars = await ch.coinbaseDaily({ symbol, days })
+    if (bars.length < 5) return null
+    console.log(`[Coinbase] chart OK: ${symbol} (${bars.length} bars)`)
+    return ch.toChart(symbol, bars)
+  } catch (e) { console.warn('[Coinbase] chart error:', e.message); return null }
 }
 
 // ── CoinGecko helpers (free, no key, crypto fallback when Binance is blocked) ──
@@ -2164,6 +2177,8 @@ app.get('/api/chart', async (req, res) => {
     if (isCryptoSymbol(symbol)) {
       const binanceFast = await getBinanceChart(symbol, interval, range)
       if (binanceFast) return res.json(saveChart(binanceFast, 'Binance'))
+      const cbFast = await getCoinbaseChart(symbol, interval, range)
+      if (cbFast) return res.json(saveChart(cbFast, 'Coinbase'))
       const cgFast = await getCoinGeckoChart(symbol, interval, range)
       if (cgFast) return res.json(saveChart(cgFast, 'CoinGecko'))
     }
