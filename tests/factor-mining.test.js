@@ -99,3 +99,26 @@ test('a data outage never overwrites the stored library with a run over a handfu
     .rejects.toThrow(/only 5 of 7 names had 5 years of bars — too few to rank; the stored library is kept/)
   expect(fm.readLibrary().ranAt).toBe('last-week')
 })
+
+test('SEC fundamental factors read only what was filed by each rebalance date', () => {
+  const u = universe({ n: 30, seed: 9 })
+  // Each stock reports EPS every quarter, filed 40 days after the quarter ends;
+  // stocks with higher k report more earnings.
+  const fundamentals = {}
+  for (const [k, sym] of Object.keys(u).entries()) {
+    const eps = []
+    for (let q = 0; q < 22; q++) {
+      const end = new Date(Date.UTC(2020, 0, 1) + q * 91 * 86400000).toISOString().slice(0, 10)
+      const start = new Date(Date.parse(end) - 90 * 86400000).toISOString().slice(0, 10)
+      const filed = new Date(Date.parse(end) + 40 * 86400000).toISOString().slice(0, 10)
+      eps.push({ start, end, val: 0.1 + k * 0.05, filed })
+    }
+    fundamentals[sym] = { series: { eps, revenue: [], netIncome: [], ocf: [], capex: [], equity: [], assets: [], debt: [], shares: [] } }
+  }
+  const lib = fm.mineFactors(u, { fundamentals })
+  const ey = lib.factors.find(f => f.name === 'earnings_yield')
+  expect(ey.periods).toBeGreaterThan(30)
+  // a snapshot on a date before a quarter's filing does not see that quarter
+  const p = { c: [100], days: ['2020-05-01'], fund: fundamentals.S0 }
+  expect(fm.FACTORS.earnings_yield.fn(p, 0)).toBeNull()      // only one quarter filed by then — no trailing four
+})

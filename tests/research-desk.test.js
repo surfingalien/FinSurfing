@@ -85,6 +85,13 @@ describe('buildEvidence', () => {
       .toMatch(/No post-earnings drift study has run yet/)
   })
 
+  test('reported financials from SEC filings are a measured item, dated by filing', () => {
+    const reported = { periodEnd: '2026-07-26', lastFiled: '2026-08-26', revenueTtm: 302969000000, revenueGrowthYoY: 83.4, netMargin: 63.7, epsTtm: 7.91, pe: 26.7, fcfMargin: 41.9, roe: 84.2, debtToEquity: 0.15 }
+    const item = evidence({ reported }).items.find(i => i.kind === 'reported')
+    expect(item.measured).toBe(true)
+    expect(item.text).toBe('Reported in SEC filings (latest quarter ended 2026-07-26, filed 2026-08-26): trailing-four-quarter revenue $303.0B (+83.4% year over year); net margin 63.7%; diluted EPS $7.91 (P/E 26.7 at the last close); free-cash-flow margin 41.9%; return on equity 84.2%; long-term debt/equity 0.15.')
+  })
+
   test('price facts come from the bars', () => {
     const f = priceFacts(bars)
     expect(f.last).toBe(bars.at(-1).c)

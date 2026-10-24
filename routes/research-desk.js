@@ -132,11 +132,11 @@ function strategiesFor(sym) {
 }
 
 /** The latest factor-mining run and this symbol's percentiles on its survivors. */
-function minedFactorsFor(bars) {
+function minedFactorsFor(bars, fund = null) {
   try {
     const fm = require('../lib/factor-mining')
     const library = fm.readLibrary()
-    return { library, ranks: library ? fm.percentilesFor(bars, library) : [] }
+    return { library, ranks: library ? fm.percentilesFor(bars, library, { fund }) : [] }
   } catch { return null }
 }
 
@@ -160,11 +160,14 @@ function earningsDriftFor(sym, bars, fundamentals) {
 async function gatherEvidence(sym, req) {
   const headers   = fwdKeys(req)
   const assetType = assetTypeOf(sym)
-  const [bars, fundamentals, macro, regimes] = await Promise.all([
+  const [bars, fundamentals, macro, regimes, secFacts] = await Promise.all([
     fetchDailyBars(sym, { range: '2y', headers, timeoutMs: 25_000 }),
     assetType === 'stock' ? fetchFundamentals(sym, headers) : Promise.resolve({ error: `not applicable to ${assetType}` }),
     macroSnapshot(),
     priceRegime.getCurrentRegimes({ fetchBars: s => fetchDailyBars(s, { range: '5y', headers, timeoutMs: 15_000 }) }).catch(() => null),
+    // Reported figures straight from SEC filings — keyless, so the dossier keeps
+    // its fundamentals when the FMP quota is spent.
+    assetType === 'stock' ? require('../lib/sec-facts').getCompanyFacts(sym).catch(() => null) : Promise.resolve(null),
   ])
   if (bars.length < 60) {
     const err = new Error(`Not enough price history for ${sym} (${bars.length} daily bars, need 60+)`)
@@ -181,7 +184,8 @@ async function gatherEvidence(sym, req) {
   const { items, gaps, facts } = desk.buildEvidence({
     symbol: sym, bars, taLine, fundamentals, macro,
     priceRegime: assetType === 'crypto' ? regimes?.crypto : regimes?.equity,
-    minedFactors: assetType === 'stock' ? minedFactorsFor(bars) : null,
+    minedFactors: assetType === 'stock' ? minedFactorsFor(bars, secFacts) : null,
+    reported: secFacts ? require('../lib/sec-facts').snapshotAt(secFacts, new Date().toISOString().slice(0, 10), { price: bars.at(-1)?.c }) : null,
     earningsDrift: assetType === 'stock' ? earningsDriftFor(sym, bars, fundamentals) : null,
     strategies: strategiesFor(sym),
     exposure:   exposureFor(sym),

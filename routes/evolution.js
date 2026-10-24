@@ -91,7 +91,10 @@ router.get('/factors', requireAuth, (req, res) => {
 // Admin-only: fetches five years of bars for ~70 names.
 router.post('/factors/run', requireAuth, requireAdmin, (req, res) => {
   const fm = require('../lib/factor-mining')
-  fm.runMining({ fetchBars: s => fetchDailyBars(s, { range: '5y', headers: { 'x-internal': '1' }, timeoutMs: 25_000 }) })
+  fm.runMining({
+    fetchBars:  s => fetchDailyBars(s, { range: '5y', headers: { 'x-internal': '1' }, timeoutMs: 25_000 }),
+    fetchFacts: s => require('../lib/sec-facts').getCompanyFacts(s),
+  })
     .then(lib => console.log(`[evolution/factors] mined ${lib.tested} factors over ${lib.universe} names: admitted ${lib.admitted.join(', ') || 'none'}`))
     .catch(e => console.error('[evolution/factors]', e.stack || e.message))
   res.json({ ok: true, status: 'running', message: 'Factor mining started. Poll GET /api/evolution/factors.' })
