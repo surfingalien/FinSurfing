@@ -50,7 +50,7 @@ test('the false-admission rate on noise: no factor admitted across 15 skill-less
   // The gate was once fed only direction-chosen (always positive) Sharpes and
   // admitted a noise factor in 34 of 40 runs. Pinned so it cannot drift back.
   let falseRuns = 0
-  for (let seed = 1; seed <= 15; seed++) if (fm.mineFactors(universe({ seed: seed * 7919 })).admitted.length) falseRuns++
+  for (let seed = 1; seed <= 15; seed++) if (fm.mineFactors(universe({ seed: seed * 7919 }), { diagnostics: false }).admitted.length) falseRuns++
   expect(falseRuns).toBe(0)
 })
 
@@ -98,4 +98,38 @@ test('a data outage never overwrites the stored library with a run over a handfu
   await expect(fm.runMining({ fetchBars: async s => u[s] || [], universe: [...Object.keys(u), 'X1', 'X2'] }))
     .rejects.toThrow(/only 5 of 7 names had 5 years of bars — too few to rank; the stored library is kept/)
   expect(fm.readLibrary().ranAt).toBe('last-week')
+})
+
+test('SEC fundamental factors read only what was filed by each rebalance date', () => {
+  const u = universe({ n: 30, seed: 9 })
+  // Each stock reports EPS every quarter, filed 40 days after the quarter ends;
+  // stocks with higher k report more earnings.
+  const fundamentals = {}
+  for (const [k, sym] of Object.keys(u).entries()) {
+    const eps = []
+    for (let q = 0; q < 22; q++) {
+      const end = new Date(Date.UTC(2020, 0, 1) + q * 91 * 86400000).toISOString().slice(0, 10)
+      const start = new Date(Date.parse(end) - 90 * 86400000).toISOString().slice(0, 10)
+      const filed = new Date(Date.parse(end) + 40 * 86400000).toISOString().slice(0, 10)
+      eps.push({ start, end, val: 0.1 + k * 0.05, filed })
+    }
+    fundamentals[sym] = { series: { eps, revenue: [], netIncome: [], ocf: [], capex: [], equity: [], assets: [], debt: [], shares: [] } }
+  }
+  const lib = fm.mineFactors(u, { fundamentals })
+  const ey = lib.factors.find(f => f.name === 'earnings_yield')
+  expect(ey.periods).toBeGreaterThan(30)
+  // a snapshot on a date before a quarter's filing does not see that quarter
+  const p = { c: [100], days: ['2020-05-01'], fund: fundamentals.S0 }
+  expect(fm.FACTORS.earnings_yield.fn(p, 0)).toBeNull()      // only one quarter filed by then — no trailing four
+})
+
+test('decay and turnover: persistent momentum keeps its IC across horizons and barely turns over', () => {
+  const lib = fm.mineFactors(universe({ seed: 5, drift: k => (k - 20) * 0.00012 }))
+  const mom = lib.factors.find(f => f.name === 'mom_12_1')
+  expect(Object.keys(mom.decay).map(Number)).toEqual(fm.DECAY_HORIZONS)
+  expect(mom.decay[21]).toBeGreaterThan(0)
+  expect(mom.decay[63]).toBeGreaterThan(0)
+  expect(mom.turnover).toBeLessThan(0.3)                         // the same drifters stay on top
+  const rev = lib.factors.find(f => f.name === 'rev_1w')
+  expect(rev.turnover).toBeGreaterThan(mom.turnover)            // a one-week signal churns
 })

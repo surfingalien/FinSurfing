@@ -176,6 +176,12 @@ export function TradePlan({ plan, stock }) {
         </p>
       )}
       {plan.notes?.map((n, i) => <p key={i} className="text-[9px] text-amber-400 mt-1 leading-snug">⚠ {n}</p>)}
+      {stock?.metaLabel && (
+        <p className={`text-[9px] mt-1.5 leading-snug ${stock.metaLabel.validated ? (stock.metaLabel.pass ? 'text-emerald-400' : 'text-amber-400') : 'text-slate-500'}`}>
+          Second check — {Math.round(stock.metaLabel.prob * 100)}% chance of reaching the target before the stop, judged from picks like this one
+          {stock.metaLabel.validated ? (stock.metaLabel.pass ? ' (passes)' : ' — below the cut-off; the paper broker skips it') : ' (model not yet proven on newer picks — shown, not applied)'}
+        </p>
+      )}
       {stock?.outcomeRange && (
         <p className={`text-[9px] mt-1.5 leading-snug ${stock.outcomeRange.reliable === false ? 'text-amber-400' : 'text-slate-400'}`}>
           Measured range — {stock.outcomeRange.text}

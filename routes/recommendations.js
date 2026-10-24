@@ -449,6 +449,9 @@ Respond ONLY with a JSON object — no markdown, no explanation, just the JSON:
     // arbitrary on a cold start.
     let kellyStats = null
     try { kellyStats = computeStats(readPredictions()) } catch { /* calibration optional */ }
+    // The thinnest measured record behind any pick: Black-Litterman trusts the
+    // slate's views only as far as its least-proven one.
+    let kellyCalibratedN = Infinity
 
     const minNetEdge = Number(process.env.ADVISORY_MIN_NET_EDGE) > 0
       ? Number(process.env.ADVISORY_MIN_NET_EDGE)
@@ -477,6 +480,7 @@ Respond ONLY with a JSON object — no markdown, no explanation, just the JSON:
       })
       const { p: winProb, source: winProbSource } = winProbInfo
       winProbSources.add(winProbSource)
+      kellyCalibratedN = Math.min(kellyCalibratedN, winProbInfo.n || 0)
 
       const ev = expectedValue.evaluateTrade({
         winProb,
@@ -543,6 +547,27 @@ Respond ONLY with a JSON object — no markdown, no explanation, just the JSON:
             excluded: syms.filter(sym => result.weights[sym] == null),
             note: 'how to split money across the WHOLE slate so correlated picks share one risk budget — separate from each pick\'s own Kelly size',
           }
+          // Black-Litterman (lib/black-litterman.js): the same covariance, plus
+          // each pick's after-cost expected value as a view, trusted only as
+          // far as the measured win rate behind it.
+          try {
+            const aligned = hrp.alignReturns(bars)
+            const views = Object.fromEntries(data.recommendations.filter(r => r.expectedValue?.netEdge != null).map(r => [String(r.symbol).toUpperCase(), r.expectedValue.netEdge]))
+            const horizonDays = data.recommendations.some(r => r.period === '6m') ? 126 : 63
+            const blr = require('../lib/black-litterman').blackLitterman(aligned, views, { horizonDays, calibratedN: Number.isFinite(kellyCalibratedN) ? kellyCalibratedN : 0 })
+            if (blr) {
+              for (const r of data.recommendations) {
+                const w = blr.weights[String(r.symbol).toUpperCase()]
+                if (w != null) r.blWeightPct = +(w * 100).toFixed(1)
+              }
+              allocation.blackLitterman = {
+                horizonDays, viewConfidence: blr.confidence,
+                note: blr.confidence <= 0.05
+                  ? 'no measured win rate yet, so the AI views barely move the neutral split'
+                  : `views trusted at ${Math.round(blr.confidence * 100)}% from the measured record`,
+              }
+            }
+          } catch (e) { console.warn('[recommendations] Black-Litterman failed:', e.message) }
         }
       }
     } catch (e) { console.warn('[recommendations] HRP allocation failed:', e.message) }

@@ -124,6 +124,29 @@ export default function TrackRecord({ data, onAdoptBrackets }) {
       </section>
 
       <section>
+        <h3 className="text-sm font-semibold mb-2">Leaderboard</h3>
+        {data.leaderboard?.rows?.length ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-[11px]">
+              <thead><tr className="text-slate-500 text-left"><th className="font-normal">#</th><th className="font-normal">Decider</th><th className="font-normal">{data.leaderboard.metric}</th><th className="font-normal">vs overall {pc(data.leaderboard.overall)}</th><th className="font-normal">n</th></tr></thead>
+              <tbody>
+                {data.leaderboard.rows.map((r, i) => (
+                  <tr key={`${r.group}-${r.name}`} className="text-slate-300">
+                    <td className="text-slate-500">{i + 1}</td>
+                    <td>{r.name} <span className="text-slate-500">· {r.group}</span></td>
+                    <td>{pc(r.rate)}{ci(r.lo, r.hi)}</td>
+                    <td className={r.vsOverall === 'above' ? 'text-emerald-400' : r.vsOverall === 'below' ? 'text-red-400' : 'text-slate-500'}>{r.vsOverall}</td>
+                    <td>{r.n}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="text-[11px] text-slate-500 mt-1">Ranked by the low end of each 95% interval — what the record can vouch for — so a short lucky streak cannot top the table.</p>
+          </div>
+        ) : <p className="text-[12px] text-slate-500">No decider has enough resolved decisions to rank yet.</p>}
+      </section>
+
+      <section>
         <h3 className="text-sm font-semibold mb-2 flex items-center gap-1.5"><Shuffle className="w-3.5 h-3.5" /> Picks vs random picks from the same list</h3>
         {vr ? (
           <div className="space-y-2">
@@ -172,21 +195,28 @@ export default function TrackRecord({ data, onAdoptBrackets }) {
             </p>
             <div className="overflow-x-auto">
               <table className="w-full text-[11px]">
-                <thead><tr className="text-slate-500 text-left"><th className="font-normal">Factor</th><th className="font-normal">IC older 70%</th><th className="font-normal">IC newest 30%</th><th className="font-normal">deflated</th><th className="font-normal">verdict</th></tr></thead>
+                <thead><tr className="text-slate-500 text-left"><th className="font-normal">Factor</th><th className="font-normal">IC older 70%</th><th className="font-normal">IC newest 30%</th><th className="font-normal">deflated</th><th className="font-normal">IC at 5/21/63 days</th><th className="font-normal">top-fifth turnover</th><th className="font-normal">verdict</th></tr></thead>
                 <tbody>
                   {data.factors.factors.map(f => (
                     <tr key={f.name} className="text-slate-300">
-                      <td>{f.label}{f.direction === 'inverted' ? ' (inverted)' : ''}</td>
+                      <td>{f.label}{f.direction === 'inverted' ? ' (inverted)' : ''}{f.source === 'llm' ? ' · model-proposed' : ''}</td>
                       <td>{signed(f.train?.meanIc)}{f.train?.t != null ? ` t=${f.train.t}` : ''}</td>
                       <td>{signed(f.holdout?.meanIc)}{f.holdout?.t != null ? ` t=${f.holdout.t}` : ''}</td>
                       <td>{f.dsr ?? '—'}</td>
+                      <td>{f.decay ? [5, 21, 63].map(h => signed(f.decay[h], 3)).join(' / ') : '—'}</td>
+                      <td>{f.turnover != null ? pc(f.turnover) : '—'}</td>
                       <td className={FACTOR_VERDICT[f.verdict]?.[0]}>{FACTOR_VERDICT[f.verdict]?.[1] || f.verdict}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-            <p className="text-[11px] text-slate-500">IC is the rank correlation between a factor and the next {data.factors.horizon} days' return across the list. The direction is chosen on the older periods; the newest are untouched until then. Deflated = the chance the factor beats the luckiest of every candidate tried in both directions, admitted at ≥ 0.9. {data.factors.caveats?.[0]}</p>
+            {data.factors.proposals?.length > 0 && (
+              <div className="text-[11px] text-slate-400">
+                Model-proposed this run: {data.factors.proposals.map(p => `${p.name?.replace(/^llm_/, '') || '?'} (${p.status === 'tested' ? 'tested above' : p.status}${p.reason ? `: ${p.reason}` : ''})`).join('; ')}.
+              </div>
+            )}
+            <p className="text-[11px] text-slate-500">IC is the rank correlation between a factor and the next {data.factors.horizon} days' return across the list. The direction is chosen on the older periods; the newest are untouched until then. Deflated = the chance the factor beats the luckiest of every candidate tried in both directions, admitted at ≥ 0.9. IC by horizon shows how fast the signal fades; turnover is the share of the top fifth replaced each month (what trading it costs). {data.factors.caveats?.[0]}</p>
           </div>
         ) : <p className="text-[12px] text-slate-500">No factor-mining run yet — it runs weekly (Saturday 5:15 AM ET).</p>}
       </section>
@@ -196,8 +226,13 @@ export default function TrackRecord({ data, onAdoptBrackets }) {
         {data.pead?.strategy ? (
           <div className="space-y-2">
             <p className={`text-[12px] ${DRIFT_VERDICT[data.pead.strategy.verdict]?.[0] || 'text-slate-400'}`}>
-              {DRIFT_VERDICT[data.pead.strategy.verdict]?.[1] || data.pead.strategy.verdict} ({data.pead.strategy.reason}).
+              Analyst surprise: {DRIFT_VERDICT[data.pead.strategy.verdict]?.[1] || data.pead.strategy.verdict} ({data.pead.strategy.reason}).
             </p>
+            {data.pead.sue?.strategy && (
+              <p className={`text-[12px] ${DRIFT_VERDICT[data.pead.sue.strategy.verdict]?.[0] || 'text-slate-400'}`}>
+                Estimate-free surprise (SEC-reported EPS vs the same quarter a year earlier): {DRIFT_VERDICT[data.pead.sue.strategy.verdict]?.[1] || data.pead.sue.strategy.verdict} ({data.pead.sue.strategy.reason}).
+              </p>
+            )}
             <div className="overflow-x-auto">
               <table className="w-full text-[11px]">
                 <thead><tr className="text-slate-500 text-left"><th className="font-normal">After the report</th><th className="font-normal">vs SPY, {data.pead.params?.holdDays} sessions</th><th className="font-normal">beat SPY</th><th className="font-normal">t (by month)</th><th className="font-normal">events</th></tr></thead>
@@ -207,6 +242,11 @@ export default function TrackRecord({ data, onAdoptBrackets }) {
                   <DriftRow label={`Miss ≤ ${data.pead.params?.missPct}% (control)`} g={data.pead.groups?.miss} />
                   <DriftRow label="Beat + call tone improved" g={data.pead.tone?.improved} />
                   <DriftRow label="Beat + call tone worsened" g={data.pead.tone?.worsened} />
+                  {data.pead.sue && <>
+                    <DriftRow label={`Estimate-free: SUE ≥ ${data.pead.sue.params?.beatSue} — older 70%`} g={data.pead.sue.strategy?.train} />
+                    <DriftRow label="Estimate-free: SUE beat — newest 30%" g={data.pead.sue.strategy?.holdout} />
+                    <DriftRow label={`Estimate-free: SUE ≤ ${data.pead.sue.params?.missSue} (control)`} g={data.pead.sue.groups?.miss} />
+                  </>}
                 </tbody>
               </table>
             </div>
@@ -214,7 +254,24 @@ export default function TrackRecord({ data, onAdoptBrackets }) {
               {data.pead.universe} large caps, {data.pead.events} reported quarters, run {String(data.pead.ranAt).slice(0, 10)}. Entry the open after the report, net of costs. Call tone (a word count, compared with the previous call): {TONE_VERDICT[data.pead.tone?.verdict] || '—'}. {data.pead.caveats?.join(' ')}
             </p>
           </div>
-        ) : <p className="text-[12px] text-slate-500">No drift study yet — it runs weekly (Sunday 5:30 AM ET) and needs FMP_API_KEY.</p>}
+        ) : <p className="text-[12px] text-slate-500">No drift study yet — it runs weekly (Sunday 5:30 AM ET). The estimate-free track needs no key; the analyst track needs FMP_API_KEY.</p>}
+      </section>
+
+      <section>
+        <h3 className="text-sm font-semibold mb-2">Second check on AI Brain picks</h3>
+        {data.metaLabel ? (
+          <div className="text-[12px] space-y-1">
+            <p className={data.metaLabel.validated ? 'text-emerald-400' : 'text-slate-400'}>
+              {data.metaLabel.validated ? 'Adopted' : 'Not adopted'} — {data.metaLabel.reason}.
+            </p>
+            {data.metaLabel.validation && (
+              <p className="text-[11px] text-slate-500">
+                Tested on the newest {data.metaLabel.validation.holdout} labelled picks it never saw: all picks reached their target first {pc(data.metaLabel.validation.baseRate)}; the ones it kept {pc(data.metaLabel.validation.precision)} (lower bound {pc(data.metaLabel.validation.precisionLo)}, {data.metaLabel.validation.kept} kept). Retrained nightly on {data.metaLabel.labelled} labelled picks.
+              </p>
+            )}
+            <p className="text-[11px] text-slate-500">A small model reads only what the scan knew (score, confidence, agreement, relative strength, regime, reward/risk) and estimates whether a pick reaches its target before its stop. It filters the paper broker only once adopted.</p>
+          </div>
+        ) : <p className="text-[12px] text-slate-500">Not trained yet — the nightly cycle trains it once enough picks have a target/stop outcome.</p>}
       </section>
 
       <section>
@@ -262,6 +319,16 @@ export default function TrackRecord({ data, onAdoptBrackets }) {
           <p className="text-[12px] text-slate-400">
             {pp.openPositions} open · {pp.closedTrades} closed{pp.winRate != null ? ` · ${pc(pp.winRate)} of closed trades made money` : ''} · realized ${Number(pp.realizedPnl || 0).toFixed(2)}
           </p>
+          {pp.protections?.global && (
+            <div className="mt-2 p-3 rounded-xl border border-amber-500/30 bg-amber-500/10 text-[12px] text-amber-300">
+              New buys paused ({pp.protections.global.kind}): {pp.protections.global.reason}, until {pp.protections.global.until.slice(0, 16).replace('T', ' ')} UTC. Exits still run.
+            </div>
+          )}
+          {Object.keys(pp.protections?.symbols || {}).length > 0 && (
+            <p className="text-[11px] text-slate-500 mt-1">
+              Not re-entering: {Object.entries(pp.protections.symbols).map(([s, l]) => `${s} (${l.kind === 'cooldown' ? 'cooldown' : 'kept losing'}, until ${l.until.slice(0, 10)})`).join(', ')}.
+            </p>
+          )}
           {Object.keys(pp.exitsByKind || {}).length > 0 && (
             <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mt-2">
               {Object.entries(pp.exitsByKind).map(([k, e]) => (

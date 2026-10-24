@@ -91,7 +91,13 @@ router.get('/factors', requireAuth, (req, res) => {
 // Admin-only: fetches five years of bars for ~70 names.
 router.post('/factors/run', requireAuth, requireAdmin, (req, res) => {
   const fm = require('../lib/factor-mining')
-  fm.runMining({ fetchBars: s => fetchDailyBars(s, { range: '5y', headers: { 'x-internal': '1' }, timeoutMs: 25_000 }) })
+  fm.runMining({
+    fetchBars:  s => fetchDailyBars(s, { range: '5y', headers: { 'x-internal': '1' }, timeoutMs: 25_000 }),
+    fetchFacts: s => require('../lib/sec-facts').getCompanyFacts(s),
+    propose: process.env.ANTHROPIC_API_KEY || process.env.GROQ_API_KEY
+      ? ({ existing }) => require('../lib/factor-dsl').proposeFactors({ router: require('../lib/ai-router').getRouter('factor-mining'), existing })
+      : null,
+  })
     .then(lib => console.log(`[evolution/factors] mined ${lib.tested} factors over ${lib.universe} names: admitted ${lib.admitted.join(', ') || 'none'}`))
     .catch(e => console.error('[evolution/factors]', e.stack || e.message))
   res.json({ ok: true, status: 'running', message: 'Factor mining started. Poll GET /api/evolution/factors.' })
@@ -105,17 +111,37 @@ router.get('/pead', requireAuth, (req, res) => {
 
 // Admin-only: five years of bars + earnings history (+ recent transcripts) for ~70 names.
 router.post('/pead/run', requireAuth, requireAdmin, (req, res) => {
-  if (!process.env.FMP_API_KEY) return res.status(400).json({ error: 'FMP_API_KEY not set — earnings history comes from FMP' })
   const fmp = require('../lib/fmp')
+  const secFacts = require('../lib/sec-facts')
+  const hasFmp = !!process.env.FMP_API_KEY
   require('../lib/pead').runStudy({
     universe:         require('../lib/factor-mining').defaultUniverse(),
     fetchBars:        s => fetchDailyBars(s, { range: '5y', headers: { 'x-internal': '1' }, timeoutMs: 25_000 }),
-    fetchSurprises:   s => fmp.earningsSurprises(s, { limit: 20 }),
-    fetchTranscripts: (s, n) => fmp.transcripts(s, { limit: n, timeoutMs: 15_000 }),
+    fetchSurprises:   hasFmp ? s => fmp.earningsSurprises(s, { limit: 20 }) : null,
+    fetchEps:         s => secFacts.getCompanyFacts(s).then(secFacts.epsQuarters),
+    fetchTranscripts: hasFmp ? (s, n) => fmp.transcripts(s, { limit: n, timeoutMs: 15_000 }) : null,
   })
     .then(st => console.log(`[evolution/pead] ${st.events} events — long-beats ${st.strategy.verdict}`))
     .catch(e => console.error('[evolution/pead]', e.stack || e.message))
   res.json({ ok: true, status: 'running', message: 'Drift study started. Poll GET /api/evolution/pead.' })
+})
+
+// ── 13F holdings changes (lib/thirteenf.js) ─────────────────────────────────
+
+router.get('/13f', requireAuth, (req, res) => {
+  const t = require('../lib/thirteenf')
+  const store = t.readStore()
+  const sym = String(req.query.symbol || '').toUpperCase().replace(/[^A-Z0-9.-]/g, '')
+  if (!store) return res.json({ store: null })
+  const { cusipMap, bySymbol, ...meta } = store
+  res.json(sym ? { ...meta, symbol: sym, rows: bySymbol[sym] || [], summary: t.describeFor(sym, store) } : { ...meta, symbols: Object.keys(bySymbol).length })
+})
+
+router.post('/13f/run', requireAuth, requireAdmin, (req, res) => {
+  require('../lib/thirteenf').refresh()
+    .then(s => console.log(`[evolution/13f] ${s.managers.length} managers, ${Object.keys(s.bySymbol).length} symbols`))
+    .catch(e => console.error('[evolution/13f]', e.message))
+  res.json({ ok: true, status: 'running', message: '13F refresh started (a few minutes). Poll GET /api/evolution/13f.' })
 })
 
 // ── Paper portfolio ───────────────────────────────────────────────────────────

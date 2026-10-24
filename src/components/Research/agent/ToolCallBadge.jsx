@@ -15,6 +15,7 @@ const TOOL_META = {
   get_options_flow:       { icon: '🔀', label: 'Options Flow',           color: 'amber'  },
   get_analyst_consensus:  { icon: '🏦', label: 'Analyst Consensus',      color: 'indigo' },
   get_insider_activity:   { icon: '🔍', label: 'Insider Activity',       color: 'indigo' },
+  get_13f_changes:        { icon: '🏦', label: 'Fund 13F Changes',       color: 'indigo' },
   classify_symbol:        { icon: '🏷️', label: 'Symbol Classifier',      color: 'mint'   },
   sector_universe:        { icon: '🗂️', label: 'Sector Universe',        color: 'mint'   },
   portfolio_risk:         { icon: '⚠️', label: 'Portfolio Risk',         color: 'amber'  },

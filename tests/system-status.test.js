@@ -130,3 +130,11 @@ describe('fallbacks and paper exits', () => {
     expect(find(evaluateStatus({ paper: { enabled: false } }), 'paper-book')).toBeUndefined()
   })
 })
+
+test('a paper protection pause is reported, with the time it lifts', () => {
+  const { evaluateStatus } = require('../lib/system-status')
+  const r = evaluateStatus({ paper: { enabled: true, openPositions: 0, unmanaged: [], protections: { global: { kind: 'stoploss-guard', reason: '3 stop-outs in 7 days', until: '2026-10-22T15:00:00.000Z' }, symbols: {} } } })
+  const c = r.checks.find(x => x.id === 'paper-pause')
+  expect(c).toMatchObject({ status: 'warn' })
+  expect(c.detail).toMatch(/Paused \(stoploss-guard\): 3 stop-outs in 7 days — until 2026-10-22 15:00 UTC/)
+})

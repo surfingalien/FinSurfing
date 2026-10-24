@@ -132,26 +132,31 @@ function strategiesFor(sym) {
 }
 
 /** The latest factor-mining run and this symbol's percentiles on its survivors. */
-function minedFactorsFor(bars) {
+function minedFactorsFor(bars, fund = null) {
   try {
     const fm = require('../lib/factor-mining')
     const library = fm.readLibrary()
-    return { library, ranks: library ? fm.percentilesFor(bars, library) : [] }
+    return { library, ranks: library ? fm.percentilesFor(bars, library, { fund }) : [] }
   } catch { return null }
 }
 
 /** The symbol's last report, where it stands in the drift window, and the pooled study. */
-function earningsDriftFor(sym, bars, fundamentals) {
+function earningsDriftFor(sym, bars, fundamentals, secFacts = null) {
   try {
     const pead = require('../lib/pead')
     const studied = pead.readStudy()
+    // Estimate-free surprise from the company's own filings, computed live.
+    const sueLast = secFacts ? pead.sueSeries(require('../lib/sec-facts').epsQuarters(secFacts)).at(-1) : null
+    const sue = sueLast ? { ...sueLast, group: sueLast.sue >= pead.SUE_BEAT ? 'beat' : sueLast.sue <= pead.SUE_MISS ? 'miss' : 'inline', window: pead.windowState({ date: sueLast.filed }, bars) } : null
     const last = (fundamentals?.eps_surprises || []).find(e => e.date && e.surprise_pct != null) || null
     const fromStudy = studied?.latestBySymbol?.[sym]
     const event = last ? { date: String(last.date).slice(0, 10), surprisePct: last.surprise_pct, group: pead.groupOf(last.surprise_pct), estimate: last.estimate, actual: last.actual } : null
+    if (!event && !sue) return null
     return {
       study: studied,
       event: event && { ...event, toneChange: fromStudy?.date === event.date ? fromStudy.toneChange : null },
       window: event ? pead.windowState(event, bars) : null,
+      sue,
     }
   } catch { return null }
 }
@@ -160,11 +165,14 @@ function earningsDriftFor(sym, bars, fundamentals) {
 async function gatherEvidence(sym, req) {
   const headers   = fwdKeys(req)
   const assetType = assetTypeOf(sym)
-  const [bars, fundamentals, macro, regimes] = await Promise.all([
+  const [bars, fundamentals, macro, regimes, secFacts] = await Promise.all([
     fetchDailyBars(sym, { range: '2y', headers, timeoutMs: 25_000 }),
     assetType === 'stock' ? fetchFundamentals(sym, headers) : Promise.resolve({ error: `not applicable to ${assetType}` }),
     macroSnapshot(),
     priceRegime.getCurrentRegimes({ fetchBars: s => fetchDailyBars(s, { range: '5y', headers, timeoutMs: 15_000 }) }).catch(() => null),
+    // Reported figures straight from SEC filings — keyless, so the dossier keeps
+    // its fundamentals when the FMP quota is spent.
+    assetType === 'stock' ? require('../lib/sec-facts').getCompanyFacts(sym).catch(() => null) : Promise.resolve(null),
   ])
   if (bars.length < 60) {
     const err = new Error(`Not enough price history for ${sym} (${bars.length} daily bars, need 60+)`)
@@ -181,8 +189,10 @@ async function gatherEvidence(sym, req) {
   const { items, gaps, facts } = desk.buildEvidence({
     symbol: sym, bars, taLine, fundamentals, macro,
     priceRegime: assetType === 'crypto' ? regimes?.crypto : regimes?.equity,
-    minedFactors: assetType === 'stock' ? minedFactorsFor(bars) : null,
-    earningsDrift: assetType === 'stock' ? earningsDriftFor(sym, bars, fundamentals) : null,
+    minedFactors: assetType === 'stock' ? minedFactorsFor(bars, secFacts) : null,
+    institutional: assetType === 'stock' ? (() => { try { return require('../lib/thirteenf').describeFor(sym, require('../lib/thirteenf').readStore()) } catch { return null } })() : null,
+    reported: secFacts ? require('../lib/sec-facts').snapshotAt(secFacts, new Date().toISOString().slice(0, 10), { price: bars.at(-1)?.c }) : null,
+    earningsDrift: assetType === 'stock' ? earningsDriftFor(sym, bars, fundamentals, secFacts) : null,
     strategies: strategiesFor(sym),
     exposure:   exposureFor(sym),
     track:      desk.trackFor(records, { symbol: sym, assetType, horizon }),
@@ -226,6 +236,9 @@ router.get('/theses', requireAuth, async (req, res) => {
 })
 
 router.get('/track-record', requireAuth, (req, res) => {
+  const decisions = learningStore.getCalibration()
+  let vsRandom = null
+  try { const sb = require('../lib/shadow-baseline'); vsRandom = sb.compareToShadows(readPredictions(), sb.readShadows()) } catch { /* no shadows yet */ }
   let stats = null
   try { stats = computeStats(readPredictions()) } catch { /* empty record */ }
   const edge = stats ? computeEdgeReport(stats) : null
@@ -247,20 +260,28 @@ router.get('/track-record', requireAuth, (req, res) => {
     pead: (() => { try { const p = require('../lib/pead').readStudy(); return p && {
       ranAt: p.ranAt, universe: p.universe, events: p.events, params: p.params, groups: p.groups,
       strategy: p.strategy, spreadVsMiss: p.spreadVsMiss, tone: p.tone, caveats: p.caveats,
+      analystNames: p.analystNames ?? null,
+      sue: p.sue ? { events: p.sue.events, params: p.sue.params, groups: p.sue.groups, strategy: p.sue.strategy, spreadVsMiss: p.sue.spreadVsMiss } : null,
     } } catch { return null } })(),
+    // The second-opinion model on AI Brain picks (lib/meta-label.js).
+    metaLabel: (() => { try { const m = require('../lib/meta-label').loadModel(); return m && { validated: m.validated, reason: m.reason, validation: m.validation ?? null, labelled: m.labelled, trainedAt: m.trainedAt } } catch { return null } })(),
     // Which price factors rank the large-cap list (lib/factor-mining.js), last weekly run.
     factors: (() => { try { const l = require('../lib/factor-mining').readLibrary(); return l && {
       ranAt: l.ranAt, universe: l.universe, tested: l.tested, periods: l.periods, horizon: l.horizon, admitted: l.admitted, caveats: l.caveats,
-      factors: l.factors.map(f => ({ name: f.name, label: f.label, verdict: f.verdict, direction: f.direction, train: f.train, holdout: f.holdout, dsr: f.deflated?.dsr ?? null })),
+      withFundamentals: l.withFundamentals ?? null,
+      proposals: (l.proposals || []).map(p => ({ name: p.name, hypothesis: p.hypothesis, status: p.status, reason: p.reason ?? null })),
+      factors: l.factors.map(f => ({ name: f.name, label: f.label, source: f.source ?? 'builtin', verdict: f.verdict, direction: f.direction, train: f.train, holdout: f.holdout, dsr: f.deflated?.dsr ?? null, decay: f.decay ?? null, turnover: f.turnover ?? null })),
     } } catch { return null } })(),
     // Do the self-learned findings hold up against the stats, and do picks
     // made with them beat picks made without (lib/learning-health.js)?
     learningHealth: (() => { try { return getLearningHealth() } catch { return null } })(),
     // The picks vs random picks from the SAME priced list (lib/shadow-baseline.js):
     // beating SPY can be the list; beating these is the model.
-    vsRandom: (() => { try { const sb = require('../lib/shadow-baseline'); return sb.compareToShadows(readPredictions(), sb.readShadows()) } catch { return null } })(),
+    vsRandom,
+    // Every decider in one table, ranked by the lower bound (lib/leaderboard.js).
+    leaderboard: (() => { try { return require('../lib/leaderboard').buildLeaderboard(decisions, vsRandom) } catch { return null } })(),
     edges: edge && { overall: edge.overall, tested: edge.tested, topEdges: edge.topEdges, topDrags: edge.topDrags },
-    decisions: learningStore.getCalibration(),
+    decisions,
     strategies: library.libraryStats(),
     paper: paperFacts(),
   })
@@ -278,6 +299,7 @@ function paperFacts() {
       openPositions: perf.openPositions, closedTrades: perf.closedTrades, winRate: perf.winRate,
       realizedPnl: perf.realizedPnl, exitsByKind: perf.exitsByKind,
       unmanaged: pb.unmanagedPositions(book),
+      protections: pb.protections(pb.loadTrades(), book),
     }
   } catch { return null }
 }

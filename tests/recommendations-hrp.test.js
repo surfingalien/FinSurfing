@@ -42,4 +42,10 @@ test('surviving picks carry a slate weight that sums to 100%; a name with no his
   expect(weighted.map(r => r.symbol).sort()).toEqual(['AMD', 'KO', 'NVDA'])
   expect(weighted.reduce((s, r) => s + r.slateWeightPct, 0)).toBeCloseTo(100, 0)
   expect(res.body.recommendations.find(r => r.symbol === 'KO').slateWeightPct).toBeGreaterThan(40)   // the calm one
+  // Black-Litterman alongside: long-only, sums to 100, and with no measured
+  // win rate the views are trusted at the floor.
+  const bl = res.body.recommendations.filter(r => r.blWeightPct != null)
+  expect(bl.reduce((s, r) => s + r.blWeightPct, 0)).toBeCloseTo(100, 0)
+  expect(res.body.allocation.blackLitterman).toMatchObject({ viewConfidence: 0.05 })
+  expect(res.body.allocation.blackLitterman.note).toMatch(/barely move the neutral split/)
 })

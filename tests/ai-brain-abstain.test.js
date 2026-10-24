@@ -232,6 +232,19 @@ describe('POST /api/ai-brain/analyze — the AVAX regression', () => {
     require('../lib/price-regime')._resetForTests()
   })
 
+  test('a trained second-opinion model rates each actionable pick, and the rating is logged', async () => {
+    const metaLabel = require('../lib/meta-label')
+    metaLabel.saveModel({ validated: false, cutoff: 0.5, bias: 0.2, w: new Array(metaLabel.FEATURES.length).fill(0.1), reason: 'test' })
+    try { fsp.unlinkSync(TMP_LOG) } catch { /* fine */ }
+    mockCall.mockResolvedValue(reply(stock()))
+    const res = await scan()
+    const card = res.body.rankedStocks.find(s => s.symbol === 'AVAX')
+    expect(card.metaLabel).toMatchObject({ prob: expect.any(Number), validated: false })
+    const rec = JSON.parse(fsp.readFileSync(TMP_LOG, 'utf8').trim().split('\n').at(-1))
+    expect(rec.metaProb).toBe(card.metaLabel.prob)
+    require('fs').unlinkSync(metaLabel.MODEL_FILE)
+  })
+
   test('an abstain writes no prediction at all', async () => {
     // An "Avoid" is not a trade, so it must never reach the calibration record.
     try { fsp.unlinkSync(TMP_LOG) } catch { /* fine */ }

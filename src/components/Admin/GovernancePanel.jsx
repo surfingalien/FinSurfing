@@ -131,14 +131,14 @@ export default function GovernancePanel() {
     setLoading(true)
     try {
       const [s, a] = await Promise.all([
-        fetch(`${BASE}/api/governance/status`).then(r => r.json()),
-        fetch(`${BASE}/api/governance/audit?limit=20`).then(r => r.json()),
+        authFetch(`${BASE}/api/governance/status`).then(r => r.json()),
+        authFetch(`${BASE}/api/governance/audit?limit=20`).then(r => r.json()),
       ])
       setStatus(s)
       setAudit(a)
     } catch {}
     setLoading(false)
-  }, [])
+  }, [authFetch])
 
   useEffect(() => { load() }, [load])
 
