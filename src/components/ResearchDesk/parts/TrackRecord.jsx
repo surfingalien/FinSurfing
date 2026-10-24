@@ -172,7 +172,7 @@ export default function TrackRecord({ data, onAdoptBrackets }) {
             </p>
             <div className="overflow-x-auto">
               <table className="w-full text-[11px]">
-                <thead><tr className="text-slate-500 text-left"><th className="font-normal">Factor</th><th className="font-normal">IC older 70%</th><th className="font-normal">IC newest 30%</th><th className="font-normal">deflated</th><th className="font-normal">verdict</th></tr></thead>
+                <thead><tr className="text-slate-500 text-left"><th className="font-normal">Factor</th><th className="font-normal">IC older 70%</th><th className="font-normal">IC newest 30%</th><th className="font-normal">deflated</th><th className="font-normal">IC at 5/21/63 days</th><th className="font-normal">top-fifth turnover</th><th className="font-normal">verdict</th></tr></thead>
                 <tbody>
                   {data.factors.factors.map(f => (
                     <tr key={f.name} className="text-slate-300">
@@ -180,13 +180,15 @@ export default function TrackRecord({ data, onAdoptBrackets }) {
                       <td>{signed(f.train?.meanIc)}{f.train?.t != null ? ` t=${f.train.t}` : ''}</td>
                       <td>{signed(f.holdout?.meanIc)}{f.holdout?.t != null ? ` t=${f.holdout.t}` : ''}</td>
                       <td>{f.dsr ?? '—'}</td>
+                      <td>{f.decay ? [5, 21, 63].map(h => signed(f.decay[h], 3)).join(' / ') : '—'}</td>
+                      <td>{f.turnover != null ? pc(f.turnover) : '—'}</td>
                       <td className={FACTOR_VERDICT[f.verdict]?.[0]}>{FACTOR_VERDICT[f.verdict]?.[1] || f.verdict}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-            <p className="text-[11px] text-slate-500">IC is the rank correlation between a factor and the next {data.factors.horizon} days' return across the list. The direction is chosen on the older periods; the newest are untouched until then. Deflated = the chance the factor beats the luckiest of every candidate tried in both directions, admitted at ≥ 0.9. {data.factors.caveats?.[0]}</p>
+            <p className="text-[11px] text-slate-500">IC is the rank correlation between a factor and the next {data.factors.horizon} days' return across the list. The direction is chosen on the older periods; the newest are untouched until then. Deflated = the chance the factor beats the luckiest of every candidate tried in both directions, admitted at ≥ 0.9. IC by horizon shows how fast the signal fades; turnover is the share of the top fifth replaced each month (what trading it costs). {data.factors.caveats?.[0]}</p>
           </div>
         ) : <p className="text-[12px] text-slate-500">No factor-mining run yet — it runs weekly (Saturday 5:15 AM ET).</p>}
       </section>
