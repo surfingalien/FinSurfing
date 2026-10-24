@@ -141,17 +141,22 @@ function minedFactorsFor(bars, fund = null) {
 }
 
 /** The symbol's last report, where it stands in the drift window, and the pooled study. */
-function earningsDriftFor(sym, bars, fundamentals) {
+function earningsDriftFor(sym, bars, fundamentals, secFacts = null) {
   try {
     const pead = require('../lib/pead')
     const studied = pead.readStudy()
+    // Estimate-free surprise from the company's own filings, computed live.
+    const sueLast = secFacts ? pead.sueSeries(require('../lib/sec-facts').epsQuarters(secFacts)).at(-1) : null
+    const sue = sueLast ? { ...sueLast, group: sueLast.sue >= pead.SUE_BEAT ? 'beat' : sueLast.sue <= pead.SUE_MISS ? 'miss' : 'inline', window: pead.windowState({ date: sueLast.filed }, bars) } : null
     const last = (fundamentals?.eps_surprises || []).find(e => e.date && e.surprise_pct != null) || null
     const fromStudy = studied?.latestBySymbol?.[sym]
     const event = last ? { date: String(last.date).slice(0, 10), surprisePct: last.surprise_pct, group: pead.groupOf(last.surprise_pct), estimate: last.estimate, actual: last.actual } : null
+    if (!event && !sue) return null
     return {
       study: studied,
       event: event && { ...event, toneChange: fromStudy?.date === event.date ? fromStudy.toneChange : null },
       window: event ? pead.windowState(event, bars) : null,
+      sue,
     }
   } catch { return null }
 }
@@ -186,7 +191,7 @@ async function gatherEvidence(sym, req) {
     priceRegime: assetType === 'crypto' ? regimes?.crypto : regimes?.equity,
     minedFactors: assetType === 'stock' ? minedFactorsFor(bars, secFacts) : null,
     reported: secFacts ? require('../lib/sec-facts').snapshotAt(secFacts, new Date().toISOString().slice(0, 10), { price: bars.at(-1)?.c }) : null,
-    earningsDrift: assetType === 'stock' ? earningsDriftFor(sym, bars, fundamentals) : null,
+    earningsDrift: assetType === 'stock' ? earningsDriftFor(sym, bars, fundamentals, secFacts) : null,
     strategies: strategiesFor(sym),
     exposure:   exposureFor(sym),
     track:      desk.trackFor(records, { symbol: sym, assetType, horizon }),
@@ -251,6 +256,8 @@ router.get('/track-record', requireAuth, (req, res) => {
     pead: (() => { try { const p = require('../lib/pead').readStudy(); return p && {
       ranAt: p.ranAt, universe: p.universe, events: p.events, params: p.params, groups: p.groups,
       strategy: p.strategy, spreadVsMiss: p.spreadVsMiss, tone: p.tone, caveats: p.caveats,
+      analystNames: p.analystNames ?? null,
+      sue: p.sue ? { events: p.sue.events, params: p.sue.params, groups: p.sue.groups, strategy: p.sue.strategy, spreadVsMiss: p.sue.spreadVsMiss } : null,
     } } catch { return null } })(),
     // Which price factors rank the large-cap list (lib/factor-mining.js), last weekly run.
     factors: (() => { try { const l = require('../lib/factor-mining').readLibrary(); return l && {

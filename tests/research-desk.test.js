@@ -85,6 +85,15 @@ describe('buildEvidence', () => {
       .toMatch(/No post-earnings drift study has run yet/)
   })
 
+  test('the estimate-free surprise appears even with no analyst event', () => {
+    const earningsDrift = { event: null, window: null, study: { sue: { strategy: { verdict: 'mixed' }, groups: { beat: { n: 210, meanAbn: 0.31 } } } },
+      sue: { end: '2026-07-26', filed: '2026-08-26', change: 1.16, sue: 2.4, group: 'beat', window: { sessionsSince: 40, inWindow: false } } }
+    const item = evidence({ earningsDrift }).items.find(i => i.kind === 'earnings-drift')
+    expect(item.text).toMatch(/Estimate-free surprise from SEC filings \(quarter ended 2026-07-26, filed 2026-08-26\): EPS up 1.16 on the same quarter a year earlier, SUE \+2.4 \(a beat, window closed\)/)
+    expect(item.text).toMatch(/Estimate-free drift study: SUE beats averaged \+0.31% vs SPY over 210 events; verdict mixed/)
+    expect(item.text).not.toMatch(/Last report/)
+  })
+
   test('reported financials from SEC filings are a measured item, dated by filing', () => {
     const reported = { periodEnd: '2026-07-26', lastFiled: '2026-08-26', revenueTtm: 302969000000, revenueGrowthYoY: 83.4, netMargin: 63.7, epsTtm: 7.91, pe: 26.7, fcfMargin: 41.9, roe: 84.2, debtToEquity: 0.15 }
     const item = evidence({ reported }).items.find(i => i.kind === 'reported')

@@ -108,13 +108,15 @@ router.get('/pead', requireAuth, (req, res) => {
 
 // Admin-only: five years of bars + earnings history (+ recent transcripts) for ~70 names.
 router.post('/pead/run', requireAuth, requireAdmin, (req, res) => {
-  if (!process.env.FMP_API_KEY) return res.status(400).json({ error: 'FMP_API_KEY not set — earnings history comes from FMP' })
   const fmp = require('../lib/fmp')
+  const secFacts = require('../lib/sec-facts')
+  const hasFmp = !!process.env.FMP_API_KEY
   require('../lib/pead').runStudy({
     universe:         require('../lib/factor-mining').defaultUniverse(),
     fetchBars:        s => fetchDailyBars(s, { range: '5y', headers: { 'x-internal': '1' }, timeoutMs: 25_000 }),
-    fetchSurprises:   s => fmp.earningsSurprises(s, { limit: 20 }),
-    fetchTranscripts: (s, n) => fmp.transcripts(s, { limit: n, timeoutMs: 15_000 }),
+    fetchSurprises:   hasFmp ? s => fmp.earningsSurprises(s, { limit: 20 }) : null,
+    fetchEps:         s => secFacts.getCompanyFacts(s).then(secFacts.epsQuarters),
+    fetchTranscripts: hasFmp ? (s, n) => fmp.transcripts(s, { limit: n, timeoutMs: 15_000 }) : null,
   })
     .then(st => console.log(`[evolution/pead] ${st.events} events — long-beats ${st.strategy.verdict}`))
     .catch(e => console.error('[evolution/pead]', e.stack || e.message))

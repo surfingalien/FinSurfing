@@ -196,8 +196,13 @@ export default function TrackRecord({ data, onAdoptBrackets }) {
         {data.pead?.strategy ? (
           <div className="space-y-2">
             <p className={`text-[12px] ${DRIFT_VERDICT[data.pead.strategy.verdict]?.[0] || 'text-slate-400'}`}>
-              {DRIFT_VERDICT[data.pead.strategy.verdict]?.[1] || data.pead.strategy.verdict} ({data.pead.strategy.reason}).
+              Analyst surprise: {DRIFT_VERDICT[data.pead.strategy.verdict]?.[1] || data.pead.strategy.verdict} ({data.pead.strategy.reason}).
             </p>
+            {data.pead.sue?.strategy && (
+              <p className={`text-[12px] ${DRIFT_VERDICT[data.pead.sue.strategy.verdict]?.[0] || 'text-slate-400'}`}>
+                Estimate-free surprise (SEC-reported EPS vs the same quarter a year earlier): {DRIFT_VERDICT[data.pead.sue.strategy.verdict]?.[1] || data.pead.sue.strategy.verdict} ({data.pead.sue.strategy.reason}).
+              </p>
+            )}
             <div className="overflow-x-auto">
               <table className="w-full text-[11px]">
                 <thead><tr className="text-slate-500 text-left"><th className="font-normal">After the report</th><th className="font-normal">vs SPY, {data.pead.params?.holdDays} sessions</th><th className="font-normal">beat SPY</th><th className="font-normal">t (by month)</th><th className="font-normal">events</th></tr></thead>
@@ -207,6 +212,11 @@ export default function TrackRecord({ data, onAdoptBrackets }) {
                   <DriftRow label={`Miss ≤ ${data.pead.params?.missPct}% (control)`} g={data.pead.groups?.miss} />
                   <DriftRow label="Beat + call tone improved" g={data.pead.tone?.improved} />
                   <DriftRow label="Beat + call tone worsened" g={data.pead.tone?.worsened} />
+                  {data.pead.sue && <>
+                    <DriftRow label={`Estimate-free: SUE ≥ ${data.pead.sue.params?.beatSue} — older 70%`} g={data.pead.sue.strategy?.train} />
+                    <DriftRow label="Estimate-free: SUE beat — newest 30%" g={data.pead.sue.strategy?.holdout} />
+                    <DriftRow label={`Estimate-free: SUE ≤ ${data.pead.sue.params?.missSue} (control)`} g={data.pead.sue.groups?.miss} />
+                  </>}
                 </tbody>
               </table>
             </div>
@@ -214,7 +224,7 @@ export default function TrackRecord({ data, onAdoptBrackets }) {
               {data.pead.universe} large caps, {data.pead.events} reported quarters, run {String(data.pead.ranAt).slice(0, 10)}. Entry the open after the report, net of costs. Call tone (a word count, compared with the previous call): {TONE_VERDICT[data.pead.tone?.verdict] || '—'}. {data.pead.caveats?.join(' ')}
             </p>
           </div>
-        ) : <p className="text-[12px] text-slate-500">No drift study yet — it runs weekly (Sunday 5:30 AM ET) and needs FMP_API_KEY.</p>}
+        ) : <p className="text-[12px] text-slate-500">No drift study yet — it runs weekly (Sunday 5:30 AM ET). The estimate-free track needs no key; the analyst track needs FMP_API_KEY.</p>}
       </section>
 
       <section>

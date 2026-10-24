@@ -110,6 +110,7 @@ test('runStudy fetches per name, tolerates failures, saves, and keeps each name\
   const fetchBars = jest.fn(async () => bars)
   const fetchSurprises = jest.fn(async s => (s === 'BAD' ? Promise.reject(new Error('x')) : [{ date: key(bars[300].t), epsActual: 1.2, epsEstimated: 1 }]))
   const out = await pead.runStudy({ universe: ['AAA', 'BAD'], fetchBars, fetchSurprises, toneQuarters: 0, minUniverse: 1 })
+  expect(out.analystNames).toBe(1)
   expect(out.universe).toBe(1)
   expect(out.missing).toEqual(['BAD'])
   expect(out.latestBySymbol.AAA).toMatchObject({ group: 'beat', surprisePct: 20 })
@@ -124,4 +125,51 @@ test('an exhausted FMP quota never overwrites the stored study', async () => {
   await expect(pead.runStudy({ universe: ['A', 'B', 'C'], fetchBars: async () => bars, fetchSurprises, toneQuarters: 0 }))
     .rejects.toThrow(/only 0 of 3 names had earnings history \(e.g. Limit Reach/)
   expect(pead.readStudy().ranAt).toBe('last-week')
+})
+
+// Quarterly EPS one year apart: a steady +0.10/yr trend with small wobble, then a jump.
+function epsHistory(n, { jumpAt = null } = {}) {
+  const out = []
+  for (let q = 0; q < n; q++) {
+    const end = new Date(Date.UTC(2020, 2, 31) + q * 91.3 * 86400000).toISOString().slice(0, 10)
+    const filed = new Date(Date.parse(end) + 35 * 86400000).toISOString().slice(0, 10)
+    out.push({ end, filed, val: 1 + 0.025 * q + 0.01 * ((q * 7) % 3) + (jumpAt != null && q >= jumpAt ? 0.5 : 0) })
+  }
+  return out
+}
+
+test('SUE: change on the same quarter a year earlier, scaled by its own history; nothing without enough history', () => {
+  const s = pead.sueSeries(epsHistory(14, { jumpAt: 13 }))
+  expect(s.length).toBeGreaterThan(0)
+  expect(s.every(q => q.end >= '2021-03-01')).toBe(true)          // needs a year back AND four prior changes
+  const last = s.at(-1)
+  expect(last.change).toBeGreaterThan(0.5)
+  expect(last.sue).toBeGreaterThan(pead.SUE_BEAT)
+  expect(pead.sueSeries(epsHistory(6))).toEqual([])
+})
+
+test('SUE events enter after the FILING date, and a value is never computed from a later quarter', () => {
+  const bars = series(1800)
+  const eps = epsHistory(20, { jumpAt: 17 })
+  const ev = pead.sueEvents({ symbol: 'ACME', eps, bars, benchBars: bars })
+  for (const e of ev) {
+    const q = eps.find(x => x.end === e.periodEnd)
+    expect(e.date).toBe(q.filed)
+    if (e.entryDate) expect(e.entryDate > q.filed).toBe(true)
+  }
+  // truncating the future leaves past SUE values unchanged
+  const past = pead.sueSeries(eps.slice(0, 15))
+  expect(pead.sueSeries(eps).slice(0, past.length)).toEqual(past)
+})
+
+test('the study runs on SEC-reported EPS alone when FMP is unavailable', async () => {
+  const bars = series(1800)
+  const fetchSurprises = async () => { throw new Error('Limit Reach') }
+  const out = await pead.runStudy({ universe: ['A', 'B'], fetchBars: async () => bars, fetchSurprises, fetchEps: async () => epsHistory(20, { jumpAt: 16 }), toneQuarters: 0, minUniverse: 2, save: false })
+  expect(out.universe).toBe(2)
+  expect(out.analystNames).toBe(0)
+  expect(out.events).toBe(0)
+  expect(out.sue.events).toBeGreaterThan(0)
+  expect(out.sue.params.source).toMatch(/no analyst estimates/)
+  expect(out.latestBySymbol.A.sue).toEqual(expect.objectContaining({ value: expect.any(Number), group: expect.any(String) }))
 })
