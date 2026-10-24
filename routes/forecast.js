@@ -12,6 +12,7 @@
  */
 
 const express = require('express')
+const { fetchDailyBars } = require('../lib/internal-api')
 const router  = express.Router()
 
 const TIMESFM_URL    = () => process.env.TIMESFM_URL || 'http://localhost:8000'
@@ -37,24 +38,15 @@ router.get('/:symbol', async (req, res) => {
     return res.status(503).json({ error: 'TimesFM service not configured (set TIMESFM_URL)' })
 
   try {
-    // ── Step 1: fetch daily bars from internal chart endpoint ─────────────────
-    const port     = process.env.PORT || 3001
-    const chartRes = await fetch(
-      `http://127.0.0.1:${port}/api/chart/${encodeURIComponent(sym)}?interval=1d&range=2y`,
-      { signal: AbortSignal.timeout(15_000) }
-    )
-    if (!chartRes.ok) {
-      const e = await chartRes.json().catch(() => ({}))
-      return res.status(422).json({ error: e.error || 'Failed to fetch price history' })
-    }
+    // ── Step 1: daily bars via the shared internal chart helper ───────────────
+    // This used to fetch /api/chart/<SYM> (no such route — the chart takes
+    // ?symbol=) and read a `candles` field the chart never returns, so every
+    // forecast failed before reaching TimesFM.
+    const bars = await fetchDailyBars(sym, { range: '2y', headers: { 'x-internal': '1' }, timeoutMs: 15_000 })
+    if (bars.length < 30)
+      return res.status(422).json({ error: `Insufficient price history for ${sym} (${bars.length} bars, need ≥30)` })
 
-    const chartJson = await chartRes.json()
-    const candles   = chartJson?.candles ?? []
-
-    if (candles.length < 30)
-      return res.status(422).json({ error: `Insufficient price history for ${sym} (${candles.length} bars, need ≥30)` })
-
-    const closes = candles.map(c => c.close).filter(v => v != null && !isNaN(v))
+    const closes = bars.map(b => b.c).filter(v => v != null && !isNaN(v))
 
     // ── Step 2: call TimesFM Python microservice ──────────────────────────────
     const tfRes = await fetch(`${svcUrl}/predict`, {
@@ -89,6 +81,9 @@ router.get('/:symbol', async (req, res) => {
     if (err.name === 'AbortError' || err.name === 'TimeoutError')
       return res.status(504).json({ error: 'TimesFM request timed out — model may be warming up, retry in 30s' })
 
+    // The bars helper never throws, so a network failure here is TimesFM itself.
+    if (err.message === 'fetch failed')
+      return res.status(503).json({ error: `TimesFM service unreachable at ${TIMESFM_URL()} — set TIMESFM_URL to a running instance` })
     console.error('[forecast]', sym, err.message)
     return res.status(503).json({ error: err.message })
   }

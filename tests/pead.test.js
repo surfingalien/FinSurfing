@@ -109,10 +109,19 @@ test('runStudy fetches per name, tolerates failures, saves, and keeps each name\
   const bars = series(400)
   const fetchBars = jest.fn(async () => bars)
   const fetchSurprises = jest.fn(async s => (s === 'BAD' ? Promise.reject(new Error('x')) : [{ date: key(bars[300].t), epsActual: 1.2, epsEstimated: 1 }]))
-  const out = await pead.runStudy({ universe: ['AAA', 'BAD'], fetchBars, fetchSurprises, toneQuarters: 0 })
+  const out = await pead.runStudy({ universe: ['AAA', 'BAD'], fetchBars, fetchSurprises, toneQuarters: 0, minUniverse: 1 })
   expect(out.universe).toBe(1)
   expect(out.missing).toEqual(['BAD'])
   expect(out.latestBySymbol.AAA).toMatchObject({ group: 'beat', surprisePct: 20 })
   expect(pead.readStudy()).toMatchObject({ universe: 1 })
   await expect(pead.runStudy({ universe: ['A'], fetchBars: async () => [], fetchSurprises })).rejects.toThrow(/no SPY bars/)
+})
+
+test('an exhausted FMP quota never overwrites the stored study', async () => {
+  pead.saveStudy({ ranAt: 'last-week', events: 900 })
+  const bars = series(400)
+  const fetchSurprises = async () => { throw new Error('Limit Reach . Please upgrade your plan') }
+  await expect(pead.runStudy({ universe: ['A', 'B', 'C'], fetchBars: async () => bars, fetchSurprises, toneQuarters: 0 }))
+    .rejects.toThrow(/only 0 of 3 names had earnings history \(e.g. Limit Reach/)
+  expect(pead.readStudy().ranAt).toBe('last-week')
 })
