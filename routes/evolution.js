@@ -112,6 +112,26 @@ router.get('/paper/trades', (req, res) => {
   })
 })
 
+// Positions opened before brackets existed can never exit. Give each one
+// technical reference levels from its own bars (lib/trade-levels.js: stop
+// below support/ATR, booking at 1.5R and 3R) instead of resetting the book.
+router.post('/paper/adopt-brackets', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { levelInputs, tradeLevels } = require('../lib/trade-levels')
+    const symbols = paperBroker.unmanagedPositions(paperBroker.loadPortfolio())
+    const proposals = {}
+    await Promise.all(symbols.map(async sym => {
+      const li = levelInputs(await fetchDailyBars(sym, { range: '6mo', timeoutMs: 10_000 }))
+      const plan = li && tradeLevels(li)
+      if (plan) proposals[sym] = { price: li.price, bracket: { stop: plan.stop.price, t1: plan.booking[0].price, t2: plan.booking[1].price } }
+    }))
+    res.json({ ok: true, ...paperBroker.adoptUnmanaged(proposals) })
+  } catch (e) {
+    console.error('[evolution/paper/adopt-brackets]', e.message)
+    res.status(500).json({ error: e.message })
+  }
+})
+
 router.post('/paper/reset', requireAuth, requireAdmin, (req, res) => {
   const cash = Math.max(1000, Math.min(Number(req.body?.cash) || paperBroker.STARTING_CASH, 10_000_000))
   const portfolio = paperBroker.reset(cash)

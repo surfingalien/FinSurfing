@@ -109,3 +109,24 @@ describe('recordFacts', () => {
     expect(r.nextResolutionAt).toBe(NOW - 2 * 86400000 + 7 * 86400000)
   })
 })
+
+describe('fallbacks and paper exits', () => {
+  const { evaluateStatus } = require('../lib/system-status')
+  const find = (st, id) => st.checks.find(c => c.id === id)
+
+  test('a refused output schema or a refused code mode is a warning naming it, not a log line nobody reads', () => {
+    const st = evaluateStatus({ aiFallbacks: { refusedSchemas: ['groq:research-thesis'], codeMode: { enabled: false, refused: { at: '2026-10-24T10:00:00Z', message: 'code_execution not available' } } } })
+    const c = find(st, 'ai-fallbacks')
+    expect(c.status).toBe('warn')
+    expect(c.detail).toMatch(/groq:research-thesis/)
+    expect(c.detail).toMatch(/code_execution not available/)
+    expect(find(evaluateStatus({ aiFallbacks: { refusedSchemas: [], codeMode: { enabled: true, refused: null } } }), 'ai-fallbacks').status).toBe('ok')
+  })
+
+  test('open paper positions without exits are named, with the fix; no check at all when paper trading is off', () => {
+    const c = find(evaluateStatus({ paper: { enabled: true, openPositions: 3, unmanaged: ['OLD', 'OLDER'] } }), 'paper-book')
+    expect(c).toMatchObject({ status: 'warn', detail: expect.stringMatching(/2 of 3 .*OLD, OLDER/), fix: expect.stringMatching(/Give them exits/) })
+    expect(find(evaluateStatus({ paper: { enabled: true, openPositions: 3, unmanaged: [] } }), 'paper-book').status).toBe('ok')
+    expect(find(evaluateStatus({ paper: { enabled: false } }), 'paper-book')).toBeUndefined()
+  })
+})
