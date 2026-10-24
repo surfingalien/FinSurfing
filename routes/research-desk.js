@@ -259,6 +259,8 @@ router.get('/track-record', requireAuth, (req, res) => {
       analystNames: p.analystNames ?? null,
       sue: p.sue ? { events: p.sue.events, params: p.sue.params, groups: p.sue.groups, strategy: p.sue.strategy, spreadVsMiss: p.sue.spreadVsMiss } : null,
     } } catch { return null } })(),
+    // The second-opinion model on AI Brain picks (lib/meta-label.js).
+    metaLabel: (() => { try { const m = require('../lib/meta-label').loadModel(); return m && { validated: m.validated, reason: m.reason, validation: m.validation ?? null, labelled: m.labelled, trainedAt: m.trainedAt } } catch { return null } })(),
     // Which price factors rank the large-cap list (lib/factor-mining.js), last weekly run.
     factors: (() => { try { const l = require('../lib/factor-mining').readLibrary(); return l && {
       ranAt: l.ranAt, universe: l.universe, tested: l.tested, periods: l.periods, horizon: l.horizon, admitted: l.admitted, caveats: l.caveats,

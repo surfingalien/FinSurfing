@@ -230,6 +230,23 @@ export default function TrackRecord({ data, onAdoptBrackets }) {
       </section>
 
       <section>
+        <h3 className="text-sm font-semibold mb-2">Second check on AI Brain picks</h3>
+        {data.metaLabel ? (
+          <div className="text-[12px] space-y-1">
+            <p className={data.metaLabel.validated ? 'text-emerald-400' : 'text-slate-400'}>
+              {data.metaLabel.validated ? 'Adopted' : 'Not adopted'} — {data.metaLabel.reason}.
+            </p>
+            {data.metaLabel.validation && (
+              <p className="text-[11px] text-slate-500">
+                Tested on the newest {data.metaLabel.validation.holdout} labelled picks it never saw: all picks reached their target first {pc(data.metaLabel.validation.baseRate)}; the ones it kept {pc(data.metaLabel.validation.precision)} (lower bound {pc(data.metaLabel.validation.precisionLo)}, {data.metaLabel.validation.kept} kept). Retrained nightly on {data.metaLabel.labelled} labelled picks.
+              </p>
+            )}
+            <p className="text-[11px] text-slate-500">A small model reads only what the scan knew (score, confidence, agreement, relative strength, regime, reward/risk) and estimates whether a pick reaches its target before its stop. It filters the paper broker only once adopted.</p>
+          </div>
+        ) : <p className="text-[12px] text-slate-500">Not trained yet — the nightly cycle trains it once enough picks have a target/stop outcome.</p>}
+      </section>
+
+      <section>
         <h3 className="text-sm font-semibold mb-2">Where is the edge?</h3>
         {data.edges?.tested ? (
           data.edges.topEdges.length || data.edges.topDrags.length ? (

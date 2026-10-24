@@ -35,6 +35,7 @@ const { levelInputs, tradeLevels } = require('../lib/trade-levels')
 const { MODE_SECTORS, FMP_SECTORS, DISCOVERY_MODES, BROAD_FIXED, filterMovers, buildScanUniverse, isPlainTicker } = require('../lib/scan-universe')
 const { fetchDailyBars }    = require('../lib/internal-api')
 const priceRegime           = require('../lib/price-regime')
+const metaLabel             = require('../lib/meta-label')
 const { tryParseAiJson }    = require('../lib/ai-json')
 const { SCAN_SCHEMA }       = require('../lib/ai-schemas')
 const { canonicalizeEnums } = require('../lib/output-schema')
@@ -627,7 +628,7 @@ async function resolveUniverse({ symbols, scanMode, universeMode, fmpKey }) {
 // Write a prediction record for future win-rate tracking
 function logPrediction(symbol, agents, zones, generatedAt, {
   baseline = null, optionsPcRatio = null, taPatterns = null, rsRankAtScan = null,
-  regimeAtScan = null, priceRegimeAtScan = null, modelVersion = null, learningsVersion = null,
+  regimeAtScan = null, priceRegimeAtScan = null, modelVersion = null, learningsVersion = null, metaProb = null,
 } = {}) {
   try {
     const dir = path.dirname(PREDICTION_LOG)
@@ -691,6 +692,10 @@ function logPrediction(symbol, agents, zones, generatedAt, {
       // BTC for crypto) at scan time, from bars up to today only
       // (lib/price-regime.js) — the tape, where the FRED regime is the cycle.
       priceRegimeAtScan: priceRegimeAtScan ?? null,
+      // The second-opinion model's probability that this pick reaches its
+      // target first (lib/meta-label.js) — logged whether or not the model is
+      // adopted, so the next refit can judge it on picks it never saw.
+      metaProb:          metaProb ?? null,
       // Which generator produced this pick: model id + prompt version. A model
       // swap or a prompt rewrite is a new system, and pooling its results with
       // the old one's yields an average that describes neither.
@@ -1150,6 +1155,25 @@ Apply the instructions, JSON schema and rules from the system prompt. Respond ON
     const priceRegimes = await priceRegimesP
     const priceRegimeOf = stock => priceRegime.labelFor(/-USD$/.test(stock.symbol) || String(stock.type || '').toLowerCase() === 'crypto' ? 'crypto' : 'stock', priceRegimes)
 
+    // Second opinion (meta-labelling): would this pick reach its target before
+    // its stop, judged from scan-time facts by a model trained on this
+    // system's own resolved picks? Shown on every card; it filters only when
+    // the model has been adopted on picks it never saw (lib/meta-label.js).
+    const metaModel = (() => { try { return metaLabel.loadModel() } catch { return null } })()
+    if (metaModel?.w) {
+      for (const stock of data.rankedStocks.filter(p => p.actionable !== false)) {
+        const isCrypto = /-USD$/.test(stock.symbol) || String(stock.type || '').toLowerCase() === 'crypto'
+        stock.metaLabel = metaLabel.assess(metaModel, {
+          compositeScore: stock.compositeScore, confidence: stock.confidence,
+          ensembleConfirmed: stock.ensemble ? (stock.ensemble.confirmed && stock.ensemble.verdictMatch === true) : null,
+          highConviction: stock.highConviction, rsRankAtScan: taRsRankMap.get(stock.symbol) ?? null,
+          volumeSignal: stock.volumeSignal, priceRegimeAtScan: priceRegimeOf(stock),
+          assetType: isCrypto ? 'crypto' : 'stock', targetReturn: stock.targetReturn, stopLoss: stock.stopLoss,
+          baselineProb: taBaselines.get(stock.symbol)?.prob ?? null, daysToEarnings: stock.daysToEarnings ?? null,
+        })
+      }
+    }
+
     // Log each prediction for win-rate tracking (log ALL picks before threshold filter
     // so calibration data covers the full score distribution, not just filtered picks)
     // Only actionable picks are predictions. An "Avoid" carries no entry,
@@ -1170,6 +1194,7 @@ Apply the instructions, JSON schema and rules from the system prompt. Respond ON
         priceRegimeAtScan: priceRegimeOf(stock),
         modelVersion,
         learningsVersion,
+        metaProb: stock.metaLabel?.prob ?? null,
       })
     }
 
