@@ -34,6 +34,7 @@ const { auditPicks, midOf } = require('../lib/price-coherence')
 const { levelInputs, tradeLevels } = require('../lib/trade-levels')
 const { MODE_SECTORS, FMP_SECTORS, DISCOVERY_MODES, BROAD_FIXED, filterMovers, buildScanUniverse, isPlainTicker } = require('../lib/scan-universe')
 const { fetchDailyBars }    = require('../lib/internal-api')
+const priceRegime           = require('../lib/price-regime')
 const { tryParseAiJson }    = require('../lib/ai-json')
 const { SCAN_SCHEMA }       = require('../lib/ai-schemas')
 const { canonicalizeEnums } = require('../lib/output-schema')
@@ -626,7 +627,7 @@ async function resolveUniverse({ symbols, scanMode, universeMode, fmpKey }) {
 // Write a prediction record for future win-rate tracking
 function logPrediction(symbol, agents, zones, generatedAt, {
   baseline = null, optionsPcRatio = null, taPatterns = null, rsRankAtScan = null,
-  regimeAtScan = null, modelVersion = null, learningsVersion = null,
+  regimeAtScan = null, priceRegimeAtScan = null, modelVersion = null, learningsVersion = null,
 } = {}) {
   try {
     const dir = path.dirname(PREDICTION_LOG)
@@ -686,6 +687,10 @@ function logPrediction(symbol, agents, zones, generatedAt, {
       // already injected into this prompt. A strategy that only works risk-on
       // has an overall win rate that describes neither regime.
       regimeAtScan:      regimeAtScan ?? null,
+      // The trend/volatility regime of the asset class's benchmark (SPY, or
+      // BTC for crypto) at scan time, from bars up to today only
+      // (lib/price-regime.js) — the tape, where the FRED regime is the cycle.
+      priceRegimeAtScan: priceRegimeAtScan ?? null,
       // Which generator produced this pick: model id + prompt version. A model
       // swap or a prompt rewrite is a new system, and pooling its results with
       // the old one's yields an average that describes neither.
@@ -751,6 +756,11 @@ router.post('/analyze', requireAuth, brainLimit, guardAsync('ai-brain/analyze', 
   const stockSyms    = requested.filter(s => !s.includes('-') && !s.includes('='))
 
   const isOptionsEligible = !isCryptoScan && !scanMode.startsWith('mutualfunds')
+
+  // Benchmark trend/volatility regimes (1h cache), fetched alongside the rest.
+  const priceRegimesP = priceRegime.getCurrentRegimes({
+    fetchBars: sym => fetchDailyBars(sym, { range: '5y', headers: fwdKeys(req), timeoutMs: 15_000 }),
+  }).catch(() => null)
 
   const [quoteResult, socialResult, earningsResult, taResult, macroResult, altDataResult, fngResult, btcDomResult, optionsResult] = await Promise.allSettled([
     (async () => {
@@ -1137,6 +1147,8 @@ Apply the instructions, JSON schema and rules from the system prompt. Respond ON
     // re-derivation that could disagree with it.
     const regimeAtScan = (macroResult.status === 'fulfilled' && macroResult.value?.regime?.regime) || null
     const modelVersion = llmUsed === 'claude' ? 'claude-sonnet-4-6' : GROQ_MODEL
+    const priceRegimes = await priceRegimesP
+    const priceRegimeOf = stock => priceRegime.labelFor(/-USD$/.test(stock.symbol) || String(stock.type || '').toLowerCase() === 'crypto' ? 'crypto' : 'stock', priceRegimes)
 
     // Log each prediction for win-rate tracking (log ALL picks before threshold filter
     // so calibration data covers the full score distribution, not just filtered picks)
@@ -1155,6 +1167,7 @@ Apply the instructions, JSON schema and rules from the system prompt. Respond ON
         taPatterns:     taPatternMap.get(stock.symbol) ?? null,
         rsRankAtScan:   taRsRankMap.get(stock.symbol) ?? null,
         regimeAtScan,
+        priceRegimeAtScan: priceRegimeOf(stock),
         modelVersion,
         learningsVersion,
       })
@@ -1196,6 +1209,7 @@ Apply the instructions, JSON schema and rules from the system prompt. Respond ON
             modelVersion,
             promptVersion:  SCAN_PROMPT_VERSION,
             regime:         regimeAtScan,
+            priceRegime:    priceRegimeOf(s),
           },
         })))
     } catch (e) { console.warn('[ai-brain] learning-store record failed:', e.message) }

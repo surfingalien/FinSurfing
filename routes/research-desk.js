@@ -40,6 +40,7 @@ const entityGraph              = require('../lib/entity-graph')
 const learningStore            = require('../lib/learning-store')
 const durableFiles             = require('../lib/durable-files')
 const desk                     = require('../lib/research-desk')
+const priceRegime              = require('../lib/price-regime')
 const { evaluateStatus, recordFacts } = require('../lib/system-status')
 
 const router   = express.Router()
@@ -130,14 +131,40 @@ function strategiesFor(sym) {
   } catch { return [] }
 }
 
+/** The latest factor-mining run and this symbol's percentiles on its survivors. */
+function minedFactorsFor(bars) {
+  try {
+    const fm = require('../lib/factor-mining')
+    const library = fm.readLibrary()
+    return { library, ranks: library ? fm.percentilesFor(bars, library) : [] }
+  } catch { return null }
+}
+
+/** The symbol's last report, where it stands in the drift window, and the pooled study. */
+function earningsDriftFor(sym, bars, fundamentals) {
+  try {
+    const pead = require('../lib/pead')
+    const studied = pead.readStudy()
+    const last = (fundamentals?.eps_surprises || []).find(e => e.date && e.surprise_pct != null) || null
+    const fromStudy = studied?.latestBySymbol?.[sym]
+    const event = last ? { date: String(last.date).slice(0, 10), surprisePct: last.surprise_pct, group: pead.groupOf(last.surprise_pct), estimate: last.estimate, actual: last.actual } : null
+    return {
+      study: studied,
+      event: event && { ...event, toneChange: fromStudy?.date === event.date ? fromStudy.toneChange : null },
+      window: event ? pead.windowState(event, bars) : null,
+    }
+  } catch { return null }
+}
+
 /** Everything the thesis may rest on, computed server-side. */
 async function gatherEvidence(sym, req) {
   const headers   = fwdKeys(req)
   const assetType = assetTypeOf(sym)
-  const [bars, fundamentals, macro] = await Promise.all([
+  const [bars, fundamentals, macro, regimes] = await Promise.all([
     fetchDailyBars(sym, { range: '2y', headers, timeoutMs: 25_000 }),
     assetType === 'stock' ? fetchFundamentals(sym, headers) : Promise.resolve({ error: `not applicable to ${assetType}` }),
     macroSnapshot(),
+    priceRegime.getCurrentRegimes({ fetchBars: s => fetchDailyBars(s, { range: '5y', headers, timeoutMs: 15_000 }) }).catch(() => null),
   ])
   if (bars.length < 60) {
     const err = new Error(`Not enough price history for ${sym} (${bars.length} daily bars, need 60+)`)
@@ -153,6 +180,9 @@ async function gatherEvidence(sym, req) {
 
   const { items, gaps, facts } = desk.buildEvidence({
     symbol: sym, bars, taLine, fundamentals, macro,
+    priceRegime: assetType === 'crypto' ? regimes?.crypto : regimes?.equity,
+    minedFactors: assetType === 'stock' ? minedFactorsFor(bars) : null,
+    earningsDrift: assetType === 'stock' ? earningsDriftFor(sym, bars, fundamentals) : null,
     strategies: strategiesFor(sym),
     exposure:   exposureFor(sym),
     track:      desk.trackFor(records, { symbol: sym, assetType, horizon }),
@@ -208,7 +238,21 @@ router.get('/track-record', requireAuth, (req, res) => {
       byAssetType: stats.byAssetType, calibration: stats.calibration,
       autoTune: stats.autoTune, baseline: stats.baseline,
       exitQuality: stats.exitQuality,
+      byPriceRegime: stats.byPriceRegime,
     },
+    // The benchmarks' current trend/volatility state and what followed each
+    // state historically (last fetched by a scan or a dossier — no network here).
+    priceRegime: (() => { try { return require('../lib/price-regime').cachedRegimes() } catch { return null } })(),
+    // Post-earnings drift: do beats keep beating SPY here, net of costs (lib/pead.js)?
+    pead: (() => { try { const p = require('../lib/pead').readStudy(); return p && {
+      ranAt: p.ranAt, universe: p.universe, events: p.events, params: p.params, groups: p.groups,
+      strategy: p.strategy, spreadVsMiss: p.spreadVsMiss, tone: p.tone, caveats: p.caveats,
+    } } catch { return null } })(),
+    // Which price factors rank the large-cap list (lib/factor-mining.js), last weekly run.
+    factors: (() => { try { const l = require('../lib/factor-mining').readLibrary(); return l && {
+      ranAt: l.ranAt, universe: l.universe, tested: l.tested, periods: l.periods, horizon: l.horizon, admitted: l.admitted, caveats: l.caveats,
+      factors: l.factors.map(f => ({ name: f.name, label: f.label, verdict: f.verdict, direction: f.direction, train: f.train, holdout: f.holdout, dsr: f.deflated?.dsr ?? null })),
+    } } catch { return null } })(),
     // Do the self-learned findings hold up against the stats, and do picks
     // made with them beat picks made without (lib/learning-health.js)?
     learningHealth: (() => { try { return getLearningHealth() } catch { return null } })(),

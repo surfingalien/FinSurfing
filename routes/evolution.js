@@ -75,6 +75,49 @@ router.post('/run', requireAuth, requireAdmin, (req, res) => {
   res.json({ ok: true, status: 'running', message: 'Evolution cycle started. Poll GET /api/evolution/status.' })
 })
 
+// ── Factor library (lib/factor-mining.js) ────────────────────────────────────
+
+/** The last mining run without the stored cross-sections (they are for lookups). */
+function factorSummary(lib) {
+  if (!lib) return null
+  const { factors = [], ...rest } = lib
+  return { ...rest, factors: factors.map(({ latest, ...f }) => ({ ...f, latestAsOf: latest?.asOf ?? null })) }
+}
+
+router.get('/factors', requireAuth, (req, res) => {
+  res.json({ library: factorSummary(require('../lib/factor-mining').readLibrary()) })
+})
+
+// Admin-only: fetches five years of bars for ~70 names.
+router.post('/factors/run', requireAuth, requireAdmin, (req, res) => {
+  const fm = require('../lib/factor-mining')
+  fm.runMining({ fetchBars: s => fetchDailyBars(s, { range: '5y', headers: { 'x-internal': '1' }, timeoutMs: 25_000 }) })
+    .then(lib => console.log(`[evolution/factors] mined ${lib.tested} factors over ${lib.universe} names: admitted ${lib.admitted.join(', ') || 'none'}`))
+    .catch(e => console.error('[evolution/factors]', e.stack || e.message))
+  res.json({ ok: true, status: 'running', message: 'Factor mining started. Poll GET /api/evolution/factors.' })
+})
+
+// ── Post-earnings drift study (lib/pead.js) ─────────────────────────────────
+
+router.get('/pead', requireAuth, (req, res) => {
+  res.json({ study: require('../lib/pead').readStudy() })
+})
+
+// Admin-only: five years of bars + earnings history (+ recent transcripts) for ~70 names.
+router.post('/pead/run', requireAuth, requireAdmin, (req, res) => {
+  if (!process.env.FMP_API_KEY) return res.status(400).json({ error: 'FMP_API_KEY not set — earnings history comes from FMP' })
+  const fmp = require('../lib/fmp')
+  require('../lib/pead').runStudy({
+    universe:         require('../lib/factor-mining').defaultUniverse(),
+    fetchBars:        s => fetchDailyBars(s, { range: '5y', headers: { 'x-internal': '1' }, timeoutMs: 25_000 }),
+    fetchSurprises:   s => fmp.earningsSurprises(s, { limit: 20 }),
+    fetchTranscripts: (s, n) => fmp.transcripts(s, { limit: n, timeoutMs: 15_000 }),
+  })
+    .then(st => console.log(`[evolution/pead] ${st.events} events — long-beats ${st.strategy.verdict}`))
+    .catch(e => console.error('[evolution/pead]', e.stack || e.message))
+  res.json({ ok: true, status: 'running', message: 'Drift study started. Poll GET /api/evolution/pead.' })
+})
+
 // ── Paper portfolio ───────────────────────────────────────────────────────────
 
 // Mark positions to market using the internal chart feed so equity/P&L are
