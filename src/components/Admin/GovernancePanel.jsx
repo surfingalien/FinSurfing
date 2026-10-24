@@ -180,6 +180,11 @@ export default function GovernancePanel() {
           ))}
         </div>
       )}
+      {stats?.since && (
+        <div className="text-[9px] text-slate-600 -mt-1">
+          Over the last {stats.total} calls, since {new Date(stats.since).toLocaleDateString()} — the log is kept across deploys
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="flex gap-1">
@@ -244,6 +249,31 @@ export default function GovernancePanel() {
       )}
 
       {/* Audit log tab */}
+      {tab === 'audit' && stats?.routes && Object.keys(stats.routes).length > 0 && (
+        <div className="rounded-xl border border-white/[0.07] overflow-hidden">
+          <div className="px-3 py-2 bg-white/[0.03] border-b border-white/[0.06] text-[10px] font-semibold text-slate-400">By route</div>
+          <table className="w-full text-[10px]">
+            <thead>
+              <tr className="text-slate-500 text-left">
+                <th className="px-3 py-1 font-medium">Route</th>
+                <th className="px-3 py-1 font-medium text-right">Calls</th>
+                <th className="px-3 py-1 font-medium text-right">Est. cost</th>
+                <th className="px-3 py-1 font-medium text-right">Prompt from cache</th>
+              </tr>
+            </thead>
+            <tbody>
+              {Object.entries(stats.routes).sort((a, b) => b[1].costUsd - a[1].costUsd).map(([route, r]) => (
+                <tr key={route} className="border-t border-white/[0.04] text-slate-300">
+                  <td className="px-3 py-1 font-mono">{route}</td>
+                  <td className="px-3 py-1 text-right font-mono">{r.calls}</td>
+                  <td className="px-3 py-1 text-right font-mono">{fmtCost(r.costUsd)}</td>
+                  <td className="px-3 py-1 text-right font-mono">{r.cacheHitRate == null ? '—' : `${Math.round(r.cacheHitRate * 100)}%`}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
       {tab === 'audit' && (
         <div className="rounded-xl border border-white/[0.07] overflow-hidden">
           <div className="flex items-center gap-2 px-3 py-2 bg-white/[0.03] border-b border-white/[0.06]">
