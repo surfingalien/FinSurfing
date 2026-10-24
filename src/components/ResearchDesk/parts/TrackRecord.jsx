@@ -176,7 +176,7 @@ export default function TrackRecord({ data, onAdoptBrackets }) {
                 <tbody>
                   {data.factors.factors.map(f => (
                     <tr key={f.name} className="text-slate-300">
-                      <td>{f.label}{f.direction === 'inverted' ? ' (inverted)' : ''}</td>
+                      <td>{f.label}{f.direction === 'inverted' ? ' (inverted)' : ''}{f.source === 'llm' ? ' · model-proposed' : ''}</td>
                       <td>{signed(f.train?.meanIc)}{f.train?.t != null ? ` t=${f.train.t}` : ''}</td>
                       <td>{signed(f.holdout?.meanIc)}{f.holdout?.t != null ? ` t=${f.holdout.t}` : ''}</td>
                       <td>{f.dsr ?? '—'}</td>
@@ -188,6 +188,11 @@ export default function TrackRecord({ data, onAdoptBrackets }) {
                 </tbody>
               </table>
             </div>
+            {data.factors.proposals?.length > 0 && (
+              <div className="text-[11px] text-slate-400">
+                Model-proposed this run: {data.factors.proposals.map(p => `${p.name?.replace(/^llm_/, '') || '?'} (${p.status === 'tested' ? 'tested above' : p.status}${p.reason ? `: ${p.reason}` : ''})`).join('; ')}.
+              </div>
+            )}
             <p className="text-[11px] text-slate-500">IC is the rank correlation between a factor and the next {data.factors.horizon} days' return across the list. The direction is chosen on the older periods; the newest are untouched until then. Deflated = the chance the factor beats the luckiest of every candidate tried in both directions, admitted at ≥ 0.9. IC by horizon shows how fast the signal fades; turnover is the share of the top fifth replaced each month (what trading it costs). {data.factors.caveats?.[0]}</p>
           </div>
         ) : <p className="text-[12px] text-slate-500">No factor-mining run yet — it runs weekly (Saturday 5:15 AM ET).</p>}

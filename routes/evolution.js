@@ -94,6 +94,9 @@ router.post('/factors/run', requireAuth, requireAdmin, (req, res) => {
   fm.runMining({
     fetchBars:  s => fetchDailyBars(s, { range: '5y', headers: { 'x-internal': '1' }, timeoutMs: 25_000 }),
     fetchFacts: s => require('../lib/sec-facts').getCompanyFacts(s),
+    propose: process.env.ANTHROPIC_API_KEY || process.env.GROQ_API_KEY
+      ? ({ existing }) => require('../lib/factor-dsl').proposeFactors({ router: require('../lib/ai-router').getRouter('factor-mining'), existing })
+      : null,
   })
     .then(lib => console.log(`[evolution/factors] mined ${lib.tested} factors over ${lib.universe} names: admitted ${lib.admitted.join(', ') || 'none'}`))
     .catch(e => console.error('[evolution/factors]', e.stack || e.message))
