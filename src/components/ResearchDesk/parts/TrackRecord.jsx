@@ -272,6 +272,16 @@ export default function TrackRecord({ data, onAdoptBrackets }) {
           <p className="text-[12px] text-slate-400">
             {pp.openPositions} open · {pp.closedTrades} closed{pp.winRate != null ? ` · ${pc(pp.winRate)} of closed trades made money` : ''} · realized ${Number(pp.realizedPnl || 0).toFixed(2)}
           </p>
+          {pp.protections?.global && (
+            <div className="mt-2 p-3 rounded-xl border border-amber-500/30 bg-amber-500/10 text-[12px] text-amber-300">
+              New buys paused ({pp.protections.global.kind}): {pp.protections.global.reason}, until {pp.protections.global.until.slice(0, 16).replace('T', ' ')} UTC. Exits still run.
+            </div>
+          )}
+          {Object.keys(pp.protections?.symbols || {}).length > 0 && (
+            <p className="text-[11px] text-slate-500 mt-1">
+              Not re-entering: {Object.entries(pp.protections.symbols).map(([s, l]) => `${s} (${l.kind === 'cooldown' ? 'cooldown' : 'kept losing'}, until ${l.until.slice(0, 10)})`).join(', ')}.
+            </p>
+          )}
           {Object.keys(pp.exitsByKind || {}).length > 0 && (
             <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mt-2">
               {Object.entries(pp.exitsByKind).map(([k, e]) => (

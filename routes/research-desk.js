@@ -289,6 +289,7 @@ function paperFacts() {
       openPositions: perf.openPositions, closedTrades: perf.closedTrades, winRate: perf.winRate,
       realizedPnl: perf.realizedPnl, exitsByKind: perf.exitsByKind,
       unmanaged: pb.unmanagedPositions(book),
+      protections: pb.protections(pb.loadTrades(), book),
     }
   } catch { return null }
 }
