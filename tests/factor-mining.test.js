@@ -85,9 +85,17 @@ test('runMining fetches with bounded concurrency, tolerates a failed name, and s
     if (s === 'S1') throw new Error('down')
     return u[s]
   }
-  const lib = await fm.runMining({ fetchBars, universe: Object.keys(u), concurrency: 3 })
+  const lib = await fm.runMining({ fetchBars, universe: Object.keys(u), concurrency: 3, minUniverse: 10 })
   expect(peak).toBeLessThanOrEqual(3)
   expect(lib.universe).toBe(14)
   expect(lib.requested).toBe(15)
   expect(fm.readLibrary()).toMatchObject({ universe: 14, tested: lib.tested })
+})
+
+test('a data outage never overwrites the stored library with a run over a handful of names', async () => {
+  fm.saveLibrary({ ranAt: 'last-week', universe: 60, tested: 12, admitted: [], factors: [] })
+  const u = universe({ n: 5, seed: 3 })
+  await expect(fm.runMining({ fetchBars: async s => u[s] || [], universe: [...Object.keys(u), 'X1', 'X2'] }))
+    .rejects.toThrow(/only 5 of 7 names had 5 years of bars — too few to rank; the stored library is kept/)
+  expect(fm.readLibrary().ranAt).toBe('last-week')
 })

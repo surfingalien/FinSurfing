@@ -1160,8 +1160,13 @@ async function getStooqChart(symbol, interval = '1d', range = '1y') {
 }
 
 // ── Binance helpers (free, no API key, crypto only) ───────────────────────────
-// api.binance.com is a public REST API — no auth needed for market data.
-// Covers every crypto asset TradingView lists (BTC, ETH, SOL, DOGE, etc.).
+// Public market data, no auth. api.binance.com and stream.binance.com refuse
+// US locations with HTTP 451 ("restricted location") — Railway runs in the
+// US, so every Binance call failed in production and crypto fell through to
+// CoinGecko. Binance's market-data-only mirrors (*.binance.vision) serve the
+// same klines / ticker / stream payloads from those locations.
+const BINANCE_REST = (process.env.BINANCE_API_BASE || 'https://data-api.binance.vision').replace(/\/+$/, '')
+const BINANCE_WS   = process.env.BINANCE_WS_URL || 'wss://data-stream.binance.vision/ws'
 
 // Well-known crypto base tickers (bare symbols without -USD suffix)
 // Crypto classification + exchange mapping moved to lib/crypto-classify.js
@@ -1183,7 +1188,7 @@ async function getBinanceChart(symbol, interval = '1d', range = '1y') {
   const perDay = { '1m':1440,'5m':288,'15m':96,'30m':48,'60m':24,'1h':24,'1d':1,'1wk':1/7,'1mo':1/30 }
   const limit  = Math.min(Math.ceil(days * (perDay[interval] ?? 1)), 1000)
 
-  const url = `https://api.binance.com/api/v3/klines?symbol=${binSym}&interval=${bInterval}&limit=${limit}`
+  const url = `${BINANCE_REST}/api/v3/klines?symbol=${binSym}&interval=${bInterval}&limit=${limit}`
   try {
     const r = await fetch(url, { signal: AbortSignal.timeout(15000) })
     if (!r.ok) throw new Error(`HTTP ${r.status}`)
@@ -1217,7 +1222,7 @@ async function getBinanceSingleQuote(symbol) {
   if (!isCryptoSymbol(symbol)) return null
   const binSym = toBinancePair(symbol)
   try {
-    const d = await apiFetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${binSym}`, 8000)
+    const d = await apiFetch(`${BINANCE_REST}/api/v3/ticker/24hr?symbol=${binSym}`, 8000)
     const price = parseFloat(d?.lastPrice)
     if (!price) return null
     const prev  = parseFloat(d.prevClosePrice) || price
@@ -1680,7 +1685,7 @@ function _binUnsubIfUnused(symbol) {
 }
 
 function _connectBinWs() {
-  _binWs = new WebSocket('wss://stream.binance.com:9443/ws')
+  _binWs = new WebSocket(BINANCE_WS)
 
   _binWs.on('open', () => {
     console.log('[Binance WS] connected')
@@ -2417,6 +2422,10 @@ app.get('/api/news', async (req, res) => {
 
 
 /* ── SPA fallback ──────────────────────────────── */
+// An unknown API path is a 404 in JSON, not the app's HTML with a 200 — a
+// client calling a renamed or mistyped route otherwise gets a page it cannot
+// parse and reports a JSON error instead of "not found".
+app.use('/api', (req, res) => res.status(404).json({ error: `No API route ${req.method} ${req.baseUrl}${req.path}` }))
 app.get('*', (_req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'))
 })

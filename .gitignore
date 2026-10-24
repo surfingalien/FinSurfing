@@ -26,3 +26,7 @@ data/ai-brain-predictions.jsonl
 data/symbol-db.json
 data/*.damaged-*
 data/.*.tmp
+data/last-quotes.json
+data/ai-brain-shadow.jsonl
+data/factor-library.json
+data/pead-study.json
