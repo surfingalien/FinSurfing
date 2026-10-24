@@ -49,3 +49,10 @@ test('drift study: readable when signed in; running it is admin-only', async () 
   expect(r.body.study).toMatchObject({ events: 3, strategy: { verdict: 'insufficient' } })
   expect((await request(app).post('/api/evolution/pead/run').set('Authorization', `Bearer ${sign('user')}`)).status).toBe(403)
 })
+
+test('the read endpoints need sign-in', async () => {
+  for (const path of ['/status', '/strategies', '/paper', '/paper/trades']) {
+    expect((await request(app).get(`/api/evolution${path}`)).status).toBe(401)
+    expect((await request(app).get(`/api/evolution${path}`).set('Authorization', `Bearer ${sign('user')}`)).status).toBe(200)
+  }
+})
