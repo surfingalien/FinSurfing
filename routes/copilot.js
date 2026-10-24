@@ -1149,7 +1149,7 @@ async function dispatchTool(name, input, req) {
       })
       const data = await r.json()
       if (!data.proposals) return `Strategy Lab failed: ${data.error || 'unknown error'}`
-      const VERDICT_ICON = { validated: '✅', mixed: '🟡', insufficient_trades: '⚪', rejected: '❌' }
+      const VERDICT_ICON = { validated: '✅', mixed: '🟡', fragile: '🟠', insufficient_trades: '⚪', rejected: '❌' }
       return (
         `**Strategy Lab — ${data.symbol}** (${data.range}, ${data.dataPoints} daily bars, backtest-verified)\n` +
         (data.taLine ? `Technicals: ${data.taLine}\n` : '') + '\n' +
