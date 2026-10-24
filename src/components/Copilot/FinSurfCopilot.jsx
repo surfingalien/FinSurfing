@@ -64,6 +64,7 @@ function ToolBadge({ name }) {
     get_fundamentals: '📑 Reading fundamentals...',
     get_analyst_consensus: '🎯 Reading valuation...',
     get_insider_activity: '🕵️ Checking insider activity...',
+    get_13f_changes: '🏦 Reading fund managers\' 13F filings...',
     find_exposure: '🕸️ Reading exposure map...',
   }
   return (

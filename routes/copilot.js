@@ -157,7 +157,7 @@ When evaluating strategies, always classify: risk level (Low/Medium/High/Very Hi
 - Bridge TA with fundamentals: breakout + earnings catalyst = higher conviction
 
 ## Source & Data Transparency
-Tools provide live data from: internal AI Brain (5 agents), Reddit APIs, FRED macro series, Yahoo/Finnhub/FMP market data, FMP financial statements (income/balance/cash flow, 4 quarters), OpenInsider (insider transactions), and FINRA (short interest). SEC 13F institutional holdings, satellite data, and real-time options tape are not available — state this clearly rather than speculating.
+Tools provide live data from: internal AI Brain (5 agents), Reddit APIs, FRED macro series, Yahoo/Finnhub/FMP market data, FMP financial statements (income/balance/cash flow, 4 quarters), OpenInsider (insider transactions), FINRA (short interest), and SEC 13F filings of ~23 notable fund managers (get_13f_changes — quarter-end, filed up to 45 days late). Satellite data and a real-time options tape are not available — state this clearly rather than speculating.
 
 ## Guardrails (Non-Negotiable)
 - Never provide personalized investment advice or tell users what to buy/sell
@@ -353,6 +353,17 @@ const TOOLS = [
       required: ['symbol'],
       properties: {
         symbol: { type: 'string', description: 'US stock ticker (e.g. AAPL, NVDA). Not applicable to crypto or ETFs.' },
+      },
+    },
+  },
+  {
+    name: 'get_13f_changes',
+    description: 'What notable discretionary fund managers (Berkshire, Pershing Square, Tiger Global, Coatue, Viking, Soros, Duquesne and others — about 23) did with a US stock in their two latest SEC 13F filings: opened, added, trimmed, sold out or held, with share counts. Holdings are as of quarter end and filed up to 45 days later; long US positions only.',
+    input_schema: {
+      type: 'object',
+      required: ['symbol'],
+      properties: {
+        symbol: { type: 'string', description: 'US stock ticker (e.g. GOOGL). Not applicable to crypto.' },
       },
     },
   },
@@ -828,6 +839,17 @@ async function dispatchTool(name, input, req) {
       } catch (e) {
         return `Analyst consensus fetch failed for ${sym}: ${e.message}`
       }
+    }
+
+    case 'get_13f_changes': {
+      const sym = (input.symbol || '').toUpperCase().replace(/[^A-Z0-9.-]/g, '')
+      if (!sym) return 'No symbol provided.'
+      const t = require('../lib/thirteenf')
+      const store = t.readStore()
+      if (!store) return '13F holdings have not been loaded yet — the weekly refresh (Sunday) fills them.'
+      const rows = store.bySymbol?.[sym] || []
+      const line = r => `${r.manager}: ${r.action}${r.changePct != null && r.action !== 'new' && r.action !== 'exited' ? ` (${r.changePct > 0 ? '+' : ''}${r.changePct}% shares)` : ''} — ${r.shares.toLocaleString()} shares${r.value ? ` ($${(r.value / 1e6).toFixed(1)}M)` : ''}, quarter ended ${r.period}`
+      return [t.describeFor(sym, store), ...rows.map(line), store.caveats.join(' ')].filter(Boolean).join('\n')
     }
 
     case 'get_insider_activity': {

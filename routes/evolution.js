@@ -126,6 +126,24 @@ router.post('/pead/run', requireAuth, requireAdmin, (req, res) => {
   res.json({ ok: true, status: 'running', message: 'Drift study started. Poll GET /api/evolution/pead.' })
 })
 
+// ── 13F holdings changes (lib/thirteenf.js) ─────────────────────────────────
+
+router.get('/13f', requireAuth, (req, res) => {
+  const t = require('../lib/thirteenf')
+  const store = t.readStore()
+  const sym = String(req.query.symbol || '').toUpperCase().replace(/[^A-Z0-9.-]/g, '')
+  if (!store) return res.json({ store: null })
+  const { cusipMap, bySymbol, ...meta } = store
+  res.json(sym ? { ...meta, symbol: sym, rows: bySymbol[sym] || [], summary: t.describeFor(sym, store) } : { ...meta, symbols: Object.keys(bySymbol).length })
+})
+
+router.post('/13f/run', requireAuth, requireAdmin, (req, res) => {
+  require('../lib/thirteenf').refresh()
+    .then(s => console.log(`[evolution/13f] ${s.managers.length} managers, ${Object.keys(s.bySymbol).length} symbols`))
+    .catch(e => console.error('[evolution/13f]', e.message))
+  res.json({ ok: true, status: 'running', message: '13F refresh started (a few minutes). Poll GET /api/evolution/13f.' })
+})
+
 // ── Paper portfolio ───────────────────────────────────────────────────────────
 
 // Mark positions to market using the internal chart feed so equity/P&L are

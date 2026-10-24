@@ -190,6 +190,7 @@ async function gatherEvidence(sym, req) {
     symbol: sym, bars, taLine, fundamentals, macro,
     priceRegime: assetType === 'crypto' ? regimes?.crypto : regimes?.equity,
     minedFactors: assetType === 'stock' ? minedFactorsFor(bars, secFacts) : null,
+    institutional: assetType === 'stock' ? (() => { try { return require('../lib/thirteenf').describeFor(sym, require('../lib/thirteenf').readStore()) } catch { return null } })() : null,
     reported: secFacts ? require('../lib/sec-facts').snapshotAt(secFacts, new Date().toISOString().slice(0, 10), { price: bars.at(-1)?.c }) : null,
     earningsDrift: assetType === 'stock' ? earningsDriftFor(sym, bars, fundamentals, secFacts) : null,
     strategies: strategiesFor(sym),
