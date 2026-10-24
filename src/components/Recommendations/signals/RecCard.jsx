@@ -124,6 +124,11 @@ export function RecCard({ rec, onAnalyze, liveQuote }) {
       {rec.slateWeightPct != null && (
         <div className="text-[10px] text-slate-400 mb-2" title="Hierarchical Risk Parity across the whole slate: correlated picks share one risk budget. Separate from this pick's own Kelly size.">
           Slate weight <span className="font-mono font-bold text-white">{rec.slateWeightPct}%</span> <span className="text-slate-500">(if you take the whole slate — HRP)</span>
+          {rec.blWeightPct != null && (
+            <span title="Black-Litterman: a neutral equal-weight prior moved toward each pick's after-cost expected value, as far as the measured win rate trusts it.">
+              {' '}· with the AI's views <span className="font-mono font-bold text-white">{rec.blWeightPct}%</span> <span className="text-slate-500">(Black-Litterman)</span>
+            </span>
+          )}
         </div>
       )}
 
