@@ -11,9 +11,9 @@
  *   GET  /api/evolution/paper/trades — paper trade audit trail
  *   POST /api/evolution/paper/reset  — (admin) flatten the paper book
  *
- * Read endpoints are open (same posture as /api/ai-brain/learnings — they
- * expose only server-side aggregates). Anything that MUTATES state or spends
- * API budget requires admin.
+ * Every endpoint requires sign-in: the paper book, its trade trail and the
+ * strategy library are the system's own record, not public data. Anything
+ * that MUTATES state or spends API budget also requires admin.
  */
 
 const express = require('express')
@@ -28,7 +28,7 @@ const durableFiles  = require('../lib/durable-files')
 
 // ── Status ────────────────────────────────────────────────────────────────────
 
-router.get('/status', (req, res) => {
+router.get('/status', requireAuth, (req, res) => {
   try {
     const entries = library.readLibrary()
     res.json({
@@ -53,7 +53,7 @@ router.get('/status', (req, res) => {
   }
 })
 
-router.get('/strategies', (req, res) => {
+router.get('/strategies', requireAuth, (req, res) => {
   const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 25, 1), 100)
   const includeRetired = req.query.includeRetired === '1'
   const all = library.readLibrary()
@@ -158,7 +158,7 @@ async function currentPrices(symbols) {
   return map
 }
 
-router.get('/paper', async (req, res) => {
+router.get('/paper', requireAuth, async (req, res) => {
   try {
     const portfolio = paperBroker.loadPortfolio()
     const symbols   = Object.keys(portfolio.positions || {})
@@ -170,7 +170,7 @@ router.get('/paper', async (req, res) => {
   }
 })
 
-router.get('/paper/trades', (req, res) => {
+router.get('/paper/trades', requireAuth, (req, res) => {
   const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 500)
   const trades = paperBroker.loadTrades()
   res.json({
