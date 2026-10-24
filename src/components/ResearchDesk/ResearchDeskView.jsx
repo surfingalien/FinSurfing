@@ -194,7 +194,7 @@ export default function ResearchDeskView({ defaultSymbol = null, onSymbol }) {
       )}
 
       {isAuthenticated && tab === 'record' && (
-        busy === 'record' ? <Loader2 className="w-5 h-5 animate-spin text-slate-500" /> : <TrackRecord data={record} />
+        busy === 'record' ? <Loader2 className="w-5 h-5 animate-spin text-slate-500" /> : <TrackRecord data={record} onAdoptBrackets={() => call('/api/evolution/paper/adopt-brackets', { method: 'POST', body: {} })} />
       )}
     </div>
   )

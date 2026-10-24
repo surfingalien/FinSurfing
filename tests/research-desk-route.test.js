@@ -193,6 +193,15 @@ describe('POST /:symbol/thesis — bull vs bear debate', () => {
   })
 })
 
+describe('GET /track-record', () => {
+  test('carries the random-pick comparison and the paper book, even before anything has resolved', async () => {
+    const r = await request(app).get('/api/research-desk/track-record').set('Authorization', `Bearer ${tokenA}`)
+    expect(r.status).toBe(200)
+    expect(r.body.vsRandom).toMatchObject({ verdict: 'insufficient' })
+    expect(r.body).toHaveProperty('paper')
+  })
+})
+
 describe('GET /theses', () => {
   test("lists only the caller's theses, with a live status", async () => {
     const id = await valId()

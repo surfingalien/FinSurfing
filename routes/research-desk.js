@@ -218,8 +218,25 @@ router.get('/track-record', requireAuth, (req, res) => {
     edges: edge && { overall: edge.overall, tested: edge.tested, topEdges: edge.topEdges, topDrags: edge.topDrags },
     decisions: learningStore.getCalibration(),
     strategies: library.libraryStats(),
+    paper: paperFacts(),
   })
 })
+
+/** The paper book's record, if paper trading is on. Marked at cost (no live quotes here). */
+function paperFacts() {
+  try {
+    const pb = require('../lib/paper-broker')
+    if (!pb.isEnabled()) return { enabled: false }
+    const book = pb.loadPortfolio()
+    const perf = pb.performance(book, pb.loadTrades())
+    return {
+      enabled: true,
+      openPositions: perf.openPositions, closedTrades: perf.closedTrades, winRate: perf.winRate,
+      realizedPnl: perf.realizedPnl, exitsByKind: perf.exitsByKind,
+      unmanaged: pb.unmanagedPositions(book),
+    }
+  } catch { return null }
+}
 
 // "Is it working?" — every moving part of the research pipeline checked live
 // and reported as ok / warn / fail with the reason and the fix. One probe
@@ -270,6 +287,16 @@ router.get('/system-status', requireAuth, evidenceLimit, async (req, res) => {
   } catch { facts.jobs = [] }
   try { facts.record = recordFacts(readPredictions()) } catch { facts.record = {} }
   try { facts.learningHealth = getLearningHealth() } catch { facts.learningHealth = null }
+  // Fallbacks that would otherwise show only in the server log: a provider
+  // refusing an output schema, or the API refusing code mode.
+  try {
+    facts.aiFallbacks = {
+      refusedSchemas: require('../lib/ai-router').refusedSchemas(),
+      codeMode: require('../lib/code-mode').codeModeStatus(),
+      codeModeSwitchedOff: String(process.env.COPILOT_CODE_MODE || 'on').toLowerCase() === 'off',
+    }
+  } catch { facts.aiFallbacks = null }
+  facts.paper = paperFacts()
   res.json(evaluateStatus(facts))
 })
 

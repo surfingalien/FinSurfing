@@ -55,3 +55,24 @@ test('off unless the kill switch is on', async () => {
   expect(await jobs._paperManageForTests()).toMatchObject({ skipped: true })
   process.env.PAPER_TRADING_ENABLED = 'true'
 })
+
+test('a position opened before brackets existed can be given exits; the time limit starts at adoption, not at the old open', async () => {
+  pb.savePortfolio({ ...pb.emptyPortfolio(10_000), cash: 9_000, positions: { OLD: { shares: 10, avgCost: 100, openedAt: '2026-01-01T14:00:00Z' } } })
+  expect(pb.unmanagedPositions(pb.loadPortfolio())).toEqual(['OLD'])
+
+  // A stop above today's price would exit on the next check — refused, not adopted.
+  expect(pb.adoptUnmanaged({ OLD: { price: 90, bracket: { stop: 95, t1: 105, t2: 110 } } }).skipped[0].reason).toMatch(/not below the price/)
+
+  const out = pb.adoptUnmanaged({ OLD: { price: 100, bracket: { stop: 94, t1: 106, t2: 112 } } })
+  expect(out.adopted).toEqual([expect.objectContaining({ symbol: 'OLD', bracket: expect.objectContaining({ stop: 94, adopted: true }) })])
+  expect(pb.loadTrades().some(t => t.status === 'bracket-adopted' && t.symbol === 'OLD')).toBe(true)
+
+  global.fetch = jest.fn(async () => quote({ OLD: 101 }))
+  expect((await jobs._paperManageForTests()).exits).toEqual([])          // no instant time exit despite a January open
+  global.fetch = jest.fn(async () => quote({ OLD: 93 }))
+  expect((await jobs._paperManageForTests()).exits[0]).toMatchObject({ kind: 'stop', ok: true })
+
+  // adopting twice never replaces a bracket
+  pb.savePortfolio({ ...pb.emptyPortfolio(10_000), positions: { NEW: { shares: 1, avgCost: 50, bracket: { stop: 45, t2: 60, t1Done: true } } } })
+  expect(pb.adoptUnmanaged({ NEW: { price: 50, bracket: { stop: 40, t2: 70 } } })).toEqual({ adopted: [], skipped: [] })
+})
