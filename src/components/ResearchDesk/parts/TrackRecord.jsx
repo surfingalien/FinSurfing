@@ -124,6 +124,29 @@ export default function TrackRecord({ data, onAdoptBrackets }) {
       </section>
 
       <section>
+        <h3 className="text-sm font-semibold mb-2">Leaderboard</h3>
+        {data.leaderboard?.rows?.length ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-[11px]">
+              <thead><tr className="text-slate-500 text-left"><th className="font-normal">#</th><th className="font-normal">Decider</th><th className="font-normal">{data.leaderboard.metric}</th><th className="font-normal">vs overall {pc(data.leaderboard.overall)}</th><th className="font-normal">n</th></tr></thead>
+              <tbody>
+                {data.leaderboard.rows.map((r, i) => (
+                  <tr key={`${r.group}-${r.name}`} className="text-slate-300">
+                    <td className="text-slate-500">{i + 1}</td>
+                    <td>{r.name} <span className="text-slate-500">· {r.group}</span></td>
+                    <td>{pc(r.rate)}{ci(r.lo, r.hi)}</td>
+                    <td className={r.vsOverall === 'above' ? 'text-emerald-400' : r.vsOverall === 'below' ? 'text-red-400' : 'text-slate-500'}>{r.vsOverall}</td>
+                    <td>{r.n}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="text-[11px] text-slate-500 mt-1">Ranked by the low end of each 95% interval — what the record can vouch for — so a short lucky streak cannot top the table.</p>
+          </div>
+        ) : <p className="text-[12px] text-slate-500">No decider has enough resolved decisions to rank yet.</p>}
+      </section>
+
+      <section>
         <h3 className="text-sm font-semibold mb-2 flex items-center gap-1.5"><Shuffle className="w-3.5 h-3.5" /> Picks vs random picks from the same list</h3>
         {vr ? (
           <div className="space-y-2">

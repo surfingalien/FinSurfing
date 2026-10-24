@@ -236,6 +236,9 @@ router.get('/theses', requireAuth, async (req, res) => {
 })
 
 router.get('/track-record', requireAuth, (req, res) => {
+  const decisions = learningStore.getCalibration()
+  let vsRandom = null
+  try { const sb = require('../lib/shadow-baseline'); vsRandom = sb.compareToShadows(readPredictions(), sb.readShadows()) } catch { /* no shadows yet */ }
   let stats = null
   try { stats = computeStats(readPredictions()) } catch { /* empty record */ }
   const edge = stats ? computeEdgeReport(stats) : null
@@ -274,9 +277,11 @@ router.get('/track-record', requireAuth, (req, res) => {
     learningHealth: (() => { try { return getLearningHealth() } catch { return null } })(),
     // The picks vs random picks from the SAME priced list (lib/shadow-baseline.js):
     // beating SPY can be the list; beating these is the model.
-    vsRandom: (() => { try { const sb = require('../lib/shadow-baseline'); return sb.compareToShadows(readPredictions(), sb.readShadows()) } catch { return null } })(),
+    vsRandom,
+    // Every decider in one table, ranked by the lower bound (lib/leaderboard.js).
+    leaderboard: (() => { try { return require('../lib/leaderboard').buildLeaderboard(decisions, vsRandom) } catch { return null } })(),
     edges: edge && { overall: edge.overall, tested: edge.tested, topEdges: edge.topEdges, topDrags: edge.topDrags },
-    decisions: learningStore.getCalibration(),
+    decisions,
     strategies: library.libraryStats(),
     paper: paperFacts(),
   })
