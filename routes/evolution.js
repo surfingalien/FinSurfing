@@ -92,6 +92,8 @@ router.get('/factors', requireAuth, (req, res) => {
 router.post('/factors/run', requireAuth, requireAdmin, (req, res) => {
   const fm = require('../lib/factor-mining')
   fm.runMining({
+    // Uses the stored filing-change fingerprints; the weekly job refreshes them.
+    filingSims: require('../lib/filing-change').simsBySymbol(),
     fetchBars:  s => fetchDailyBars(s, { range: '5y', headers: { 'x-internal': '1' }, timeoutMs: 25_000 }),
     fetchFacts: s => require('../lib/sec-facts').getCompanyFacts(s),
     propose: process.env.ANTHROPIC_API_KEY || process.env.GROQ_API_KEY

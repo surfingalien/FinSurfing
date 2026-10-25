@@ -56,3 +56,13 @@ test('the read endpoints need sign-in', async () => {
     expect((await request(app).get(`/api/evolution${path}`).set('Authorization', `Bearer ${sign('user')}`)).status).toBe(200)
   }
 })
+
+test('the insider study endpoints: sign-in to read, admin to run', async () => {
+  expect((await request(app).get('/api/evolution/insiders')).status).toBe(401)
+  const r = await request(app).get('/api/evolution/insiders').set('Authorization', `Bearer ${sign('user')}`)
+  expect(r.status).toBe(200)
+  expect(r.body).toEqual({ study: null })
+  const s = await request(app).get('/api/evolution/insiders?symbol=pfe').set('Authorization', `Bearer ${sign('user')}`)
+  expect(s.body).toEqual({ symbol: 'PFE', recent: null })
+  expect((await request(app).post('/api/evolution/insiders/run').set('Authorization', `Bearer ${sign('user')}`)).status).toBe(403)
+})

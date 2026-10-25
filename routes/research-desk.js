@@ -132,11 +132,12 @@ function strategiesFor(sym) {
 }
 
 /** The latest factor-mining run and this symbol's percentiles on its survivors. */
-function minedFactorsFor(bars, fund = null) {
+function minedFactorsFor(bars, fund = null, sym = null) {
   try {
     const fm = require('../lib/factor-mining')
     const library = fm.readLibrary()
-    return { library, ranks: library ? fm.percentilesFor(bars, library, { fund }) : [] }
+    const filings = sym ? require('../lib/filing-change').simsBySymbol()[sym] || null : null
+    return { library, ranks: library ? fm.percentilesFor(bars, library, { fund, filings }) : [] }
   } catch { return null }
 }
 
@@ -189,7 +190,8 @@ async function gatherEvidence(sym, req) {
   const { items, gaps, facts } = desk.buildEvidence({
     symbol: sym, bars, taLine, fundamentals, macro,
     priceRegime: assetType === 'crypto' ? regimes?.crypto : regimes?.equity,
-    minedFactors: assetType === 'stock' ? minedFactorsFor(bars, secFacts) : null,
+    minedFactors: assetType === 'stock' ? minedFactorsFor(bars, secFacts, sym) : null,
+    filingChange: assetType === 'stock' ? (() => { try { return require('../lib/filing-change').describeFor(sym) } catch { return null } })() : null,
     insiders: assetType === 'stock' ? (() => { try { const ib = require('../lib/insider-buys'); return ib.describeRecent(ib.recentFor(sym)) } catch { return null } })() : null,
     institutional: assetType === 'stock' ? (() => { try { return require('../lib/thirteenf').describeFor(sym, require('../lib/thirteenf').readStore()) } catch { return null } })() : null,
     reported: secFacts ? require('../lib/sec-facts').snapshotAt(secFacts, new Date().toISOString().slice(0, 10), { price: bars.at(-1)?.c }) : null,
@@ -277,7 +279,7 @@ router.get('/track-record', requireAuth, (req, res) => {
     // Which price factors rank the large-cap list (lib/factor-mining.js), last weekly run.
     factors: (() => { try { const l = require('../lib/factor-mining').readLibrary(); return l && {
       ranAt: l.ranAt, universe: l.universe, tested: l.tested, periods: l.periods, horizon: l.horizon, admitted: l.admitted, caveats: l.caveats,
-      withFundamentals: l.withFundamentals ?? null,
+      withFundamentals: l.withFundamentals ?? null, withFilingChange: l.withFilingChange ?? null,
       proposals: (l.proposals || []).map(p => ({ name: p.name, hypothesis: p.hypothesis, status: p.status, reason: p.reason ?? null })),
       factors: l.factors.map(f => ({ name: f.name, label: f.label, source: f.source ?? 'builtin', verdict: f.verdict, direction: f.direction, train: f.train, holdout: f.holdout, dsr: f.deflated?.dsr ?? null, decay: f.decay ?? null, turnover: f.turnover ?? null })),
     } } catch { return null } })(),
