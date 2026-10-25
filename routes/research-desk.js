@@ -197,7 +197,8 @@ async function gatherEvidence(sym, req) {
     exposure:   exposureFor(sym),
     track:      desk.trackFor(records, { symbol: sym, assetType, horizon }),
   })
-  const winProb = kelly.winProbFromStats(stats, { assetType })
+  const bracketProb = require('../lib/bracket-prob')
+  const winProb = bracketProb.winProbFor(bracketProb.loadStore(), { assetType }) || kelly.winProbFromStats(stats, { assetType })
   const levels = require('../lib/trade-levels').levelInputs(bars)
   const referenceLevels = levels ? require('../lib/trade-levels').tradeLevels({ price: facts.last, atr: levels.atr, support: levels.support, resistance: levels.resistance }) : null
   return { sym, assetType, facts, items, gaps, winProb, levels, referenceLevels, company: fundamentals?.company?.name ?? null }
@@ -263,6 +264,8 @@ router.get('/track-record', requireAuth, (req, res) => {
       analystNames: p.analystNames ?? null,
       sue: p.sue ? { events: p.sue.events, params: p.sue.params, groups: p.sue.groups, strategy: p.sue.strategy, spreadVsMiss: p.sue.spreadVsMiss } : null,
     } } catch { return null } })(),
+    // Which win probability sizes trades: the bracket calibration, if adopted (lib/bracket-prob.js).
+    bracketProb: (() => { try { const b = require('../lib/bracket-prob').loadStore(); return b && { adopted: b.adopted, rateAdopted: b.rateAdopted ?? false, reason: b.reason, validation: b.validation ?? null, labelled: b.labelled, trainedAt: b.trainedAt, rates: b.rates ?? null } } catch { return null } })(),
     // The second-opinion model on AI Brain picks (lib/meta-label.js).
     metaLabel: (() => { try { const m = require('../lib/meta-label').loadModel(); return m && { validated: m.validated, reason: m.reason, validation: m.validation ?? null, labelled: m.labelled, trainedAt: m.trainedAt } } catch { return null } })(),
     // Which price factors rank the large-cap list (lib/factor-mining.js), last weekly run.

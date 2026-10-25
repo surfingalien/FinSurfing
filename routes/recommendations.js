@@ -449,6 +449,8 @@ Respond ONLY with a JSON object — no markdown, no explanation, just the JSON:
     // arbitrary on a cold start.
     let kellyStats = null
     try { kellyStats = computeStats(readPredictions()) } catch { /* calibration optional */ }
+    const bracketProb = require('../lib/bracket-prob')
+    const bracketStore = bracketProb.loadStore()
     // The thinnest measured record behind any pick: Black-Litterman trusts the
     // slate's views only as far as its least-proven one.
     let kellyCalibratedN = Infinity
@@ -474,10 +476,13 @@ Respond ONLY with a JSON object — no markdown, no explanation, just the JSON:
       citationAudits.push({ symbol: rec.symbol, ...audit })
       const sources = audit.kept
 
-      const winProbInfo = kelly.winProbFromStats(kellyStats, {
-        assetType: expectedValue.normalizeAssetType(rec.type),
-        fallback:  0.5,
-      })
+      // The bracket (target-before-stop) probability once it has beaten the
+      // fixed-horizon rate on newer picks (lib/bracket-prob.js); else the rate.
+      const winProbInfo = bracketProb.winProbFor(bracketStore, { assetType: expectedValue.normalizeAssetType(rec.type) })
+        || kelly.winProbFromStats(kellyStats, {
+          assetType: expectedValue.normalizeAssetType(rec.type),
+          fallback:  0.5,
+        })
       const { p: winProb, source: winProbSource } = winProbInfo
       winProbSources.add(winProbSource)
       kellyCalibratedN = Math.min(kellyCalibratedN, winProbInfo.n || 0)

@@ -258,6 +258,23 @@ export default function TrackRecord({ data, onAdoptBrackets }) {
       </section>
 
       <section>
+        <h3 className="text-sm font-semibold mb-2">Which win probability sizes trades</h3>
+        {data.bracketProb ? (
+          <div className="text-[12px] space-y-1">
+            <p className={data.bracketProb.adopted ? 'text-emerald-400' : 'text-slate-400'}>
+              {data.bracketProb.adopted ? `Bracket ${data.bracketProb.adopted === 'model' ? 'model' : 'win rate'} in use` : 'Fixed-horizon win rate still in use'} — {data.bracketProb.reason}.
+            </p>
+            {data.bracketProb.validation?.brier && (
+              <p className="text-[11px] text-slate-500">
+                Error on the newest {data.bracketProb.validation.holdout} picks (Brier, lower is better): current {data.bracketProb.validation.brier.current}, bracket rate {data.bracketProb.validation.brier.rate}, per-pick model {data.bracketProb.validation.brier.model}. {pc(data.bracketProb.validation.bracketWinRate)} of those picks reached their target first or ended up.
+              </p>
+            )}
+            <p className="text-[11px] text-slate-500">Position sizes and the expected-value gate pay the target on a win and the stop on a loss, so the probability should be of THAT: target before stop. It replaces the 30-day rate only after predicting newer picks better.</p>
+          </div>
+        ) : <p className="text-[12px] text-slate-500">Not trained yet — the nightly cycle fits it once 150 picks have a target/stop outcome.</p>}
+      </section>
+
+      <section>
         <h3 className="text-sm font-semibold mb-2">Second check on AI Brain picks</h3>
         {data.metaLabel ? (
           <div className="text-[12px] space-y-1">

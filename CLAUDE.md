@@ -161,6 +161,9 @@ Turns the Brain from "tunes its own prompt" into a system that discovers strateg
 
 **Governance** (`routes/governance.js`): status/audit need sign-in; circuit reset is admin-only (they were public). Tests: `tests/governance-route.test.js`.
 
+## Round 4 — bracket probability, informed insider buying, filing changes
+**Bracket win probability** (`lib/bracket-prob.js`, `data/bracket-prob.json`, trained in the nightly brain-learning cycle). Kelly and the EV gate pay the target on a win and the stop on a loss, but were fed the 30-day fixed-horizon rate — a pick that hit its target and round-tripped counted as a loss. The event the payoffs describe is the BRACKET outcome (`meta-label.labelOf`: target first = 1, stop first = 0, neither → sign at day 30). Two candidates are fitted on the older 70% of labelled picks — a per-asset bracket rate (shrunk toward 50%, usable by any surface) and a per-pick logistic on the meta-label features (AI Brain-shaped picks) — and scored by Brier on the newest 30% against the CURRENT method (`kelly.winProbFromStats` over `computeStats` of the same older picks). One is adopted only if its Brier is lower with paired t ≥ 1; else nothing changes. `winProbFor(store, {assetType, pickLike})` returns the `winProbFromStats` shape (`bracket: true`) or null → callers keep the old rate. Used by Advisory (`routes/recommendations.js`) and the Research Desk thesis; `bracketProb` on the track record + a Track record section. Tests: `tests/bracket-prob.test.js`, `tests/recommendations-edge-gate.test.js`.
+
 ## Exposure Map — supply chain / peers, evidenced (`lib/exposure-map.js` + `lib/edgar-search.js` + `lib/entity-graph.js` + `routes/exposure.js`)
 Answers "which LISTED stocks have exposure to X, and which should I buy" for X = a public ticker OR a private company (SpaceX, OpenAI, Anduril…). For private anchors this is the only tradeable angle that exists.
 
