@@ -248,6 +248,9 @@ Advisory had the same hole from the other side: `routes/recommendations.js` rebu
 ## Technical Indicators (`lib/technical-indicators.js`)
 Pure TA math (RSI, EMA, MACD, BB, ATR, StochRSI, VWAP, OBV, pivot S/R, patterns, volume) shared by `routes/trading-analysis.js` and `routes/ai-brain.js`. `compactTaLine()` builds one-line per-symbol summaries injected into AI Brain scans as COMPUTED TECHNICALS so technicalScore is grounded in real data. Unit tests: `tests/technical-indicators.test.js`, `tests/brain-learnings.test.js`.
 
+## Trader skills (`.claude/skills/trader-*`) — Claude Code tools, not app code
+15 MIT skills by Jake Schincariol (licence copied into each folder): the 11 of `day-trader-skill` v2 (scanner, news, entry, exit, timemachine, risk, budget, broker, alerts, analyst, pelosi) plus the 4 of `trader-skill` v1 that v2 does not replace (copycat, screener, tax, rebalance; v2's budget keeps v1's weights mode). Standard-library Python 3.8+ reading public data (Yahoo chart/spark, Nasdaq Trader, SEC EDGAR, House Clerk); nothing here is required by the server, and Railway never runs them. They write to `trader/` at the repo root (gitignored — it holds the user's budget, limits, portfolio and broker log). SEC calls need `SEC_USER_AGENT` ("Name email") or `sec_user_agent` in `trader/config.json`. Only `trader-broker` can lead to an order, via the user's own Alpaca/IBKR connector, after `trader-risk` PASS + an explicit yes; `.claude/settings.json` keeps the Alpaca order tools on `ask` and the option/crypto/close-all tools on `deny`. Upstream tests (315 + 175) are not copied; re-run them from the source repos when updating.
+
 ## Deploy
 Railway auto-deploy `main` (`railway.toml` + `Procfile`).
 

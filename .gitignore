@@ -37,3 +37,6 @@ data/insider-buys.json
 data/insider-study.json
 data/filing-change.json
 data/ai-calls.jsonl
+# Trader skills (.claude/skills/trader-*) working folder: your budget, limits,
+# portfolio, orders and broker log. Personal — never commit it.
+trader/
