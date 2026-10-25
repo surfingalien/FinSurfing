@@ -79,7 +79,7 @@ export default function ThesisResult({ data, onCite }) {
               ? (actionable ? 'Trade plan — levels derived from the price and the thesis percentages' : 'Levels from the thesis — but the trade did not clear the checks above')
               : 'Reference levels — no trade was recommended; from price action only'}
           </h4>
-          <TradePlan plan={j.tradePlan} stock={{ currentPrice: data.lastPrice, priceSource: 'last close', priceAsOf: data.asOf }} />
+          <TradePlan symbol={data.symbol} plan={j.tradePlan} stock={{ currentPrice: data.lastPrice, priceSource: 'last close', priceAsOf: data.asOf }} />
         </div>
       )}
 
