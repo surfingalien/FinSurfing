@@ -190,6 +190,7 @@ async function gatherEvidence(sym, req) {
     symbol: sym, bars, taLine, fundamentals, macro,
     priceRegime: assetType === 'crypto' ? regimes?.crypto : regimes?.equity,
     minedFactors: assetType === 'stock' ? minedFactorsFor(bars, secFacts) : null,
+    insiders: assetType === 'stock' ? (() => { try { const ib = require('../lib/insider-buys'); return ib.describeRecent(ib.recentFor(sym)) } catch { return null } })() : null,
     institutional: assetType === 'stock' ? (() => { try { return require('../lib/thirteenf').describeFor(sym, require('../lib/thirteenf').readStore()) } catch { return null } })() : null,
     reported: secFacts ? require('../lib/sec-facts').snapshotAt(secFacts, new Date().toISOString().slice(0, 10), { price: bars.at(-1)?.c }) : null,
     earningsDrift: assetType === 'stock' ? earningsDriftFor(sym, bars, fundamentals, secFacts) : null,
@@ -263,6 +264,11 @@ router.get('/track-record', requireAuth, (req, res) => {
       strategy: p.strategy, spreadVsMiss: p.spreadVsMiss, tone: p.tone, caveats: p.caveats,
       analystNames: p.analystNames ?? null,
       sue: p.sue ? { events: p.sue.events, params: p.sue.params, groups: p.sue.groups, strategy: p.sue.strategy, spreadVsMiss: p.sue.spreadVsMiss } : null,
+    } } catch { return null } })(),
+    // Do opportunistic / cluster insider buys beat IWM here (lib/insider-buys.js)?
+    insiders: (() => { try { const s = require('../lib/insider-buys').readStudy(); return s && {
+      ranAt: s.ranAt, quarters: s.quarters, coverageStart: s.coverageStart, purchases: s.purchases, classes: s.classes, universe: s.universe,
+      events: s.events, params: s.params, groups: s.groups, strategies: s.strategies, oppVsRoutine: s.oppVsRoutine, caveats: s.caveats,
     } } catch { return null } })(),
     // Which win probability sizes trades: the bracket calibration, if adopted (lib/bracket-prob.js).
     bracketProb: (() => { try { const b = require('../lib/bracket-prob').loadStore(); return b && { adopted: b.adopted, rateAdopted: b.rateAdopted ?? false, reason: b.reason, validation: b.validation ?? null, labelled: b.labelled, trainedAt: b.trainedAt, rates: b.rates ?? null } } catch { return null } })(),

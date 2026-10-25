@@ -144,6 +144,22 @@ router.post('/13f/run', requireAuth, requireAdmin, (req, res) => {
   res.json({ ok: true, status: 'running', message: '13F refresh started (a few minutes). Poll GET /api/evolution/13f.' })
 })
 
+// ── Insider buying study (lib/insider-buys.js) ──────────────────────────────
+
+router.get('/insiders', requireAuth, (req, res) => {
+  const ib = require('../lib/insider-buys')
+  const sym = String(req.query.symbol || '').toUpperCase().replace(/[^A-Z0-9.-]/g, '')
+  res.json(sym ? { symbol: sym, recent: ib.recentFor(sym, { days: 365 }) } : { study: ib.readStudy() })
+})
+
+router.post('/insiders/run', requireAuth, requireAdmin, (req, res) => {
+  const { fetchDailyBars } = require('../lib/internal-api')
+  require('../lib/insider-buys').runStudy({ fetchBars: sym => fetchDailyBars(sym, { range: '5y', headers: { 'x-internal': '1' }, timeoutMs: 25_000 }) })
+    .then(s => console.log(`[evolution/insiders] ${s.purchases} purchases, opportunistic ${s.strategies.opportunistic.verdict}, cluster ${s.strategies.cluster.verdict}`))
+    .catch(e => console.error('[evolution/insiders]', e.message))
+  res.json({ ok: true, status: 'running', message: 'Insider study started (the first run downloads ~24 quarters of SEC data). Poll GET /api/evolution/insiders.' })
+})
+
 // ── Paper portfolio ───────────────────────────────────────────────────────────
 
 // Mark positions to market using the internal chart feed so equity/P&L are
