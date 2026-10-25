@@ -132,11 +132,12 @@ function strategiesFor(sym) {
 }
 
 /** The latest factor-mining run and this symbol's percentiles on its survivors. */
-function minedFactorsFor(bars, fund = null) {
+function minedFactorsFor(bars, fund = null, sym = null) {
   try {
     const fm = require('../lib/factor-mining')
     const library = fm.readLibrary()
-    return { library, ranks: library ? fm.percentilesFor(bars, library, { fund }) : [] }
+    const filings = sym ? require('../lib/filing-change').simsBySymbol()[sym] || null : null
+    return { library, ranks: library ? fm.percentilesFor(bars, library, { fund, filings }) : [] }
   } catch { return null }
 }
 
@@ -189,7 +190,9 @@ async function gatherEvidence(sym, req) {
   const { items, gaps, facts } = desk.buildEvidence({
     symbol: sym, bars, taLine, fundamentals, macro,
     priceRegime: assetType === 'crypto' ? regimes?.crypto : regimes?.equity,
-    minedFactors: assetType === 'stock' ? minedFactorsFor(bars, secFacts) : null,
+    minedFactors: assetType === 'stock' ? minedFactorsFor(bars, secFacts, sym) : null,
+    filingChange: assetType === 'stock' ? (() => { try { return require('../lib/filing-change').describeFor(sym) } catch { return null } })() : null,
+    insiders: assetType === 'stock' ? (() => { try { const ib = require('../lib/insider-buys'); return ib.describeRecent(ib.recentFor(sym)) } catch { return null } })() : null,
     institutional: assetType === 'stock' ? (() => { try { return require('../lib/thirteenf').describeFor(sym, require('../lib/thirteenf').readStore()) } catch { return null } })() : null,
     reported: secFacts ? require('../lib/sec-facts').snapshotAt(secFacts, new Date().toISOString().slice(0, 10), { price: bars.at(-1)?.c }) : null,
     earningsDrift: assetType === 'stock' ? earningsDriftFor(sym, bars, fundamentals, secFacts) : null,
@@ -197,7 +200,8 @@ async function gatherEvidence(sym, req) {
     exposure:   exposureFor(sym),
     track:      desk.trackFor(records, { symbol: sym, assetType, horizon }),
   })
-  const winProb = kelly.winProbFromStats(stats, { assetType })
+  const bracketProb = require('../lib/bracket-prob')
+  const winProb = bracketProb.winProbFor(bracketProb.loadStore(), { assetType }) || kelly.winProbFromStats(stats, { assetType })
   const levels = require('../lib/trade-levels').levelInputs(bars)
   const referenceLevels = levels ? require('../lib/trade-levels').tradeLevels({ price: facts.last, atr: levels.atr, support: levels.support, resistance: levels.resistance }) : null
   return { sym, assetType, facts, items, gaps, winProb, levels, referenceLevels, company: fundamentals?.company?.name ?? null }
@@ -263,12 +267,19 @@ router.get('/track-record', requireAuth, (req, res) => {
       analystNames: p.analystNames ?? null,
       sue: p.sue ? { events: p.sue.events, params: p.sue.params, groups: p.sue.groups, strategy: p.sue.strategy, spreadVsMiss: p.sue.spreadVsMiss } : null,
     } } catch { return null } })(),
+    // Do opportunistic / cluster insider buys beat IWM here (lib/insider-buys.js)?
+    insiders: (() => { try { const s = require('../lib/insider-buys').readStudy(); return s && {
+      ranAt: s.ranAt, quarters: s.quarters, coverageStart: s.coverageStart, purchases: s.purchases, classes: s.classes, universe: s.universe,
+      events: s.events, params: s.params, groups: s.groups, strategies: s.strategies, oppVsRoutine: s.oppVsRoutine, caveats: s.caveats,
+    } } catch { return null } })(),
+    // Which win probability sizes trades: the bracket calibration, if adopted (lib/bracket-prob.js).
+    bracketProb: (() => { try { const b = require('../lib/bracket-prob').loadStore(); return b && { adopted: b.adopted, rateAdopted: b.rateAdopted ?? false, reason: b.reason, validation: b.validation ?? null, labelled: b.labelled, trainedAt: b.trainedAt, rates: b.rates ?? null } } catch { return null } })(),
     // The second-opinion model on AI Brain picks (lib/meta-label.js).
     metaLabel: (() => { try { const m = require('../lib/meta-label').loadModel(); return m && { validated: m.validated, reason: m.reason, validation: m.validation ?? null, labelled: m.labelled, trainedAt: m.trainedAt } } catch { return null } })(),
     // Which price factors rank the large-cap list (lib/factor-mining.js), last weekly run.
     factors: (() => { try { const l = require('../lib/factor-mining').readLibrary(); return l && {
       ranAt: l.ranAt, universe: l.universe, tested: l.tested, periods: l.periods, horizon: l.horizon, admitted: l.admitted, caveats: l.caveats,
-      withFundamentals: l.withFundamentals ?? null,
+      withFundamentals: l.withFundamentals ?? null, withFilingChange: l.withFilingChange ?? null,
       proposals: (l.proposals || []).map(p => ({ name: p.name, hypothesis: p.hypothesis, status: p.status, reason: p.reason ?? null })),
       factors: l.factors.map(f => ({ name: f.name, label: f.label, source: f.source ?? 'builtin', verdict: f.verdict, direction: f.direction, train: f.train, holdout: f.holdout, dsr: f.deflated?.dsr ?? null, decay: f.decay ?? null, turnover: f.turnover ?? null })),
     } } catch { return null } })(),

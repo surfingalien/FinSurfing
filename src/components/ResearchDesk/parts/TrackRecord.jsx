@@ -40,6 +40,12 @@ const DRIFT_VERDICT = {
   rejected:     ['text-red-400',     'Rejected — beats did not drift ahead of SPY after costs'],
   insufficient: ['text-slate-500',   'Not enough events yet'],
 }
+const INSIDER_VERDICT = {
+  validated:    ['text-emerald-400', 'Validated — beat IWM after costs on both older and newer events'],
+  mixed:        ['text-amber-400',   'Mixed — positive on only part of the history, or not beyond chance'],
+  rejected:     ['text-red-400',     'Rejected — did not beat IWM after costs'],
+  insufficient: ['text-slate-500',   'Not enough events yet'],
+}
 const TONE_VERDICT = { adds: 'adds to a beat', 'no-evidence': 'no evidence it adds to a beat', insufficient: 'not enough calls to judge' }
 
 function DriftRow({ label, g }) {
@@ -255,6 +261,52 @@ export default function TrackRecord({ data, onAdoptBrackets }) {
             </p>
           </div>
         ) : <p className="text-[12px] text-slate-500">No drift study yet — it runs weekly (Sunday 5:30 AM ET). The estimate-free track needs no key; the analyst track needs FMP_API_KEY.</p>}
+      </section>
+
+      <section>
+        <h3 className="text-sm font-semibold mb-2">Insider buying</h3>
+        {data.insiders?.strategies ? (
+          <div className="space-y-2">
+            {[['opportunistic', 'Opportunistic buys'], ['cluster', 'Cluster buys (3+ insiders within 30 days)']].map(([k, label]) => (
+              <p key={k} className={`text-[12px] ${INSIDER_VERDICT[data.insiders.strategies[k].verdict]?.[0] || 'text-slate-400'}`}>
+                {label}: {INSIDER_VERDICT[data.insiders.strategies[k].verdict]?.[1] || data.insiders.strategies[k].verdict} ({data.insiders.strategies[k].reason}).
+              </p>
+            ))}
+            <div className="overflow-x-auto">
+              <table className="w-full text-[11px]">
+                <thead><tr className="text-slate-500 text-left"><th className="font-normal">After the Form 4 filing</th><th className="font-normal">vs {data.insiders.params?.benchmark}, {data.insiders.params?.holdDays} sessions</th><th className="font-normal">beat {data.insiders.params?.benchmark}</th><th className="font-normal">t (by month)</th><th className="font-normal">events</th></tr></thead>
+                <tbody>
+                  <DriftRow label="Opportunistic — older 70%" g={data.insiders.strategies.opportunistic.train} />
+                  <DriftRow label="Opportunistic — newest 30%" g={data.insiders.strategies.opportunistic.holdout} />
+                  <DriftRow label="Cluster — older 70%" g={data.insiders.strategies.cluster.train} />
+                  <DriftRow label="Cluster — newest 30%" g={data.insiders.strategies.cluster.holdout} />
+                  <DriftRow label="Routine (control)" g={data.insiders.groups?.routine} />
+                  <DriftRow label="Plan / stock-plan (control)" g={data.insiders.groups?.plan} />
+                </tbody>
+              </table>
+            </div>
+            <p className="text-[11px] text-slate-500">
+              {data.insiders.purchases} open-market purchases from {data.insiders.quarters} quarters of SEC data (since {data.insiders.coverageStart}); {data.insiders.universe} stocks priced; run {String(data.insiders.ranAt).slice(0, 10)}. Opportunistic minus routine: {data.insiders.oppVsRoutine?.spread ?? '—'}% (t {data.insiders.oppVsRoutine?.t ?? '—'}). Net of {data.insiders.params?.costBps}bps. {data.insiders.caveats?.join(' ')}
+            </p>
+          </div>
+        ) : <p className="text-[12px] text-slate-500">No insider study yet — it runs weekly (Sunday 6:45 AM ET) from SEC's free Form 4 data sets.</p>}
+      </section>
+
+      <section>
+        <h3 className="text-sm font-semibold mb-2">Which win probability sizes trades</h3>
+        {data.bracketProb ? (
+          <div className="text-[12px] space-y-1">
+            <p className={data.bracketProb.adopted ? 'text-emerald-400' : 'text-slate-400'}>
+              {data.bracketProb.adopted ? `Bracket ${data.bracketProb.adopted === 'model' ? 'model' : 'win rate'} in use` : 'Fixed-horizon win rate still in use'} — {data.bracketProb.reason}.
+            </p>
+            {data.bracketProb.validation?.brier && (
+              <p className="text-[11px] text-slate-500">
+                Error on the newest {data.bracketProb.validation.holdout} picks (Brier, lower is better): current {data.bracketProb.validation.brier.current}, bracket rate {data.bracketProb.validation.brier.rate}, per-pick model {data.bracketProb.validation.brier.model}. {pc(data.bracketProb.validation.bracketWinRate)} of those picks reached their target first or ended up.
+              </p>
+            )}
+            <p className="text-[11px] text-slate-500">Position sizes and the expected-value gate pay the target on a win and the stop on a loss, so the probability should be of THAT: target before stop. It replaces the 30-day rate only after predicting newer picks better.</p>
+          </div>
+        ) : <p className="text-[12px] text-slate-500">Not trained yet — the nightly cycle fits it once 150 picks have a target/stop outcome.</p>}
       </section>
 
       <section>

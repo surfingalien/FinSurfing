@@ -171,3 +171,28 @@ describe('POST /api/recommendations — expected-value gate', () => {
     }
   })
 })
+
+describe('POST /api/recommendations — bracket win probability', () => {
+  const fs = require('fs')
+  const bp = require('../lib/bracket-prob')
+  afterEach(() => { try { fs.unlinkSync(bp.STORE_FILE) } catch {} })
+
+  test('an adopted bracket rate replaces the fixed-horizon rate for sizing and the gate', async () => {
+    // The 30-day rate says 45%; the bracket record says stocks reach target before stop only 15% of the time.
+    bp.saveStore({ adopted: 'rate', rateAdopted: true, labelled: 400, rates: { overall: { n: 400, p: 0.15, raw: 0.14 }, byAsset: { stock: { n: 300, p: 0.15, raw: 0.14 } } } })
+    mockCall.mockResolvedValue(reply([goodPick('AAPL')]))
+    const res = await post()
+    expect(res.status).toBe(200)
+    // 20% target / 10% stop needs ~33% to break even, so 15% rejects it.
+    expect(res.body.recommendations).toHaveLength(0)
+    expect(res.body.edgeGate.winProbSources.join(' ')).toMatch(/bracket win rate, assetType:stock/)
+  })
+
+  test('a stored calibration that was not adopted changes nothing', async () => {
+    bp.saveStore({ adopted: null, rateAdopted: false, labelled: 400, rates: { overall: { n: 400, p: 0.15 }, byAsset: {} } })
+    mockCall.mockResolvedValue(reply([goodPick('AAPL')]))
+    const res = await post()
+    expect(res.body.recommendations).toHaveLength(1)
+    expect(res.body.recommendations[0].sizing.winProbSource).toMatch(/assetType:stock \(n=40/)
+  })
+})
