@@ -1,5 +1,9 @@
+import { lazy, Suspense, useState } from 'react'
 import { motion } from 'motion/react'
-import { GitFork, Lock } from 'lucide-react'
+import { GitFork, Lock, LineChart } from 'lucide-react'
+
+// recharts only loads when someone opens a chart, not with every scan card.
+const TradePlanChart = lazy(() => import('./TradePlanChart'))
 
 /* ── ScoreBar ──────────────────────────────────────────────── */
 export function ScoreBar({ agent, score, conflictAgents = [] }) {
@@ -140,8 +144,9 @@ export function PriceZones({ stock }) {
 const money = v => (v == null ? '—' : `$${Number(v) >= 1 ? Number(v).toFixed(2) : Number(v).toPrecision(4)}`)
 const range = (lo, hi) => `${money(lo)} – ${money(hi)}`
 
-export function TradePlan({ plan, stock }) {
+export function TradePlan({ plan, stock, symbol = stock?.symbol }) {
   const reference = plan.basis === 'technical'
+  const [chart, setChart] = useState(false)
   return (
     <div className={`mt-3 rounded-xl p-2.5 border ${reference ? 'bg-slate-500/5 border-slate-400/20' : 'bg-blue-500/5 border-blue-500/15'}`}>
       <div className="flex items-center justify-between gap-2 mb-1.5">
@@ -176,6 +181,19 @@ export function TradePlan({ plan, stock }) {
         </p>
       )}
       {plan.notes?.map((n, i) => <p key={i} className="text-[9px] text-amber-400 mt-1 leading-snug">⚠ {n}</p>)}
+      {symbol && (
+        <>
+          <button type="button" onClick={() => setChart(c => !c)} aria-expanded={chart}
+            className="mt-1.5 inline-flex items-center gap-1 text-[10px] text-blue-400 hover:text-blue-300">
+            <LineChart className="w-3 h-3" /> {chart ? 'Hide chart' : 'Show on chart'}
+          </button>
+          {chart && (
+            <Suspense fallback={<div className="h-[180px] flex items-center justify-center text-[10px] text-slate-500">Loading chart…</div>}>
+              <TradePlanChart symbol={symbol} plan={plan} price={stock?.currentPrice} />
+            </Suspense>
+          )}
+        </>
+      )}
       {stock?.metaLabel && (
         <p className={`text-[9px] mt-1.5 leading-snug ${stock.metaLabel.validated ? (stock.metaLabel.pass ? 'text-emerald-400' : 'text-amber-400') : 'text-slate-500'}`}>
           Second check — {Math.round(stock.metaLabel.prob * 100)}% chance of reaching the target before the stop, judged from picks like this one

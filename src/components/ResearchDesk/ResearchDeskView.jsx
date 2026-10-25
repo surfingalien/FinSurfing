@@ -157,7 +157,7 @@ export default function ResearchDeskView({ defaultSymbol = null, onSymbol }) {
                 {!thesis && dossier.referenceLevels && (
                   <div className="glass rounded-2xl p-4">
                     <h4 className="text-xs font-semibold mb-1">Where a setup would start — from price action, before any thesis</h4>
-                    <TradePlan plan={dossier.referenceLevels} stock={{ currentPrice: dossier.lastPrice, priceSource: 'last close', priceAsOf: dossier.asOf }} />
+                    <TradePlan symbol={dossier.symbol} plan={dossier.referenceLevels} stock={{ currentPrice: dossier.lastPrice, priceSource: 'last close', priceAsOf: dossier.asOf }} />
                   </div>
                 )}
                 {!thesis && (
