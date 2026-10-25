@@ -279,7 +279,7 @@ router.get('/track-record', requireAuth, (req, res) => {
     // Which price factors rank the large-cap list (lib/factor-mining.js), last weekly run.
     factors: (() => { try { const l = require('../lib/factor-mining').readLibrary(); return l && {
       ranAt: l.ranAt, universe: l.universe, tested: l.tested, periods: l.periods, horizon: l.horizon, admitted: l.admitted, caveats: l.caveats,
-      withFundamentals: l.withFundamentals ?? null, withFilingChange: l.withFilingChange ?? null,
+      withFundamentals: l.withFundamentals ?? null, withFilingChange: l.withFilingChange ?? null, selection: l.selection ?? null,
       proposals: (l.proposals || []).map(p => ({ name: p.name, hypothesis: p.hypothesis, status: p.status, reason: p.reason ?? null })),
       factors: l.factors.map(f => ({ name: f.name, label: f.label, source: f.source ?? 'builtin', verdict: f.verdict, direction: f.direction, train: f.train, holdout: f.holdout, dsr: f.deflated?.dsr ?? null, decay: f.decay ?? null, turnover: f.turnover ?? null })),
     } } catch { return null } })(),

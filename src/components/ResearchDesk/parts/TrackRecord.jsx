@@ -223,6 +223,11 @@ export default function TrackRecord({ data, onAdoptBrackets }) {
               </div>
             )}
             <p className="text-[11px] text-slate-500">IC is the rank correlation between a factor and the next {data.factors.horizon} days' return across the list. The direction is chosen on the older periods; the newest are untouched until then. Deflated = the chance the factor beats the luckiest of every candidate tried in both directions, admitted at ≥ 0.9. IC by horizon shows how fast the signal fades; turnover is the share of the top fifth replaced each month (what trading it costs). {data.factors.caveats?.[0]}</p>
+            {data.factors.selection && (
+              <p className={`text-[11px] ${data.factors.selection.pbo > 0.5 ? 'text-amber-400' : 'text-slate-500'}`}>
+                Selection check (probability of backtest overfitting): keeping whichever candidate had the best IC on half the periods, it ranked below the median on the other half in {Math.round(data.factors.selection.pbo * 100)}% of {data.factors.selection.splits} splits{data.factors.selection.pbo > 0.5 ? ' — picking the best-looking factor here mostly picks luck' : ''}.
+              </p>
+            )}
           </div>
         ) : <p className="text-[12px] text-slate-500">No factor-mining run yet — it runs weekly (Saturday 5:15 AM ET).</p>}
       </section>
@@ -414,7 +419,7 @@ export default function TrackRecord({ data, onAdoptBrackets }) {
 
       <section className="flex items-center gap-2 text-[12px] text-slate-400">
         <Database className="w-3.5 h-3.5" />
-        Strategy library: {data.strategies?.active ?? 0} active, {data.strategies?.proven ?? 0} proven on bars after discovery{data.strategies?.deflatedAdmissions ? `, ${data.strategies.deflatedAdmissions} admitted past the deflated-Sharpe check (beat the best of the strategies tried alongside them)` : ''}.
+        Strategy library: {data.strategies?.active ?? 0} active, {data.strategies?.proven ?? 0} proven on bars after discovery{data.strategies?.deflatedAdmissions ? `, ${data.strategies.deflatedAdmissions} admitted past the deflated-Sharpe check (beat the best of the strategies tried alongside them)` : ''}{data.strategies?.pboChecked ? `, ${data.strategies.pboChecked} also past the overfitting check (picking the best backtest in their batch did not usually pick a loser out of sample)` : ''}.
       </section>
     </div>
   )
