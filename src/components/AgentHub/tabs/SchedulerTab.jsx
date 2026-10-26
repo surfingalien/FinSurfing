@@ -4,6 +4,7 @@ import {
   Clock, Loader2, ToggleLeft, ToggleRight, AlertTriangle, ChevronDown, ChevronUp,
 } from 'lucide-react'
 import { apiFetch, timeAgo } from './shared'
+import { useAuth } from '../../../contexts/AuthContext'
 
 // ── ─────────────────────────────────────────────────────────────────────────────
 //    TAB 3 — Task Scheduler
@@ -97,6 +98,10 @@ function JobCard({ job, onTrigger, onToggle }) {
 }
 
 export default function SchedulerTab() {
+  // Trigger and toggle are requireAuth + requireAdmin on the server; the plain
+  // apiFetch sends no Authorization header, so every Run Now 401'd with
+  // "Missing access token" before the job ever started.
+  const { authFetch } = useAuth()
   const [jobs,    setJobs]    = useState([])
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState(null)
@@ -113,10 +118,20 @@ export default function SchedulerTab() {
 
   useEffect(() => { load() }, [load])
 
+  // The trigger is fire-and-forget (an AI Brain scan takes minutes), so poll
+  // while anything is running — otherwise the card sits on "Running…" until a
+  // manual Refresh.
+  const anyRunning = jobs.some(j => j.result.status === 'running')
+  useEffect(() => {
+    if (!anyRunning) return
+    const t = setInterval(load, 5_000)
+    return () => clearInterval(t)
+  }, [anyRunning, load])
+
   const handleTrigger = async (id) => {
     setJobs(prev => prev.map(j => j.id === id ? { ...j, result: { ...j.result, status: 'running' } } : j))
     try {
-      const r    = await apiFetch(`/api/scheduler/jobs/${id}/trigger`, { method: 'POST' })
+      const r    = await authFetch(`/api/scheduler/jobs/${id}/trigger`, { method: 'POST' })
       const data = await r.json()
       if (!r.ok) throw new Error(data.error)
       await load()
@@ -127,7 +142,13 @@ export default function SchedulerTab() {
 
   const handleToggle = async (id, enabled) => {
     setJobs(prev => prev.map(j => j.id === id ? { ...j, enabled } : j))
-    await apiFetch(`/api/scheduler/jobs/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled }) })
+    try {
+      const r = await authFetch(`/api/scheduler/jobs/${id}`, { method: 'PATCH', body: { enabled } })
+      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || `HTTP ${r.status}`)
+    } catch (e) {
+      // Undo the optimistic flip — the server did not change the job.
+      setJobs(prev => prev.map(j => j.id === id ? { ...j, enabled: !enabled, result: { ...j.result, error: e.message } } : j))
+    }
   }
 
   if (loading) return <div className="flex items-center justify-center py-16"><div className="w-6 h-6 border-2 border-mint-400/30 border-t-mint-400 rounded-full animate-spin" /></div>
