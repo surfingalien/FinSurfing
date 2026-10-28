@@ -91,21 +91,23 @@ describe('holdings rotation', () => {
 })
 
 describe('HTML', () => {
-  test('model text is escaped, abstentions and failures are stated', () => {
-    const [def, buffett, lynch] = Object.values(PERSONAS)
-    const html = me.buildStrategyDeskHtml({
-      dateStr: 'Wed, Oct 28',
-      results: [
-        { persona: def, data: { marketOutlook: 'Calm <b>tape</b>', recommendations: [{ symbol: 'NVDA', entryPrice: 100, takeProfitPrice: 115, targetReturn: 15, stopLossPrice: 94, stopLoss: 6, thesis: '<script>x</script>', expectedValue: { netEdge: 0.0123 } }] } },
-        { persona: buffett, data: { recommendations: [], abstained: true } },
-        { persona: lynch, error: 'timeout' },
-      ],
+  test('persona email: model text is escaped, net edge shown as a percent', () => {
+    const html = me.buildPersonaHtml({
+      persona: PERSONAS.buffett, dateStr: 'Wed, Oct 28',
+      data: { marketOutlook: 'Calm <b>tape</b>', recommendations: [{ symbol: 'NVDA', entryPrice: 100, takeProfitPrice: 115, targetReturn: 15, stopLossPrice: 94, stopLoss: 6, thesis: '<script>x</script>', expectedValue: { netEdge: 0.0123 } }] },
     })
+    expect(html).toContain('Warren Buffett')
     expect(html).not.toMatch(/<script>|<b>tape/)
     expect(html).toContain('&lt;script&gt;')
     expect(html).toContain('1.23%')
-    expect(html).toMatch(/abstained/)
-    expect(html).toMatch(/failed today: timeout/)
+  })
+
+  test('an abstaining persona says so; failures are listed with their reasons', () => {
+    expect(me.buildPersonaHtml({ persona: PERSONAS.lynch, dateStr: 'Wed', data: { recommendations: [] } })).toMatch(/abstained/)
+    const html = me.buildPersonaFailuresHtml({ dateStr: 'Wed', total: 10, failures: [{ persona: PERSONAS.burry, error: 'HTTP 503 <AI>' }] })
+    expect(html).toContain('Michael Burry')
+    expect(html).toContain('HTTP 503 &lt;AI&gt;')
+    expect(html).toMatch(/1 of 10 persona run\(s\) failed/)
   })
 
   test('holdings: verdict, checked claims, plan, deep link and what is next', () => {
@@ -168,23 +170,31 @@ describe('morning brief (buy / avoid)', () => {
 })
 
 describe('strategy desk', () => {
-  test('every persona runs independently (no userId, so no shared "recent picks"); a failure is reported, not fatal', async () => {
+  test('one email per persona, run independently (no userId, so no shared "recent picks"); failures in one summary', async () => {
     global.fetch = jest.fn(async (url, opts) => {
       const { persona } = JSON.parse(opts.body)
-      return persona === 'burry' ? json({ error: 'model timeout' }) : json({ recommendations: [{ symbol: `${persona.toUpperCase()}1`, entryPrice: 10 }], marketOutlook: 'ok' })
+      if (persona === 'burry') return json({ error: 'model timeout' })
+      if (persona === 'marks') return json({ recommendations: [], abstained: true })
+      return json({ recommendations: [{ symbol: `${persona.toUpperCase()}1`, entryPrice: 10 }], marketOutlook: 'ok' })
     })
     const out = await jobs._strategyDeskEmailForTests()
     const bodies = global.fetch.mock.calls.map(bodyOf)
     expect(bodies.map(b => b.persona)).toEqual(Object.keys(PERSONAS))
     bodies.forEach(b => expect(b.userId).toBeUndefined())
+    const subjects = mockSend.mock.calls.map(c => c[0].subject)
+    expect(subjects).toHaveLength(10) // 9 persona emails (the abstain included) + 1 failure summary
+    expect(subjects.filter(s => /Warren Buffett — 1 pick —/.test(s))).toHaveLength(1)
+    expect(subjects.filter(s => /Howard Marks — no picks today/.test(s))).toHaveLength(1)
+    expect(subjects.some(s => /Michael Burry/.test(s))).toBe(false)
+    expect(subjects.at(-1)).toMatch(/1 of 10 persona run\(s\) failed/)
     expect(out.personas.find(p => p.id === 'burry').error).toMatch(/model timeout/)
-    expect(mockSend.mock.calls[0][0].subject).toMatch(/10 personas/)
   })
 
-  test('every persona failing is a failed run, not an empty email', async () => {
+  test('an outage is one email, not ten, and a failed run', async () => {
     global.fetch = jest.fn(async () => json({ error: 'AI unavailable' }))
     await expect(jobs._strategyDeskEmailForTests()).rejects.toThrow(/every persona run failed/)
-    expect(mockSend).not.toHaveBeenCalled()
+    expect(mockSend).toHaveBeenCalledTimes(1)
+    expect(mockSend.mock.calls[0][0].subject).toMatch(/10 of 10 persona run\(s\) failed/)
   })
 })
 
