@@ -38,6 +38,7 @@ const kelly                    = require('../lib/kelly')
 const library                  = require('../lib/strategy-library')
 const entityGraph              = require('../lib/entity-graph')
 const learningStore            = require('../lib/learning-store')
+const notesStore               = require('../lib/notes-store')
 const durableFiles             = require('../lib/durable-files')
 const desk                     = require('../lib/research-desk')
 const priceRegime              = require('../lib/price-regime')
@@ -166,6 +167,19 @@ function earningsDriftFor(sym, bars, fundamentals, secFacts = null) {
 }
 
 /** Everything the thesis may rest on, computed server-side. */
+// The user's latest Second Brain note on the symbol, leaving out the notes the
+// morning job writes from this desk's own theses (that would be the desk
+// quoting itself). Best-effort: a notes failure never costs the dossier.
+async function ownNoteFor(userId, sym) {
+  try {
+    const [note] = await notesStore.latestNotes(userId, sym, { limit: 1, withoutTag: notesStore.RESEARCH_DESK_TAG })
+    return note ?? null
+  } catch (e) {
+    console.warn('[research-desk] own-note lookup failed:', e.message)
+    return null
+  }
+}
+
 async function gatherEvidence(sym, req) {
   const headers   = fwdKeys(req)
   const assetType = assetTypeOf(sym)
@@ -202,6 +216,7 @@ async function gatherEvidence(sym, req) {
     strategies: strategiesFor(sym),
     exposure:   exposureFor(sym),
     track:      desk.trackFor(records, { symbol: sym, assetType, horizon }),
+    ownNote:    await ownNoteFor(effectiveUserId(req), sym),
   })
   const bracketProb = require('../lib/bracket-prob')
   const winProb = bracketProb.winProbFor(bracketProb.loadStore(), { assetType }) || kelly.winProbFromStats(stats, { assetType })
