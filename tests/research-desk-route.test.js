@@ -152,6 +152,39 @@ describe('POST /:symbol/thesis', () => {
   })
 })
 
+// The morning holdings-research job (lib/scheduled-jobs.js) calls this route
+// over loopback with the internal secret. It has no req.user — the route read
+// req.user.userId and would have thrown — so the owner rides in the body.
+describe('POST /:symbol/thesis — from the holdings-research job', () => {
+  const internal = () => ({ 'x-internal': '1', 'x-internal-secret': require('../lib/internal-secret').INTERNAL_SECRET })
+  const journal = () => fs.readFileSync(TMP_THESES, 'utf8').trim().split('\n').map(l => JSON.parse(l))
+
+  test('a verified internal call is journalled under the owner it names', async () => {
+    const id = await valId()
+    mockCall.mockResolvedValue(withIds(thesisReply(), id))
+    const r = await request(app).post('/api/research-desk/ACME/thesis').set(internal()).send({ userId: 'owner-1' })
+    expect(r.body.error).toBeUndefined()
+    expect(r.body.judgement.verdict).toBe('actionable')
+    expect(journal()[0].userId).toBe('owner-1')
+  })
+
+  test('a signed-in user cannot journal under someone else by naming them in the body', async () => {
+    const id = await valId()
+    mockCall.mockResolvedValue(withIds(thesisReply(), id))
+    await request(app).post('/api/research-desk/ACME/thesis').set('Authorization', `Bearer ${tokenA}`).send({ userId: 'user-b' })
+    expect(journal()[0].userId).toBe('user-a')
+  })
+
+  test("the job's calls do not spend the per-user thesis limit (12 per 15 minutes)", async () => {
+    const id = await valId()
+    mockCall.mockResolvedValue(withIds(thesisReply(), id))
+    for (let i = 0; i < 13; i++) {
+      const r = await request(app).post('/api/research-desk/ACME/thesis').set(internal()).send({ userId: 'owner-1' })
+      expect(r.status).toBe(200)
+    }
+  })
+})
+
 describe('POST /:symbol/thesis — bull vs bear debate', () => {
   const reply = obj => ({ text: JSON.stringify(obj), llmUsed: 'claude' })
 

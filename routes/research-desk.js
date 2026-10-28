@@ -21,7 +21,7 @@ const path    = require('path')
 const crypto  = require('crypto')
 const rateLimit = require('express-rate-limit')
 
-const { requireAuth }          = require('../middleware/auth')
+const { requireAuth, effectiveUserId } = require('../middleware/auth')
 const { getRouter }            = require('../lib/ai-router')
 const { THESIS_SCHEMA, BULL_SCHEMA, BEAR_SCHEMA, DECISION_SCHEMA } = require('../lib/ai-schemas')
 const { tryParseAiJson }       = require('../lib/ai-json')
@@ -30,7 +30,7 @@ const { fetchDailyBars }       = require('../lib/internal-api')
 const { compactTaLine }        = require('../lib/technical-indicators')
 const { isLastBarForming }     = require('../lib/bar-session')
 const { startJsonHeartbeat }   = require('../lib/http-heartbeat')
-const { INTERNAL_SECRET }      = require('../lib/internal-secret')
+const { INTERNAL_SECRET, isInternalRequest } = require('../lib/internal-secret')
 const { isCryptoSymbol }       = require('../lib/crypto-classify')
 const { readPredictions, computeStats, getLearningHealth } = require('../lib/brain-learnings')
 const { computeEdgeReport }    = require('../lib/edge-report')
@@ -54,9 +54,12 @@ const KEY_HEADERS = ['x-aisa-key', 'x-finnhub-key', 'x-fmp-key', 'x-td-key', 'x-
 
 // One LLM call per thesis; generous for research, tight enough to stop a loop.
 // Keyed by IP like every other limiter here (a custom key generator trips
-// express-rate-limit's IPv6 validation).
+// express-rate-limit's IPv6 validation). The morning holdings-research job
+// (lib/scheduled-jobs.js) calls over loopback with the internal secret and
+// bounds itself, so it does not spend a signed-in user's budget.
 const thesisLimit = rateLimit({
   windowMs: 15 * 60 * 1000, max: 12,
+  skip: isInternalRequest,
   standardHeaders: true, legacyHeaders: false,
   message: { error: 'Thesis limit reached — try again in a few minutes' },
 })
@@ -431,7 +434,9 @@ router.post('/:symbol/thesis', requireAuth, thesisLimit, async (req, res) => {
   const judgement = desk.judgeThesis({ thesis, items: ev.items, lastPrice: ev.facts.last, assetType: ev.assetType, winProb: ev.winProb, levels: ev.levels })
   const entry = {
     id: crypto.randomBytes(5).toString('hex'),
-    userId: req.user.userId,
+    // Not req.user.userId: an internal call (the holdings-research job) has no
+    // req.user, and the owner rides in the body — honoured only when verified.
+    userId: effectiveUserId(req) ?? null,
     symbol: sym, company: ev.company, assetType: ev.assetType,
     at: new Date().toISOString(),
     lastPrice: ev.facts.last, asOf: ev.facts.date,
