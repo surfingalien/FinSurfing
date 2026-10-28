@@ -19,6 +19,16 @@ jest.mock('../lib/user-holdings', () => ({
   holdingSymbols: (...a) => mockHoldings(...a),
 }))
 
+// Second Brain notes: the holdings job reads the previous verdict + the user's
+// own note and saves today's thesis; the Sunday job counts notes to consolidate.
+const mockLatest = jest.fn(async () => [])
+const mockCreate = jest.fn(async (userId, note) => ({ id: 'n1', user_id: userId, ...note }))
+jest.mock('../lib/notes-store', () => ({
+  RESEARCH_DESK_TAG: 'research-desk',
+  latestNotes: (...a) => mockLatest(...a),
+  createNote: (...a) => mockCreate(...a),
+}))
+
 const me = require('../lib/morning-emails')
 const jobs = require('../lib/scheduled-jobs')
 const { PERSONAS } = require('../lib/investor-personas')
@@ -32,9 +42,10 @@ let realFetch
 beforeEach(() => {
   realFetch = global.fetch
   mockSend.mockClear(); mockUserId.mockReset(); mockHoldings.mockReset()
+  mockLatest.mockReset(); mockLatest.mockResolvedValue([]); mockCreate.mockClear()
   jest.spyOn(console, 'warn').mockImplementation(() => {})
 })
-afterEach(() => { global.fetch = realFetch; jest.restoreAllMocks() })
+afterEach(() => { global.fetch = realFetch; jest.useRealTimers(); jest.restoreAllMocks() })
 
 describe('splitBuysAvoids', () => {
   test('buys by score, avoids weakest first, a symbol seen twice counted once', () => {
@@ -229,5 +240,111 @@ describe('holdings research', () => {
     mockHoldings.mockResolvedValue([])
     expect((await jobs._holdingsResearchEmailForTests()).reason).toMatch(/no holdings/)
     expect(mockSend).not.toHaveBeenCalled()
+  })
+})
+
+// A + B: every holdings thesis is saved to the Second Brain with its verdict,
+// and the next email says whether the verdict changed and quotes the user's
+// own latest note.
+describe('holdings research → Second Brain', () => {
+  const actionable = { company: 'NVIDIA', lastPrice: 180, judgement: { verdict: 'actionable', reasons: ['+1.2% expected'], bull: [{ claim: 'ROIC 60%' }], bear: [], zones: { entryLow: 176, entryHigh: 184, target: 207, stop: 169, targetReturn: 15, stopLoss: 6 }, horizonDays: 30, invalidation: 'Orders fall' } }
+
+  test("each thesis is saved as a tagged note under the owner's account", async () => {
+    mockUserId.mockResolvedValue('user-1')
+    mockHoldings.mockResolvedValue(['NVDA'])
+    global.fetch = jest.fn(async () => json(actionable))
+    const out = await jobs._holdingsResearchEmailForTests()
+    expect(mockCreate).toHaveBeenCalledWith('user-1', expect.objectContaining({
+      symbol: 'NVDA', note_type: 'thesis', tags: ['research-desk', 'verdict:actionable'],
+      title: expect.stringMatching(/^Research Desk · NVDA · .* · Actionable long$/),
+    }))
+    const content = mockCreate.mock.calls[0][1].content
+    expect(content).toMatch(/\*\*Verdict: Actionable long\*\*/)
+    expect(content).toMatch(/- ROIC 60%/)
+    expect(content).toMatch(/#\/research-desk\/NVDA/)
+    expect(out.researched[0].noteSaved).toBe(true)
+  })
+
+  test('the email says the verdict changed and shows the latest own note; reads happen before today is saved', async () => {
+    mockUserId.mockResolvedValue('user-1')
+    mockHoldings.mockResolvedValue(['NVDA'])
+    mockLatest.mockImplementation(async (uid, sym, opts) => opts.withTag
+      ? [{ tags: ['research-desk', 'verdict:no-trade'], created_at: '2026-10-27T11:50:00Z' }]
+      : [{ title: 'Why I hold NVDA', updated_at: '2026-10-20T09:00:00Z' }])
+    global.fetch = jest.fn(async () => json(actionable))
+    await jobs._holdingsResearchEmailForTests()
+    const html = mockSend.mock.calls[0][0].html
+    expect(html).toMatch(/Changed<\/strong> since 2026-10-27: was No trade, now Actionable long/)
+    expect(html).toMatch(/Your latest note: “Why I hold NVDA” \(2026-10-20\)/)
+    expect(mockLatest.mock.invocationCallOrder[0]).toBeLessThan(mockCreate.mock.invocationCallOrder[0])
+  })
+
+  test('a failed note save never fails the email', async () => {
+    mockUserId.mockResolvedValue('user-1')
+    mockHoldings.mockResolvedValue(['NVDA'])
+    mockCreate.mockRejectedValueOnce(new Error('db down'))
+    global.fetch = jest.fn(async () => json(actionable))
+    const out = await jobs._holdingsResearchEmailForTests()
+    expect(out.researched[0]).toMatchObject({ verdict: 'actionable', noteSaved: false })
+    expect(mockSend).toHaveBeenCalledTimes(1)
+  })
+
+  test('verdictOfNote reads the tag; an untagged note has none', () => {
+    expect(me.verdictOfNote({ tags: ['research-desk', 'verdict:no-trade'] })).toBe('no-trade')
+    expect(me.verdictOfNote({ tags: ['x'] })).toBeNull()
+  })
+})
+
+// C: the routine's weekly step, emailed on Sundays.
+describe('Second Brain weekly email', () => {
+  const lint = { issues: [{ severity: 'error', title: 'AAPL', message: 'Note1 bullish, Note2 bearish' }, { severity: 'warning', title: 'TSLA', message: 'TSLA is in your portfolio but has no research notes' }], score: 77, noteCount: 12 }
+
+  test('runs Weekly Synthesis and Lint for the owner, with their holdings', async () => {
+    jest.useFakeTimers({ now: new Date('2026-11-15T14:00:00Z'), doNotFake: ['nextTick', 'setImmediate'] }) // third Sunday
+    mockUserId.mockResolvedValue('user-1')
+    mockHoldings.mockResolvedValue(['AAPL', 'TSLA'])
+    global.fetch = jest.fn(async url => json(String(url).includes('weekly-synthesis')
+      ? { title: 'Weekly Synthesis', content: '## Emerging Themes\n- AI capex <script>x</script>\n**Bold** point' }
+      : lint))
+    const out = await jobs._secondBrainWeeklyEmailForTests()
+    const [synthCall, lintCall] = global.fetch.mock.calls
+    expect(synthCall[0]).toMatch(/\/api\/research-notes\/weekly-synthesis$/)
+    expect(bodyOf(synthCall)).toEqual({ userId: 'user-1' })
+    expect(bodyOf(lintCall)).toEqual({ userId: 'user-1', portfolioSymbols: ['AAPL', 'TSLA'] })
+    const { subject, html } = mockSend.mock.calls[0][0]
+    expect(subject).toMatch(/health 77\/100/)
+    expect(html).toContain('Emerging Themes')
+    expect(html).toContain('&lt;script&gt;')
+    expect(html).not.toContain('<script>')
+    expect(html).toMatch(/Contradictions \(1\)/)
+    expect(html).toMatch(/Your research routine/)
+    expect(out.consolidate).toBeNull() // not the first Sunday
+    expect(mockLatest).not.toHaveBeenCalled()
+  })
+
+  test("first Sunday of the month lists holdings to consolidate, counting only the user's own notes", async () => {
+    jest.useFakeTimers({ now: new Date('2026-11-01T14:00:00Z'), doNotFake: ['nextTick', 'setImmediate'] })
+    mockUserId.mockResolvedValue('user-1')
+    mockHoldings.mockResolvedValue(['AAPL', 'TSLA'])
+    mockLatest.mockImplementation(async (uid, sym) => (sym === 'AAPL' ? [{}, {}, {}, {}] : [{}]))
+    global.fetch = jest.fn(async url => json(String(url).includes('weekly-synthesis') ? { content: 'x' } : lint))
+    const out = await jobs._secondBrainWeeklyEmailForTests()
+    expect(out.consolidate).toEqual([{ symbol: 'AAPL', count: 4 }])
+    mockLatest.mock.calls.forEach(c => expect(c[2]).toMatchObject({ withoutTag: 'research-desk' }))
+    expect(mockSend.mock.calls[0][0].subject).toMatch(/1 to consolidate/)
+  })
+
+  test('a quiet week (no notes) still sends the health check; both failing is a failed run', async () => {
+    mockUserId.mockResolvedValue('user-1')
+    mockHoldings.mockResolvedValue([])
+    global.fetch = jest.fn(async url => (String(url).includes('weekly-synthesis')
+      ? { ok: false, status: 400, json: async () => ({}), text: async () => '{"error":"No notes created or updated in the last 7 days"}' }
+      : json(lint)))
+    const out = await jobs._secondBrainWeeklyEmailForTests()
+    expect(out.synthesis).toMatch(/nothing to synthesise/)
+    expect(mockSend.mock.calls[0][0].html).toMatch(/nothing to synthesise/)
+
+    global.fetch = jest.fn(async () => json({ error: 'AI service not configured' }))
+    await expect(jobs._secondBrainWeeklyEmailForTests()).rejects.toThrow(/both failed/)
   })
 })

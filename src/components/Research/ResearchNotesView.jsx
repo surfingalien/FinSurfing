@@ -29,6 +29,7 @@ import ThinkModal           from './notes/ThinkModal'
 import ThinkingPartnerModal from './notes/ThinkingPartnerModal'
 import LintModal            from './notes/LintModal'
 import WeeklySynthesisModal from './notes/WeeklySynthesisModal'
+import RoutineCard          from './notes/RoutineCard'
 
 // ── Main view ─────────────────────────────────────────────────────────────────
 export default function ResearchNotesView({ defaultSymbol, portfolio }) {
@@ -217,6 +218,8 @@ export default function ResearchNotesView({ defaultSymbol, portfolio }) {
             </span>
           )}
         </button>
+
+        <RoutineCard />
 
         {/* Note creation error */}
         {noteError && (
