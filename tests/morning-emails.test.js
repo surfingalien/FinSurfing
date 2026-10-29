@@ -207,6 +207,23 @@ describe('strategy desk', () => {
     expect(mockSend).toHaveBeenCalledTimes(1)
     expect(mockSend.mock.calls[0][0].subject).toMatch(/10 of 10 persona run\(s\) failed/)
   })
+
+  test('a rejected send does not stop the personas after it; it is reported in the summary', async () => {
+    jest.spyOn(console, 'error').mockImplementation(() => {})
+    global.fetch = jest.fn(async (url, opts) => json({ recommendations: [{ symbol: JSON.parse(opts.body).persona.toUpperCase(), entryPrice: 10 }] }))
+    mockSend.mockImplementation(async ({ subject }) => {
+      if (/Warren Buffett/.test(subject)) throw new Error('Resend error 503 (after 3 attempts)')
+      return true
+    })
+    try {
+      const out = await jobs._strategyDeskEmailForTests()
+      expect(global.fetch).toHaveBeenCalledTimes(10) // every persona still ran
+      const buffett = out.personas.find(p => p.id === 'buffett')
+      expect(buffett.sent).toBe(false)
+      expect(buffett.error).toMatch(/email was not sent: Resend error 503/)
+      expect(mockSend.mock.calls.at(-1)[0].subject).toMatch(/1 of 10 persona run\(s\) failed/)
+    } finally { mockSend.mockImplementation(async () => true) }
+  })
 })
 
 describe('holdings research', () => {
