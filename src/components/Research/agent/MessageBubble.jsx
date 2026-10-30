@@ -25,6 +25,44 @@ function renderMarkdown(text) {
       continue
     }
 
+    // ## Heading (the agent writes these; they used to show as raw "##")
+    const heading = line.trim().match(/^(#{1,4})\s+(.+)$/)
+    if (heading) {
+      elements.push(
+        <h3 key={key++} className={`${heading[1].length <= 2 ? 'text-base' : 'text-sm'} font-bold text-mint-400 mt-4 mb-1`}
+          dangerouslySetInnerHTML={{ __html: formatInline(heading[2]) }} />
+      )
+      continue
+    }
+
+    // | table | rows | — consecutive pipe lines; the |---| row is dropped
+    if (/^\|.*\|$/.test(line.trim())) {
+      const rows = []
+      while (i < lines.length && /^\|.*\|$/.test(lines[i].trim())) {
+        const cells = lines[i].trim().slice(1, -1).split('|').map(c => c.trim())
+        if (!cells.every(c => /^:?-{2,}:?$/.test(c))) rows.push(cells)
+        i++
+      }
+      i--
+      if (!rows.length) continue
+      const [head, ...body] = rows
+      elements.push(
+        <div key={key++} className="overflow-x-auto my-2">
+          <table className="w-full text-xs text-slate-300 border-collapse">
+            <thead>
+              <tr>{head.map((c, j) => <th key={j} className="text-left font-semibold text-slate-200 border-b border-white/10 px-2 py-1" dangerouslySetInnerHTML={{ __html: formatInline(c) }} />)}</tr>
+            </thead>
+            <tbody>
+              {body.map((r, ri) => (
+                <tr key={ri}>{r.map((c, j) => <td key={j} className="border-b border-white/[0.06] px-2 py-1 align-top" dangerouslySetInnerHTML={{ __html: formatInline(c) }} />)}</tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )
+      continue
+    }
+
     // Bullet points
     if (/^[-•*]\s/.test(line.trim())) {
       const content = line.trim().replace(/^[-•*]\s/, '')
@@ -93,8 +131,9 @@ function formatInline(text) {
     .replace(/\*(.+?)\*/g, '<em class="text-slate-200">$1</em>')
     // `code`
     .replace(/`([^`]+)`/g, '<code class="font-mono text-xs bg-white/10 px-1.5 py-0.5 rounded text-mint-300">$1</code>')
-    // $price highlights
-    .replace(/\$(\d[\d,.]+)/g, '<span class="font-mono text-emerald-300">$$1</span>')
+    // $price highlights. In a replacement string "$$" is a literal "$", so
+    // "$$1" printed every price as "$1"; "$$$1" is "$" + the captured figure.
+    .replace(/\$(\d[\d,.]*)/g, '<span class="font-mono text-emerald-300">$$$1</span>')
 }
 
 // ── Plan check ────────────────────────────────────────────────────────────────
