@@ -111,6 +111,14 @@ describe('GET /:symbol/evidence', () => {
     mockBars.mockResolvedValue(bars.slice(0, 20))
     const r = await request(app).get('/api/research-desk/ACME/evidence').set('Authorization', `Bearer ${tokenA}`)
     expect(r.status).toBe(422)
+    expect(r.body.error).toMatch(/20 daily bars, need 60\+/)
+  })
+
+  test('no bars at all names the reason instead of "0 daily bars"', async () => {
+    mockBars.mockResolvedValue(Object.assign([], { reason: 'the data providers did not answer within 25s' }))
+    const r = await request(app).get('/api/research-desk/SPCX/evidence').set('Authorization', `Bearer ${tokenA}`)
+    expect(r.status).toBe(422)
+    expect(r.body.error).toBe('No price history for SPCX: the data providers did not answer within 25s')
   })
 
   test('rejects a malformed symbol', async () => {
