@@ -25,24 +25,26 @@ app.use('/api/alerts',       require('../routes/alerts'))
 const refused = [
   ['post', '/api/dcf', { symbol: 'AAPL' }],
   ['post', '/api/dividend/screen', {}],
-  ['get',  '/api/patterns/AAPL'],
-  ['get',  '/api/forecast/AAPL'],
-  ['get',  '/api/timeline'],
-  ['get',  '/api/agentic-os/stats'],
-  ['get',  '/api/agentic-os/graph'],
-  ['get',  '/api/market-focus'],
-  ['get',  '/api/scheduler/jobs'],
-  ['get',  '/api/scheduler/cache/scan'],
-  ['get',  '/api/scheduler/cache/digest'],
-  ['get',  '/api/scheduler/cache/alt/AAPL'],
-  ['get',  '/api/alerts/stream'],
+  ['get',  '/api/patterns/AAPL', null],
+  ['get',  '/api/forecast/AAPL', null],
+  ['get',  '/api/timeline', null],
+  ['get',  '/api/agentic-os/stats', null],
+  ['get',  '/api/agentic-os/graph', null],
+  ['get',  '/api/market-focus', null],
+  ['get',  '/api/scheduler/jobs', null],
+  ['get',  '/api/scheduler/cache/scan', null],
+  ['get',  '/api/scheduler/cache/digest', null],
+  ['get',  '/api/scheduler/cache/alt/AAPL', null],
+  ['get',  '/api/alerts/stream', null],
   ['post', '/api/alerts/trigger', { symbol: 'AAPL' }],
   ['post', '/api/alerts/watchlist', { symbols: ['AAPL'] }],
 ]
 
+// Every row has three values: jest-each passes a `done` callback as an extra
+// argument when a row is shorter than the test function's parameter list.
 test.each(refused)('%s %s → 401 without a token', async (method, path, body) => {
   const req = request(app)[method](path)
-  const res = body ? await req.send(body) : await req
+  const res = body != null ? await req.send(body) : await req
   expect(res.status).toBe(401)
 })
 
