@@ -156,6 +156,43 @@ describe('auditClaims — each claim is checked against ONLY what it cites', () 
   })
 })
 
+// The user's latest Second Brain note joins the dossier as context. Notes can
+// hold unchecked AI text (Braindump, Deep Research), so nothing may rest on it.
+describe('the user\'s own note — context, never evidence', () => {
+  const ownNote = { title: 'ACME thesis', content: 'Revenue will grow 45% next year on the new product.', updated_at: '2026-10-20T10:00:00Z' }
+  const { items, facts } = evidence({ ownNote })
+  const mine = items.find(i => i.kind === 'own-note')
+  const val = items.find(i => i.kind === 'valuation').id
+
+  test('it is listed, dated, uncitable, and labelled as context in the prompt', () => {
+    expect(mine).toMatchObject({ measured: false, citable: false, source: 'Second Brain' })
+    expect(mine.text).toContain('"ACME thesis" (2026-10-20)')
+    expect(buildThesisPrompt({ symbol: 'ACME', items })).toMatch(new RegExp(`\\[${mine.id}\\] Your own earlier note \\(the user's own earlier note — context only; never cite it\\)`))
+    expect(evidence().items.some(i => i.kind === 'own-note')).toBe(false)
+  })
+
+  test('a claim citing it is dropped even though the figure is in it', () => {
+    const { kept, dropped } = auditClaims([
+      { claim: 'Revenue will grow 45% next year', cites: [mine.id] },
+      { claim: 'Revenue will grow 45% and P/E is 24.3', cites: [mine.id, val] },
+    ], items)
+    expect(kept).toHaveLength(0)
+    expect(dropped.map(d => d.reason)).toEqual([
+      `cites the user's own note (${mine.id}), which is context, not evidence`,
+      `cites the user's own note (${mine.id}), which is context, not evidence`,
+    ])
+  })
+
+  test("a summary supported only by the note's figures is removed", () => {
+    const out = judgeThesis({
+      thesis: { stance: 'long', summary: 'Revenue grows 45% next year.', bull: [{ claim: 'ROIC of 19.1% on a P/E of 24.3', cites: [val] }], bear: [], targetReturn: 15, stopLoss: 6, horizonDays: 30, invalidation: 'x' },
+      items, lastPrice: facts.last, assetType: 'stock', winProb: { p: 0.6, n: 100, source: 't' },
+    })
+    expect(out.summary).toBeNull()
+    expect(out.bull).toHaveLength(1)
+  })
+})
+
 describe('judgeThesis', () => {
   const { items, facts } = evidence()
   const val = items.find(i => i.kind === 'valuation').id

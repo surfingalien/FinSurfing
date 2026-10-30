@@ -22,8 +22,9 @@ const https           = require('https')
 const http            = require('http')
 const Anthropic       = require('@anthropic-ai/sdk')
 const { query }       = require('../db/db')
-const { requireAuth } = require('../middleware/auth')
+const { requireAuth, effectiveUserId } = require('../middleware/auth')
 const { MEM, persistMem } = require('../db/memstore')
+const notesStore      = require('../lib/notes-store')
 
 const router  = express.Router()
 router.use(requireAuth)
@@ -138,6 +139,19 @@ function getFinnhubKey(req) {
 
 // Parse JSON from Claude's text response — handles markdown fences + common malformations
 // parseAiJson now lives in lib/ai-json.js (shared by all AI routes)
+
+// One line per symbol from the morning job's Research Desk notes, oldest →
+// newest verdict, e.g. "NVDA: No trade (2026-10-27) → Actionable long (2026-10-29)".
+function deskVerdictLines(deskNotes) {
+  const bySym = {}
+  for (const n of [...deskNotes].sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)))) {
+    if (!n.symbol) continue
+    const tag = (n.tags || []).find(t => String(t).startsWith('verdict:'))
+    const label = tag === 'verdict:actionable' ? 'Actionable long' : 'No trade'
+    ;(bySym[n.symbol] ||= []).push(`${label} (${String(n.created_at).slice(0, 10)})`)
+  }
+  return Object.entries(bySym).map(([sym, v]) => `${sym}: ${v.join(' → ')}`)
+}
 
 function isStaleNote(updatedAt) {
   if (!updatedAt) return false
@@ -275,24 +289,7 @@ router.post('/', async (req, res) => {
   const { title, content = '', symbol, note_type = 'note', source_url, tags = [] } = req.body
   if (!title?.trim()) return res.status(400).json({ error: 'title is required' })
 
-  const sym = symbol ? symbol.toUpperCase() : null
-
-  if (DB_MODE) {
-    const { rows: [note] } = await query(`
-      INSERT INTO research_notes (user_id, symbol, title, content, note_type, source_url, tags)
-      VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *
-    `, [userId, sym, title.trim(), content, note_type, source_url || null, tags])
-    return res.status(201).json(note)
-  }
-
-  const note = {
-    id: newId(), user_id: userId, symbol: sym,
-    title: title.trim(), content, note_type,
-    source_url: source_url || null, tags,
-    created_at: now(), updated_at: now(),
-  }
-  MEM.notes.set(note.id, note)
-  persistMem()
+  const note = await notesStore.createNote(userId, { title, content, symbol, note_type, source_url, tags })
   return res.status(201).json(note)
 })
 
@@ -618,15 +615,18 @@ router.post('/consolidate', async (req, res) => {
       let sql = `SELECT * FROM research_notes WHERE user_id = $1`
       const params = [userId]
       if (sym) { params.push(sym); sql += ` AND symbol = $${params.length}` }
-      sql += ` ORDER BY updated_at DESC LIMIT 20`
+      sql += ` ORDER BY updated_at DESC LIMIT 200`
       const { rows } = await query(sql, params)
       existingNotes = rows
     } else {
       existingNotes = [...MEM.notes.values()]
         .filter(n => n.user_id === userId && (!sym || n.symbol === sym))
         .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
-        .slice(0, 20)
     }
+    // The morning job saves a Research Desk note per holding each weekday; the
+    // 20-note budget goes to the user's own notes plus only the LATEST verdict.
+    const isDeskNote = n => (n.tags || []).includes(notesStore.RESEARCH_DESK_TAG)
+    existingNotes = [...existingNotes.filter(n => !isDeskNote(n)).slice(0, 19), ...existingNotes.filter(isDeskNote).slice(0, 1)]
 
     if (existingNotes.length === 0) {
       return res.status(400).json({ error: `No notes found${sym ? ` for ${sym}` : ''}` })
@@ -960,7 +960,10 @@ Respond ONLY with valid JSON:
 // ── POST /api/research-notes/lint ─────────────────────────────────────────────
 // Vault health check: stale theses, empty notes, orphans, coverage gaps, contradictions
 router.post('/lint', async (req, res) => {
-  const userId = req.user.userId
+  // effectiveUserId: the Sunday Second Brain email calls this over loopback,
+  // naming the owner in the body (honoured only for a verified internal call).
+  const userId = effectiveUserId(req)
+  if (!userId) return res.status(401).json({ error: 'Authentication required' })
   const { portfolioSymbols = [] } = req.body
 
   try {
@@ -976,9 +979,13 @@ router.post('/lint', async (req, res) => {
     }
 
     const issues = []
+    // The morning job's Research Desk notes are dated snapshots, superseded by
+    // the next one, and their verdict changes are tracked exactly — so they
+    // count as coverage but are never "stale" and never contradiction input.
+    const isDeskNote = n => (n.tags || []).includes(notesStore.RESEARCH_DESK_TAG)
 
     // Stale theses
-    notes.filter(n => n.note_type === 'thesis' && isStaleNote(n.updated_at)).forEach(n =>
+    notes.filter(n => n.note_type === 'thesis' && !isDeskNote(n) && isStaleNote(n.updated_at)).forEach(n =>
       issues.push({ type: 'stale_thesis', severity: 'warning', noteId: n.id, title: n.title,
         message: `Thesis is over 30 days old — market conditions may have changed` })
     )
@@ -1006,7 +1013,7 @@ router.post('/lint', async (req, res) => {
 
     // AI contradiction detection across multi-thesis symbols
     const thesesBySym = {}
-    notes.filter(n => n.symbol && n.note_type === 'thesis').forEach(n => {
+    notes.filter(n => n.symbol && n.note_type === 'thesis' && !isDeskNote(n)).forEach(n => {
       if (!thesesBySym[n.symbol]) thesesBySym[n.symbol] = []
       thesesBySym[n.symbol].push(n)
     })
@@ -1053,31 +1060,40 @@ Respond ONLY with a JSON array — if none, return []:
 // ── POST /api/research-notes/weekly-synthesis ─────────────────────────────────
 // Identify patterns & themes across last 7 days of notes (claudesidian weekly-synthesis)
 router.post('/weekly-synthesis', async (req, res) => {
-  const userId = req.user.userId
+  const userId = effectiveUserId(req)
+  if (!userId) return res.status(401).json({ error: 'Authentication required' })
 
   try {
     const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString()
-    let recentNotes
+    let weekNotes
 
     if (DB_MODE) {
       const { rows } = await query(
-        `SELECT * FROM research_notes WHERE user_id = $1 AND updated_at > $2 ORDER BY updated_at DESC LIMIT 30`,
+        `SELECT * FROM research_notes WHERE user_id = $1 AND updated_at > $2 ORDER BY updated_at DESC LIMIT 200`,
         [userId, sevenDaysAgo]
       )
-      recentNotes = rows
+      weekNotes = rows
     } else {
-      recentNotes = [...MEM.notes.values()]
+      weekNotes = [...MEM.notes.values()]
         .filter(n => n.user_id === userId && n.updated_at > sevenDaysAgo)
         .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
-        .slice(0, 30)
     }
 
-    if (recentNotes.length === 0)
+    // The morning job writes up to 40 Research Desk notes a week; left in the
+    // 30-note window they would push the user's own thinking out. They go in
+    // as one compact verdict line per symbol instead.
+    const isDeskNote = n => (n.tags || []).includes(notesStore.RESEARCH_DESK_TAG)
+    const recentNotes = weekNotes.filter(n => !isDeskNote(n)).slice(0, 30)
+    const deskLines = deskVerdictLines(weekNotes.filter(isDeskNote))
+
+    if (recentNotes.length === 0 && deskLines.length === 0)
       return res.status(400).json({ error: 'No notes created or updated in the last 7 days' })
 
     const notesSummary = recentNotes.map((n, i) =>
       `Note ${i+1}: "${n.title}" [${n.note_type}${n.symbol ? ` · ${n.symbol}` : ''}] (${new Date(n.updated_at).toLocaleDateString()})\n${n.content.slice(0, 500)}`
-    ).join('\n\n---\n\n')
+    ).join('\n\n---\n\n') + (deskLines.length
+      ? `\n\n---\n\nRESEARCH DESK VERDICTS THIS WEEK (checked theses on the user's holdings, oldest → newest):\n${deskLines.join('\n')}`
+      : '')
 
     const today     = new Date()
     const weekStart = new Date(Date.now() - 7 * 86400000)

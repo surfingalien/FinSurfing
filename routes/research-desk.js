@@ -21,7 +21,7 @@ const path    = require('path')
 const crypto  = require('crypto')
 const rateLimit = require('express-rate-limit')
 
-const { requireAuth }          = require('../middleware/auth')
+const { requireAuth, effectiveUserId } = require('../middleware/auth')
 const { getRouter }            = require('../lib/ai-router')
 const { THESIS_SCHEMA, BULL_SCHEMA, BEAR_SCHEMA, DECISION_SCHEMA } = require('../lib/ai-schemas')
 const { tryParseAiJson }       = require('../lib/ai-json')
@@ -30,7 +30,7 @@ const { fetchDailyBars }       = require('../lib/internal-api')
 const { compactTaLine }        = require('../lib/technical-indicators')
 const { isLastBarForming }     = require('../lib/bar-session')
 const { startJsonHeartbeat }   = require('../lib/http-heartbeat')
-const { INTERNAL_SECRET }      = require('../lib/internal-secret')
+const { INTERNAL_SECRET, isInternalRequest } = require('../lib/internal-secret')
 const { isCryptoSymbol }       = require('../lib/crypto-classify')
 const { readPredictions, computeStats, getLearningHealth } = require('../lib/brain-learnings')
 const { computeEdgeReport }    = require('../lib/edge-report')
@@ -38,6 +38,7 @@ const kelly                    = require('../lib/kelly')
 const library                  = require('../lib/strategy-library')
 const entityGraph              = require('../lib/entity-graph')
 const learningStore            = require('../lib/learning-store')
+const notesStore               = require('../lib/notes-store')
 const durableFiles             = require('../lib/durable-files')
 const desk                     = require('../lib/research-desk')
 const priceRegime              = require('../lib/price-regime')
@@ -54,9 +55,12 @@ const KEY_HEADERS = ['x-aisa-key', 'x-finnhub-key', 'x-fmp-key', 'x-td-key', 'x-
 
 // One LLM call per thesis; generous for research, tight enough to stop a loop.
 // Keyed by IP like every other limiter here (a custom key generator trips
-// express-rate-limit's IPv6 validation).
+// express-rate-limit's IPv6 validation). The morning holdings-research job
+// (lib/scheduled-jobs.js) calls over loopback with the internal secret and
+// bounds itself, so it does not spend a signed-in user's budget.
 const thesisLimit = rateLimit({
   windowMs: 15 * 60 * 1000, max: 12,
+  skip: isInternalRequest,
   standardHeaders: true, legacyHeaders: false,
   message: { error: 'Thesis limit reached — try again in a few minutes' },
 })
@@ -163,6 +167,19 @@ function earningsDriftFor(sym, bars, fundamentals, secFacts = null) {
 }
 
 /** Everything the thesis may rest on, computed server-side. */
+// The user's latest Second Brain note on the symbol, leaving out the notes the
+// morning job writes from this desk's own theses (that would be the desk
+// quoting itself). Best-effort: a notes failure never costs the dossier.
+async function ownNoteFor(userId, sym) {
+  try {
+    const [note] = await notesStore.latestNotes(userId, sym, { limit: 1, withoutTag: notesStore.RESEARCH_DESK_TAG })
+    return note ?? null
+  } catch (e) {
+    console.warn('[research-desk] own-note lookup failed:', e.message)
+    return null
+  }
+}
+
 async function gatherEvidence(sym, req) {
   const headers   = fwdKeys(req)
   const assetType = assetTypeOf(sym)
@@ -176,7 +193,9 @@ async function gatherEvidence(sym, req) {
     assetType === 'stock' ? require('../lib/sec-facts').getCompanyFacts(sym).catch(() => null) : Promise.resolve(null),
   ])
   if (bars.length < 60) {
-    const err = new Error(`Not enough price history for ${sym} (${bars.length} daily bars, need 60+)`)
+    const err = new Error(bars.length
+      ? `Not enough price history for ${sym} (${bars.length} daily bars, need 60+)`
+      : `No price history for ${sym}: ${bars.reason || 'no data provider returned any'}`)
     err.status = 422
     throw err
   }
@@ -199,6 +218,7 @@ async function gatherEvidence(sym, req) {
     strategies: strategiesFor(sym),
     exposure:   exposureFor(sym),
     track:      desk.trackFor(records, { symbol: sym, assetType, horizon }),
+    ownNote:    await ownNoteFor(effectiveUserId(req), sym),
   })
   const bracketProb = require('../lib/bracket-prob')
   const winProb = bracketProb.winProbFor(bracketProb.loadStore(), { assetType }) || kelly.winProbFromStats(stats, { assetType })
@@ -431,7 +451,9 @@ router.post('/:symbol/thesis', requireAuth, thesisLimit, async (req, res) => {
   const judgement = desk.judgeThesis({ thesis, items: ev.items, lastPrice: ev.facts.last, assetType: ev.assetType, winProb: ev.winProb, levels: ev.levels })
   const entry = {
     id: crypto.randomBytes(5).toString('hex'),
-    userId: req.user.userId,
+    // Not req.user.userId: an internal call (the holdings-research job) has no
+    // req.user, and the owner rides in the body — honoured only when verified.
+    userId: effectiveUserId(req) ?? null,
     symbol: sym, company: ev.company, assetType: ev.assetType,
     at: new Date().toISOString(),
     lastPrice: ev.facts.last, asOf: ev.facts.date,
