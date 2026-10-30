@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import { Clock, AlertTriangle, TrendingUp, TrendingDown, Minus, ChevronDown, ChevronUp, RefreshCw, Filter } from 'lucide-react'
+import { useAuth } from '../../contexts/AuthContext'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -175,6 +176,7 @@ function TimelineCard({ event, isLast }) {
 // ── Main view ─────────────────────────────────────────────────────────────────
 
 export default function TradeTimelineView({ portfolio }) {
+  const { authFetch } = useAuth()
   const [events, setEvents]       = useState([])
   const [symbols, setSymbols]     = useState([])
   const [activeSyms, setActiveSyms] = useState([])
@@ -189,7 +191,7 @@ export default function TradeTimelineView({ portfolio }) {
     try {
       const params = new URLSearchParams({ limit: LIMIT, offset: off })
       if (sym.length) params.set('symbols', sym.join(','))
-      const r = await fetch(`/api/timeline?${params}`)
+      const r = await authFetch(`/api/timeline?${params}`)
       const data = await r.json()
       if (off === 0) {
         setEvents(data.events || [])

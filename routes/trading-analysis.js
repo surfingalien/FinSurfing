@@ -25,6 +25,7 @@ const { getSocialSentiment } = require('../lib/social-sentiment')
 const { getAltDataSnippet }  = require('../lib/alt-data')
 const { getOptionsFlowCompact } = require('../lib/options-flow-cache')
 const { startJsonHeartbeat } = require('../lib/http-heartbeat')
+const planCheck = require('../lib/plan-check')
 
 const aiRouter = getRouter('trading-analysis')
 
@@ -623,6 +624,25 @@ router.post('/analyze', requireAuth, async (req, res) => {
 
     analysis = canonicalizeEnums(TRADING_ANALYSIS_SCHEMA, analysis)
 
+    // The model's entry / target / stop are checked in code (direction,
+    // reward/risk, after-cost EV at the measured win rate) — they used to be
+    // passed straight to the card, so a BUY with its target below its entry
+    // shipped. Never repaired: the card shows what is wrong.
+    const signal = String(analysis?.signal || '').toUpperCase()
+    const side = /BUY/.test(signal) ? 'long' : /SELL/.test(signal) ? 'short' : null
+    const entry = analysis?.entry ?? (analysis?.entryZoneLow != null && analysis?.entryZoneHigh != null ? (analysis.entryZoneLow + analysis.entryZoneHigh) / 2 : null)
+    const assetType = isCryptoSymbol(sym) ? 'crypto' : 'stock'
+    const check = planCheck.checkPlan({ side, entry, target: analysis?.target, stop: analysis?.stopLoss, price, assetType, winProb: planCheck.winProbFor(assetType) })
+    // Recorded for signed-in users only, anchored on a price the SERVER
+    // fetched (the client may send its own live price), one per symbol and
+    // direction a day — the page re-runs a symbol often. Daily and weekly
+    // charts only: the store scores calls days later, which says nothing about
+    // a plan made on a 5-minute chart.
+    if (req.user?.userId && /^(D|1D|W|1W)$/i.test(String(interval))) {
+      const anchor = priceLabel === 'live (TradingView)' ? closes[closes.length - 1] : price
+      planCheck.recordPlan({ surface: 'trading-analysis', symbol: sym, check, price: anchor, confidence: planCheck.confidenceBucket(analysis?.confidence), meta: { interval } })
+    }
+
     // Persist analysis to memory (fire-and-forget — never blocks response)
     if (req.user?.userId) saveMemory(req.user.userId, sym, yInterval, price, analysis)
 
@@ -648,6 +668,7 @@ router.post('/analyze', requireAuth, async (req, res) => {
       interval,
       price,
       analysis,
+      planCheck: { ...check, line: planCheck.describeCheck(check) },
       indicators,
       candles,
       sentiment: sentiment ? { bullish: sentiment.bullish, bearish: sentiment.bearish, neutral: sentiment.neutral, total: sentiment.total, bullishPct: sentiment.bullishPct, snippets: sentiment.snippets } : null,

@@ -18,6 +18,7 @@ const router = express.Router()
 router.use(requireAuth)
 
 const { claudePaused, pausedError } = require('../lib/ai-pause')
+const { planRebalance } = require('../lib/rebalance-plan')
 let _client = null
 function getClient() {
   if (claudePaused()) throw pausedError()
@@ -28,65 +29,75 @@ function getClient() {
   return _client
 }
 
+// Prices the server fetched itself; the client's price is used only for a
+// holding the server could not price, and the plan says so.
+async function serverPrices(symbols) {
+  if (!symbols.length) return new Map()
+  try {
+    const port = process.env.PORT || 3001
+    const r = await fetch(`http://127.0.0.1:${port}/api/quote?symbols=${symbols.map(encodeURIComponent).join(',')}`, { signal: AbortSignal.timeout(10_000) })
+    const rows = (await r.json())?.quoteResponse?.result || []
+    return new Map(rows.filter(q => q?.regularMarketPrice > 0).map(q => [String(q.symbol).toUpperCase(), q.regularMarketPrice]))
+  } catch { return new Map() }
+}
+
 router.post('/suggest', async (req, res) => {
   const { holdings = [], targetAllocation = {}, riskProfile = 'moderate' } = req.body
 
   if (!Array.isArray(holdings) || holdings.length === 0)
     return res.status(400).json({ error: 'holdings array is required' })
 
-  const totalValue = holdings.reduce((s, h) => s + (h.shares * h.currentPrice || 0), 0)
-  if (totalValue <= 0)
-    return res.status(400).json({ error: 'Portfolio value is zero — provide currentPrice for holdings' })
+  // The arithmetic is done here, in code (lib/rebalance-plan.js): the model
+  // used to work out share counts, dollar amounts and the new weights itself.
+  const live = await serverPrices(holdings.map(h => String(h.symbol || '').toUpperCase()).filter(Boolean).slice(0, 100))
+  const priced = holdings.map(h => {
+    const sym = String(h.symbol || '').toUpperCase()
+    const priceSource = live.has(sym) ? 'live' : Number(h.currentPrice) > 0 ? 'page' : Number(h.avgCost) > 0 ? 'cost' : null
+    const px = { live: live.get(sym), page: Number(h.currentPrice), cost: Number(h.avgCost) }[priceSource] ?? null
+    return { symbol: sym, shares: Number(h.shares) || 0, price: px, sector: h.sector || 'Unknown', priceSource }
+  })
+  const plan = planRebalance({ holdings: priced, targetAllocation })
+  if (!(plan.total > 0))
+    return res.status(400).json({ error: 'Portfolio value is zero — no holding has a price' })
+  const atCost = priced.filter(h => h.priceSource === 'cost').map(h => h.symbol)
+  if (atCost.length) plan.notes.push(`No market price for ${atCost.join(', ')} — valued at your average cost, which may be far from today's price.`)
 
-  const sectorMap = {}
-  for (const h of holdings) {
-    const sec = h.sector || 'Unknown'
-    const val = (h.shares || 0) * (h.currentPrice || 0)
-    sectorMap[sec] = (sectorMap[sec] || 0) + val
-  }
-  const currentAlloc = Object.fromEntries(
-    Object.entries(sectorMap).map(([s, v]) => [s, +((v / totalValue) * 100).toFixed(1)])
-  )
+  const tradeLines = plan.trades.length
+    ? plan.trades.map(t => `  - ${t.side.toUpperCase()} ${t.shares} ${t.symbol} (${t.sector}) @ $${t.price} = $${t.value.toFixed(2)}`).join('\n')
+    : '  (none — every sector is already within a share of its target)'
+  const sectorLines = plan.sectors.map(s => `  - ${s.sector}: ${s.currentPct}% now → ${s.targetPct}% target → ${s.afterPct}% after these trades`).join('\n')
 
-  const holdingLines = holdings.map(h => {
-    const val = (h.shares * h.currentPrice).toFixed(2)
-    const pct = ((h.shares * h.currentPrice / totalValue) * 100).toFixed(1)
-    return `  - ${h.symbol}: ${h.shares} shares @ $${h.currentPrice} = $${val} (${pct}%)`
-  }).join('\n')
+  const prompt = `You are a professional portfolio manager. The rebalancing trades below were COMPUTED IN CODE from the user's holdings and target weights. Use these numbers exactly: do not recompute them, change share counts, or add trades that are not listed.
 
-  const allocLines = Object.entries(currentAlloc)
-    .map(([s, w]) => `  - ${s}: ${w}% current → ${targetAllocation[s] ?? '?'}% target`)
-    .join('\n')
+**Portfolio value**: $${plan.total.toFixed(2)}
+**Risk profile**: ${riskProfile}
 
-  const prompt = `You are a professional portfolio manager. Analyze this portfolio and create a specific rebalancing plan.
+**Sector weights** (largest drift first)
+${sectorLines}
 
-**Portfolio** (total value: $${totalValue.toFixed(2)})
-${holdingLines}
+**Trades** (sales fund the buys; cash left over: $${plan.cashResidual.toFixed(2)})
+${tradeLines}
+${plan.notes.length ? `\n**Notes**\n${plan.notes.map(n => `  - ${n}`).join('\n')}\n` : ''}
+Write:
 
-**Sector Allocation Analysis**
-${allocLines}
+1. **Executive Summary** — 2-3 sentences on the key imbalances and what the trades fix.
 
-**Risk Profile**: ${riskProfile}
+2. **Priority Order** — the order to place these trades and why (largest drift and risk reduction first; sells before buys so the cash exists).
 
-Provide a structured rebalancing plan:
+3. **Fit With the ${riskProfile} Profile** — whether the after-trade weights suit it, and any concentration that remains.
 
-1. **Executive Summary** — 2-3 sentences on the key imbalances and overall recommendation.
+4. **Risks & Considerations** — transaction costs, partial rebalancing if the full set is disruptive. Tax: purchase dates and cost basis were not provided, so say the tax impact cannot be judged here and what to check before selling.
 
-2. **Rebalancing Actions** — Specific buy/sell/trim/add actions per holding. Be concrete (e.g. "Sell 15 shares of MSFT (~$6,200) to reduce Technology overweight").
-
-3. **Priority Order** — Rank the top 5 trades by impact, with the tax/cost rationale.
-
-4. **After Rebalance** — Project the new sector weights and explain how they align with the ${riskProfile} profile.
-
-5. **Risks & Considerations** — Tax impact (short vs long-term), transaction costs, partial rebalancing if full rebalance is disruptive.
-
-Be direct and actionable. Use dollar amounts, share counts, and percentages throughout.`
+Keep figures to the ones listed above.`
 
   res.setHeader('Content-Type', 'text/event-stream')
   res.setHeader('Cache-Control', 'no-cache')
   res.setHeader('Connection', 'keep-alive')
   res.setHeader('X-Accel-Buffering', 'no')
   res.flushHeaders()
+
+  // The computed plan first, so the page can show the trades as a table.
+  res.write(`data: ${JSON.stringify({ plan })}\n\n`)
 
   try {
     const client = getClient()

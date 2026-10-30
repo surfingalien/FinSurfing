@@ -4,15 +4,18 @@
  *
  * Alert → AI trigger pipeline.
  *
+ * All three routes need a signed-in user (the trigger runs an AI analysis).
+ *
  * GET  /api/alerts/stream
- *   SSE stream — client connects once; receives AI analysis events when alerts fire.
+ *   SSE stream — client connects once; receives AI analysis events when ITS
+ *   alerts fire, plus system events (AI Brain entry zones, signal flips).
  *   Events: { type: 'analysis', symbol, signal, confidence, trend, entry, stopLoss,
  *             reasoning, triggeredBy: {type,threshold,price}, analyzedAt }
  *            { type: 'ping' }  — keepalive every 25s
  *
  * POST /api/alerts/trigger
  *   body: { symbol, alertType, threshold, price }
- *   Runs analyze_symbol in background, broadcasts result to all SSE clients.
+ *   Runs analyze_symbol in background, sends the result to this user's streams.
  *   Returns immediately: { ok: true, queued: symbol }
  */
 
@@ -20,6 +23,7 @@ const express     = require('express')
 const rateLimit   = require('express-rate-limit')
 const broadcaster = require('../lib/alert-broadcaster')
 const { INTERNAL_SECRET } = require('../lib/internal-secret')
+const { requireAuth } = require('../middleware/auth')
 
 const router = express.Router()
 
@@ -29,14 +33,14 @@ const BASE_URL = () => `http://127.0.0.1:${process.env.PORT || 3001}`
 
 // ── SSE stream ────────────────────────────────────────────────────────────────
 
-router.get('/stream', (req, res) => {
+router.get('/stream', requireAuth, (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream')
   res.setHeader('Cache-Control', 'no-cache')
   res.setHeader('Connection', 'keep-alive')
   res.setHeader('X-Accel-Buffering', 'no')
   res.flushHeaders?.()
 
-  const clientId = broadcaster.subscribe(res)
+  const clientId = broadcaster.subscribe(res, req.user?.userId ?? null)
 
   // Keepalive ping every 25s
   const hb = setInterval(() => {
@@ -53,17 +57,17 @@ router.get('/stream', (req, res) => {
 
 // ── Trigger ───────────────────────────────────────────────────────────────────
 
-router.post('/trigger', triggerLimit, async (req, res) => {
+router.post('/trigger', requireAuth, triggerLimit, async (req, res) => {
   const { symbol, alertType, threshold, price } = req.body || {}
   if (!symbol) return res.status(400).json({ error: 'symbol required' })
 
   res.json({ ok: true, queued: symbol.toUpperCase() })
 
   // Run analyze_symbol in background — don't block the HTTP response
-  setImmediate(() => _runAnalysis({ symbol, alertType, threshold, price }, req))
+  setImmediate(() => _runAnalysis({ symbol, alertType, threshold, price }, req, req.user?.userId ?? null))
 })
 
-async function _runAnalysis({ symbol, alertType, threshold, price }, req) {
+async function _runAnalysis({ symbol, alertType, threshold, price }, req, userId) {
   const sym = symbol.toUpperCase()
   try {
     // Forward user API keys if present
@@ -91,7 +95,7 @@ async function _runAnalysis({ symbol, alertType, threshold, price }, req) {
       risks:       a?.risks || [],
       triggeredBy: { type: alertType, threshold, price },
       analyzedAt:  new Date().toISOString(),
-    })
+    }, { userId })
   } catch (e) {
     broadcaster.broadcast({
       type:        'analysis_error',
@@ -99,12 +103,12 @@ async function _runAnalysis({ symbol, alertType, threshold, price }, req) {
       error:       e.message,
       triggeredBy: { type: alertType, threshold, price },
       analyzedAt:  new Date().toISOString(),
-    })
+    }, { userId })
   }
 }
 
 // POST /api/alerts/watchlist — sync client watchlist to server so hourly scan uses it
-router.post('/watchlist', (req, res) => {
+router.post('/watchlist', requireAuth, (req, res) => {
   const { symbols } = req.body || {}
   if (!Array.isArray(symbols)) return res.status(400).json({ error: 'symbols array required' })
   const clean = symbols

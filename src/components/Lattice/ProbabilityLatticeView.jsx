@@ -14,6 +14,7 @@
 import { useRef, useEffect, useMemo, useState } from 'react'
 import { Boxes, RefreshCw, AlertTriangle } from 'lucide-react'
 import { useQuery, fetchJson } from '../../hooks/useQuery'
+import { useAuth } from '../../contexts/AuthContext'
 
 const N_BINS = 15
 const LOSS = '#ff4757'
@@ -29,9 +30,10 @@ function resolvedReturn(item) {
 }
 
 function useLatticeData() {
+  const { authFetch } = useAuth()
   const { data, error, loading, refetch } = useQuery(
     'brain-activity-lattice',
-    () => fetchJson('/api/ai-brain/activity?limit=100'),
+    () => fetchJson('/api/ai-brain/activity?limit=100', undefined, authFetch),
     { staleMs: 5 * 60_000 },
   )
   const derived = useMemo(() => {

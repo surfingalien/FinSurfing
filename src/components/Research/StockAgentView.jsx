@@ -17,6 +17,7 @@ import {
 import AIAdvisoryView from './AIAdvisoryView'
 import { MessageBubble } from './agent/MessageBubble'
 import { NoKeyBanner } from './agent/NoKeyBanner'
+import { useAuth } from '../../contexts/AuthContext'
 
 // ── Quick prompts ─────────────────────────────────────────────────────────────
 
@@ -51,6 +52,7 @@ export default function StockAgentView({ portfolio }) {
   const [hasKey,      setHasKey]    = useState(null)      // null = unknown, true/false
   const [agentCaps,   setAgentCaps] = useState({})        // { hasFMP, hasAV, hasGemini }
   const [error,       setError]     = useState(null)
+  const { authFetch } = useAuth()
 
   const bottomRef  = useRef(null)
   const inputRef   = useRef(null)
@@ -124,9 +126,9 @@ I'm your real-time stock analyst powered by Claude. I can:
     try {
       const history = buildHistory()
 
-      const res = await fetch('/api/agent/analyze', {
+      // Signed-in only (the route pays for every round of the agent).
+      const res = await authFetch('/api/agent/analyze', {
         method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({ prompt: text, symbol: sym, history, model }),
       })
 
@@ -188,6 +190,11 @@ I'm your real-time stock analyst powered by Claude. I can:
                 }))
                 break
 
+              case 'plan_check':
+                // The answer's trade plan, checked by code (lib/plan-check.js)
+                updateAssistant(m => ({ ...m, planCheck: evt.check }))
+                break
+
               case 'done':
                 updateAssistant(m => ({
                   ...m,
@@ -215,7 +222,7 @@ I'm your real-time stock analyst powered by Claude. I can:
       setStreaming(false)
       inputRef.current?.focus()
     }
-  }, [input, symbol, streaming, buildHistory])
+  }, [input, symbol, streaming, buildHistory, model, authFetch])
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -408,7 +415,7 @@ I'm your real-time stock analyst powered by Claude. I can:
               </button>
             </div>
             <p className="text-[10px] text-slate-700 mt-1.5 px-1">
-              Not financial advice · Real-time data via Yahoo Finance · Model: {model}
+              Not financial advice · Prices from the app's market-data providers (may be delayed) · Model: {model}
             </p>
           </div>
         </div>

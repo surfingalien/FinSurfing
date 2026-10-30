@@ -20,7 +20,7 @@ function getJobs() {
   return scheduledJobs
 }
 
-router.get('/jobs', (req, res) => {
+router.get('/jobs', requireAuth, (req, res) => {
   res.json(scheduler.getStatus())
 })
 
@@ -58,10 +58,10 @@ router.post('/test-email', requireAuth, requireAdmin, async (req, res) => {
   }
 })
 
-// Cached result endpoints — read-only, no auth needed for internal UI use
-router.get('/cache/scan',    (req, res) => res.json(getJobs().getCachedScan()    || { data: null }))
-router.get('/cache/digest',  (req, res) => res.json(getJobs().getCachedDigest()  || { results: [] }))
-router.get('/cache/alt/:symbol', (req, res) => {
+// Cached result endpoints — the AI Brain's latest scan and digest, signed-in only
+router.get('/cache/scan',    requireAuth, (req, res) => res.json(getJobs().getCachedScan()    || { data: null }))
+router.get('/cache/digest',  requireAuth, (req, res) => res.json(getJobs().getCachedDigest()  || { results: [] }))
+router.get('/cache/alt/:symbol', requireAuth, (req, res) => {
   const snippet = getJobs().getCachedAltData(req.params.symbol?.toUpperCase())
   res.json({ symbol: req.params.symbol, snippet: snippet || null })
 })

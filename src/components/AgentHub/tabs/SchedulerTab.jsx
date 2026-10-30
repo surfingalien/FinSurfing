@@ -3,7 +3,7 @@ import {
   Calendar, Play, RefreshCw, CheckCircle2, XCircle,
   Clock, Loader2, ToggleLeft, ToggleRight, AlertTriangle, ChevronDown, ChevronUp,
 } from 'lucide-react'
-import { apiFetch, timeAgo } from './shared'
+import { timeAgo } from './shared'
 import { useAuth } from '../../../contexts/AuthContext'
 
 // ── ─────────────────────────────────────────────────────────────────────────────
@@ -99,7 +99,7 @@ function JobCard({ job, onTrigger, onToggle }) {
 
 export default function SchedulerTab() {
   // Trigger and toggle are requireAuth + requireAdmin on the server; the plain
-  // apiFetch sends no Authorization header, so every Run Now 401'd with
+  // fetch sent no Authorization header, so every Run Now 401'd with
   // "Missing access token" before the job ever started.
   const { authFetch } = useAuth()
   const [jobs,    setJobs]    = useState([])
@@ -108,13 +108,14 @@ export default function SchedulerTab() {
 
   const load = useCallback(async () => {
     try {
-      const r    = await apiFetch('/api/scheduler/jobs')
+      // The job list carries the latest scan results: signed-in only.
+      const r    = await authFetch('/api/scheduler/jobs')
       const data = await r.json()
       if (!r.ok) throw new Error(data.error || 'Failed to load jobs')
       setJobs(data)
     } catch (e) { setError(e.message) }
     setLoading(false)
-  }, [])
+  }, [authFetch])
 
   useEffect(() => { load() }, [load])
 

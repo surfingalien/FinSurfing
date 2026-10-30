@@ -14,6 +14,7 @@
 const express = require('express')
 const { fetchDailyBars } = require('../lib/internal-api')
 const router  = express.Router()
+const { requireAuth } = require('../middleware/auth')
 
 const TIMESFM_URL    = () => process.env.TIMESFM_URL || 'http://localhost:8000'
 const CACHE_TTL_MS   = 15 * 60 * 1000   // 15-min — aligns with /api/chart cache
@@ -22,7 +23,8 @@ const TIMEOUT_MS     = 35_000            // model cold-start can take ~30s
 const _cache = new Map()
 
 // ── GET /api/forecast/:symbol ─────────────────────────────────────────────────
-router.get('/:symbol', async (req, res) => {
+// Sign-in only: AI and scan results are not for anonymous visitors.
+router.get('/:symbol', requireAuth, async (req, res) => {
   const sym = (req.params.symbol || '').trim().toUpperCase()
   if (!sym || !/^[A-Z0-9.\-^]{1,20}$/.test(sym))
     return res.status(400).json({ error: 'Valid symbol required' })

@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Network, Plug, Zap, Puzzle, Cpu,
   BrainCircuit, RefreshCw, Search, GitBranch, Loader2,
 } from 'lucide-react'
-import { apiFetch }  from './tabs/shared'
+import { useApiFetch } from './tabs/shared'
 import DashboardTab  from './tabs/DashboardTab'
 import GraphifyTab   from './tabs/GraphifyTab'
 import MCPTab        from './tabs/MCPTab'
@@ -22,6 +22,7 @@ const TABS = [
 ]
 
 export default function AgenticOSView() {
+  const apiFetch = useApiFetch()
   const [tab,    setTab]    = useState('dashboard')
   const [stats,  setStats]  = useState(null)
   const [graph,  setGraph]  = useState(null)

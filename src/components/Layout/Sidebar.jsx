@@ -12,7 +12,7 @@ import { useState, useEffect, useRef } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import {
   ChevronLeft, ChevronRight, LogIn, LogOut,
-  KeyRound, X, FolderOpen, Settings,
+  KeyRound, X, FolderOpen, Settings, Lock,
 } from 'lucide-react'
 import { NAV_GROUPS, ADMIN_GROUP } from '../../navigation'
 import { useAuth } from '../../contexts/AuthContext'
@@ -25,12 +25,15 @@ import { Tooltip } from '../shared/Tooltip'
 
 // ── Nav item definitions ──────────────────────────────────────────────────────
 
-function buildGroups(user, triggeredCount) {
+function buildGroups(user, triggeredCount, isAuthenticated) {
   const groups = NAV_GROUPS.map(group => ({
     ...group,
-    items: group.items.map(item =>
-      item.id === 'alerts' ? { ...item, badge: triggeredCount } : item
-    ),
+    items: group.items.map(item => ({
+      ...item,
+      ...(item.id === 'alerts' ? { badge: triggeredCount } : {}),
+      // AI and scan tabs need an account; a guest sees them locked.
+      locked: !!item.auth && !isAuthenticated,
+    })),
   }))
 
   if (user?.role === 'admin') groups.push(ADMIN_GROUP)
@@ -82,7 +85,8 @@ function NavItem({ tab, active, collapsed, onClick }) {
     >
       <Icon className={`w-4 h-4 shrink-0 transition-opacity ${active ? '' : 'opacity-70 group-hover:opacity-100'}`} />
       {!collapsed && <span className="truncate">{tab.label}</span>}
-      {!collapsed && tab.tag && (
+      {!collapsed && tab.locked && <Lock className="ml-auto w-3 h-3 shrink-0 opacity-50" aria-label="Sign in to use" />}
+      {!collapsed && tab.tag && !tab.locked && (
         <span className="ml-auto text-[8px] font-bold px-1.5 py-0.5 rounded bg-[#00ffcc]/15 text-[#00ffcc] border border-[#00ffcc]/25 animate-pulse">
           {tab.tag}
         </span>
@@ -196,7 +200,7 @@ export default function Sidebar({
   const [showCreate,     setShowCreate]     = useState(false)
   const [showApiKeys,    setShowApiKeys]    = useState(false)
 
-  const groups = buildGroups(user, triggeredCount)
+  const groups = buildGroups(user, triggeredCount, isAuthenticated)
 
   const toggleCollapse = () => {
     setCollapsed(v => {

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { Network, Loader2, Code2, GitBranch, Layers, Zap, TrendingUp, TrendingDown, Minus } from 'lucide-react'
-import { apiFetch, NODE_COLOR, NODE_ICON } from './shared'
+import { useApiFetch, NODE_COLOR, NODE_ICON } from './shared'
 
 // ── Graphify Tab ──────────────────────────────────────────────────────────────
 
@@ -28,6 +28,7 @@ const TIER_COLOR = {
 const TIER_LABEL = ['External Provider', 'API Route', 'Cache / Lib', 'UI Component']
 
 export default function GraphifyTab({ graph, search, selectedNode, onSelectNode }) {
+  const apiFetch = useApiFetch()
   const [nodeDetail,    setNodeDetail]    = useState(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [view,          setView]          = useState('graph')

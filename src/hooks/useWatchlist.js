@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { fetchQuotes, subscribeQuotes } from '../services/api'
+import { useAuth } from '../contexts/AuthContext'
 
 const LS_KEY = 'finsurf_watchlist'
 const DEFAULT_WATCHLIST = ['SPY', 'QQQ', 'AMZN', 'META', 'NFLX', 'LLY', 'PLTR', 'ARM']
@@ -50,15 +51,15 @@ export function useWatchlist() {
     return () => { clearInterval(fullRefresh); unsub() }
   }, [refresh]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Sync watchlist to server so the hourly AI scan uses it
+  // Sync watchlist to server so the hourly AI scan uses it (signed-in only)
+  const { authFetch, isAuthenticated } = useAuth()
   useEffect(() => {
-    if (!symbols.length) return
-    fetch('/api/alerts/watchlist', {
+    if (!symbols.length || !isAuthenticated) return
+    authFetch('/api/alerts/watchlist', {
       method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({ symbols }),
     }).catch(() => {})
-  }, [symbols])
+  }, [symbols, isAuthenticated, authFetch])
 
   const addSymbol = useCallback((sym) => {
     setSymbols(prev => prev.includes(sym) ? prev : [...prev, sym.toUpperCase()])

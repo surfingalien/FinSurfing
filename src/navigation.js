@@ -32,11 +32,11 @@ export const NAV_GROUPS = [
     label: 'Markets',
     items: [
       { id: 'analyze',      label: 'Analyze',       icon: LineChart    },
-      { id: 'market-focus', label: 'Market Focus',  icon: Radio, tag: 'LIVE' },
+      { id: 'market-focus', label: 'Market Focus',  icon: Radio, tag: 'LIVE', auth: true },
       { id: 'tradingview',  label: 'TradingView',   icon: Monitor      },
       { id: 'heatmap',      label: 'Heatmap',       icon: LayoutGrid   },
       { id: 'calendar',     label: 'Econ Calendar', icon: CalendarDays },
-      { id: 'sentiment',    label: 'Sentiment',     icon: Zap          },
+      { id: 'sentiment',    label: 'Sentiment',     icon: Zap, auth: true },
       { id: 'macro',        label: 'Macro',         icon: Globe        },
     ],
   },
@@ -46,35 +46,35 @@ export const NAV_GROUPS = [
   {
     label: 'Research',
     items: [
-      { id: 'research-desk',   label: 'Research Desk',   icon: Microscope, tag: 'NEW' },
-      { id: 'screener',        label: 'Screener',        icon: Filter },
-      { id: 'ai-brain',        label: 'AI Brain Scan',   icon: Brain },
-      { id: 'recommendations', label: 'Advisory',        icon: Lightbulb },
-      { id: 'buy-signals',     label: 'AI Buy Signals',  icon: Sparkles },
-      { id: 'filings',         label: 'Filing Research', icon: FileText },
-      { id: 'exposure',        label: 'Exposure Map',    icon: Network },
-      { id: 'dcf-valuation',   label: 'DCF Valuation',   icon: TrendingUp },
-      { id: 'pattern-finder',  label: 'Pattern Finder',  icon: Search },
-      { id: 'dividend-screen', label: 'Dividend Screen', icon: DollarSign },
+      { id: 'research-desk',   label: 'Research Desk',   icon: Microscope, tag: 'NEW', auth: true },
+      { id: 'screener',        label: 'Screener',        icon: Filter, auth: true },
+      { id: 'ai-brain',        label: 'AI Brain Scan',   icon: Brain, auth: true },
+      { id: 'recommendations', label: 'Advisory',        icon: Lightbulb, auth: true },
+      { id: 'buy-signals',     label: 'AI Buy Signals',  icon: Sparkles, auth: true },
+      { id: 'filings',         label: 'Filing Research', icon: FileText, auth: true },
+      { id: 'exposure',        label: 'Exposure Map',    icon: Network, auth: true },
+      { id: 'dcf-valuation',   label: 'DCF Valuation',   icon: TrendingUp, auth: true },
+      { id: 'pattern-finder',  label: 'Pattern Finder',  icon: Search, auth: true },
+      { id: 'dividend-screen', label: 'Dividend Screen', icon: DollarSign, auth: true },
     ],
   },
   // What the AI actually got right, measured against the market.
   {
     label: 'Track Record',
     items: [
-      { id: 'brain-activity',      label: 'Brain Activity',      icon: Activity },
-      { id: 'trade-timeline',      label: 'Trade Timeline',      icon: Clock },
-      { id: 'probability-lattice', label: 'Probability Lattice', icon: Boxes },
+      { id: 'brain-activity',      label: 'Brain Activity',      icon: Activity, auth: true },
+      { id: 'trade-timeline',      label: 'Trade Timeline',      icon: Clock, auth: true },
+      { id: 'probability-lattice', label: 'Probability Lattice', icon: Boxes, auth: true },
     ],
   },
   {
     label: 'Agents & Labs',
     items: [
-      { id: 'research',     label: 'AI Agent',     icon: Bot },
-      { id: 'agent-hub',    label: 'Agent Hub',    icon: Network },
-      { id: 'agentic-os',   label: 'Agentic OS',   icon: BrainCircuit },
-      { id: 'second-brain', label: 'Second Brain', icon: BookOpen },
-      { id: 'quantmind',    label: 'QuantMind',    icon: FlaskConical },
+      { id: 'research',     label: 'AI Agent',     icon: Bot, auth: true },
+      { id: 'agent-hub',    label: 'Agent Hub',    icon: Network, auth: true },
+      { id: 'agentic-os',   label: 'Agentic OS',   icon: BrainCircuit, auth: true },
+      { id: 'second-brain', label: 'Second Brain', icon: BookOpen, auth: true },
+      { id: 'quantmind',    label: 'QuantMind',    icon: FlaskConical, auth: true },
       { id: 'ai-watchlist', label: 'AI Watchlist', icon: Bookmark },
       { id: 'polymarket',   label: 'Polymarket',   icon: TrendingUp },
     ],
@@ -96,7 +96,7 @@ export const NAV_GROUPS = [
       { id: 'risk-rules',   label: 'Risk Rules',     icon: ShieldCheck },
       { id: 'trade-setups', label: 'Trade Setups',   icon: SlidersHorizontal },
       { id: 'montecarlo',   label: 'Retirement',     icon: TrendingUp },
-      { id: 'rebalancer',   label: 'AI Rebalancer',  icon: BarChart3 },
+      { id: 'rebalancer',   label: 'AI Rebalancer',  icon: BarChart3, auth: true },
     ],
   },
 ]
@@ -108,6 +108,11 @@ export const ADMIN_GROUP = {
 
 // Tabs reachable outside the sidebar groups (user menu, deep links)
 const EXTRA_TABS = ['portfolios', 'admin']
+
+// Tabs that run or show AI or scan results. A guest (the landing page's demo)
+// sees a sign-in screen on these instead of the view; the server refuses their
+// routes without a signed-in user anyway.
+export const AUTH_TABS = new Set(NAV_GROUPS.flatMap(g => g.items.filter(i => i.auth).map(i => i.id)))
 
 // ── All valid route tabs ──────────────────────────────────────────────────────
 export const ALL_TABS = new Set([

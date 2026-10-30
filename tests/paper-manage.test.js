@@ -76,3 +76,39 @@ test('a position opened before brackets existed can be given exits; the time lim
   pb.savePortfolio({ ...pb.emptyPortfolio(10_000), positions: { NEW: { shares: 1, avgCost: 50, bracket: { stop: 45, t2: 60, t1Done: true } } } })
   expect(pb.adoptUnmanaged({ NEW: { price: 50, bracket: { stop: 40, t2: 70 } } })).toEqual({ adopted: [], skipped: [] })
 })
+
+// The 9:45 executor used to buy at the 8:30 pre-market scan's price (the
+// opening gap was never paid), only above a fixed score of 70 nothing had
+// tested, and every position closed at 30 days whatever the pick's horizon.
+describe('paper executor', () => {
+  const plan = tradeLevels({ price: 100, atr: 2, targetReturn: 12, stopLoss: 6 })   // entry range $98–$102
+  const pick = (symbol, compositeScore, over = {}) => ({ symbol, currentPrice: 100, compositeScore, agentVerdict: 'Buy', actionable: true, tradePlan: plan, ...over })
+
+  test('fills at the live price, skips a price that ran past the entry range, and has no fixed score cutoff', async () => {
+    jobs._setBroadScanForTests({ horizon: '3m', rankedStocks: [pick('AAA', 60), pick('BBB', 85), pick('CCC', 90, { agentVerdict: 'Avoid', actionable: false })] })
+    global.fetch = jest.fn(async () => quote({ AAA: 100.5, BBB: 108 }))
+    const out = await jobs._paperExecuteForTests()
+    expect(out.cutoff).toBeNull()                                   // no validated cutoff ⇒ no score filter
+    expect(out.executed.map(e => e.symbol)).toEqual(['AAA'])         // a 60 is no longer screened out
+    expect(out.rejected).toEqual([expect.objectContaining({ symbol: 'BBB', reason: expect.stringMatching(/above the entry range/) })])
+    expect(pb.loadTrades().filter(t => t.side === 'buy').at(-1)).toMatchObject({ symbol: 'AAA', price: 100.5 })
+    expect(pb.loadPortfolio().positions.AAA.bracket.holdDays).toBe(91)   // the 3-month scan's horizon
+  })
+
+  test('no live quote, no position', async () => {
+    jobs._setBroadScanForTests({ horizon: '6m', rankedStocks: [pick('DDD', 80)] })
+    global.fetch = jest.fn(async () => quote({}))
+    const out = await jobs._paperExecuteForTests()
+    expect(out.executed).toEqual([])
+    expect(out.rejected[0]).toMatchObject({ symbol: 'DDD', reason: 'no live quote at execution time' })
+  })
+
+  test("a position is held for its pick's horizon; one opened before the horizon was carried keeps 30 days", () => {
+    const book = bracket => ({ ...pb.emptyPortfolio(10_000), positions: { A: { shares: 10, avgCost: 100, openedAt: '2026-01-01T14:00:00Z', bracket: { stop: 90, t1: 110, t2: 120, t1Done: false, ...bracket } } } })
+    const day = d => ({ now: new Date(Date.parse('2026-01-01T14:00:00Z') + d * 86_400_000) })
+    expect(pb.bracketExits(book({ holdDays: 91 }), { A: 101 }, day(40)).exits).toEqual([])
+    expect(pb.bracketExits(book({ holdDays: 91 }), { A: 101 }, day(92)).exits[0]).toMatchObject({ kind: 'time' })
+    expect(pb.bracketExits(book({}), { A: 101 }, day(31)).exits[0]).toMatchObject({ kind: 'time' })
+    expect(pb.validBracket({ stop: 90, t1: 110, t2: 120, holdDays: 182 }, 100).bracket.holdDays).toBe(182)
+  })
+})

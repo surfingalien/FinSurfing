@@ -580,11 +580,12 @@ describe('computeStats — regime, generator and barrier segments', () => {
   })
 
   test('barriers report how often the stated targets and stops were reachable', () => {
+    const own = { horizon: '3m', horizonDays: 91 }
     const s = computeStats([
-      mk({ barrier: { label: 'target', days: 4 } }),
-      mk({ barrier: { label: 'target', days: 8 } }),
-      mk({ barrier: { label: 'stop',   days: 2 } }),
-      mk({ barrier: { label: 'time',   days: 30 } }),
+      mk({ ...own, barrier: { label: 'target', days: 4,  window: 91 } }),
+      mk({ ...own, barrier: { label: 'target', days: 8,  window: 91 } }),
+      mk({ ...own, barrier: { label: 'stop',   days: 2,  window: 91 } }),
+      mk({ ...own, barrier: { label: 'time',   days: 91, window: 91 } }),
     ])
     expect(s.barriers.n).toBe(4)
     expect(s.barriers.targetFirst).toBe(0.5)
@@ -595,6 +596,17 @@ describe('computeStats — regime, generator and barrier segments', () => {
 
   test('barriers is null until at least one window has been resolved', () => {
     expect(computeStats([mk()]).barriers).toBeNull()
+  })
+
+  // A 6-month target judged over a 30-day window (every pick before the
+  // horizon stamp) says nothing about whether it was reachable.
+  test('a label not measured over the pick\'s own horizon is left out and counted', () => {
+    const s = computeStats([
+      mk({ horizon: '6m', horizonDays: 182, barrier: { label: 'target', days: 40, window: 182 } }),
+      mk({ barrier: { label: 'stop', days: 3 } }),                                     // unstamped, 30-day label
+      mk({ horizon: '6m', horizonDays: 182, barrier: { label: 'stop', days: 3, window: 30 } }),
+    ])
+    expect(s.barriers).toMatchObject({ n: 1, targetFirst: 1, legacyExcluded: 2 })
   })
 })
 

@@ -6,7 +6,7 @@ import {
   TrendingUp, Zap, Activity, BarChart2, Cpu, Target,
   AlertTriangle, Clock, Shield, Star, ChevronUp, ChevronDown,
 } from 'lucide-react'
-import { apiFetch } from './shared'
+import { useApiFetch } from './shared'
 
 // ── Tool registry — all 13 MarketPulse copilot tools ─────────────────────────
 const TOOLS = [
@@ -196,6 +196,7 @@ function SelfImprovementPanel({ calibration }) {
 // ── Agentic Brain Tab ─────────────────────────────────────────────────────────
 
 export default function BrainTab({ jobs, stats, mcps, onRefresh }) {
+  const apiFetch = useApiFetch()
   const [scanCache,    setScanCache]    = useState(null)
   const [calibration,  setCalibration]  = useState(null)
   const [toolsOpen,    setToolsOpen]    = useState(false)

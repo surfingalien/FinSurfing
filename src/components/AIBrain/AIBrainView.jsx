@@ -28,9 +28,11 @@ import StockCard from './scan/StockCard'
 import AgentOrb from './scan/AgentOrb'
 import AgentNotesPanel from './scan/AgentNotesPanel'
 import SymbolSearchInput from './scan/SymbolSearchInput'
+import { useAuth } from '../../contexts/AuthContext'
 
 /* ── Main view ────────────────────────────────────────────── */
 export default function AIBrainView({ portfolio, onAnalyze }) {
+  const { authFetch } = useAuth()
   const [analysis,      setAnalysis]      = useState(null)
   const [loading,       setLoading]       = useState(false)
   const [error,         setError]         = useState(null)
@@ -44,7 +46,7 @@ export default function AIBrainView({ portfolio, onAnalyze }) {
 
   const { data: activityData } = useQuery(
     'ai-brain-activity-calibration',
-    () => fetchJson('/api/ai-brain/activity?limit=1'),
+    () => fetchJson('/api/ai-brain/activity?limit=1', undefined, authFetch),
     { staleMs: 60 * 60_000 },
   )
   const byCompositeScore = activityData?.byCompositeScore ?? null

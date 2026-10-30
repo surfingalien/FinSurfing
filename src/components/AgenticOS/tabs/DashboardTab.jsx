@@ -5,7 +5,7 @@ import {
   BarChart2, RefreshCw,
 } from 'lucide-react'
 import MiniGraph from './MiniGraph'
-import { apiFetch } from './shared'
+import { useApiFetch } from './shared'
 
 function sigCol(v) {
   if (!v) return '#6b7280'
@@ -17,6 +17,7 @@ function sigCol(v) {
 }
 
 export default function DashboardTab({ stats, graph, jobs, mcps, skills, onTabSwitch }) {
+  const apiFetch = useApiFetch()
   const [scanCache, setScanCache] = useState(null)
 
   useEffect(() => {

@@ -23,6 +23,7 @@ import {
   ArrowUpRight, ArrowDownRight, Minus, TrendingUp,
 } from 'lucide-react'
 import { useBackgroundJob } from '../../hooks/useBackgroundJob'
+import { useAuth } from '../../contexts/AuthContext'
 
 const RELATION_STYLE = {
   supplier:   { label: 'Supplier',   cls: 'text-mint-400 bg-mint-500/10 border-mint-500/25' },
@@ -44,11 +45,6 @@ function getApiKeyHeaders() {
     if (keys.fmp)     h['x-fmp-key']     = keys.fmp
     return h
   } catch { return {} }
-}
-
-function authHeaders() {
-  const t = localStorage.getItem('finsurf_token')
-  return t ? { Authorization: `Bearer ${t}` } : {}
 }
 
 /* ── Cards ─────────────────────────────────────────────────────────────── */
@@ -162,6 +158,7 @@ function DiffPanel({ anchor, diff }) {
 const cleanAnchor = k => String(k || '').toUpperCase().replace(/[^A-Z0-9.-]/g, '')
 
 export default function ExposureView({ onAnalyze }) {
+  const { authFetch } = useAuth()
   const [anchor, setAnchor]   = useState('')
   const [anchors, setAnchors] = useState(null)
   const [data, setData]       = useState(null)
@@ -170,7 +167,7 @@ export default function ExposureView({ onAnalyze }) {
   const [filter, setFilter]   = useState('all')
 
   useEffect(() => {
-    fetch('/api/exposure/anchors')
+    authFetch('/api/exposure/anchors')
       .then(r => r.json()).then(setAnchors)
       .catch(() => {})
   }, [])
@@ -198,7 +195,7 @@ export default function ExposureView({ onAnalyze }) {
     if (!a) return
     setReading(true); setError(null)
     try {
-      const r = await fetch(`/api/exposure/${a}/graph`, { headers: { ...authHeaders(), ...getApiKeyHeaders() } })
+      const r = await authFetch(`/api/exposure/${a}/graph`, { headers: getApiKeyHeaders() })
       const d = await r.json()
       if (!r.ok || d.error) throw new Error(d.error || `Request failed (${r.status})`)
       setData(d.edges?.length ? d : { ...d, empty: true })

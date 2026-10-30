@@ -210,7 +210,7 @@ describe('GET /api/exposure/:anchor/graph', () => {
     await get('/api/exposure/SPACEX')
 
     mockCall.mockReset(); mockFindMentions.mockReset()
-    const res = await request(app).get('/api/exposure/SPACEX/graph')
+    const res = await request(app).get('/api/exposure/SPACEX/graph').set('Authorization', `Bearer ${token}`)
     expect(res.status).toBe(200)
     expect(res.body.edges).toHaveLength(1)
     expect(res.body.cached).toBe(true)
@@ -219,15 +219,22 @@ describe('GET /api/exposure/:anchor/graph', () => {
   })
 
   test('an unmapped anchor returns an empty map, not an error', async () => {
-    const res = await request(app).get('/api/exposure/NEVERMAPPED/graph')
+    const res = await request(app).get('/api/exposure/NEVERMAPPED/graph').set('Authorization', `Bearer ${token}`)
     expect(res.status).toBe(200)
     expect(res.body.edges).toEqual([])
   })
 })
 
+describe('stored maps are signed-in only', () => {
+  test('the graph and the anchor list refuse a visitor with no token', async () => {
+    expect((await request(app).get('/api/exposure/SPACEX/graph')).status).toBe(401)
+    expect((await request(app).get('/api/exposure/anchors')).status).toBe(401)
+  })
+})
+
 describe('GET /api/exposure/anchors', () => {
   test('lists private anchors and the relation vocabulary', async () => {
-    const res = await request(app).get('/api/exposure/anchors')
+    const res = await request(app).get('/api/exposure/anchors').set('Authorization', `Bearer ${token}`)
     expect(res.status).toBe(200)
     expect(res.body.private.map(a => a.key)).toEqual(expect.arrayContaining(['SPACEX', 'OPENAI']))
     expect(Object.keys(res.body.relations)).toEqual(expect.arrayContaining(['supplier', 'competitor']))

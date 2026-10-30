@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { useAuth } from '../contexts/AuthContext'
 
 const LS_KEY = 'finsurf_alerts'
 
@@ -6,12 +7,14 @@ function load() {
   try { return JSON.parse(localStorage.getItem(LS_KEY) || '[]') } catch { return [] }
 }
 
-// Fire-and-forget: POST alert trigger to server so analyze_symbol runs in background
-async function triggerServerAnalysis(alert) {
+// Fire-and-forget: POST alert trigger to server so analyze_symbol runs in background.
+// Signed-in only (the trigger runs an AI analysis); a guest's alert still fires
+// locally, it just gets no analysis.
+async function triggerServerAnalysis(alert, authFetch) {
+  if (!authFetch) return
   try {
-    await fetch('/api/alerts/trigger', {
+    await authFetch('/api/alerts/trigger', {
       method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({
         symbol:    alert.symbol,
         alertType: alert.type,
@@ -26,6 +29,7 @@ export function useAlerts(quotesMap = {}) {
   const [alerts, setAlerts]     = useState(load)
   const [triggered, setTriggered] = useState([])
   const prevTriggered             = useRef(new Set())
+  const { authFetch, isAuthenticated } = useAuth()
 
   // Persist
   useEffect(() => {
@@ -45,11 +49,11 @@ export function useAlerts(quotesMap = {}) {
         fired.push({ ...a, price })
         prevTriggered.current.add(a.id)
         // Kick off server-side AI analysis in background
-        triggerServerAnalysis({ ...a, price })
+        triggerServerAnalysis({ ...a, price }, isAuthenticated ? authFetch : null)
       }
     })
     if (fired.length) setTriggered(prev => [...prev, ...fired])
-  }, [quotesMap, alerts])
+  }, [quotesMap, alerts, isAuthenticated, authFetch])
 
   const addAlert = useCallback((alert) => {
     const id = Date.now()

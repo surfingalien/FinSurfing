@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react'
 import { Search, AlertTriangle, ArrowRight } from 'lucide-react'
 import { getApiKeyHeaders } from '../../services/api'
+import { useAuth } from '../../contexts/AuthContext'
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri']
@@ -66,6 +67,7 @@ function Skeleton() {
 }
 
 export default function PatternFinderView({ onAnalyze }) {
+  const { authFetch } = useAuth()
   const [symbol, setSymbol] = useState('')
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -79,7 +81,7 @@ export default function PatternFinderView({ onAnalyze }) {
     setError(null)
     setData(null)
     try {
-      const res = await fetch(`/api/patterns/${encodeURIComponent(sym)}`, {
+      const res = await authFetch(`/api/patterns/${encodeURIComponent(sym)}`, {
         headers: getApiKeyHeaders(),
       })
       // The endpoint heartbeats to survive slow mobile connections, which pins

@@ -17,6 +17,8 @@ import { useWatchlist } from './hooks/useWatchlist'
 import { useAlerts } from './hooks/useAlerts'
 import { useAlertStream, formatAnalysisToast } from './hooks/useAlertStream'
 import { useToast } from './components/shared/ToastNotifications'
+import SignInRequired from './components/shared/SignInRequired'
+import { AUTH_TABS } from './navigation'
 
 // ── Lazy views — each becomes its own chunk, loaded on first visit ────────────
 const AuthPage               = lazy(() => import('./components/Auth/AuthPage'))
@@ -286,7 +288,11 @@ function MainApp({ onSignIn }) {
     'admin':          () => <AdminDashboard />,
   }
 
-  const renderView = views[activeTab] ?? views['dashboard']
+  // AI and scan tabs are for signed-in users only (navigation.js AUTH_TABS);
+  // the guest demo shows a sign-in screen there instead of the view.
+  const renderView = !isAuthenticated && AUTH_TABS.has(activeTab)
+    ? () => <SignInRequired onSignIn={onSignIn} />
+    : views[activeTab] ?? views['dashboard']
 
   // Show portfolio setup wizard for new authenticated users with no portfolios
   const showWizard = isAuthenticated && !loadingPortfolios && portfolios.length === 0 && !wizardDone
@@ -354,13 +360,15 @@ function MainApp({ onSignIn }) {
         onNavigate={navigateTo}
       />
 
-      {/* ── FinSurf Copilot — floating agentic AI panel ── */}
-      <Suspense fallback={null}>
-        <FinSurfCopilot
-          portfolio={portfolio.positions}
-          watchlist={watchlist.symbols}
-        />
-      </Suspense>
+      {/* ── FinSurf Copilot — floating agentic AI panel (signed-in only) ── */}
+      {isAuthenticated && (
+        <Suspense fallback={null}>
+          <FinSurfCopilot
+            portfolio={portfolio.positions}
+            watchlist={watchlist.symbols}
+          />
+        </Suspense>
+      )}
     </div>
   )
 }
