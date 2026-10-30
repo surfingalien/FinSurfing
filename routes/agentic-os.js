@@ -16,6 +16,10 @@ const express = require('express')
 const fs      = require('fs')
 const path    = require('path')
 const router  = express.Router()
+const { requireAuth } = require('../middleware/auth')
+// Sign-in only: the scan cache, scheduler state and system map are not for
+// anonymous visitors.
+router.use(requireAuth)
 
 const ROOT = path.join(__dirname, '..')
 

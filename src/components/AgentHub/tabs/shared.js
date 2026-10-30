@@ -1,11 +1,8 @@
-import { getApiKeyHeaders } from '../../../services/api'
+// Agent Hub calls go through authFetch (useAuth): every route behind it
+// needs a signed-in user. The old unauthenticated apiFetch helper is gone.
 
 export const TELEMETRY_KEY = 'finsurf_agent_runs'
 const MAX_RUNS = 50
-
-export function apiFetch(url, opts = {}) {
-  return fetch(url, { headers: getApiKeyHeaders(), ...opts })
-}
 
 export function timeAgo(ts) {
   if (!ts) return 'Never'

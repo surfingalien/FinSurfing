@@ -242,7 +242,8 @@ Rules:
 
 // ── Routes ────────────────────────────────────────────────────────────────────
 
-router.get('/', async (req, res) => {
+// Sign-in only: this is the AI's focus list.
+router.get('/', requireAuth, async (req, res) => {
   // Serve cache if fresh (< 35 min old)
   if (_cache.updatedAt) {
     const age = Date.now() - new Date(_cache.updatedAt).getTime()

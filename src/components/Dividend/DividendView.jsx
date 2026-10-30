@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback } from 'react'
 import { DollarSign, AlertTriangle, ArrowRight } from 'lucide-react'
 import { getApiKeyHeaders } from '../../services/api'
+import { useAuth } from '../../contexts/AuthContext'
 
 const FILTERS = [
   { id: 'all', label: 'All' },
@@ -47,6 +48,7 @@ function Skeleton() {
 }
 
 export default function DividendView({ onAnalyze }) {
+  const { authFetch } = useAuth()
   const [amount, setAmount] = useState(10000)
   const [goal, setGoal] = useState(500)
   const [customSymbols, setCustomSymbols] = useState('')
@@ -62,9 +64,9 @@ export default function DividendView({ onAnalyze }) {
     setData(null)
     try {
       const symbols = customSymbols.split(',').map(s => s.trim().toUpperCase()).filter(Boolean)
-      const res = await fetch('/api/dividend/screen', {
+      const res = await authFetch('/api/dividend/screen', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...getApiKeyHeaders() },
+        headers: getApiKeyHeaders(),
         body: JSON.stringify({ investmentAmount: Number(amount) || 0, monthlyIncomeGoal: Number(goal) || 0, symbols }),
       })
       // The endpoint heartbeats to survive slow mobile connections, which pins

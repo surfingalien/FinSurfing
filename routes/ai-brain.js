@@ -1347,7 +1347,7 @@ mountJobRoutes(router, {
 // GET /api/ai-brain/learnings — returns current self-improvement state for UI
 // display, plus the human-owned overrides so the UI can show what's pinned,
 // suppressed, or directed.
-router.get('/learnings', (req, res) => {
+router.get('/learnings', requireAuth, (req, res) => {
   try {
     const { readLearnings, readOverrides } = require('../lib/brain-learnings')
     const data = readLearnings()
@@ -1383,7 +1383,7 @@ router.put('/learnings/overrides', requireAuth, (req, res) => {
 // GET /api/ai-brain/refinements — the memory's refinement history: every
 // nightly AI rewrite and human edit, with the evidence behind it, what
 // changed, and whether the hash chain is intact. Read-only, no secrets.
-router.get('/refinements', (req, res) => {
+router.get('/refinements', requireAuth, (req, res) => {
   try {
     const refinement = require('../lib/memory-refinement')
     const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 25, 1), 100)
@@ -1484,8 +1484,8 @@ function buildActivityFeed(records, limit = 40) {
 // reasoning (scores, ensemble disagreement, baseline delta, resolved outcome)
 // the scan already produces, plus the deterministic calibration stats so the UI
 // can show "you claimed High confidence → High historically won X% vs benchmark".
-// Read-only over server-side data — unauthenticated like /learnings.
-router.get('/activity', (req, res) => {
+// Read-only over server-side data; signed-in only, like /learnings.
+router.get('/activity', requireAuth, (req, res) => {
   try {
     const { readPredictions, computeStats } = require('../lib/brain-learnings')
     const limit   = Math.min(Math.max(parseInt(req.query.limit, 10) || 40, 1), 100)

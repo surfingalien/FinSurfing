@@ -21,6 +21,7 @@ import {
 } from 'lucide-react'
 import { useQuery, fetchJson } from '../../hooks/useQuery'
 import { fmtPct } from '../../services/api'
+import { useAuth } from '../../contexts/AuthContext'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -381,11 +382,12 @@ function TerminalStream({ feed }) {
 // ── Main view ─────────────────────────────────────────────────────────────────
 
 export default function BrainActivityView({ onAnalyze }) {
+  const { authFetch } = useAuth()
   const [filter, setFilter] = useState('all') // all | splits | resolved
   const [live,   setLive]   = useState(false)
   const { data, loading, fetching, error, refetch } = useQuery(
     'ai-brain-activity',
-    () => fetchJson('/api/ai-brain/activity?limit=60'),
+    () => fetchJson('/api/ai-brain/activity?limit=60', undefined, authFetch),
     { staleMs: 30_000, refetchMs: live ? 20_000 : 60_000 },
   )
 

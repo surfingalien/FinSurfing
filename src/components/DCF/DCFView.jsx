@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react'
 import { TrendingUp, AlertTriangle, ArrowRight } from 'lucide-react'
 import { getApiKeyHeaders } from '../../services/api'
+import { useAuth } from '../../contexts/AuthContext'
 
 function fmtMoney(value) {
   if (value == null || isNaN(value)) return '—'
@@ -44,6 +45,7 @@ function Skeleton() {
 }
 
 export default function DCFView({ onAnalyze }) {
+  const { authFetch } = useAuth()
   const [symbol, setSymbol] = useState('')
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -57,9 +59,9 @@ export default function DCFView({ onAnalyze }) {
     setError(null)
     setData(null)
     try {
-      const res = await fetch('/api/dcf', {
+      const res = await authFetch('/api/dcf', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...getApiKeyHeaders() },
+        headers: getApiKeyHeaders(),
         body: JSON.stringify({ symbol: sym }),
       })
       // The endpoint heartbeats to survive slow mobile connections, which pins

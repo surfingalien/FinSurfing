@@ -301,7 +301,7 @@ function sendBuildError(res, err) {
 // ── Routes ───────────────────────────────────────────────────────────────────
 
 /** Anchors you can map, plus what has already been built. */
-router.get('/anchors', (req, res) => {
+router.get('/anchors', requireAuth, (req, res) => {
   res.json({
     private: Object.entries(edgarSearch.PRIVATE_ANCHORS).map(([key, v]) => ({ key, label: v.label, listed: false })),
     note: 'Any US-listed ticker also works as an anchor (e.g. NVDA, TSM, PLTR).',
@@ -353,7 +353,7 @@ router.post('/build', requireAuth, exposureLimit, async (req, res) => {
 })
 
 /** Last stored map. No network, no LLM — instant, and safe to poll. */
-router.get('/:anchor/graph', (req, res) => {
+router.get('/:anchor/graph', requireAuth, (req, res) => {
   const anchor = cleanAnchor(req.params.anchor)
   if (!anchor) return res.status(400).json({ error: 'Invalid anchor' })
   const edges = entityGraph.latestEdges(anchor)

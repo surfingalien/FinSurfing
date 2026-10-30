@@ -62,7 +62,7 @@ function RefinementHistory() {
   const [msg, setMsg] = useState(null)
   const { data } = useQuery(
     'ai-brain-refinements',
-    () => fetchJson('/api/ai-brain/refinements?limit=25'),
+    () => fetchJson('/api/ai-brain/refinements?limit=25', undefined, authFetch),
     { staleMs: 5 * 60_000, enabled: open },
   )
 
@@ -278,10 +278,11 @@ function EditableLearnings({ data }) {
 }
 
 export default function TrackRecordPanel() {
+  const { authFetch } = useAuth()
   const [expanded, setExpanded] = useState(false)
   const { data, error } = useQuery(
     'ai-brain-learnings',
-    () => fetchJson('/api/ai-brain/learnings'),
+    () => fetchJson('/api/ai-brain/learnings', undefined, authFetch),
     { staleMs: 60 * 60_000 },
   )
 

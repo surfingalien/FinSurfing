@@ -2,7 +2,7 @@
 /**
  * routes/dcf.js
  *
- * POST /api/dcf  (public — no auth)
+ * POST /api/dcf  (signed-in users only)
  * body: { symbol }
  *
  * Fetches 5 years of FMP fundamentals (income statement, cash flow, balance
@@ -14,6 +14,7 @@ const express       = require('express')
 const { startJsonHeartbeat } = require('../lib/http-heartbeat')
 
 const router        = express.Router()
+const { requireAuth } = require('../middleware/auth')
 const rateLimit     = require('express-rate-limit')
 const { getRouter } = require('../lib/ai-router')
 
@@ -117,7 +118,8 @@ All percentages as plain numbers (e.g. 8.5 means 8.5%). Return ONLY this JSON ob
 }
 
 // ── POST / ────────────────────────────────────────────────────────────────────
-router.post('/', dcfLimit, async (req, res) => {
+// Sign-in only: AI and scan results are not for anonymous visitors.
+router.post('/', requireAuth, dcfLimit, async (req, res) => {
   // Four provider calls plus a 4k-token LLM call; keeps a slow mobile
   // connection from idling out mid-request. Failures after the first heartbeat
   // arrive as 200 + `error` in the body.

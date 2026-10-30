@@ -8,6 +8,7 @@ import { generateAdvisory } from '../../services/research'
 import { StanceBadge, SignalPill, ConfidenceMeter, IndicatorRow } from './trade/TradeWidgets'
 import TradeCard from './trade/TradeCard'
 import MiniChart from './trade/MiniChart'
+import { useAuth } from '../../contexts/AuthContext'
 
 /* ── TimesFM Forecast Card ───────────────────────── */
 function TimesFMCard({ forecast, loading }) {
@@ -104,6 +105,7 @@ function TimesFMCard({ forecast, loading }) {
 
 /* ── Main ResearchView ───────────────────────────── */
 export default function ResearchView({ portfolioSymbols = [], watchlistSymbols = [] }) {
+  const { authFetch } = useAuth()
   const [query,     setQuery]     = useState('')
   const [results,   setResults]   = useState([])
   const [timeframe, setTimeframe] = useState('Swing')
@@ -161,7 +163,7 @@ export default function ResearchView({ portfolioSymbols = [], watchlistSymbols =
       // Fire TimesFM forecast in background — non-blocking
       if (process.env.NODE_ENV !== 'test') {
         setFcLoading(true)
-        fetch(`/api/forecast/${encodeURIComponent(sym)}`)
+        authFetch(`/api/forecast/${encodeURIComponent(sym)}`)
           .then(r => r.json())
           .then(d => { if (!d.error) setForecast(d) })
           .catch(() => {})

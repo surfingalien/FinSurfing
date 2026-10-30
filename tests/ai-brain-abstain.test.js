@@ -333,3 +333,12 @@ describe('POST /api/ai-brain/analyze — real prices and levels on every card', 
     expect(prompt).toMatch(/Removed from this scan \(no current price available\): NOPRICE/)
   })
 })
+
+// The Brain's record (its learnings, its own refinements, every pick and how
+// it resolved) is for signed-in users only — it was readable by anyone.
+describe('AI Brain record routes need a signed-in user', () => {
+  test.each(['/learnings', '/refinements', '/activity'])('GET %s → 401 without a token, served with one', async (p) => {
+    expect((await request(app).get(`/api/ai-brain${p}`)).status).toBe(401)
+    expect((await request(app).get(`/api/ai-brain${p}`).set('Authorization', `Bearer ${token}`)).status).not.toBe(401)
+  })
+})

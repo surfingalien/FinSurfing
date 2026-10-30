@@ -2,7 +2,7 @@
 /**
  * routes/pattern-finder.js
  *
- * GET /api/patterns/:symbol  (public — no auth)
+ * GET /api/patterns/:symbol  (signed-in users only)
  *
  * Combines server-computed seasonal/day-of-week return patterns (from 3y of
  * daily prices) with FMP insider, institutional, and short-interest data, then
@@ -13,6 +13,7 @@ const express       = require('express')
 const { startJsonHeartbeat } = require('../lib/http-heartbeat')
 
 const router        = express.Router()
+const { requireAuth } = require('../middleware/auth')
 const rateLimit     = require('express-rate-limit')
 const { getRouter } = require('../lib/ai-router')
 
@@ -214,7 +215,8 @@ Return ONLY this JSON object:
 }
 
 // ── GET /:symbol ──────────────────────────────────────────────────────────────
-router.get('/:symbol', patternLimit, async (req, res) => {
+// Sign-in only: AI and scan results are not for anonymous visitors.
+router.get('/:symbol', requireAuth, patternLimit, async (req, res) => {
   // A wide provider fan-out plus a 3k-token LLM call. Failures after the first
   // heartbeat arrive as 200 + `error` in the body, so clients check both.
   startJsonHeartbeat(res)

@@ -19,6 +19,7 @@ const express = require('express')
 const fs      = require('fs')
 
 const router         = express.Router()
+const { requireAuth } = require('../middleware/auth')
 const { PREDICTION_LOG } = require('../lib/prediction-log-path')
 
 function readPredictions() {
@@ -47,7 +48,8 @@ const VERDICT_COLOR = {
   'Strong Sell':   '#ef4444',
 }
 
-router.get('/', (req, res) => {
+// Sign-in only: this is the AI Brain's prediction log.
+router.get('/', requireAuth, (req, res) => {
   const { symbols, limit = '100', offset = '0' } = req.query
   const filterSyms = symbols ? symbols.split(',').map(s => s.trim().toUpperCase()).filter(Boolean) : null
   const lim = Math.min(parseInt(limit) || 100, 500)
