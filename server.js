@@ -2215,7 +2215,16 @@ app.get('/api/chart', async (req, res) => {
       if (stooqD) return res.json(saveChart(stooqD, 'Stooq-daily'))
     }
 
-    res.status(502).json({ error: `No price history available for ${symbol} — not covered by any data provider (may be illiquid, delisted, or non-US)`, chart: { result: null, error: { code: 'unavailable', description: 'No market data provider returned data' } } })
+    // Name the providers that could not even be asked: a missing key is the
+    // one cause the operator can fix, and it is otherwise only in the log.
+    const noKey = [
+      !(keys.aisa || AISA_KEY()) && 'AISA',
+      !(keys.finnhub || FH_KEY()) && 'Finnhub',
+      !(keys.fmp || FMP_KEY()) && 'FMP',
+      !(keys.td || process.env.TWELVE_DATA_API_KEY) && 'TwelveData (demo key only)',
+      !(keys.av || process.env.ALPHA_VANTAGE_API_KEY || process.env.AV_API_KEY) && 'AlphaVantage',
+    ].filter(Boolean)
+    res.status(502).json({ error: `No price history available for ${symbol} — no data provider returned it (may be newly listed, illiquid, delisted, or non-US)${noKey.length ? `; no API key set for ${noKey.join(', ')}` : ''}`, noKey, chart: { result: null, error: { code: 'unavailable', description: 'No market data provider returned data' } } })
   } catch (e) {
     res.status(500).json({ error: e.message })
   }

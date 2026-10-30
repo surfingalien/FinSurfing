@@ -193,7 +193,9 @@ async function gatherEvidence(sym, req) {
     assetType === 'stock' ? require('../lib/sec-facts').getCompanyFacts(sym).catch(() => null) : Promise.resolve(null),
   ])
   if (bars.length < 60) {
-    const err = new Error(`Not enough price history for ${sym} (${bars.length} daily bars, need 60+)`)
+    const err = new Error(bars.length
+      ? `Not enough price history for ${sym} (${bars.length} daily bars, need 60+)`
+      : `No price history for ${sym}: ${bars.reason || 'no data provider returned any'}`)
     err.status = 422
     throw err
   }
