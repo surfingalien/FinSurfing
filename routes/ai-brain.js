@@ -23,7 +23,7 @@ const { getSocialSentiment, getCryptoFearGreed, getBtcDominance } = require('../
 const { getAltDataSnippet, getGeopoliticalRiskSnippet } = require('../lib/alt-data')
 const { getIndicators }      = require('./macro')
 const { requireAuth }     = require('../middleware/auth')
-const { buildLearnings, getAutoTunedThreshold } = require('../lib/brain-learnings')
+const { buildLearnings, getAutoTunedThreshold, HORIZON_DAYS } = require('../lib/brain-learnings')
 const { getStrategyBlock }  = require('../lib/strategy-library')
 const learningStore         = require('../lib/learning-store')
 const { compactTaLine, detectPatterns, KEY_PATTERNS, computeRsRanks } = require('../lib/technical-indicators')
@@ -79,7 +79,7 @@ const { PREDICTION_LOG } = require('../lib/prediction-log-path')
 // v6: constrained decoding — the scan is decoded against SCAN_SCHEMA
 // (lib/ai-schemas.js), so verdict/confidence/volumeSignal can only be the
 // declared values. Same prompt text; a different decoder is a different system.
-const SCAN_PROMPT_VERSION = 6
+const SCAN_PROMPT_VERSION = 7
 
 // The fixed part of every scan prompt: role, output schema and scoring rules.
 // It contains NO interpolation, so it is byte-identical across scans and is
@@ -161,17 +161,19 @@ Rules:
 - agentVerdict: use "Avoid" when the setup is genuinely unattractive or the evidence points DOWN. Do NOT express a bearish view as a negative targetReturn on a buy verdict — say "Avoid" and explain why in the analyses. For "Avoid", set targetReturn and stopLoss to 0 and leave the price zones at 0; there is no trade to price. Never pad the list with buys you do not believe
 - UNITS: targetReturn and stopLoss are PERCENTAGES measured from the entry, never prices. targetReturn 12 means the target is 12% above entry; stopLoss 8 means the stop is 8% below entry (a $100 entry with stopLoss 8 stops at $92). Dollar levels go ONLY in the *Zone* fields
 - compositeScore = weighted avg (fundamental 25%, technical 20%, sentiment 15%, macro 20%, risk 20%)
-- RSRank in COMPUTED TECHNICALS = intra-universe relative-strength percentile over 20 days (100=top, 0=weakest in this scan). Boost technicalScore +8 when RSRank ≥ 70 with uptrend; cut -8 when RSRank ≤ 30 (chronic underperformer) unless thesis is explicit turnaround
+- NO FIXED SCORE BUMPS for return signals this app has not measured (relative strength, analyst targets, insider counts, social sentiment, short ratio, options put/call): weigh each on its merits and say which drove the score. The riskScore and macroScore rules below stay — they limit risk, they do not claim an edge
+- RSRank in COMPUTED TECHNICALS = intra-universe relative-strength percentile over 20 days (100=top, 0=weakest in this scan) — one input to technicalScore
 - All scores 0-100; riskScore: higher = safer
-- fundamentalScore: boost +10 when AnalystTarget from LIVE SNAPSHOT is >15% above current price with ≥5 analysts (shown as "AnalystTarget=$xxx(Nx)"); cut -10 when analyst target is below current price
-- sentimentScore: boost +8 when INSIDER ACTIVITY shows "🟢 net buying"; cut -8 when it shows "🔴 net selling"; boost +5 when Reddit/social sentiment is bullish (>55% bullish posts by upvote weight); cut -5 when FINRA short ratio >15%; additionally boost +6 when OPTIONS FLOW shows P/C<0.70🟢 (smart-money call buying); cut -6 when P/C>1.30🔴 (heavy protective put buying or bearish speculation)
+- AnalystTarget in the LIVE SNAPSHOT ("AnalystTarget=$xxx(Nx)") is third-party opinion, not a measured signal: context for fundamentalScore, never a score in itself
+- INSIDERS: CLASSIFIED INSIDER BUYS lines (SEC Form 4) split purchases into opportunistic, routine and plan buys and state what this app's own study measured for them — weigh opportunistic and cluster buys only as far as that verdict supports; routine and plan (10b5-1) buys carry no information. The OpenInsider buy/sell counts under INSIDER ACTIVITY include routine trades and option-exercise sales: context only
+- Reddit/social sentiment, FINRA short ratio and OPTIONS FLOW put/call are unmeasured on this app: context for sentimentScore, never a fixed adjustment
 - riskScore: cut -15 when earnings ≤7 days away (binary binary event); cut -8 when earnings 8–21 days away; cut -10 for IMMINENT short squeeze risk (high short interest + rising price)
 - macroScore: use FRED regime context — cut -10 in rate-rising / credit-spread-widening regime for rate-sensitive sectors
 - agentConflict.exists = true when ANY two agent scores differ by ≥25 points
 - agentConflict.agents = the two most-divergent agents
 - Price zones: entryZoneLow/High = ±2% around ideal entry; targetZoneLow/High = ±3% around target; stopZoneLow/High = ±1.5% around stop
 - volumeSignal: "Confirming" if vol > 1.1x avg and price trending up; "Weak" if vol < 0.8x; "Diverging" if vol rising but price falling (or vice versa); "Unknown" if no data
-- highConviction: set true ONLY when ≥3 of these independent confirming signals are present: (1) net insider buying in last 90d, (2) analyst target >15% upside with ≥5 analysts, (3) volumeSignal=Confirming, (4) compositeScore ≥ 80, (5) ensemble cross-model confirmed, (6) macroScore ≥ 75 (clear macro tailwind), (7) OPTIONS FLOW P/C<0.70🟢 with at least 1 unusual-CALL (smart-money bullish positioning); otherwise false
+- highConviction: set true ONLY when ≥3 of these independent confirming signals are present: (1) opportunistic or cluster insider purchases in the CLASSIFIED INSIDER BUYS lines (last 90d), (2) analyst target >15% upside with ≥5 analysts, (3) volumeSignal=Confirming, (4) compositeScore ≥ 80, (5) ensemble cross-model confirmed, (6) macroScore ≥ 75 (clear macro tailwind), (7) OPTIONS FLOW P/C<0.70🟢 with at least 1 unusual-CALL (smart-money bullish positioning); otherwise false
 - catalyst: the single most time-sensitive trigger for this pick (e.g. "earnings beat expected next week", "Fed pivot boosts rate-sensitive sector", "breakout above 200-day MA"); required for all picks
 - thesisAssumptions: 3 specific, falsifiable conditions that must hold for the bull case to play out
 - dataSource: always "live" — every symbol in the request carries a current price; use those prices, never remembered ones
@@ -629,6 +631,7 @@ async function resolveUniverse({ symbols, scanMode, universeMode, fmpKey }) {
 function logPrediction(symbol, agents, zones, generatedAt, {
   baseline = null, optionsPcRatio = null, taPatterns = null, rsRankAtScan = null,
   regimeAtScan = null, priceRegimeAtScan = null, modelVersion = null, learningsVersion = null, metaProb = null,
+  horizon = null,
 } = {}) {
   try {
     const dir = path.dirname(PREDICTION_LOG)
@@ -714,6 +717,11 @@ function logPrediction(symbol, agents, zones, generatedAt, {
       baselineProb:     baseline?.prob ?? null,
       baselineDir:      baseline?.dir ?? null,
       baselineFeatures: baseline?.features ?? null,
+      // The horizon the scan was asked for. Targets are sized for it, so the
+      // barrier, exit and horizon return are measured over it (brain-learnings
+      // HORIZON_DAYS) — a 30-day window used to judge 6-month targets.
+      horizon:           horizon ?? null,
+      horizonDays:       HORIZON_DAYS[horizon] ?? null,
       // outcome fields filled later by a scheduled job
       price7d: null, price30d: null, price90d: null,
     })
@@ -845,6 +853,20 @@ router.post('/analyze', requireAuth, brainLimit, guardAsync('ai-brain/analyze', 
   if (altDataResult.status === 'fulfilled' && Array.isArray(altDataResult.value)) {
     const parts = altDataResult.value.filter(Boolean)
     if (parts.length) altDataSnippet = '\n' + parts.join('\n')
+  }
+  // Classified insider purchases (lib/insider-buys.js, local SEC data — no
+  // network): opportunistic vs routine vs plan, with this app's measured
+  // verdict. The prompt used to add a fixed +8 for any "net buying".
+  if (isStockScan) {
+    try {
+      const ib = require('../lib/insider-buys')
+      const store = ib.readStore(), studyOut = ib.readStudy()
+      const lines = stockSyms.map(sym => {
+        const line = ib.describeRecent(ib.recentFor(sym, { store, studyOut }))
+        return line && `  ${sym}: ${line}`
+      }).filter(Boolean)
+      if (lines.length) altDataSnippet += `\n\nCLASSIFIED INSIDER BUYS (SEC Form 4, last 90 days):\n${lines.join('\n')}`
+    } catch (e) { console.warn('[ai-brain] classified insider lines skipped:', e.message) }
   }
 
   // Geopolitical risk — scored headline scan from Finnhub general news
@@ -1195,6 +1217,7 @@ Apply the instructions, JSON schema and rules from the system prompt. Respond ON
         modelVersion,
         learningsVersion,
         metaProb: stock.metaLabel?.prob ?? null,
+        horizon,
       })
     }
 

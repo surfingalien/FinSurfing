@@ -97,6 +97,33 @@ function formatInline(text) {
     .replace(/\$(\d[\d,.]+)/g, '<span class="font-mono text-emerald-300">$$1</span>')
 }
 
+// ── Plan check ────────────────────────────────────────────────────────────────
+// The server parses the answer's Trade Hypothesis and checks it in code
+// (direction, reward/risk, after-cost expected value at the measured win rate).
+const CHECK_STYLE = {
+  act:        { label: 'Checked by code — plan pays after costs', cls: 'border-emerald-500/30 bg-emerald-500/[0.06] text-emerald-300' },
+  thin:       { label: 'Checked by code — edge is thin',           cls: 'border-amber-500/30 bg-amber-500/[0.06] text-amber-300' },
+  reject:     { label: 'Checked by code — plan does not pay',      cls: 'border-red-500/30 bg-red-500/[0.06] text-red-300' },
+  incoherent: { label: 'Checked by code — levels contradict',      cls: 'border-red-500/30 bg-red-500/[0.06] text-red-300' },
+  'no-trade': { label: 'Checked by code — no trade',               cls: 'border-white/10 bg-white/[0.03] text-slate-300' },
+}
+
+function PlanCheck({ check }) {
+  const style = CHECK_STYLE[check.verdict] ?? CHECK_STYLE['no-trade']
+  return (
+    <div className={`rounded-xl border px-3 py-2 text-xs ${style.cls}`}>
+      <div className="font-semibold">{style.label}</div>
+      {check.rr != null && (
+        <div className="mt-0.5 text-slate-300">
+          {check.side} {check.symbol} · entry ${check.entry} · target ${check.target} (+{check.targetReturn}%) · stop ${check.stop} (−{check.stopLoss}%) · reward/risk {check.rr}:1
+        </div>
+      )}
+      {check.reasons?.map((r, i) => <div key={i} className="mt-0.5 text-slate-400">{r}</div>)}
+      {check.winProbSource && <div className="mt-0.5 text-slate-500">Win rate used: {Math.round(check.winProb * 100)}% — {check.winProbSource}</div>}
+    </div>
+  )
+}
+
 // ── Message bubble ────────────────────────────────────────────────────────────
 
 export function MessageBubble({ msg }) {
@@ -128,6 +155,8 @@ export function MessageBubble({ msg }) {
             {renderMarkdown(msg.content)}
           </div>
         )}
+
+        {msg.planCheck && <PlanCheck check={msg.planCheck} />}
 
         {/* Streaming cursor */}
         {msg.streaming && (

@@ -4,6 +4,7 @@ import {
 } from 'lucide-react'
 import SearchResultRow from './quantmind/SearchResultRow'
 import PaperCard from './quantmind/PaperCard'
+import { useAuth } from '../../contexts/AuthContext'
 
 const PERSONAS = [
   { id: 'quant_analyst',    label: 'Quant Analyst',     color: 'text-violet-400' },
@@ -51,6 +52,8 @@ export default function QuantMindView() {
   const [error, setError]               = useState(null)
 
   const apiBase = import.meta.env.VITE_API_URL || ''
+  // Every QuantMind route needs a signed-in user (they pay for Claude calls).
+  const { authFetch } = useAuth()
 
   // ── Helpers ─────────────────────────────────────────────────────────────────
   const addPaperToLibrary = (paper) => {
@@ -71,7 +74,7 @@ export default function QuantMindView() {
     try {
       const params = new URLSearchParams({ category: searchCat, max: 20 })
       if (q) params.set('q', q)
-      const res = await fetch(`${apiBase}/api/quantmind/search?${params}`, { credentials: 'include' })
+      const res = await authFetch(`${apiBase}/api/quantmind/search?${params}`)
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Search failed')
       setSearchResults(data.results || [])
@@ -80,16 +83,14 @@ export default function QuantMindView() {
     } finally {
       setSearching(false)
     }
-  }, [searchQuery, searchCat, apiBase])
+  }, [searchQuery, searchCat, apiBase, authFetch])
 
   // Load a search result into the library (fetch + Claude extract)
   const loadSearchResult = useCallback(async (arxivId) => {
     setLoadingId(arxivId); setError(null)
     try {
-      const res = await fetch(`${apiBase}/api/quantmind/paper`, {
+      const res = await authFetch(`${apiBase}/api/quantmind/paper`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify({ arxiv_id: arxivId }),
       })
       const data = await res.json()
@@ -101,7 +102,7 @@ export default function QuantMindView() {
     } finally {
       setLoadingId(null)
     }
-  }, [apiBase, activeTab])
+  }, [apiBase, activeTab, authFetch])
 
   // ── Manual entry ────────────────────────────────────────────────────────────
   const fetchPaper = useCallback(async () => {
@@ -112,8 +113,8 @@ export default function QuantMindView() {
     }
     setManualLoading(true); setError(null)
     try {
-      const res = await fetch(`${apiBase}/api/quantmind/paper`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+      const res = await authFetch(`${apiBase}/api/quantmind/paper`, {
+        method: 'POST',
         body: JSON.stringify({ arxiv_id: id }),
       })
       const data = await res.json()
@@ -123,15 +124,15 @@ export default function QuantMindView() {
       setActiveTab('library')
     } catch (e) { setError(e.message) }
     finally { setManualLoading(false) }
-  }, [arxivInput, papers, apiBase])
+  }, [arxivInput, papers, apiBase, authFetch])
 
   const fetchBatch = useCallback(async () => {
     const ids = batchInput.split(/[\n,\s]+/).map(s => s.trim()).filter(Boolean)
     if (!ids.length) return
     setBatchLoading(true); setError(null)
     try {
-      const res = await fetch(`${apiBase}/api/quantmind/batch`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+      const res = await authFetch(`${apiBase}/api/quantmind/batch`, {
+        method: 'POST',
         body: JSON.stringify({ arxiv_ids: ids, max_concurrency: 4 }),
       })
       const data = await res.json()
@@ -141,15 +142,15 @@ export default function QuantMindView() {
       setActiveTab('library')
     } catch (e) { setError(e.message) }
     finally { setBatchLoading(false) }
-  }, [batchInput, apiBase])
+  }, [batchInput, apiBase, authFetch])
 
   // ── Ask ─────────────────────────────────────────────────────────────────────
   const askQuestion = useCallback(async () => {
     if (!question.trim()) return
     setAskLoading(true); setError(null); setAnswer(null)
     try {
-      const res = await fetch(`${apiBase}/api/quantmind/ask`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+      const res = await authFetch(`${apiBase}/api/quantmind/ask`, {
+        method: 'POST',
         body: JSON.stringify({ question: question.trim(), arxiv_ids: [...selectedIds], persona }),
       })
       const data = await res.json()
@@ -157,7 +158,7 @@ export default function QuantMindView() {
       setAnswer(data)
     } catch (e) { setError(e.message) }
     finally { setAskLoading(false) }
-  }, [question, selectedIds, persona, apiBase])
+  }, [question, selectedIds, persona, apiBase, authFetch])
 
   const toggleSelect = (id) => {
     setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })

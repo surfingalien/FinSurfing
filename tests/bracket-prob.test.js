@@ -15,8 +15,9 @@ function records(n, edge, seed = 5) {
       symbol: 'S' + (i % 30), compositeScore: Math.round(40 + r() * 50), confidence: ['High', 'Medium', 'Low'][Math.floor(r() * 3)],
       ensembleConfirmed: r() < 0.4, rsRankAtScan: Math.round(r() * 100), priceRegimeAtScan: 'up-calm',
       assetType: r() < 0.5 ? 'crypto' : 'stock', targetReturn: 10, stopLoss: 6, entered: true, priceAtPrediction: 100,
+      horizon: '3m', horizonDays: 91,
     }
-    rec.barrier = { label: edge(rec, r) ? 'target' : 'stop' }
+    rec.barrier = { label: edge(rec, r) ? 'target' : 'stop', window: 91 }
     return rec
   })
 }

@@ -27,7 +27,12 @@ const {
   getQuantmindPaper, deleteQuantmindPaper,
 } = require('../db/ai_memory')
 
+const { requireAuth } = require('../middleware/auth')
+
 const router  = express.Router()
+// Paper extraction and Q&A pay for Claude calls; the memory routes can delete
+// cached papers. All of it needs a signed-in user.
+router.use(requireAuth)
 const breaker = getBreaker('quantmind', { threshold: 4, resetTimeoutMs: 60_000 })
 
 const QM_MODEL = 'claude-sonnet-4-6'

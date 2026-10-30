@@ -4,7 +4,8 @@ import {
   Search, GitBranch,
 } from 'lucide-react'
 import { getApiKeyHeaders } from '../../../services/api'
-import { apiFetch, saveTelemetryRun } from './shared'
+import { saveTelemetryRun } from './shared'
+import { useAuth } from '../../../contexts/AuthContext'
 import SynthesisPanel from './SynthesisPanel'
 
 // ── ─────────────────────────────────────────────────────────────────────────────
@@ -51,6 +52,7 @@ function PhaseCard({ phase, active }) {
 }
 
 export default function PipelineTab() {
+  const { authFetch } = useAuth()
   const [input,   setInput]   = useState('')
   const [result,  setResult]  = useState(null)
   const [loading, setLoading] = useState(false)
@@ -73,9 +75,9 @@ export default function PipelineTab() {
     })
 
     try {
-      const r    = await apiFetch('/api/agents/pipeline', {
+      const r    = await authFetch('/api/agents/pipeline', {
         method:  'POST',
-        headers: { 'Content-Type': 'application/json', ...getApiKeyHeaders() },
+        headers: getApiKeyHeaders(),
         body:    JSON.stringify({ symbol: sym }),
       })
       const data = await r.json()
@@ -146,6 +148,17 @@ export default function PipelineTab() {
           </div>
           {result.synthesis && (
             <SynthesisPanel text={result.synthesis} llmUsed={result.llmUsed} />
+          )}
+          {/* The long plan, checked in code — it stands only behind a BULLISH verdict */}
+          {result.plan?.line && (
+            <div className={`rounded-xl border px-4 py-3 text-xs ${
+              result.plan.verdict === 'act' ? 'border-emerald-500/30 bg-emerald-500/[0.06] text-emerald-300'
+                : result.plan.verdict === 'thin' ? 'border-amber-500/30 bg-amber-500/[0.06] text-amber-300'
+                : result.plan.verdict === 'no-trade' ? 'border-white/10 bg-white/[0.03] text-slate-300'
+                : 'border-red-500/30 bg-red-500/[0.06] text-red-300'
+            }`}>
+              <span className="font-semibold">Checked by code: </span>{result.plan.line}
+            </div>
           )}
         </>
       )}

@@ -4,7 +4,8 @@ import {
   Loader2, AlertTriangle, ChevronDown, ChevronUp, Search,
 } from 'lucide-react'
 import { getApiKeyHeaders } from '../../../services/api'
-import { apiFetch, saveTelemetryRun } from './shared'
+import { saveTelemetryRun } from './shared'
+import { useAuth } from '../../../contexts/AuthContext'
 import SynthesisPanel from './SynthesisPanel'
 
 // ── ─────────────────────────────────────────────────────────────────────────────
@@ -61,6 +62,7 @@ function AgentCard({ agent }) {
 }
 
 export default function ResearchAgentTab() {
+  const { authFetch } = useAuth()
   const [input,   setInput]   = useState('')
   const [result,  setResult]  = useState(null)
   const [loading, setLoading] = useState(false)
@@ -86,9 +88,9 @@ export default function ResearchAgentTab() {
     })
 
     try {
-      const r    = await apiFetch('/api/agents/research', {
+      const r    = await authFetch('/api/agents/research', {
         method:  'POST',
-        headers: { 'Content-Type': 'application/json', ...getApiKeyHeaders() },
+        headers: getApiKeyHeaders(),
         body:    JSON.stringify({ symbol: sym, ...opts }),
       })
       const data = await r.json()

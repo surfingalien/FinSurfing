@@ -86,6 +86,35 @@ function StreamedText({ text }) {
 
 // ── Main view ─────────────────────────────────────────────────────────────────
 
+// The trades and weights, computed by the server — the narrative below only
+// explains them.
+function TradeTable({ plan }) {
+  return (
+    <div className="mb-4 space-y-2 text-xs">
+      <div className="text-[10px] uppercase tracking-wide text-slate-500">Trades (computed in code)</div>
+      {plan.trades.length ? (
+        <table className="w-full">
+          <tbody>
+            {plan.trades.map(t => (
+              <tr key={t.symbol} className="border-b border-white/[0.05]">
+                <td className={`py-1 font-semibold ${t.side === 'buy' ? 'text-emerald-400' : 'text-red-400'}`}>{t.side.toUpperCase()}</td>
+                <td className="py-1 text-slate-200">{t.shares} {t.symbol}</td>
+                <td className="py-1 text-slate-500">{t.sector}</td>
+                <td className="py-1 text-right font-mono text-slate-300">${t.value.toLocaleString()}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : <div className="text-slate-400">No trades needed.</div>}
+      <div className="text-slate-500">
+        {plan.sectors.map(s => `${s.sector} ${s.currentPct}% → ${s.afterPct}%`).join(' · ')}
+        {plan.cashResidual ? ` · cash left $${plan.cashResidual.toLocaleString()}` : ''}
+      </div>
+      {plan.notes?.map((n, i) => <div key={i} className="text-amber-400/80">{n}</div>)}
+    </div>
+  )
+}
+
 export default function RebalancerView() {
   const { authFetch, isAuthenticated, user } = useAuth()
   const { activePortfolioId } = usePortfolioContext()
@@ -99,6 +128,7 @@ export default function RebalancerView() {
   const [targets,     setTargets]     = useState({})
   const [streaming,   setStreaming]   = useState(false)
   const [plan,        setPlan]        = useState('')
+  const [trades,      setTrades]      = useState(null)   // computed in code (lib/rebalance-plan.js)
   const [error,       setError]       = useState(null)
   const planRef = useRef(null)
 
@@ -136,6 +166,7 @@ export default function RebalancerView() {
     sectors.forEach(s => { init[s] = Math.round(currentAlloc[s]) })
     setTargets(init)
     setPlan('')
+    setTrades(null)
     setError(null)
   }
 
@@ -150,10 +181,12 @@ export default function RebalancerView() {
       return {
         symbol:       pos.symbol,
         shares:       pos.shares,
-        currentPrice: q?.regularMarketPrice ?? pos.avgCost ?? 0,
+        // The server prices holdings itself; these are fallbacks it labels.
+        currentPrice: q?.regularMarketPrice ?? null,
+        avgCost:      pos.avgCost ?? null,
         sector:       pos.sector || 'Unknown',
       }
-    }).filter(h => h.currentPrice > 0)
+    }).filter(h => h.currentPrice > 0 || h.avgCost > 0)
 
     if (holdings.length === 0) {
       setError('No live prices available. Try refreshing.'); return
@@ -162,7 +195,7 @@ export default function RebalancerView() {
     const targetAllocation = {}
     sectors.forEach(s => { targetAllocation[s] = getTarget(s) })
 
-    setStreaming(true); setPlan(''); setError(null)
+    setStreaming(true); setPlan(''); setTrades(null); setError(null)
 
     try {
       const resp = await authFetch('/api/rebalancer/suggest', {
@@ -192,6 +225,7 @@ export default function RebalancerView() {
           let obj
           try { obj = JSON.parse(payload) } catch { continue } // skip malformed lines
           if (obj.error) throw new Error(obj.error)            // propagate to outer catch
+          if (obj.plan)  setTrades(obj.plan)
           if (obj.text)  setPlan(prev => prev + obj.text)
         }
         if (planRef.current) planRef.current.scrollTop = planRef.current.scrollHeight
@@ -327,6 +361,8 @@ export default function RebalancerView() {
               <p>Adjust your target allocations and click<br />"Generate Plan" to get AI recommendations.</p>
             </div>
           )}
+
+          {trades && <TradeTable plan={trades} />}
 
           {(plan || streaming) && (
             <div ref={planRef} className="flex-1 overflow-y-auto">

@@ -458,6 +458,17 @@ export default function TradingAIPanel({ symbol, interval, price }) {
                     </span>
                     <span className="text-slate-500">{analysis.sentimentAlignment ?? ''}</span>
                   </div>
+
+                  {/* The levels above, checked in code (lib/plan-check.js) */}
+                  {result?.planCheck && result.planCheck.verdict !== 'no-trade' && (
+                    <div className={`mt-2 rounded-lg px-2 py-1.5 text-[10px] leading-snug ${
+                      result.planCheck.verdict === 'act' ? 'bg-emerald-500/10 text-emerald-300'
+                        : result.planCheck.verdict === 'thin' ? 'bg-amber-500/10 text-amber-300'
+                        : 'bg-red-500/10 text-red-300'
+                    }`}>
+                      {result.planCheck.line}
+                    </div>
+                  )}
                 </div>
 
                 {/* ── Catalyst ─────────────────────────────────────────── */}

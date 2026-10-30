@@ -14,8 +14,9 @@ function records(n, edge, seed = 3) {
       ensembleConfirmed: r() < 0.4, highConviction: r() < 0.2, rsRankAtScan: Math.round(r() * 100),
       volumeSignal: r() < 0.5 ? 'Confirming' : 'Weak', priceRegimeAtScan: r() < 0.6 ? 'up-calm' : 'down-stressed',
       assetType: 'stock', targetReturn: 10, stopLoss: 6, baselineProb: 0.5, entered: true, priceAtPrediction: 100,
+      horizon: '3m', horizonDays: 91,
     }
-    rec.barrier = { label: edge(rec, r) ? 'target' : 'stop' }
+    rec.barrier = { label: edge(rec, r) ? 'target' : 'stop', window: 91 }
     return rec
   })
 }
@@ -24,8 +25,11 @@ test('features are scan-time facts only, scaled to about [0, 1]', () => {
   const x = ml.featurize({ compositeScore: 80, confidence: 'High', ensembleConfirmed: true, priceRegimeAtScan: 'up-stressed', targetReturn: 12, stopLoss: 6, daysToEarnings: 4 })
   expect(x).toHaveLength(ml.FEATURES.length)
   expect(x.every(v => v >= -0.5 && v <= 1)).toBe(true)
-  expect(ml.labelOf({ entered: false, barrier: { label: 'target' } })).toBeNull()
-  expect(ml.labelOf({ barrier: { label: 'time' }, priceAtPrediction: 100, price30d: 103 })).toBe(1)
+  expect(ml.labelOf({ entered: false, horizonDays: 91, barrier: { label: 'target', window: 91 } })).toBeNull()
+  expect(ml.labelOf({ horizonDays: 91, barrier: { label: 'time', window: 91 }, priceAtPrediction: 100, priceHorizon: 103 })).toBe(1)
+  // A 30-day label on a pick made for 3 months, or one with no horizon stamp, is not a label of the pick
+  expect(ml.labelOf({ horizonDays: 91, barrier: { label: 'target', window: 30 } })).toBeNull()
+  expect(ml.labelOf({ barrier: { label: 'target' } })).toBeNull()
 })
 
 test('a real relationship is found and adopted on newer picks it never saw', () => {
