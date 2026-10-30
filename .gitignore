@@ -40,3 +40,5 @@ data/ai-calls.jsonl
 # Trader skills (.claude/skills/trader-*) working folder: your budget, limits,
 # portfolio, orders and broker log. Personal — never commit it.
 trader/
+# /arena skill (.claude/skills/arena) run folders: hundreds of sub-agent files per run.
+.arena/
