@@ -95,7 +95,7 @@ function Logo({ dark = false }) {
       <BrandMark className="w-8 h-8" />
       <span className="font-bold text-xl tracking-tight">
         <span className={dark ? 'text-white' : 'text-slate-900'}>FIN</span>
-        <span className="text-blue-600">SURF</span>
+        <span className="text-orange-600">SURFING</span>
       </span>
     </div>
   )
@@ -643,7 +643,7 @@ export default function LandingPage({ onSignIn, onRegister, onTryDemo }) {
           </div>
 
           <div className="mt-12 pt-8 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4">
-            <p className="text-xs text-slate-500">© {new Date().getFullYear()} FinSurf · Not financial advice.</p>
+            <p className="text-xs text-slate-500">© {new Date().getFullYear()} FinSurfing · Not financial advice.</p>
             <div className="flex items-center gap-5 text-xs text-slate-500">
               <span className="hover:text-slate-900 transition-colors cursor-default">Privacy</span>
               <span className="hover:text-slate-900 transition-colors cursor-default">Terms</span>

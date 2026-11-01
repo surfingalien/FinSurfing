@@ -346,7 +346,7 @@ function MainApp({ onSignIn }) {
 
           <footer className="border-t border-white/[0.04] py-4 px-6">
             <div className="max-w-screen-2xl mx-auto flex items-center justify-between text-xs text-slate-600">
-              <span>FinSurf v2.0 · Real-time US Equity Platform</span>
+              <span>FinSurfing v2.0 · Real-time US Equity Platform</span>
               <span>Data via Yahoo Finance · Not financial advice</span>
             </div>
           </footer>

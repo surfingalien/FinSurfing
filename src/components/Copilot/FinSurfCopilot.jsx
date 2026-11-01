@@ -4,7 +4,7 @@ import { Bot, X, Send, ChevronDown, Loader2, Zap, TrendingUp, BarChart2, Globe }
 import { useApiKeys } from '../../contexts/ApiKeysContext'
 import { useAuth } from '../../contexts/AuthContext'
 
-const WELCOME = `Hi! I'm **FinSurf Copilot** — your AI analyst with live market access.
+const WELCOME = `Hi! I'm **FinSurfing Copilot** — your AI analyst with live market access.
 
 I can:
 - 📊 **Scan the market** — rank top picks across stocks, ETFs, crypto
@@ -238,7 +238,7 @@ export default function FinSurfCopilot({ portfolio = [], watchlist = [] }) {
             exit={{ scale: 0, opacity: 0 }}
             onClick={() => setOpen(true)}
             className="fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full bg-gradient-to-br from-[#00ffcc]/90 to-[#00b4ff]/90 shadow-lg shadow-[#00ffcc]/20 flex items-center justify-center hover:scale-105 transition-transform"
-            title="Open FinSurf Copilot"
+            title="Open FinSurfing Copilot"
           >
             <Bot size={24} className="text-[#060810]" />
           </motion.button>
@@ -265,7 +265,7 @@ export default function FinSurfCopilot({ portfolio = [], watchlist = [] }) {
                   <Bot size={15} style={{ color: activeProvider.color }} />
                 </div>
                 <div>
-                  <div className="text-sm font-semibold text-white">FinSurf Copilot</div>
+                  <div className="text-sm font-semibold text-white">FinSurfing Copilot</div>
                   <div className="text-[10px] text-slate-500">
                     {activeProvider.description} · multi-provider
                   </div>

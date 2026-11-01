@@ -76,7 +76,7 @@ export default function StockAgentView({ portfolio }) {
       setMessages([{
         id:   'welcome',
         role: 'assistant',
-        content: `**Welcome to FinSurf AI Agent** 👋
+        content: `**Welcome to FinSurfing AI Agent** 👋
 
 I'm your real-time stock analyst powered by Claude. I can:
 

@@ -151,7 +151,7 @@ export default function CommandPalette({ open, onClose, onNavigate }) {
         <div className="flex items-center gap-4 px-4 h-8 border-t border-white/[0.06] text-[9px] text-slate-600">
           <span>↑↓ navigate</span>
           <span>↵ open</span>
-          <span className="ml-auto font-mono text-mint-500/60">FINSURF</span>
+          <span className="ml-auto font-mono text-mint-500/60">FINSURFING</span>
         </div>
       </div>
     </div>

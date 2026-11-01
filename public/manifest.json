@@ -1,6 +1,6 @@
 {
-  "name": "FinSurf — Stock Intelligence Platform",
-  "short_name": "FinSurf",
+  "name": "FinSurfing — Stock Intelligence Platform",
+  "short_name": "FinSurfing",
   "description": "Real-time portfolio tracking, AI advisory, and technical analysis for US equities.",
   "start_url": "/",
   "display": "standalone",

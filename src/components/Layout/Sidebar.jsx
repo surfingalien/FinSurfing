@@ -235,7 +235,7 @@ export default function Sidebar({
           <BrandMark className="w-7 h-7 shrink-0" />
           {!collapsed && (
             <span className="font-bold tracking-tight text-base whitespace-nowrap">
-              <span className="text-white">FIN</span><span className="text-mint-400">SURF</span>
+              <span className="text-white">FIN</span><span className="text-amber-400">SURFING</span>
             </span>
           )}
         </button>
@@ -369,7 +369,7 @@ export default function Sidebar({
                     <circle cx="16" cy="18" r="2.5" fill="#6366f1"/>
                   </svg>
                   <span className="font-bold tracking-tight text-base">
-                    <span className="text-white">FIN</span><span className="text-mint-400">SURF</span>
+                    <span className="text-white">FIN</span><span className="text-amber-400">SURFING</span>
                   </span>
                 </button>
                 <button onClick={onMobileClose} className="p-1.5 rounded-lg text-slate-500 hover:text-white hover:bg-white/[0.06]">

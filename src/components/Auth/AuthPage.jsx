@@ -484,7 +484,7 @@ export default function AuthPage({ onContinueWithoutAccount, onBack, initialView
   const [demoCode,  setDemoCode]  = useState(null)
 
   const TITLES = {
-    login:    { h: 'Welcome back',      sub: 'Sign in to your FinSurf account'    },
+    login:    { h: 'Welcome back',      sub: 'Sign in to your FinSurfing account'    },
     register: { h: 'Create your account', sub: 'Free forever — no credit card needed' },
     forgot:   { h: 'Reset password',    sub: 'We\'ll send a link to your email'   },
     verify:   { h: 'Verify your email', sub: 'Enter the 6-digit code we sent you' },
@@ -538,7 +538,7 @@ export default function AuthPage({ onContinueWithoutAccount, onBack, initialView
               <circle cx="16" cy="18" r="2.5" fill="#6366f1"/>
             </svg>
             <span className="font-bold text-xl tracking-tight">
-              <span className="text-white">FIN</span><span style={{ color: '#00ffcc' }}>SURF</span>
+              <span className="text-white">FIN</span><span style={{ color: '#FBBF24' }}>SURFING</span>
             </span>
           </button>
           <div>
