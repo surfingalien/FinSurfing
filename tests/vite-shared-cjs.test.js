@@ -20,7 +20,14 @@ const PROBE = path.join(__dirname, 'helpers', 'vite-shared-cjs-probe.mjs')
 
 let report
 beforeAll(() => {
-  report = JSON.parse(execFileSync(process.execPath, [PROBE], { cwd: ROOT, encoding: 'utf8', timeout: 60000 }))
+  // stderr is captured, not inherited: closing the probe's server cancels the
+  // React pre-bundle that plugin-react starts, and esbuild prints
+  // "✘ [ERROR] The build was canceled" for it. That is harmless (exit 0, full
+  // report). If the probe really fails, execFileSync throws with the stderr in
+  // its message, so nothing is hidden.
+  report = JSON.parse(execFileSync(process.execPath, [PROBE], {
+    cwd: ROOT, encoding: 'utf8', timeout: 60000, stdio: ['ignore', 'pipe', 'pipe'],
+  }))
 })
 
 // Every relative import in src/ that lands in lib/, as a repo-relative path.
