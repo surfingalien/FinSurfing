@@ -16,7 +16,12 @@ export default function MiniChart({ candles, trade, stance }) {
 
   return (
     <div className="glass rounded-xl p-4">
-      <div className="text-xs text-slate-400 font-semibold mb-3">90-Day Price + Key Levels</div>
+      <div className="text-xs text-slate-400 font-semibold mb-3 flex items-center justify-between">
+        <span>90-Day Price + Key Levels</span>
+        {trade?.valid === false && (
+          <span className="text-[10px] text-slate-600">{trade.watch ? 'Range being watched' : 'No valid setup — no trade levels'}</span>
+        )}
+      </div>
       <ResponsiveContainer width="100%" height={200}>
         <AreaChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
           <defs>
@@ -33,17 +38,30 @@ export default function MiniChart({ candles, trade, stance }) {
             contentStyle={{ background: 'rgba(10,15,26,0.95)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, fontSize: 11 }}
             labelStyle={{ color: '#fff' }}
           />
-          {trade?.targets?.[0] && (
+          {/* Trade levels only for a valid setup; a Neutral stance draws the range it is watching. */}
+          {trade?.valid !== false && trade?.targets?.[0] && (
             <ReferenceLine y={trade.targets[0].price} stroke="#10b981" strokeDasharray="4 4" strokeOpacity={0.7}
               label={{ value: `TP1 $${fmt(trade.targets[0].price)}`, fill: '#10b981', fontSize: 9, position: 'right' }} />
           )}
-          {trade?.stopLoss && (
+          {trade?.valid !== false && trade?.stopLoss && (
             <ReferenceLine y={trade.stopLoss.price} stroke="#ef4444" strokeDasharray="4 4" strokeOpacity={0.7}
               label={{ value: `SL $${fmt(trade.stopLoss.price)}`, fill: '#ef4444', fontSize: 9, position: 'right' }} />
           )}
-          {trade?.entryZone && (
-            <ReferenceLine y={trade.entryZone.low} stroke="#f59e0b" strokeDasharray="2 4" strokeOpacity={0.5}
-              label={{ value: `Entry $${fmt(trade.entryZone.low)}`, fill: '#f59e0b', fontSize: 9, position: 'right' }} />
+          {trade?.valid !== false && trade?.entryZone && (
+            <>
+              <ReferenceLine y={trade.entryZone.low} stroke="#f59e0b" strokeDasharray="2 4" strokeOpacity={0.5}
+                label={{ value: `Entry $${fmt(trade.entryZone.low)}`, fill: '#f59e0b', fontSize: 9, position: 'right' }} />
+              <ReferenceLine y={trade.entryZone.high} stroke="#f59e0b" strokeDasharray="2 4" strokeOpacity={0.5}
+                label={{ value: `$${fmt(trade.entryZone.high)}`, fill: '#f59e0b', fontSize: 9, position: 'right' }} />
+            </>
+          )}
+          {trade?.watch?.resistance != null && (
+            <ReferenceLine y={trade.watch.resistance} stroke="#94a3b8" strokeDasharray="2 4" strokeOpacity={0.6}
+              label={{ value: `R $${fmt(trade.watch.resistance)}`, fill: '#94a3b8', fontSize: 9, position: 'right' }} />
+          )}
+          {trade?.watch?.support != null && (
+            <ReferenceLine y={trade.watch.support} stroke="#94a3b8" strokeDasharray="2 4" strokeOpacity={0.6}
+              label={{ value: `S $${fmt(trade.watch.support)}`, fill: '#94a3b8', fontSize: 9, position: 'right' }} />
           )}
           <Area type="monotone" dataKey="price" stroke={color} strokeWidth={1.5}
             fill={`url(#${gradId})`} dot={false} activeDot={{ r: 3, fill: color }} />
