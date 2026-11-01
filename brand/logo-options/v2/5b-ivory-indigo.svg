@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-label="FinSurfing logo 5B Ivory and Indigo">
+<defs><linearGradient id="ring" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4338CA"/><stop offset="1" stop-color="#1E1B4B"/></linearGradient><linearGradient id="h" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4338CA"/><stop offset="1" stop-color="#1E1B4B"/></linearGradient><linearGradient id="s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#312E81"/><stop offset="1" stop-color="#1E1B4B"/></linearGradient><linearGradient id="ln" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#2563EB"/><stop offset="1" stop-color="#06B6D4"/></linearGradient><linearGradient id="wv" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#312E81"/><stop offset="1" stop-color="#2563EB"/></linearGradient></defs>
+<circle cx="60" cy="60" r="57" fill="url(#ring)"/>
+<circle cx="60" cy="60" r="52.5" fill="#FFFBF2"/>
+<circle cx="110.0" cy="60.0" r="1.1" fill="#F59E0B"/><circle cx="108.3" cy="72.9" r="1.1" fill="#F59E0B"/><circle cx="103.3" cy="85.0" r="1.1" fill="#F59E0B"/><circle cx="95.4" cy="95.4" r="1.1" fill="#F59E0B"/><circle cx="85.0" cy="103.3" r="1.1" fill="#F59E0B"/><circle cx="72.9" cy="108.3" r="1.1" fill="#F59E0B"/><circle cx="60.0" cy="110.0" r="1.1" fill="#F59E0B"/><circle cx="47.1" cy="108.3" r="1.1" fill="#F59E0B"/><circle cx="35.0" cy="103.3" r="1.1" fill="#F59E0B"/><circle cx="24.6" cy="95.4" r="1.1" fill="#F59E0B"/><circle cx="16.7" cy="85.0" r="1.1" fill="#F59E0B"/><circle cx="11.7" cy="72.9" r="1.1" fill="#F59E0B"/><circle cx="10.0" cy="60.0" r="1.1" fill="#F59E0B"/><circle cx="11.7" cy="47.1" r="1.1" fill="#F59E0B"/><circle cx="16.7" cy="35.0" r="1.1" fill="#F59E0B"/><circle cx="24.6" cy="24.6" r="1.1" fill="#F59E0B"/><circle cx="35.0" cy="16.7" r="1.1" fill="#F59E0B"/><circle cx="47.1" cy="11.7" r="1.1" fill="#F59E0B"/><circle cx="60.0" cy="10.0" r="1.1" fill="#F59E0B"/><circle cx="72.9" cy="11.7" r="1.1" fill="#F59E0B"/><circle cx="85.0" cy="16.7" r="1.1" fill="#F59E0B"/><circle cx="95.4" cy="24.6" r="1.1" fill="#F59E0B"/><circle cx="103.3" cy="35.0" r="1.1" fill="#F59E0B"/><circle cx="108.3" cy="47.1" r="1.1" fill="#F59E0B"/>
+<circle cx="60" cy="60" r="44" fill="none" stroke="url(#ring)" stroke-width="1" opacity=".7"/>
+<g transform="translate(26 10) scale(.57)"><path d="M26 16 C14 44 30 66 60 68 C44 56 36 40 26 16Z" fill="url(#h)"/>
+<path d="M94 16 C106 44 90 66 60 68 C76 56 84 40 94 16Z" fill="url(#h)"/>
+<path fill-rule="evenodd" fill="url(#s)" d="M60 4 L68 36 L60 46 L52 36Z M60 25 a3.2 3.2 0 1 0 .01 0Z"/>
+<circle cx="60" cy="25" r="1.4" fill="#FFFBF2"/>
+<path d="M57.5 48 L60 80 L62.5 48Z" fill="#DC2626"/></g>
+<path d="M22 86 L40 78 L52 84 L72 66 L96 58" fill="none" stroke="url(#ln)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="96" cy="58" r="4.2" fill="#F59E0B"/>
+<path d="M30 98 C42 90 50 106 62 98 S80 90 90 98" fill="none" stroke="url(#wv)" stroke-width="3.5" stroke-linecap="round"/>
+</svg>

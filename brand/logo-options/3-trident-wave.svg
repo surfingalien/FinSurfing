@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-label="FinSurfing logo, option 3: Trident Wave">
+  <!-- horns, ending in curls like a breaking wave -->
+  <path d="M26 16 C14 44 30 66 60 68 C44 56 36 40 26 16 Z" fill="#0F172A"/>
+  <path d="M94 16 C106 44 90 66 60 68 C76 56 84 40 94 16 Z" fill="#0F172A"/>
+  <!-- centre prong = rising arrow -->
+  <path d="M60 3 L74 26 H65 V70 H55 V26 H46 Z" fill="#2563EB"/>
+  <!-- wave stem -->
+  <path d="M60 70 C50 80 70 88 60 98 C50 108 66 112 60 118" fill="none" stroke="#0F172A" stroke-width="4.5" stroke-linecap="round"/>
+  <!-- namam dot -->
+  <circle cx="60" cy="50" r="3.2" fill="#DC2626"/>
+</svg>

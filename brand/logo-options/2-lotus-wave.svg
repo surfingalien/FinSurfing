@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-label="FinSurfing logo, option 2: Lotus Wave">
+  <!-- petals -->
+  <path d="M60 14 C47 34 47 56 60 74 C73 56 73 34 60 14 Z" fill="#2563EB"/>
+  <path d="M60 74 C40 70 26 56 20 36 C40 38 54 52 60 74 Z" fill="#1D4ED8" opacity=".9"/>
+  <path d="M60 74 C80 70 94 56 100 36 C80 38 66 52 60 74 Z" fill="#1D4ED8" opacity=".9"/>
+  <path d="M60 74 C38 80 18 74 6 60 C28 56 48 60 60 74 Z" fill="#0F172A" opacity=".85"/>
+  <path d="M60 74 C82 80 102 74 114 60 C92 56 72 60 60 74 Z" fill="#0F172A" opacity=".85"/>
+  <!-- third-eye dot -->
+  <circle cx="60" cy="42" r="3.4" fill="#fff"/>
+  <!-- waves = "surf" -->
+  <path d="M6 92 C20 82 30 102 44 92 S68 82 82 92 S106 102 114 92" fill="none" stroke="#0F172A" stroke-width="4.5" stroke-linecap="round"/>
+  <path d="M18 108 C30 100 38 114 50 108 S72 100 84 108 S100 114 104 108" fill="none" stroke="#2563EB" stroke-width="4" stroke-linecap="round" opacity=".7"/>
+</svg>
