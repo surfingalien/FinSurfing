@@ -12,12 +12,13 @@
  * old in-sample "signal backtest" of a different rule are gone.
  */
 
-import { calcSMA, calcEMA, calcRSI, calcMACD, calcBollinger, fmt } from './api'
+import { calcSMA, calcEMA, calcRSI, calcMACD, calcBollinger } from './api'
 import {
   calcATR, detectTrend, findSwingPoints, findKeyLevels,
   detectDivergence, generateAdvisory as baseAdvisory
 } from './research'
 import * as portfolioPnl from '../../lib/portfolio-pnl.js'
+import * as horizonSetups from '../../lib/horizon-setups.js'
 
 /* ── Constants ───────────────────────────────────── */
 export const SIGNAL_TYPES = {
@@ -265,58 +266,12 @@ export function factorAgreement(factors) {
 }
 
 /* ── Trade parameters for all 3 horizons ─────────── */
-export function generateHorizonSetups(price, atr, support, resistance, rsi) {
-  const horizons = []
-
-  // Intraday (tight, ATR-based)
-  const intradayStop = +(price - atr * 0.8).toFixed(2)
-  const intradayTP1  = +(price + atr * 1.2).toFixed(2)
-  const intradayTP2  = +(price + atr * 2.0).toFixed(2)
-  horizons.push({
-    label:         'Intraday',
-    horizon:       'Same day / overnight',
-    entry:         price,
-    stop:          intradayStop,
-    tp1:           intradayTP1,
-    tp2:           intradayTP2,
-    rr:            +((intradayTP1 - price) / (price - intradayStop)).toFixed(2),
-    stopPct:       +(((price - intradayStop) / price) * 100).toFixed(2),
-    note:          'Tight ATR-based levels for short-term momentum play',
-  })
-
-  // Swing (1–3 weeks)
-  const swStop = support ? +(Math.min(support * 0.985, price - atr * 1.5)).toFixed(2) : +(price - atr * 1.5).toFixed(2)
-  const swTP1  = resistance ? +(Math.min(resistance * 0.99, price + atr * 2.5)).toFixed(2) : +(price + atr * 2.5).toFixed(2)
-  const swTP2  = +(price + (swTP1 - price) * 1.8).toFixed(2)
-  horizons.push({
-    label:         'Swing Trade',
-    horizon:       '1–3 weeks',
-    entry:         price,
-    stop:          swStop,
-    tp1:           swTP1,
-    tp2:           swTP2,
-    rr:            +((swTP1 - price) / Math.max(0.01, price - swStop)).toFixed(2),
-    stopPct:       +(((price - swStop) / price) * 100).toFixed(2),
-    note:          'Support-anchored stop, resistance-anchored target',
-  })
-
-  // Long-term (3–12 months)
-  const ltStop = +(price - atr * 4).toFixed(2)
-  const ltTP1  = +(price * 1.15).toFixed(2)
-  const ltTP2  = +(price * 1.30).toFixed(2)
-  horizons.push({
-    label:         'Long-Term Investment',
-    horizon:       '3–12 months',
-    entry:         `$${fmt(price * 0.97)}–$${fmt(price * 1.01)}`,
-    stop:          ltStop,
-    tp1:           ltTP1,
-    tp2:           ltTP2,
-    rr:            +((ltTP1 - price) / Math.max(0.01, price - ltStop)).toFixed(2),
-    stopPct:       +(((price - ltStop) / price) * 100).toFixed(2),
-    note:          'Scale in on dips; fundamental thesis must remain intact',
-  })
-
-  return horizons
+// Pure logic lives in lib/horizon-setups.js (CommonJS, so Jest tests the same
+// code): targets come only from resistance above the price, and a setup whose
+// target ≤ entry or stop ≥ entry is returned as `valid: false` with a reason.
+// `support` / `resistance` may be a single level or a nearest-first array.
+export function generateHorizonSetups(price, atr, support, resistance) {
+  return horizonSetups.generateHorizonSetups(price, atr, support, resistance)
 }
 
 /* ── Main AI advisory generator ─────────────────── */
@@ -412,9 +367,9 @@ export async function generateAIAdvisory({
   const agreement = factorAgreement({ techScore, fundScore, sentimentScore, analystScore, mtfScore })
 
   // ── Horizon setups ────────────────────────────
-  const horizons = generateHorizonSetups(
-    price, atr, support[0], resistance[0], rsi,
-  )
+  // Whole level lists, nearest first: when the nearest resistance is at or
+  // just under the price, the next level up (or the ATR target) is used.
+  const horizons = generateHorizonSetups(price, atr, support, resistance)
 
   // ── Ensemble breakdown for UI ─────────────────
   const factors = [
