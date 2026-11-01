@@ -1,8 +1,11 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { sharedCjsDev, sharedCjsPatterns } from './tools/vite/shared-cjs.mjs'
 
 export default defineConfig({
-  plugins: [react()],
+  // sharedCjsDev: lib/ CommonJS modules the client imports, converted for the
+  // dev server. The build converts the same list via commonjsOptions below.
+  plugins: [sharedCjsDev(), react()],
   server: {
     port: 5173,
     proxy: {
@@ -14,13 +17,13 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
-    // lib/portfolio-pnl.js is a CommonJS module (module.exports) shared with the
-    // server + Jest. Client code imports it via `import * as portfolioPnl`, but
-    // Rollup only converts CommonJS to ES for node_modules by default — so the
-    // source file must be added here, otherwise the bundle's namespace is empty
-    // and portfolioPnl.* is undefined at runtime (build still "succeeds").
+    // The lib/ files the client imports are CommonJS (module.exports), shared
+    // with the server + Jest. Rollup converts CommonJS only for files matching
+    // `include`; a file left off the list still builds, but its import namespace
+    // is empty, so its functions are undefined at runtime. The list is SHARED_CJS
+    // in tools/vite/shared-cjs.mjs, which the dev plugin above also reads.
     commonjsOptions: {
-      include: [/lib[\\/]portfolio-pnl/, /node_modules/],
+      include: [...sharedCjsPatterns(), /node_modules/],
     },
     rollupOptions: {
       output: {
