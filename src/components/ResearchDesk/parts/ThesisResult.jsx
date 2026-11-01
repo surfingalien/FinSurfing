@@ -1,5 +1,6 @@
 import { CheckCircle2, XCircle, ShieldOff, Scale, Ban } from 'lucide-react'
 import { TradePlan } from '../../AIBrain/scan/StockCardParts'
+import PlanOdds from '../../shared/PlanOdds'
 
 const pct = (v, dp = 1) => (v == null ? '—' : `${(v * 100).toFixed(dp)}%`)
 const px  = v => (v == null ? '—' : `$${Number(v) >= 1 ? Number(v).toFixed(2) : Number(v).toPrecision(4)}`)
@@ -80,6 +81,7 @@ export default function ThesisResult({ data, onCite }) {
               : 'Reference levels — no trade was recommended; from price action only'}
           </h4>
           <TradePlan symbol={data.symbol} plan={j.tradePlan} stock={{ currentPrice: data.lastPrice, priceSource: 'last close', priceAsOf: data.asOf }} />
+          <PlanOdds plan={j.planOdds} />
         </div>
       )}
 

@@ -1,6 +1,7 @@
 import { lazy, Suspense, useState } from 'react'
 import { motion } from 'motion/react'
 import { GitFork, Lock, LineChart } from 'lucide-react'
+import PlanOdds from '../../shared/PlanOdds'
 
 // recharts only loads when someone opens a chart, not with every scan card.
 const TradePlanChart = lazy(() => import('./TradePlanChart'))
@@ -199,6 +200,14 @@ export function TradePlan({ plan, stock, symbol = stock?.symbol }) {
           Second check — {Math.round(stock.metaLabel.prob * 100)}% chance of reaching the target before the stop, judged from picks like this one
           {stock.metaLabel.validated ? (stock.metaLabel.pass ? ' (passes)' : ' — below the cut-off; the paper broker skips it') : ' (model not yet proven on newer picks — shown, not applied)'}
         </p>
+      )}
+      {stock?.contest && (
+        <p className="text-[9px] mt-1.5 leading-snug text-emerald-400" title={stock.contest.model}>
+          Contest winner — {Math.round(stock.contest.prob * 100)}% chance of the target before the stop (this sizes the pick)
+        </p>
+      )}
+      {stock?.actionable !== false && (
+        <PlanOdds plan={stock?.planOdds} sizing={stock?.sizing} slateWeightPct={stock?.slateWeightPct} movesWith={stock?.movesWith} />
       )}
       {stock?.outcomeRange && (
         <p className={`text-[9px] mt-1.5 leading-snug ${stock.outcomeRange.reliable === false ? 'text-amber-400' : 'text-slate-400'}`}>

@@ -485,6 +485,12 @@ export default function AIBrainView({ portfolio, onAnalyze }) {
                     ⚠️ {earningsImminentCount} earnings ≤7d
                   </span>
                 )}
+                {analysis?.slate?.effectiveBets != null && (
+                  <span title={`Average pairwise correlation ${analysis.slate.avgCorrelation} over ${analysis.slate.observations} days of returns`}
+                    className={`flex items-center gap-1 px-2.5 py-1 rounded-lg border ${analysis.slate.effectiveBets < analysis.slate.picks / 2 ? 'bg-amber-500/10 border-amber-500/20 text-amber-300' : 'bg-slate-500/10 border-slate-500/20 text-slate-400'}`}>
+                    ≈ {analysis.slate.effectiveBets} independent bets in {analysis.slate.picks} picks
+                  </span>
+                )}
                 {analysis?.thresholdApplied != null && (
                   <span className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-500/10 border border-slate-500/20 text-slate-400">
                     🎯 auto-filtered · score ≥ {analysis.thresholdApplied}
@@ -512,7 +518,7 @@ export default function AIBrainView({ portfolio, onAnalyze }) {
 
 // Which symbols this scan covered and why. Discovery scans build a new list
 // every run (today's movers, a rotating slice of the sector, a few core names).
-const SOURCE_LABEL = { mover: "today's movers", core: 'core list', pool: 'sector rotation', fixed: 'benchmarks' }
+const SOURCE_LABEL = { mover: "today's movers", core: 'core list', pool: 'sector rotation', fixed: 'benchmarks', dislocation: 'lagging their peers', pair: 'cheap leg of a stretched pair' }
 function UniverseLine({ analysis }) {
   const src = analysis.universeSources
   const syms = analysis.universeAnalyzed || []
@@ -525,6 +531,9 @@ function UniverseLine({ analysis }) {
       {Object.entries(groups).map(([k, list]) => (
         <div key={k}><span className="text-slate-500">{SOURCE_LABEL[k] || k}:</span> {list.join(', ')}</div>
       ))}
+      {analysis.discoveryNotes && Object.keys(analysis.discoveryNotes).length > 0 && (
+        <div className="text-slate-500">Why: {Object.entries(analysis.discoveryNotes).map(([s, why]) => `${s} — ${why}`).join('; ')}</div>
+      )}
       {analysis.unpricedSymbols?.length > 0 && (
         <div className="text-amber-500">Skipped (no current price): {analysis.unpricedSymbols.join(', ')}</div>
       )}

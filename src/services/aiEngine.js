@@ -1,7 +1,15 @@
 /**
- * FinSurf AI Advisory Engine v2
- * Ensemble ML model: technical + fundamental + sentiment + analyst consensus
- * Outputs 7-type signals across 3 time horizons with confidence %
+ * FinSurf AI Advisory Engine v3
+ * A WEIGHTED FIVE-FACTOR SCORE with fixed, hand-set weights — technical 35%,
+ * fundamentals 20%, news 15%, analysts 15%, multi-timeframe 15% — mapped to a
+ * signal by fixed thresholds. It is not a trained model and says so.
+ *
+ * What is measured lives on the server (lib/advisory-engine.js,
+ * /api/advisory-engine): the engine's own price-only rule tested walk-forward
+ * against the base rate, every directional signal recorded on a server price
+ * and scored later, and the measured hit rate per signal type. The old
+ * "confidence %" (base 50 moved by factor agreement, clamped 22–94) and the
+ * old in-sample "signal backtest" of a different rule are gone.
  */
 
 import { calcSMA, calcEMA, calcRSI, calcMACD, calcBollinger } from './api'
@@ -146,49 +154,6 @@ function trendSlopeFn(arr) {
   return (n*sumXY - sumX*sumY) / (n*sumX2 - sumX**2) / (sumY/n) * 100
 }
 
-/* ── Signal backtest (walk-forward hit rate) ─────── */
-export function backtestSignals(candles, lookforward = 20) {
-  if (candles.length < 80) return null
-  const closes = candles.map(c => c.close)
-  let wins = 0, losses = 0, total = 0
-
-  // Test signal at every 10-bar window going back
-  for (let i = 50; i < candles.length - lookforward - 5; i += 10) {
-    const slice = candles.slice(0, i)
-    const slCloses = slice.map(c => c.close)
-    const rsi = calcRSI(slCloses)
-    const lastRSI = rsi[rsi.length - 1]
-    const macd = calcMACD(slCloses)
-    const lastMACD = macd[macd.length - 1]
-
-    if (lastRSI == null || lastMACD.macd == null) continue
-
-    // Simulated bullish signal condition
-    const wasBullish = lastRSI < 45 && lastMACD.macd > lastMACD.signal
-    const wasBearish = lastRSI > 60 && lastMACD.macd < lastMACD.signal
-
-    if (!wasBullish && !wasBearish) continue
-
-    const entryPrice = closes[i]
-    const exitPrice  = closes[i + lookforward]
-    const moved = (exitPrice - entryPrice) / entryPrice
-
-    if (wasBullish && moved > 0.02) wins++
-    else if (wasBearish && moved < -0.02) wins++
-    else losses++
-    total++
-  }
-
-  if (total < 5) return null
-  return {
-    hitRate: +((wins / total) * 100).toFixed(1),
-    total,
-    wins,
-    losses,
-    label: wins/total > 0.6 ? 'High accuracy' : wins/total > 0.45 ? 'Moderate accuracy' : 'Low accuracy',
-  }
-}
-
 /* ── Analyst score normalization ─────────────────── */
 function scoreAnalyst(fundamentals, price) {
   if (!fundamentals) return 5
@@ -292,31 +257,12 @@ export function classifySignal({
   return                       { type: 'SELL',       ensemble, raw: { techScore, fundScore, sentimentScore, analystScore, mtfScore } }
 }
 
-/* ── Confidence % ────────────────────────────────── */
-export function calcConfidencePct(signalType, factors, alignment, backtest) {
-  let base = 50
-
-  // Factor alignment
-  const vals  = Object.values(factors)
-  const above = vals.filter(v => v >= 5).length
-  const below = vals.filter(v => v < 5).length
-  const agreePct = above / vals.length
-  base += (agreePct - 0.5) * 40
-
-  // Multi-timeframe alignment bonus/penalty
-  if (alignment === 'All Bullish' || alignment === 'All Bearish') base += 10
-  if (alignment === 'Conflicting') base -= 10
-
-  // Backtest accuracy influence
-  if (backtest) {
-    base += (backtest.hitRate - 50) * 0.3
-  }
-
-  // Strong signal type boosts
-  if (signalType === 'STRONG_BUY' || signalType === 'STOP_TRIGGER') base += 5
-  if (signalType === 'WATCHLIST')  base -= 5
-
-  return Math.min(94, Math.max(22, Math.round(base)))
+/* ── Factor agreement (descriptive, not a probability) ── */
+export function factorAgreement(factors) {
+  const vals = Object.values(factors)
+  const bullish = vals.filter(v => v >= 6).length
+  const bearish = vals.filter(v => v <= 4).length
+  return { bullish, bearish, neutral: vals.length - bullish - bearish, of: vals.length }
 }
 
 /* ── Trade parameters for all 3 horizons ─────────── */
@@ -406,7 +352,6 @@ export async function generateAIAdvisory({
   const { support, resistance } = findKeyLevels(candles, price)
   const patterns  = detectAdvancedPatterns(candles)
   const divergence = detectDivergence(candles, rsiArr)
-  const backtest  = backtestSignals(candles)
 
   // ── Signal classification ─────────────────────
   const stopLevel = position ? position.avgCost * 0.85 : null  // rough stop for held positions
@@ -417,13 +362,9 @@ export async function generateAIAdvisory({
 
   const signalCfg = SIGNAL_TYPES[rawSignal.type]
 
-  // ── Confidence % ─────────────────────────────
-  const confidencePct = calcConfidencePct(
-    rawSignal.type,
-    { techScore, fundScore, sentimentScore, analystScore, mtfScore },
-    mtf.aligned,
-    backtest,
-  )
+  // How many of the five factors lean each way — a description of the inputs,
+  // not a probability. The measured hit rate comes from /api/advisory-engine.
+  const agreement = factorAgreement({ techScore, fundScore, sentimentScore, analystScore, mtfScore })
 
   // ── Horizon setups ────────────────────────────
   // Whole level lists, nearest first: when the nearest resistance is at or
@@ -454,7 +395,8 @@ export async function generateAIAdvisory({
     signal: rawSignal.type,
     signalCfg,
     ensembleScore,
-    confidencePct,
+    agreement,
+    factorScores: { tech: techScore, fund: fundScore, sentiment: sentimentScore, analyst: analystScore, mtf: mtfScore },
     factors,
     technical: { rsi, macd, bb, atr, atrPct: +((atr/price)*100).toFixed(2), s20, s50 },
     patterns,
@@ -464,7 +406,6 @@ export async function generateAIAdvisory({
     keyLevels:    { support, resistance },
     horizons,
     mtf,
-    backtest,
     gainPct: rawSignal.gainPct ?? (position != null ? +(portfolioPnl.unrealizedPct(price, position.avgCost) ?? 0).toFixed(2) : null),
     generatedAt: new Date(),
   }
@@ -481,15 +422,14 @@ export async function scanPortfolio({ positions, quotes, newsMap, fundamentalsMa
     const gainPct = portfolioPnl.unrealizedPct(price, pos.avgCost) ?? 0
     const changePct = quote.changePct ?? 0
 
-    // Quick heuristic signal from quote data alone
-    let type = 'HOLD'
-    if (gainPct > 25 && changePct > 0) type = 'PROFIT_BOOK'
-    else if (price < pos.avgCost * 0.85) type = 'STOP_TRIGGER'
-    else if (changePct > 3) type = 'BUY'
-    else if (changePct < -3) type = 'SELL'
-    else if (gainPct > 15) type = 'PROFIT_BOOK'
-    else if (gainPct > 0) type = 'HOLD'
-    else type = 'WATCHLIST'
+    // Quote data alone — a status from today's price and your cost, not an
+    // analysis. A big one-day move is a reason to look, never a BUY or SELL.
+    let type = 'HOLD', reason = 'No rule triggered'
+    if (price < pos.avgCost * 0.85) { type = 'STOP_TRIGGER'; reason = `Down ${Math.abs(gainPct).toFixed(1)}% from your cost — past the engine's 15% stop rule` }
+    else if (gainPct > 25 && changePct > 0) { type = 'PROFIT_BOOK'; reason = `Up ${gainPct.toFixed(1)}% from your cost and rising today — consider booking part of the gain` }
+    else if (Math.abs(changePct) > 3) { type = 'WATCHLIST'; reason = `Moved ${changePct > 0 ? '+' : ''}${changePct.toFixed(1)}% today — worth a full analysis` }
+    else if (gainPct > 15) { type = 'PROFIT_BOOK'; reason = `Up ${gainPct.toFixed(1)}% from your cost` }
+    else if (gainPct <= 0) { type = 'WATCHLIST'; reason = `Below your cost (${gainPct.toFixed(1)}%)` }
 
     results.push({
       symbol:     pos.symbol,
@@ -501,6 +441,7 @@ export async function scanPortfolio({ positions, quotes, newsMap, fundamentalsMa
       changePct:  +changePct.toFixed(2),
       signal:     type,
       signalCfg:  SIGNAL_TYPES[type],
+      reason,
       mktValue:   +(price * pos.shares).toFixed(2),
     })
   }

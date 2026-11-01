@@ -321,3 +321,37 @@ describe('describeRule', () => {
     expect(describeRule(null)).toBe('invalid rule')
   })
 })
+
+describe('measured statistics as rule building blocks', () => {
+  const D = require('../lib/strategy-dsl')
+  const L = require('../lib/quant/linalg')
+  const walk = (n, phi, seed) => { const g = L.rng(seed); let p = 100, e = 0; return Array.from({ length: n }, () => { e = phi * e + 0.01 * g.normal(); return (p *= Math.exp(e)) }) }
+  test('variance ratio and Hurst read trending series as persistent and alternating ones as anti-persistent', () => {
+    const up = walk(600, 0.4, 1), down = walk(600, -0.4, 2)
+    expect(D.varianceRatioSeries(up).at(-1)).toBeGreaterThan(1.2)
+    expect(D.varianceRatioSeries(down).at(-1)).toBeLessThan(0.8)
+    expect(D.hurstSeries(up).at(-1)).toBeGreaterThan(0.55)
+    expect(D.hurstSeries(down).at(-1)).toBeLessThan(0.45)
+  })
+  test('every statistic at bar i ignores bars after i', () => {
+    const c = walk(500, 0.1, 3)
+    for (const f of [D.varianceRatioSeries, D.hurstSeries, D.ewmaVolSeries, D.zscoreSeries]) {
+      const short = f(c.slice(0, 300)), long = f(c)
+      for (const i of [150, 200, 299]) expect(long[i]).toBe(short[i])
+    }
+  })
+  test('the EWMA forecast sits near the planted volatility and the z-score is in standard deviations', () => {
+    const c = walk(600, 0, 4)                     // 1% a day ≈ 15.9% a year
+    expect(D.ewmaVolSeries(c).at(-1)).toBeGreaterThan(10)
+    expect(D.ewmaVolSeries(c).at(-1)).toBeLessThan(22)
+    const flatThenJump = [...Array(39).fill(100).map((v, i) => v + (i % 2 ? 0.5 : -0.5)), 110]
+    expect(D.zscoreSeries(flatThenJump).at(-1)).toBeGreaterThan(3)
+  })
+  test('a rule conditioned on the regime validates and runs', () => {
+    const rule = {
+      entry: { op: 'and', left: { op: '<', left: { feature: 'zscore20' }, right: { const: -2 } }, right: { op: '<', left: { feature: 'vr5' }, right: { const: 1 } } },
+      exit:  { op: '>', left: { feature: 'zscore20' }, right: { const: 0 } },
+    }
+    expect(D.validateRule(rule).ok).toBe(true)
+  })
+})
