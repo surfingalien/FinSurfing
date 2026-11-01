@@ -4,6 +4,7 @@
  */
 
 import { calcSMA, calcEMA, calcRSI, calcMACD, calcBollinger } from './api'
+import * as horizonSetups from '../../lib/horizon-setups.js'
 
 /* ── ATR ─────────────────────────────────────────── */
 export function calcATR(candles, period = 14) {
@@ -385,58 +386,113 @@ export function generateAdvisory({
   const stance = techScore >= 1.5 ? 'Bullish' : techScore <= -1.5 ? 'Bearish' : 'Neutral'
 
   // ── Trade setup ───────────────────────────────
-  const nearestSupport    = support[0]
+  // findKeyLevels keeps swing highs down to 98% of the price and swing lows up
+  // to 102% of it, so the nearest "resistance" can sit under the price and the
+  // nearest "support" over it. Anything that anchors a level on one side of
+  // the price takes it from that side.
   const nearestResistance = resistance[0]
+  const supportBelow    = support.find(s => s < price) ?? null      // nearest first
+  const resistanceAbove = resistance.find(r => r > price) ?? null
   const atr2 = atr * 1.5
 
-  let entryLow, entryHigh, stopLoss, tp1, tp2, action, holdingPeriod, stopRationale, invalidation
-
-  const timeframeMultiplier = timeframe === 'Day Trade' ? 0.5 : timeframe === 'Position' ? 2.5 : 1
+  let trade, riskReward = null, positionSizes = null
 
   if (stance === 'Bullish') {
-    action = techScore >= 4 ? 'BUY' : 'BUY (Scale-in)'
-    entryLow  = nearestSupport ? Math.max(nearestSupport * 0.998, price * 0.97) : price * 0.97
-    entryHigh = price * 1.005  // slightly above current for breakout confirmation
-    stopLoss  = nearestSupport
-      ? Math.min(nearestSupport * 0.985, price - atr2)
-      : price - atr2
-    stopRationale = nearestSupport
-      ? `Below key support at $${nearestSupport.toFixed(2)} and 1.5×ATR`
-      : `1.5×ATR below entry (ATR=${atr.toFixed(2)})`
-    const riskPerShare = entryLow - stopLoss
-    tp1 = entryLow + riskPerShare * 1.5
-    tp2 = entryLow + riskPerShare * 2.5
-    if (nearestResistance && nearestResistance > price) tp1 = Math.min(tp1, nearestResistance * 0.995)
-    holdingPeriod = timeframe === 'Day Trade' ? '1–3 days' : timeframe === 'Position' ? '4–12 weeks' : '1–3 weeks'
-    invalidation  = `Close below $${stopLoss.toFixed(2)} on volume > 1.5× avg`
+    // Levels, target rule and validation live in lib/horizon-setups.js (shared
+    // with the AI Advisory horizon cards and tested by Jest): R from the top of
+    // the entry zone, resistance caps TP1 only above that zone, and a setup
+    // that is not 0 < stop < every entry < TP1 ≤ TP2 comes back valid: false.
+    const s = horizonSetups.advisoryLongSetup({ price, atr, support, resistance })
+    const holdingPeriod = timeframe === 'Day Trade' ? '1–3 days' : timeframe === 'Position' ? '4–12 weeks' : '1–3 weeks'
+    if (s.valid) {
+      riskReward    = s.riskReward
+      // Sized from the top of the zone (the worst fill), so a stop-out costs at
+      // most the stated share of the portfolio wherever it filled.
+      positionSizes = calcPositionSize(s.entryHigh, s.stop)
+      const pressed = s.bypassed[0]
+      let targetNote = s.targetSource === 'resistance'
+        ? `TP1 just under resistance $${s.targetLevel.toFixed(2)}`
+        : `TP1 at 1.5R from the top of the entry zone`
+      if (pressed != null) targetNote += ` — assumes a break above $${pressed.toFixed(2)} first`
+      trade = {
+        valid: true, reason: null,
+        action: techScore >= 4 ? 'BUY' : 'BUY (Scale-in)',
+        reference: price,
+        entryZone: { low: s.entryLow, high: s.entryHigh },
+        targets: [
+          { price: s.tp1, label: s.targetSource === 'resistance' ? 'TP1 (resistance)' : 'TP1 (1.5R)', pct: s.tp1Pct },
+          { price: s.tp2, label: 'TP2 (2.5R)', pct: s.tp2Pct },
+        ],
+        stopLoss: {
+          price: s.stop, pct: s.stopPct,
+          rationale: s.stopSource === 'support'
+            ? `Below key support at $${s.support.toFixed(2)} and 1.5×ATR`
+            : `1.5×ATR below the price (ATR=${atr.toFixed(2)})`,
+        },
+        riskReward:     s.riskReward,
+        riskRewardBest: s.riskRewardBest,
+        targetNote,
+        holdingPeriod,
+        invalidation: `Close below $${s.stop.toFixed(2)} on volume > 1.5× avg`,
+      }
+    } else {
+      trade = {
+        valid: false, reason: s.reason,
+        action: 'NO VALID SETUP',
+        reference: price,
+        entryZone: null, targets: [], stopLoss: null, riskReward: null,
+        holdingPeriod,
+        invalidation: null,
+      }
+    }
   } else if (stance === 'Bearish') {
-    action = 'REDUCE / AVOID'
-    entryLow  = price * 0.995
-    entryHigh = price * 1.01
-    stopLoss  = nearestResistance
+    const entryLow  = price * 0.995
+    const entryHigh = price * 1.01
+    const stopLoss  = nearestResistance
       ? Math.max(nearestResistance * 1.015, price + atr2)
       : price + atr2
-    stopRationale = `Above resistance $${(nearestResistance ?? price * 1.03).toFixed(2)}`
     const riskPerShare = stopLoss - entryLow
-    tp1 = entryLow - riskPerShare * 1.5
-    tp2 = entryLow - riskPerShare * 2.5
-    holdingPeriod = timeframe === 'Position' ? '4–12 weeks' : '1–3 weeks'
-    invalidation  = `Reclaim of $${stopLoss.toFixed(2)} with volume`
+    const tp1 = entryLow - riskPerShare * 1.5
+    const tp2 = entryLow - riskPerShare * 2.5
+    riskReward = tp1 && stopLoss && entryLow > 0
+      ? +((tp1 - entryLow) / (entryLow - stopLoss)).toFixed(2)
+      : null
+    positionSizes = calcPositionSize(entryLow, stopLoss)
+    // Unchanged short-side levels; the long check does not apply, so no
+    // `valid` flag (the card renders any trade that is not valid: false).
+    trade = {
+      action: 'REDUCE / AVOID',
+      reference: +entryLow.toFixed(2),
+      entryZone: { low: +entryLow.toFixed(2), high: +entryHigh.toFixed(2) },
+      targets: [
+        { price: +tp1.toFixed(2), label: 'TP1 (1.5R)', pct: +(((tp1 - entryLow) / entryLow) * 100).toFixed(1) },
+        { price: +tp2.toFixed(2), label: 'TP2 (2.5R)', pct: +(((tp2 - entryLow) / entryLow) * 100).toFixed(1) },
+      ],
+      stopLoss: {
+        price: +stopLoss.toFixed(2),
+        pct: +(((entryLow - stopLoss) / entryLow) * 100).toFixed(1),
+        rationale: `Above resistance $${(nearestResistance ?? price * 1.03).toFixed(2)}`,
+      },
+      riskReward,
+      holdingPeriod: timeframe === 'Position' ? '4–12 weeks' : '1–3 weeks',
+      invalidation:  `Reclaim of $${stopLoss.toFixed(2)} with volume`,
+    }
   } else {
-    action = 'HOLD / WATCH'
-    entryLow  = nearestSupport ? nearestSupport * 0.99 : price * 0.95
-    entryHigh = nearestResistance ? nearestResistance * 1.01 : price * 1.05
-    stopLoss  = price - atr2 * 2
-    stopRationale = 'Wait for directional confirmation before committing'
-    tp1 = nearestResistance ?? price * 1.08
-    tp2 = price * 1.15
-    holdingPeriod = 'Monitor — no active trade'
-    invalidation  = 'Breakdown below consolidation range lows'
+    // No directional edge, so no entry, stop or target. It used to show the
+    // whole support–resistance band as the "entry zone" with TP1 at the
+    // nearest resistance: the zone ran to resistance × 1.01, above its own TP1,
+    // and that resistance could be up to 2% under the price.
+    trade = {
+      valid: false,
+      reason: 'Neutral stance — no directional edge, so no entry, stop or target. Wait for a break of the range.',
+      action: 'HOLD / WATCH',
+      reference: price,
+      watch: { support: supportBelow, resistance: resistanceAbove },
+      entryZone: null, targets: [], stopLoss: null, riskReward: null,
+      holdingPeriod: 'Monitor — no active trade',
+      invalidation: null,
+    }
   }
-
-  const riskReward = tp1 && stopLoss && entryLow > 0
-    ? +((tp1 - entryLow) / (entryLow - stopLoss)).toFixed(2)
-    : null
 
   // ── Fundamental context ───────────────────────
   const fundScore = scoreFundamentals(fundamentals)
@@ -473,12 +529,11 @@ export function generateAdvisory({
   confFactors.push({ name: 'Chart pattern', score: pattern.name, weight: '10%' })
 
   if (volRegime === 'Extreme') confidence -= 1
-  if (riskReward < 1.5)        confidence -= 0.5
+  // R/R only counts where a trade is proposed; a bullish stance whose levels
+  // do not form a valid setup gets the same penalty as a thin R/R.
+  if (stance !== 'Neutral' && (riskReward == null || riskReward < 1.5)) confidence -= 0.5
 
   confidence = Math.min(9.5, Math.max(1, confidence))
-
-  // ── Position sizing ───────────────────────────
-  const positionSizes = calcPositionSize(entryLow, stopLoss)
 
   // ── Risk warnings ─────────────────────────────
   const warnings = []
@@ -486,19 +541,24 @@ export function generateAdvisory({
   if (volRegime === 'High')      warnings.push('⚠ Above-average volatility — use wider stops or smaller size')
   if (pctFrom52High > -5)        warnings.push('⚠ Trading near 52-week high — momentum extended, risk of pullback')
   if (pctFrom52Low < 10)         warnings.push('⚠ Near 52-week low — potential value but confirm no fundamental deterioration')
-  if (riskReward && riskReward < 1.5) warnings.push('⚠ Risk/reward below 1.5:1 — consider tighter entry or pass on trade')
+  if (stance === 'Bullish' && trade.valid === false) warnings.push(`⚠ No valid long setup — ${trade.reason}`)
+  if (riskReward != null && riskReward < 1.5) warnings.push(
+    stance === 'Bullish'
+      ? '⚠ Risk/reward below 1.5:1 from the top of the entry zone — enter lower or pass on the trade'
+      : '⚠ Risk/reward below 1.5:1 — consider tighter entry or pass on trade'
+  )
   if (!sma200)                   warnings.push('ℹ Insufficient history for 200-day SMA calculation')
 
   // ── Watchlist triggers ────────────────────────
   const bullishTriggers = []
   const bearishTriggers = []
   if (stance === 'Neutral' || stance === 'Bullish') {
-    if (nearestResistance) bullishTriggers.push(`Confirmed break above $${nearestResistance.toFixed(2)} on volume`)
+    if (resistanceAbove) bullishTriggers.push(`Confirmed break above $${resistanceAbove.toFixed(2)} on volume`)
     if (rsi != null && rsi < 50) bullishTriggers.push(`RSI reclaims 50 level (currently ${rsi.toFixed(1)})`)
     bullishTriggers.push(`MACD cross above signal line`)
   }
   if (stance === 'Neutral' || stance === 'Bearish') {
-    if (nearestSupport) bearishTriggers.push(`Break below support $${nearestSupport.toFixed(2)} on volume`)
+    if (supportBelow) bearishTriggers.push(`Break below support $${supportBelow.toFixed(2)} on volume`)
     bearishTriggers.push(`RSI fails to hold 40 on rally attempt`)
     bearishTriggers.push(`MACD histogram turns negative`)
   }
@@ -560,18 +620,7 @@ export function generateAdvisory({
       pctFrom52High: +pctFrom52High.toFixed(1),
     },
 
-    trade: {
-      action,
-      entryZone: { low: +entryLow.toFixed(2), high: +entryHigh.toFixed(2) },
-      targets: [
-        { price: +tp1.toFixed(2), label: 'TP1 (1.5R)', pct: +(((tp1 - entryLow) / entryLow) * 100).toFixed(1) },
-        { price: +tp2.toFixed(2), label: 'TP2 (2.5R)', pct: +(((tp2 - entryLow) / entryLow) * 100).toFixed(1) },
-      ],
-      stopLoss:  { price: +stopLoss.toFixed(2), pct: +(((entryLow - stopLoss) / entryLow) * 100).toFixed(1), rationale: stopRationale },
-      riskReward,
-      holdingPeriod,
-      invalidation,
-    },
+    trade,
 
     risk: {
       positionSizes,

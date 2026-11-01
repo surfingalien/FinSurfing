@@ -507,11 +507,12 @@ export default function ResearchView({ portfolioSymbols = [], watchlistSymbols =
               <Shield className="w-4 h-4 text-mint-400" /> Risk Management & Position Guidance
             </h3>
             <div className="grid sm:grid-cols-3 gap-4">
+              {/* No sizes without a valid setup (Neutral stance, or levels that failed the check). */}
               {['conservative', 'moderate', 'aggressive'].map(level => (
                 <div key={level} className={`glass-card border ${level === risk.toLowerCase() ? 'border-mint-500/30 bg-mint-500/5' : 'border-white/[0.06]'}`}>
                   <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-1 capitalize">{level}</div>
                   <div className="font-mono font-bold text-white text-lg">
-                    {riskSection.positionSizes[level]?.toLocaleString() ?? '—'} <span className="text-xs text-slate-500">shares</span>
+                    {riskSection.positionSizes?.[level]?.toLocaleString() ?? '—'} <span className="text-xs text-slate-500">shares</span>
                   </div>
                   <div className="text-xs text-slate-500 mt-0.5">
                     {level === 'conservative' ? '0.5%' : level === 'moderate' ? '1%' : '2%'} portfolio risk
@@ -522,6 +523,10 @@ export default function ResearchView({ portfolioSymbols = [], watchlistSymbols =
                 </div>
               ))}
             </div>
+
+            {!riskSection.positionSizes && (
+              <p className="text-xs text-slate-500 -mt-2">No position size: there is no valid trade setup to size.</p>
+            )}
 
             <div className="grid sm:grid-cols-2 gap-4">
               <div className="space-y-2">
