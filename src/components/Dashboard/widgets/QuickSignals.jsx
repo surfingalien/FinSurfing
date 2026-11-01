@@ -18,7 +18,7 @@ export default function QuickSignals({ scan, loading, onScan }) {
   if (!scan) return (
     <div className="text-center py-6 space-y-3">
       <Zap className="w-8 h-8 text-mint-400/40 mx-auto" />
-      <p className="text-slate-500 text-sm">Instant AI signal scan for all holdings</p>
+      <p className="text-slate-500 text-sm">Quick status of every holding from today's quote and your cost</p>
       <button onClick={onScan} className="btn-primary flex items-center gap-2 mx-auto">
         <Zap className="w-3.5 h-3.5" /> Quick Scan
       </button>
@@ -48,12 +48,14 @@ export default function QuickSignals({ scan, loading, onScan }) {
         </button>
       </div>
 
+      <p className="text-[10px] text-slate-500">From today's quote and your cost only — a status, not an analysis. Open the AI Advisory Engine for a full read.</p>
+
       {/* Signal list */}
       <div className="space-y-1">
         {scan.map(r => {
           const cfg = SIGNAL_TYPES[r.signal] || SIGNAL_TYPES.HOLD
           return (
-            <div key={r.symbol}
+            <div key={r.symbol} title={r.reason}
               className={`flex items-center justify-between text-xs px-3 py-2 rounded-lg border ${cfg.border} bg-white/[0.02] hover:bg-white/[0.04] transition-colors`}>
               <span className="font-mono font-black text-white w-14">{r.symbol}</span>
               <span className={`flex items-center gap-1 ${cfg.text} font-medium`}>

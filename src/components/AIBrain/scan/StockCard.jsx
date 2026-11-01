@@ -8,6 +8,7 @@ import { useAIWatchlist } from '../../../hooks/useAIWatchlist'
 import { AGENTS, VERDICT_CONFIG, CONFIDENCE_CONFIG, VOLUME_SIGNAL } from './constants'
 import { ScoreBar, CompositeRing, ConflictBanner, PriceZones, ThesisAssumptions } from './StockCardParts'
 import { signedPct, drawdownPct } from '../../../utils/formatPct'
+import QuantEvidence from '../../shared/QuantEvidence'
 
 /* ── StockCard ─────────────────────────────────────────────── */
 function compositeScoreBand(score) {
@@ -167,6 +168,7 @@ export default function StockCard({ stock, onAnalyze, horizon, byCompositeScore 
             </div>
 
             <PriceZones stock={stock} />
+            <QuantEvidence quant={stock.quant} />
 
             {stock.catalyst && (
               <div className="flex items-center gap-1.5 mt-2.5 px-2 py-1.5 rounded-lg bg-violet-500/10 border border-violet-500/20">

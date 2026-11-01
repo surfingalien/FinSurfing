@@ -13,7 +13,9 @@ export default function PriceChart({ candles, advisory }) {
     t: new Date(c.time).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
     price: c.close,
   }))
-  const h = advisory.horizons?.[1]  // swing horizon levels
+  // Swing horizon levels — none drawn when there is no valid swing setup.
+  const swing = advisory.horizons?.[1]
+  const h = swing?.valid === false ? null : swing
   return (
     <ResponsiveContainer width="100%" height={220}>
       <AreaChart data={data} margin={{ top: 8, right: 60, bottom: 0, left: 0 }}>

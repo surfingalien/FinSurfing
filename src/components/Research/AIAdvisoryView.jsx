@@ -6,7 +6,9 @@ import {
 import { fetchChart, fetchSummary, fetchQuotes, searchSymbol, fmt, fmtPct } from '../../services/api'
 import { generateAIAdvisory, SIGNAL_TYPES } from '../../services/aiEngine'
 import { generateForecast } from '../../services/forecast'
-import { SignalBadge, ConfidenceRing, FactorBar, HorizonCard, FactorRadar } from './advisory/AdvisoryWidgets'
+import { SignalBadge, FactorBar, HorizonCard, FactorRadar } from './advisory/AdvisoryWidgets'
+import { MeasuredRing, RuleBacktest } from './advisory/MeasuredRecord'
+import { useAuth } from '../../contexts/AuthContext'
 import PriceChart from './advisory/PriceChart'
 import PortfolioScanTab from './advisory/PortfolioScanTab'
 import ForecastPanel from './advisory/ForecastPanel'
@@ -23,6 +25,13 @@ export default function AIAdvisoryView({ portfolio }) {
   const [error,     setError]     = useState(null)
   const [activeH,   setActiveH]   = useState(1)  // default swing
   const [searching, setSearching] = useState(false)
+  // The measured half (server): the rule's walk-forward test on this symbol,
+  // the engine's recorded track record, and whether this signal was recorded.
+  const { authFetch, isAuthenticated } = useAuth()
+  const [backtest,    setBacktest]    = useState(null)
+  const [btState,     setBtState]     = useState({ loading: false, error: null })
+  const [calibration, setCalibration] = useState(null)
+  const [recorded,    setRecorded]    = useState(null)
 
   const portfolioSymbols = portfolio?.positions?.map(p => p.symbol) ?? []
   const allSymbols = [...new Set([...portfolioSymbols,
@@ -40,6 +49,7 @@ export default function AIAdvisoryView({ portfolio }) {
     if (!sym) return
     const s = sym.toUpperCase()
     setQuery(s); setResults([]); setLoading(true); setError(null); setAdvisory(null); setCandles(null); setForecast(null)
+    setBacktest(null); setRecorded(null); setBtState({ loading: false, error: null })
 
     try {
       const [daily, weekly, qs, fund, newsData] = await Promise.allSettled([
@@ -67,6 +77,7 @@ export default function AIAdvisoryView({ portfolio }) {
       })
       if (adv.error) throw new Error(adv.error)
       setAdvisory(adv)
+      if (isAuthenticated) measure(s, adv)
       // Generate ML forecast in parallel (non-blocking)
       try {
         const fc = generateForecast(chartD.candles, qs.value?.[0] ?? null, adv.sentiment?.score ?? 0)
@@ -77,7 +88,24 @@ export default function AIAdvisoryView({ portfolio }) {
     } finally {
       setLoading(false)
     }
-  }, [portfolio])
+  }, [portfolio, isAuthenticated])  // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Best-effort: none of this blocks the analysis, and each part fails alone.
+  const measure = async (sym, adv) => {
+    setBtState({ loading: true, error: null })
+    authFetch(`/api/advisory-engine/backtest/${encodeURIComponent(sym)}`)
+      .then(r => r.json().then(d => ({ ok: r.ok, d })))
+      .then(({ ok, d }) => {
+        if (!ok || d.error) throw new Error(d.error || 'backtest failed')
+        setBacktest(d); setBtState({ loading: false, error: null })
+      })
+      .catch(e => setBtState({ loading: false, error: e.message }))
+    authFetch('/api/advisory-engine/calibration').then(r => r.json()).then(d => { if (!d.error) setCalibration(d) }).catch(() => {})
+    authFetch('/api/advisory-engine/record', {
+      method: 'POST',
+      body: { symbol: sym, signal: adv.signal, ensembleScore: adv.ensembleScore, factors: adv.factorScores },
+    }).then(r => r.json()).then(setRecorded).catch(() => {})
+  }
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -106,7 +134,7 @@ export default function AIAdvisoryView({ portfolio }) {
             <div className="flex items-center gap-2 mb-1">
               <Cpu className="w-4 h-4 text-mint-400 animate-pulse" />
               <span className="text-sm font-semibold text-white">AI Advisory Engine</span>
-              <span className="text-xs text-slate-600">5-factor ensemble · technical + fundamental + sentiment + analyst + multi-timeframe</span>
+              <span className="text-xs text-slate-600">Weighted five-factor score (fixed weights, not a trained model) · accuracy measured, not assumed</span>
             </div>
             <div className="flex gap-2">
               <div className="relative flex-1">
@@ -155,7 +183,7 @@ export default function AIAdvisoryView({ portfolio }) {
                   </div>
                 ))}
               </div>
-              <p className="text-slate-400 text-sm">Running 5-factor ensemble analysis…</p>
+              <p className="text-slate-400 text-sm">Scoring five factors…</p>
             </div>
           )}
 
@@ -197,7 +225,7 @@ export default function AIAdvisoryView({ portfolio }) {
                       {/* Ensemble score bar */}
                       <div className="space-y-1 max-w-md">
                         <div className="flex justify-between text-xs text-slate-400">
-                          <span>Ensemble Score</span>
+                          <span title="Fixed weights: technical 35%, fundamentals 20%, news 15%, analysts 15%, multi-timeframe 15%">Weighted score</span>
                           <span className="font-mono font-bold" style={{ color: cfg.color }}>{advisory.ensembleScore}/10</span>
                         </div>
                         <div className="h-3 bg-white/[0.06] rounded-full overflow-hidden">
@@ -210,16 +238,10 @@ export default function AIAdvisoryView({ portfolio }) {
                       </div>
                     </div>
                     <div className="flex flex-col items-center gap-2">
-                      <ConfidenceRing pct={advisory.confidencePct} type={advisory.signal} />
-                      {advisory.backtest && (
-                        <div className="text-center">
-                          <div className="text-xs text-slate-500">Signal backtest</div>
-                          <div className={`text-sm font-bold ${advisory.backtest.hitRate > 60 ? 'text-emerald-400' : advisory.backtest.hitRate > 45 ? 'text-amber-400' : 'text-red-400'}`}>
-                            {advisory.backtest.hitRate}% hit rate
-                          </div>
-                          <div className="text-[10px] text-slate-600">{advisory.backtest.wins}W / {advisory.backtest.losses}L</div>
-                        </div>
-                      )}
+                      <MeasuredRing calibration={isAuthenticated ? calibration : null} signal={advisory.signal} recorded={recorded} />
+                      <div className="text-[10px] text-slate-500">
+                        Factors leaning bullish {advisory.agreement.bullish} · bearish {advisory.agreement.bearish} · neutral {advisory.agreement.neutral}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -231,11 +253,16 @@ export default function AIAdvisoryView({ portfolio }) {
                     {/* ── Ensemble model breakdown ── */}
                     <div className="glass rounded-xl p-5 space-y-3">
                       <h3 className="font-semibold text-white flex items-center gap-2 text-sm">
-                        <Cpu className="w-3.5 h-3.5 text-mint-400" /> 5-Factor Ensemble Model
+                        <Cpu className="w-3.5 h-3.5 text-mint-400" /> Five factors, fixed weights
                       </h3>
+                      <p className="text-[10px] text-slate-500 -mt-1">Hand-set weights, not fitted to data — whether they work is what the test below and the measured record answer.</p>
                       {advisory.factors.map((f, i) => <FactorBar key={i} factor={f} />)}
                       <FactorRadar factors={advisory.factors} />
                     </div>
+
+                    {isAuthenticated
+                      ? <RuleBacktest backtest={backtest} loading={btState.loading} error={btState.error} />
+                      : <div className="glass rounded-xl p-4 text-[11px] text-slate-500">Sign in to test this engine's rule on {advisory.symbol} and see its measured record.</div>}
 
                     {/* ── Patterns ── */}
                     {advisory.patterns.length > 0 && (
@@ -323,7 +350,9 @@ export default function AIAdvisoryView({ portfolio }) {
                     <div className="glass rounded-xl p-4">
                       <div className="text-xs text-slate-400 font-semibold mb-3 flex items-center justify-between">
                         <span>90-Day Price Chart</span>
-                        <span className="text-[10px] text-slate-600">Swing TP / SL reference lines</span>
+                        <span className="text-[10px] text-slate-600">
+                          {advisory.horizons?.[1]?.valid === false ? 'No valid swing setup' : 'Swing TP / SL reference lines'}
+                        </span>
                       </div>
                       <PriceChart candles={candles} advisory={advisory} />
                     </div>

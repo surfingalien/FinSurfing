@@ -62,3 +62,16 @@ describe('filterMovers', () => {
     expect(DISCOVERY_MODES.has('etfs_broad')).toBe(false)
   })
 })
+
+describe('measured discovery sources', () => {
+  const { buildScanUniverse } = require('../lib/scan-universe')
+  test('lagging and pair candidates enter after movers, labelled, capped, and only once', () => {
+    const r = buildScanUniverse({
+      movers: ['AAA', 'BBB'], curated: ['CCC'], pool: ['DDD'],
+      discovered: [{ symbol: 'XOM', source: 'dislocation' }, { symbol: 'CVX', source: 'pair' }, { symbol: 'AAA', source: 'pair' }, { symbol: 'not a ticker', source: 'pair' }, { symbol: 'EEE', source: 'dislocation' }, { symbol: 'FFF', source: 'dislocation' }],
+      maxDiscovered: 3, size: 20, seed: 1,
+    })
+    expect(r.sources).toMatchObject({ AAA: 'mover', XOM: 'dislocation', CVX: 'pair', EEE: 'dislocation' })
+    expect(r.sources.FFF).toBeUndefined()   // capped at three
+  })
+})

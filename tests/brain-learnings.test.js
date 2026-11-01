@@ -548,6 +548,20 @@ describe('computeStats — regime, generator and barrier segments', () => {
     expect(computeStats([mk()]).byRegime).toBeNull()
   })
 
+  test('quant evidence segments: byCharacter, byVolBucket and byResidual come from the scan-time stamp; unstamped rows are excluded', () => {
+    const s = computeStats([
+      mk({ quantAtScan: { character: 'trending', vol21: 0.15, residualZ: -1.4 } }),
+      mk({ quantAtScan: { character: 'mean-reverting', vol21: 0.55, residualZ: 0.2 }, price30d: 88 }),
+      mk({ quantAtScan: { character: 'unknown', vol21: null, residualZ: null } }),
+      mk(),
+    ], AT30)
+    expect(Object.keys(s.byCharacter).sort()).toEqual(['mean-reverting', 'trending'])
+    expect(s.byCharacter.trending.winRate).toBe(1); expect(s.byCharacter['mean-reverting'].winRate).toBe(0)
+    expect(Object.keys(s.byVolBucket).sort()).toEqual(['high (≥40%)', 'low (<20%)'])
+    expect(s.byResidual['lagging peers (≤−1z)'].n).toBe(1); expect(s.byResidual['in line'].n).toBe(1)
+    expect(computeStats([mk()]).byCharacter).toBeNull()
+  })
+
   test('byPriceRegime splits picks by the benchmark trend/volatility state at scan time; unstamped rows are excluded', () => {
     const s = computeStats([
       mk({ priceRegimeAtScan: 'up-calm' }),
