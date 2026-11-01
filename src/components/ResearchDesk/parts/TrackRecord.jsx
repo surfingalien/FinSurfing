@@ -130,6 +130,34 @@ export default function TrackRecord({ data, onAdoptBrackets }) {
       </section>
 
       <section>
+        <h3 className="text-sm font-semibold mb-2">Do picks beat the odds their own levels imply?</h3>
+        {b?.oddsCheck?.n ? (
+          <div className="space-y-2">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+              <Rate label="Target reached first" rate={b.oddsCheck.targetFirstRate} lo={b.oddsCheck.targetFirstLo} hi={b.oddsCheck.targetFirstHi} n={b.oddsCheck.n} k={b.oddsCheck.targetFirst} />
+              <div className="glass rounded-xl p-3">
+                <div className="text-[10px] text-slate-500">No-skill odds at scan time (average)</div>
+                <div className="text-lg font-semibold">{pc(b.oddsCheck.meanPredicted)}</div>
+                <div className="text-[10px] text-slate-500">Brier {b.oddsCheck.brierOdds} vs base rate {b.oddsCheck.brierBaseRate}</div>
+              </div>
+              <div className="glass rounded-xl p-3">
+                <div className="text-[10px] text-slate-500">Verdict</div>
+                <div className="text-sm font-semibold">{!b.oddsCheck.ready ? `Waiting — ${b.oddsCheck.n} of ${b.oddsCheck.minN}` : b.oddsCheck.verdict === 'beats-no-skill-odds' ? 'Beats its odds' : b.oddsCheck.verdict === 'below-no-skill-odds' ? 'Below its odds' : 'No measured difference'}</div>
+              </div>
+            </div>
+            {Object.keys(b.oddsCheck.byStopNoise || {}).length > 0 && (
+              <div className="grid grid-cols-3 gap-2">
+                {Object.entries(b.oddsCheck.byStopNoise).map(([level, c]) => (
+                  <Rate key={level} label={`Stopped out first — stop ${level}`} rate={c.stopFirstRate} lo={c.lo} hi={c.hi} n={c.n} k={c.stopFirst} />
+                ))}
+              </div>
+            )}
+          </div>
+        ) : <p className="text-[12px] text-slate-500">No resolved pick carries its scan-time odds yet — every actionable pick from prompt v8 logs them and is scored when its own horizon ends.</p>}
+        <p className="text-[11px] text-slate-500 mt-1">The odds are what a stock with no drift and its measured volatility would do with the same target and stop. Skill shows as target-first above them; a stop placed inside daily noise shows as early stop-outs.</p>
+      </section>
+
+      <section>
         <h3 className="text-sm font-semibold mb-2">Leaderboard</h3>
         {data.leaderboard?.rows?.length ? (
           <div className="overflow-x-auto">
@@ -187,6 +215,19 @@ export default function TrackRecord({ data, onAdoptBrackets }) {
           </div>
         )}
         <p className="text-[11px] text-slate-500 mt-1">Trend from the 200- and 50-day averages; volatility against the market's own past year. Each state uses only the bars up to that day. The table counts non-overlapping 20-day windows.</p>
+      </section>
+
+      <section>
+        <h3 className="text-sm font-semibold mb-2 flex items-center gap-1.5"><Activity className="w-3.5 h-3.5" /> AI picks by measured quant context</h3>
+        {[['byCharacter', 'Price character'], ['byVolBucket', 'Volatility outlook'], ['byResidual', 'Against the rest of the scan']].some(([k]) => b?.[k] && Object.keys(b[k]).length) ? (
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+            {[['byCharacter', 'Price character'], ['byVolBucket', 'Volatility outlook'], ['byResidual', 'Against the rest of the scan']].flatMap(([k, title]) =>
+              Object.entries(b?.[k] || {}).map(([label, c]) => (
+                <Rate key={`${k}:${label}`} label={`${title}: ${label}`} rate={c.alphaWinRate} lo={c.alphaWinRateLo} hi={c.alphaWinRateHi} n={c.nBench} k={c.alphaWins} />
+              )))}
+          </div>
+        ) : <p className="text-[12px] text-slate-500">No resolved picks carry the quant stamp yet — every scan from prompt v8 on records it (volatility forecast, variance-ratio trend test, tail risk, peer residual).</p>}
+        <p className="text-[11px] text-slate-500 mt-1">Measured from a year of daily bars at scan time. A difference between rows counts only where the intervals do not overlap; the edge report applies the multiple-testing correction.</p>
       </section>
 
       <section>
@@ -312,6 +353,40 @@ export default function TrackRecord({ data, onAdoptBrackets }) {
             <p className="text-[11px] text-slate-500">Position sizes and the expected-value gate pay the target on a win and the stop on a loss, so the probability should be of THAT: target before stop. It replaces the 30-day rate only after predicting newer picks better.</p>
           </div>
         ) : <p className="text-[12px] text-slate-500">Not trained yet — the nightly cycle fits it once 150 picks have a target/stop outcome.</p>}
+      </section>
+
+      <section>
+        <h3 className="text-sm font-semibold mb-2">Model contest — can another algorithm beat the current one?</h3>
+        {data.modelContest?.tracks ? (
+          <div className="space-y-3">
+            {Object.values(data.modelContest.tracks).map(t => (
+              <div key={t.track} className="text-[12px] space-y-1">
+                <p className={t.winner ? 'text-emerald-400' : 'text-slate-400'}>
+                  <span className="font-semibold">{t.track === 'brain' ? 'AI Brain picks' : 'Any plan (Agent Hub, Research Desk, Buy Signals)'}:</span> {t.winner ? `${t.winner} now scores plans` : 'current logistic stays'} — {t.reason}.
+                </p>
+                {t.models?.length > 0 && (
+                  <div className="overflow-x-auto">
+                    <table className="text-[11px] w-full max-w-xl">
+                      <thead><tr className="text-slate-500 text-left"><th className="pr-3 font-normal">Model</th><th className="pr-3 font-normal">Brier</th><th className="font-normal">t vs current</th></tr></thead>
+                      <tbody>
+                        {t.models.map(m => (
+                          <tr key={m.name} className={m.name === t.winner ? 'text-emerald-400' : m.name === t.champion ? 'text-white' : 'text-slate-400'}>
+                            <td className="pr-3">{m.name}{m.name === t.champion ? ' (current)' : ''}</td>
+                            <td className="pr-3 font-mono">{m.brier}</td>
+                            <td className="font-mono">{m.tVsChampion ?? '—'}</td>
+                          </tr>
+                        ))}
+                        <tr className="text-slate-500"><td className="pr-3">base rate</td><td className="pr-3 font-mono">{t.reference?.baseRate}</td><td /></tr>
+                        <tr className="text-slate-500"><td className="pr-3">no-skill odds of the levels</td><td className="pr-3 font-mono">{t.reference?.noSkillOdds}</td><td /></tr>
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            ))}
+            <p className="text-[11px] text-slate-500">Eight classifiers from the Quant Lab predict whether each newer pick reached its target before its stop, trained only on picks whose outcome was already known (purged walk-forward). A challenger replaces the current logistic only with a lower error and a paired t above the threshold corrected for trying seven of them. Run nightly.</p>
+          </div>
+        ) : <p className="text-[12px] text-slate-500">Not run yet — the nightly cycle starts it once 150 picks have a target/stop outcome on their own horizon.</p>}
       </section>
 
       <section>
