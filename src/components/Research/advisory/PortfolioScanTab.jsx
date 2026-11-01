@@ -32,10 +32,10 @@ export default function PortfolioScanTab({ portfolio }) {
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-base font-semibold text-white flex items-center gap-2">
-            <Cpu className="w-4 h-4 text-mint-400" /> Portfolio AI Scan
+            <Cpu className="w-4 h-4 text-mint-400" /> Portfolio Quick Status
           </h3>
           <p className="text-xs text-slate-500 mt-0.5">
-            Instant signal classification for all {portfolio.positions.length} holdings
+            Status of all {portfolio.positions.length} holdings from today's quote and your cost — rules, not an analysis
           </p>
         </div>
         <button onClick={runScan} disabled={loading}
@@ -49,7 +49,7 @@ export default function PortfolioScanTab({ portfolio }) {
       {!scan && !loading && (
         <div className="glass rounded-xl p-12 text-center space-y-3">
           <Cpu className="w-10 h-10 text-mint-400/40 mx-auto" />
-          <p className="text-slate-500 text-sm">Run the AI scan to classify all portfolio positions with Buy/Sell/Hold signals</p>
+          <p className="text-slate-500 text-sm">Check every holding against the stop, profit-booking and big-move rules</p>
           <button onClick={runScan} className="btn-primary mx-auto flex items-center gap-2">
             <Zap className="w-3.5 h-3.5" /> Start Scan
           </button>
@@ -106,7 +106,7 @@ export default function PortfolioScanTab({ portfolio }) {
                       <tr key={r.symbol} className="border-b border-white/[0.04] hover:bg-white/[0.02]">
                         <td className="px-4 py-2.5">
                           <div className="font-mono font-bold text-white">{r.symbol}</div>
-                          <div className="text-xs text-slate-500 truncate max-w-[120px]">{r.name}</div>
+                          <div className="text-xs text-slate-500 truncate max-w-[220px]">{r.reason || r.name}</div>
                         </td>
                         <td className="px-3 py-2.5 text-right font-mono text-white">${fmt(r.price)}</td>
                         <td className={`px-3 py-2.5 text-right font-mono text-xs hidden sm:table-cell ${r.changePct >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>

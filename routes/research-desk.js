@@ -27,6 +27,7 @@ const { THESIS_SCHEMA, BULL_SCHEMA, BEAR_SCHEMA, DECISION_SCHEMA } = require('..
 const { tryParseAiJson }       = require('../lib/ai-json')
 const { CircuitOpenError }     = require('../lib/circuit-breaker')
 const { fetchDailyBars }       = require('../lib/internal-api')
+const quantSnapshot            = require('../lib/quant-snapshot')
 const { compactTaLine }        = require('../lib/technical-indicators')
 const { isLastBarForming }     = require('../lib/bar-session')
 const { startJsonHeartbeat }   = require('../lib/http-heartbeat')
@@ -183,7 +184,7 @@ async function ownNoteFor(userId, sym) {
 async function gatherEvidence(sym, req) {
   const headers   = fwdKeys(req)
   const assetType = assetTypeOf(sym)
-  const [bars, fundamentals, macro, regimes, secFacts] = await Promise.all([
+  const [bars, fundamentals, macro, regimes, secFacts, spyBars] = await Promise.all([
     fetchDailyBars(sym, { range: '2y', headers, timeoutMs: 25_000 }),
     assetType === 'stock' ? fetchFundamentals(sym, headers) : Promise.resolve({ error: `not applicable to ${assetType}` }),
     macroSnapshot(),
@@ -191,6 +192,7 @@ async function gatherEvidence(sym, req) {
     // Reported figures straight from SEC filings — keyless, so the dossier keeps
     // its fundamentals when the FMP quota is spent.
     assetType === 'stock' ? require('../lib/sec-facts').getCompanyFacts(sym).catch(() => null) : Promise.resolve(null),
+    sym === 'SPY' ? Promise.resolve(null) : fetchDailyBars('SPY', { range: '2y', headers, timeoutMs: 10_000 }).catch(() => null),
   ])
   if (bars.length < 60) {
     const err = new Error(bars.length
@@ -200,6 +202,7 @@ async function gatherEvidence(sym, req) {
     throw err
   }
 
+  const quantSnap = quantSnapshot.symbolSnapshot(bars, { benchBars: spyBars?.length >= 60 ? spyBars : null })
   const taLine = compactTaLine(sym, bars.map(b => b.o ?? b.c), bars.map(b => b.h ?? b.c), bars.map(b => b.l ?? b.c), bars.map(b => b.c), bars.map(b => b.v ?? 0),
     { lastBarForming: isLastBarForming(bars, { isCrypto: isCryptoSymbol(sym) }) })
   let records = [], stats = null
@@ -219,12 +222,13 @@ async function gatherEvidence(sym, req) {
     exposure:   exposureFor(sym),
     track:      desk.trackFor(records, { symbol: sym, assetType, horizon }),
     ownNote:    await ownNoteFor(effectiveUserId(req), sym),
+    quant:      quantSnapshot.evidenceItems(quantSnap),
   })
   const bracketProb = require('../lib/bracket-prob')
   const winProb = bracketProb.winProbFor(bracketProb.loadStore(), { assetType }) || kelly.winProbFromStats(stats, { assetType })
   const levels = require('../lib/trade-levels').levelInputs(bars)
   const referenceLevels = levels ? require('../lib/trade-levels').tradeLevels({ price: facts.last, atr: levels.atr, support: levels.support, resistance: levels.resistance }) : null
-  return { sym, assetType, facts, items, gaps, winProb, levels, referenceLevels, company: fundamentals?.company?.name ?? null }
+  return { sym, assetType, facts, items, gaps, winProb, levels, referenceLevels, company: fundamentals?.company?.name ?? null, quant: quantSnapshot.stampOf(quantSnap), quantSnap }
 }
 
 // ── Journal ───────────────────────────────────────────────────────────────────
@@ -275,7 +279,11 @@ router.get('/track-record', requireAuth, (req, res) => {
       byAssetType: stats.byAssetType, calibration: stats.calibration,
       autoTune: stats.autoTune, baseline: stats.baseline,
       exitQuality: stats.exitQuality,
+      oddsCheck: stats.oddsCheck,
       byPriceRegime: stats.byPriceRegime,
+      // Measured quant evidence at scan time (lib/quant-snapshot.js) — scan-time
+      // conditions, so they are edge-report dimensions too.
+      byCharacter: stats.byCharacter, byVolBucket: stats.byVolBucket, byResidual: stats.byResidual,
     },
     // The benchmarks' current trend/volatility state and what followed each
     // state historically (last fetched by a scan or a dossier — no network here).
@@ -293,6 +301,8 @@ router.get('/track-record', requireAuth, (req, res) => {
       events: s.events, params: s.params, groups: s.groups, strategies: s.strategies, oppVsRoutine: s.oppVsRoutine, caveats: s.caveats,
     } } catch { return null } })(),
     // Which win probability sizes trades: the bracket calibration, if adopted (lib/bracket-prob.js).
+    // Champion / challenger over the Quant Lab's classifiers (lib/model-contest.js)
+    modelContest: (() => { try { return require('../lib/model-contest').loadStore() } catch { return null } })(),
     bracketProb: (() => { try { const b = require('../lib/bracket-prob').loadStore(); return b && { adopted: b.adopted, rateAdopted: b.rateAdopted ?? false, reason: b.reason, validation: b.validation ?? null, labelled: b.labelled, trainedAt: b.trainedAt, rates: b.rates ?? null } } catch { return null } })(),
     // The second-opinion model on AI Brain picks (lib/meta-label.js).
     metaLabel: (() => { try { const m = require('../lib/meta-label').loadModel(); return m && { validated: m.validated, reason: m.reason, validation: m.validation ?? null, labelled: m.labelled, trainedAt: m.trainedAt } } catch { return null } })(),
@@ -449,6 +459,15 @@ router.post('/:symbol/thesis', requireAuth, thesisLimit, async (req, res) => {
   if (!thesis) return res.status(502).json({ error: 'The AI returned no usable thesis — please try again' })
 
   const judgement = desk.judgeThesis({ thesis, items: ev.items, lastPrice: ev.facts.last, assetType: ev.assetType, winProb: ev.winProb, levels: ev.levels })
+  // What the measured volatility says about the plan's own levels (lib/plan-odds.js):
+  // the no-skill odds of the target first, and whether the stop sits in the noise.
+  if (judgement.zones?.targetReturn > 0 && judgement.zones?.stopLoss > 0) {
+    const odds = require('../lib/plan-odds').planFacts({
+      targetPct: judgement.zones.targetReturn, stopPct: judgement.zones.stopLoss, price: ev.facts.last, snap: ev.quantSnap,
+      sessions: require('../lib/plan-odds').sessionsFromCalendarDays(judgement.horizonDays || 30),
+    })
+    if (odds) judgement.planOdds = odds
+  }
   const entry = {
     id: crypto.randomBytes(5).toString('hex'),
     // Not req.user.userId: an internal call (the holdings-research job) has no
@@ -468,7 +487,9 @@ router.post('/:symbol/thesis', requireAuth, thesisLimit, async (req, res) => {
     try {
       learningStore.recordDecision({
         surface: 'research', symbol: sym, action: 'buy', price: ev.facts.last,
-        meta: { assetType: ev.assetType, targetReturn: judgement.zones.targetReturn, stopLoss: judgement.zones.stopLoss, horizonDays: judgement.horizonDays, thesisId: entry.id, method },
+        meta: { assetType: ev.assetType, targetReturn: judgement.zones.targetReturn, stopLoss: judgement.zones.stopLoss, horizonDays: judgement.horizonDays, thesisId: entry.id, method, quant: ev.quant ?? null,
+          modelOdds: judgement.planOdds?.odds ? { pTarget: judgement.planOdds.odds.pTarget, pStop: judgement.planOdds.odds.pStop, sessions: judgement.planOdds.odds.sessions } : null,
+          stopNoise: judgement.planOdds?.stop?.level ?? null },
       })
     } catch (e) { console.warn('[research-desk] learning-store write failed:', e.message) }
   }

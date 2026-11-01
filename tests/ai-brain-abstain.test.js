@@ -232,6 +232,44 @@ describe('POST /api/ai-brain/analyze — the AVAX regression', () => {
     require('../lib/price-regime')._resetForTests()
   })
 
+  test('an actionable pick carries the odds its levels imply, a stop check, a calibrated-or-not size, and the odds are logged', async () => {
+    // A year of noisy bars so the volatility is measurable
+    const noisy = (price, seed) => {
+      const n = 260, t0 = Math.floor(Date.now() / 1000) - n * DAY, ts = [], o = [], h = [], l = [], c = [], v = []
+      let p = price * 0.9, x = seed
+      for (let i = 0; i < n; i++) {
+        x = (x * 9301 + 49297) % 233280
+        p *= 1 + 0.03 * (x / 233280 - 0.5)
+        ts.push(t0 + i * DAY); o.push(p); h.push(p * 1.02); l.push(p * 0.98); c.push(p); v.push(1e6)
+      }
+      c[n - 1] = price
+      return { chart: { result: [{ timestamp: ts, indicators: { quote: [{ open: o, high: h, low: l, close: c, volume: v }] } }] } }
+    }
+    const base = global.fetch
+    global.fetch = jest.fn(async url => {
+      const u = String(url)
+      if (u.includes('/api/chart?')) {
+        const sym = new URL(u).searchParams.get('symbol')
+        if (LIVE[sym]) return { ok: true, json: async () => noisy(LIVE[sym], sym.length * 7) }
+      }
+      return base(url)
+    })
+    try { fsp.unlinkSync(TMP_LOG) } catch { /* fine */ }
+    mockCall.mockResolvedValue(reply(stock(), stock({ rank: 2, symbol: 'DOGE', currentPrice: 0.2, entryZoneLow: 0.196, entryZoneHigh: 0.204 })))
+    const res = await scan({ symbols: ['AVAX', 'DOGE'] })
+    const p = res.body.rankedStocks.find(x => x.symbol === 'AVAX')
+    expect(p.planOdds.odds.pTarget).toBeGreaterThan(0)
+    expect(p.planOdds.odds.pTarget + p.planOdds.odds.pStop + p.planOdds.odds.pNeither).toBeCloseTo(1, 2)
+    expect(p.planOdds.odds.sessions).toBe(63)                 // 3 months
+    expect(['inside-noise', 'tight', 'clear']).toContain(p.planOdds.stop.level)
+    expect(p.sizing.uncalibrated).toBe(true)                  // cold start: no size off an assumed win rate
+    expect(res.body.slate.picks).toBe(2)
+    expect(p.slateWeightPct).toBeGreaterThan(0)
+    const rec = JSON.parse(fsp.readFileSync(TMP_LOG, 'utf8').trim().split('\n').find(l => l.includes('"AVAX"')))
+    expect(rec.modelOdds.pTarget).toBe(p.planOdds.odds.pTarget)
+    expect(rec.stopNoise).toBe(p.planOdds.stop.level)
+  })
+
   test('a trained second-opinion model rates each actionable pick, and the rating is logged', async () => {
     const metaLabel = require('../lib/meta-label')
     metaLabel.saveModel({ validated: false, cutoff: 0.5, bias: 0.2, w: new Array(metaLabel.FEATURES.length).fill(0.1), reason: 'test' })

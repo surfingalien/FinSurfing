@@ -19,27 +19,6 @@ export function SignalBadge({ type, size = 'md' }) {
   )
 }
 
-/* ── Confidence ring ─────────────────────────────── */
-export function ConfidenceRing({ pct, type }) {
-  const cfg   = SIGNAL_TYPES[type] || SIGNAL_TYPES.HOLD
-  const r     = 36, circ = 2 * Math.PI * r
-  const dash  = (pct / 100) * circ
-  return (
-    <div className="relative flex items-center justify-center w-24 h-24">
-      <svg className="absolute" width="96" height="96" viewBox="0 0 96 96">
-        <circle cx="48" cy="48" r={r} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="8" />
-        <circle cx="48" cy="48" r={r} fill="none" stroke={cfg.color} strokeWidth="8"
-          strokeDasharray={`${dash} ${circ}`} strokeDashoffset={circ / 4}
-          strokeLinecap="round" style={{ transition: 'stroke-dasharray 1s ease' }} />
-      </svg>
-      <div className="text-center z-10">
-        <div className="font-black text-xl text-white">{pct}%</div>
-        <div className="text-[9px] text-slate-500 uppercase tracking-wide">confidence</div>
-      </div>
-    </div>
-  )
-}
-
 /* ── Factor bar ──────────────────────────────────── */
 export function FactorBar({ factor }) {
   const pct   = (factor.score / 10) * 100
