@@ -279,6 +279,7 @@ router.get('/track-record', requireAuth, (req, res) => {
       byAssetType: stats.byAssetType, calibration: stats.calibration,
       autoTune: stats.autoTune, baseline: stats.baseline,
       exitQuality: stats.exitQuality,
+      oddsCheck: stats.oddsCheck,
       byPriceRegime: stats.byPriceRegime,
       // Measured quant evidence at scan time (lib/quant-snapshot.js) — scan-time
       // conditions, so they are edge-report dimensions too.
@@ -456,6 +457,15 @@ router.post('/:symbol/thesis', requireAuth, thesisLimit, async (req, res) => {
   if (!thesis) return res.status(502).json({ error: 'The AI returned no usable thesis — please try again' })
 
   const judgement = desk.judgeThesis({ thesis, items: ev.items, lastPrice: ev.facts.last, assetType: ev.assetType, winProb: ev.winProb, levels: ev.levels })
+  // What the measured volatility says about the plan's own levels (lib/plan-odds.js):
+  // the no-skill odds of the target first, and whether the stop sits in the noise.
+  if (judgement.zones?.targetReturn > 0 && judgement.zones?.stopLoss > 0) {
+    const odds = require('../lib/plan-odds').planFacts({
+      targetPct: judgement.zones.targetReturn, stopPct: judgement.zones.stopLoss, price: ev.facts.last, snap: ev.quantSnap,
+      sessions: require('../lib/plan-odds').sessionsFromCalendarDays(judgement.horizonDays || 30),
+    })
+    if (odds) judgement.planOdds = odds
+  }
   const entry = {
     id: crypto.randomBytes(5).toString('hex'),
     // Not req.user.userId: an internal call (the holdings-research job) has no
@@ -475,7 +485,9 @@ router.post('/:symbol/thesis', requireAuth, thesisLimit, async (req, res) => {
     try {
       learningStore.recordDecision({
         surface: 'research', symbol: sym, action: 'buy', price: ev.facts.last,
-        meta: { assetType: ev.assetType, targetReturn: judgement.zones.targetReturn, stopLoss: judgement.zones.stopLoss, horizonDays: judgement.horizonDays, thesisId: entry.id, method, quant: ev.quant ?? null },
+        meta: { assetType: ev.assetType, targetReturn: judgement.zones.targetReturn, stopLoss: judgement.zones.stopLoss, horizonDays: judgement.horizonDays, thesisId: entry.id, method, quant: ev.quant ?? null,
+          modelOdds: judgement.planOdds?.odds ? { pTarget: judgement.planOdds.odds.pTarget, pStop: judgement.planOdds.odds.pStop, sessions: judgement.planOdds.odds.sessions } : null,
+          stopNoise: judgement.planOdds?.stop?.level ?? null },
       })
     } catch (e) { console.warn('[research-desk] learning-store write failed:', e.message) }
   }

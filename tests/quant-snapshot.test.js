@@ -67,3 +67,17 @@ test('Agent Hub: chart timestamps in seconds are read as dates, and short histor
   expect(f.stamp.beta).not.toBeUndefined()
   expect(quantFacts(sec(bars(40, 23)))).toBeNull()
 })
+
+test('Buy Signals and Agent Hub plans carry the odds of their own levels', () => {
+  const recs = [{ symbol: 'AAA', targetReturn: 15, stopLoss: 7, period: '6m' }]
+  require('../routes/recommendations')._test.attachQuant(recs, { AAA: bars(260, 31) }, null)
+  expect(recs[0].planOdds.odds.sessions).toBe(126)
+  expect(recs[0].planOdds.stop.level).toMatch(/inside-noise|tight|clear/)
+  const { quantFacts, levelOdds } = require('../routes/agents')._test
+  const sec = bs => bs.map(b => ({ ...b, t: b.t / 1000 }))
+  const q = quantFacts(sec(bars(260, 32)))
+  const o = levelOdds({ entry: 100, target_1: 108, stop_loss: 96 }, q)
+  expect(o.odds.sessions).toBe(21)
+  expect(o.odds.pTarget).toBeGreaterThan(0)
+  expect(levelOdds({ entry: 100, target_1: 95, stop_loss: 96 }, q)).toBeNull()   // not a long plan
+})

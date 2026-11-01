@@ -130,6 +130,34 @@ export default function TrackRecord({ data, onAdoptBrackets }) {
       </section>
 
       <section>
+        <h3 className="text-sm font-semibold mb-2">Do picks beat the odds their own levels imply?</h3>
+        {b?.oddsCheck?.n ? (
+          <div className="space-y-2">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+              <Rate label="Target reached first" rate={b.oddsCheck.targetFirstRate} lo={b.oddsCheck.targetFirstLo} hi={b.oddsCheck.targetFirstHi} n={b.oddsCheck.n} k={b.oddsCheck.targetFirst} />
+              <div className="glass rounded-xl p-3">
+                <div className="text-[10px] text-slate-500">No-skill odds at scan time (average)</div>
+                <div className="text-lg font-semibold">{pc(b.oddsCheck.meanPredicted)}</div>
+                <div className="text-[10px] text-slate-500">Brier {b.oddsCheck.brierOdds} vs base rate {b.oddsCheck.brierBaseRate}</div>
+              </div>
+              <div className="glass rounded-xl p-3">
+                <div className="text-[10px] text-slate-500">Verdict</div>
+                <div className="text-sm font-semibold">{!b.oddsCheck.ready ? `Waiting — ${b.oddsCheck.n} of ${b.oddsCheck.minN}` : b.oddsCheck.verdict === 'beats-no-skill-odds' ? 'Beats its odds' : b.oddsCheck.verdict === 'below-no-skill-odds' ? 'Below its odds' : 'No measured difference'}</div>
+              </div>
+            </div>
+            {Object.keys(b.oddsCheck.byStopNoise || {}).length > 0 && (
+              <div className="grid grid-cols-3 gap-2">
+                {Object.entries(b.oddsCheck.byStopNoise).map(([level, c]) => (
+                  <Rate key={level} label={`Stopped out first — stop ${level}`} rate={c.stopFirstRate} lo={c.lo} hi={c.hi} n={c.n} k={c.stopFirst} />
+                ))}
+              </div>
+            )}
+          </div>
+        ) : <p className="text-[12px] text-slate-500">No resolved pick carries its scan-time odds yet — every actionable pick from prompt v8 logs them and is scored when its own horizon ends.</p>}
+        <p className="text-[11px] text-slate-500 mt-1">The odds are what a stock with no drift and its measured volatility would do with the same target and stop. Skill shows as target-first above them; a stop placed inside daily noise shows as early stop-outs.</p>
+      </section>
+
+      <section>
         <h3 className="text-sm font-semibold mb-2">Leaderboard</h3>
         {data.leaderboard?.rows?.length ? (
           <div className="overflow-x-auto">

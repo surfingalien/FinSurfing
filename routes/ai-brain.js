@@ -36,6 +36,10 @@ const { MODE_SECTORS, FMP_SECTORS, DISCOVERY_MODES, BROAD_FIXED, filterMovers, b
 const { fetchDailyBars }    = require('../lib/internal-api')
 const priceRegime           = require('../lib/price-regime')
 const metaLabel             = require('../lib/meta-label')
+const planOdds              = require('../lib/plan-odds')
+const slateDiversify        = require('../lib/slate-diversify')
+const kelly                 = require('../lib/kelly')
+const expectedValue         = require('../lib/expected-value')
 const { tryParseAiJson }    = require('../lib/ai-json')
 const { SCAN_SCHEMA }       = require('../lib/ai-schemas')
 const { canonicalizeEnums } = require('../lib/output-schema')
@@ -536,7 +540,7 @@ async function fetchTaSnapshot(universe, headers) {
   // Cross-section: how far each name sits from what the others in this list explain
   const relMap = quantSnapshot.crossSection(quantBars)
   const quantLines = universe.map(s => quantSnapshot.snapshotLine(s, quantMap.get(s), relMap.get(s))).filter(Boolean)
-  return { lines: universe.map(s => bySymbol.get(s)).filter(Boolean), baselines, patternMap, rsRankMap, levelMap, quantMap, relMap, quantLines }
+  return { lines: universe.map(s => bySymbol.get(s)).filter(Boolean), baselines, patternMap, rsRankMap, levelMap, quantMap, relMap, quantLines, quantBars }
 }
 
 // ── Discovery universe ────────────────────────────────────────────────────────
@@ -646,7 +650,7 @@ async function resolveUniverse({ symbols, scanMode, universeMode, fmpKey }) {
 function logPrediction(symbol, agents, zones, generatedAt, {
   baseline = null, optionsPcRatio = null, taPatterns = null, rsRankAtScan = null,
   regimeAtScan = null, priceRegimeAtScan = null, modelVersion = null, learningsVersion = null, metaProb = null,
-  horizon = null, quantAtScan = null,
+  horizon = null, quantAtScan = null, modelOdds = null, stopNoise = null,
 } = {}) {
   try {
     const dir = path.dirname(PREDICTION_LOG)
@@ -740,6 +744,8 @@ function logPrediction(symbol, agents, zones, generatedAt, {
       // Measured quant evidence the scan showed the model (lib/quant-snapshot.js): a condition KNOWN at scan time,
       // so the track record can be sliced by it (byCharacter / byVolBucket / byResidual) — never an outcome.
       quantAtScan:       quantAtScan ?? null,
+      modelOdds:         modelOdds ?? null,
+      stopNoise:         stopNoise ?? null,
       // outcome fields filled later by a scheduled job
       price7d: null, price30d: null, price90d: null,
     })
@@ -853,6 +859,7 @@ router.post('/analyze', requireAuth, brainLimit, guardAsync('ai-brain/analyze', 
   // Measured quant evidence per symbol (lib/quant-snapshot.js) — context, see SCAN_SYSTEM's QUANT CONTEXT rule
   const quantMap = (taResult.status === 'fulfilled' && taResult.value.quantMap) || new Map()
   const relMap   = (taResult.status === 'fulfilled' && taResult.value.relMap)   || new Map()
+  const quantBarsBySym = (taResult.status === 'fulfilled' && taResult.value.quantBars) || {}
   const quantSnippet = taResult.status === 'fulfilled' && taResult.value.quantLines?.length
     ? '\n\nQUANT CONTEXT (measured from one year of daily bars — volatility forecast, trend/mean-reversion test, tail risk, regime, beta, liquidity, residual vs this list):\n' + taResult.value.quantLines.join('\n')
     : ''
@@ -1208,6 +1215,40 @@ Apply the instructions, JSON schema and rules from the system prompt. Respond ON
       if (qs) stock.quant = { stamp: quantSnapshot.stampOf(qs, relMap.get(stock.symbol)), evidence: quantSnapshot.evidenceItems(qs, relMap.get(stock.symbol)) }
     }
 
+    // Plans and sizing (lib/plan-odds.js, lib/kelly.js, lib/slate-diversify.js):
+    // what the measured volatility says about each actionable pick's target and
+    // stop, a size only from a MEASURED win rate, and how the slate behaves as
+    // a whole. Shown on the cards and logged; none of it drops or resizes a pick.
+    const slate = (() => {
+      try {
+        const actionableSyms = data.rankedStocks.filter(p => p.actionable !== false).map(p => p.symbol)
+        return slateDiversify.diversify(Object.fromEntries(actionableSyms.filter(s => quantBarsBySym[s]).map(s => [s, quantBarsBySym[s]])))
+      } catch (e) { console.warn('[ai-brain] slate diversification failed:', e.message); return null }
+    })()
+    let sizingStats = null
+    try { sizingStats = require('../lib/brain-learnings').computeStats(require('../lib/brain-learnings').readPredictions()) } catch { /* cold start */ }
+    const bracketStore = (() => { try { return require('../lib/bracket-prob').loadStore() } catch { return null } })()
+    for (const stock of data.rankedStocks.filter(p => p.actionable !== false)) {
+      const qs = quantMap.get(stock.symbol)
+      const isCrypto = /-USD$/.test(stock.symbol) || String(stock.type || '').toLowerCase() === 'crypto'
+      const assetType = isCrypto ? 'crypto' : (String(stock.type || '').toLowerCase() === 'etf' ? 'etf' : 'stock')
+      if (qs) stock.planOdds = planOdds.planFacts({
+        targetPct: stock.targetReturn, stopPct: stock.stopLoss, price: stock.currentPrice, snap: qs,
+        sessions: planOdds.sessionsFromCalendarDays(HORIZON_DAYS[horizon] ?? 30),
+      })
+      try {
+        const winProb = (bracketStore && require('../lib/bracket-prob').winProbFor(bracketStore, { assetType })) || kelly.winProbFromStats(sizingStats, { assetType })
+        const ev = expectedValue.evaluateTrade({ winProb: winProb.p, targetReturn: stock.targetReturn, stopLoss: stock.stopLoss, assetType })
+        const dailyVol = qs?.vol?.forecast21 > 0 ? qs.vol.forecast21 / Math.sqrt(252) : null
+        stock.sizing = { ...kelly.sizeIfCalibrated(winProb, { winFrac: ev.netWinFrac, lossFrac: ev.netLossFrac, riskBudget: kelly.RISK_BUDGET, volFrac: dailyVol }), winProbSource: winProb.source ?? null }
+      } catch { /* sizing is optional */ }
+      if (slate) {
+        const w = slate.weights?.[stock.symbol]
+        if (w != null) stock.slateWeightPct = +(w * 100).toFixed(1)
+        if (slate.movesWith[stock.symbol]) stock.movesWith = slate.movesWith[stock.symbol].slice(0, 3)
+      }
+    }
+
     // Second opinion (meta-labelling): would this pick reach its target before
     // its stop, judged from scan-time facts by a model trained on this
     // system's own resolved picks? Shown on every card; it filters only when
@@ -1250,6 +1291,11 @@ Apply the instructions, JSON schema and rules from the system prompt. Respond ON
         metaProb: stock.metaLabel?.prob ?? null,
         horizon,
         quantAtScan: quantSnapshot.stampOf(quantMap.get(stock.symbol), relMap.get(stock.symbol)),
+        // The no-drift odds the levels implied at scan time — scored later
+        // against the triple-barrier label, so whether a pick beats its own
+        // base rate is measured.
+        modelOdds: stock.planOdds?.odds ? { pTarget: stock.planOdds.odds.pTarget, pStop: stock.planOdds.odds.pStop, sessions: stock.planOdds.odds.sessions } : null,
+        stopNoise: stock.planOdds?.stop?.level ?? null,
       })
     }
 
@@ -1329,6 +1375,7 @@ Apply the instructions, JSON schema and rules from the system prompt. Respond ON
       ensemble,
       thresholdApplied,
       coherenceAudit:   coherence.audit,
+      slate: slate && { observations: slate.observations, avgCorrelation: slate.avgCorrelation, effectiveBets: slate.effectiveBets, order: slate.order, excluded: slate.excluded, picks: slate.symbols.length },
       agentsUsed: ['Fundamental Analyst','Technical Analyst','Sentiment Agent','Macro Economist','Risk Manager','Supervisor'],
     })
   } catch (err) {

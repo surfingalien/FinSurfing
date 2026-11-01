@@ -37,6 +37,7 @@ const { computeStats, readPredictions } = require('../lib/brain-learnings')
 const { extractArrayObjects } = require('../lib/ai-json')
 const hrp = require('../lib/hrp')
 const quantSnapshot = require('../lib/quant-snapshot')
+const planOdds = require('../lib/plan-odds')
 
 /**
  * Measured quant evidence on each pick (volatility outlook, trend vs mean
@@ -55,6 +56,14 @@ function attachQuant(recs, yearBars, benchBars = null) {
     const sym = String(r.symbol || '').toUpperCase(), snap = snaps.get(sym)
     if (!snap) continue
     r.quant = { stamp: quantSnapshot.stampOf(snap, rel.get(sym)), evidence: quantSnapshot.evidenceItems(snap, rel.get(sym)) }
+    // What the measured volatility says about this pick's own target and stop
+    // (lib/plan-odds.js): the no-drift odds of the target first, and whether
+    // the stop sits inside ordinary daily noise.
+    const plan = planOdds.planFacts({
+      targetPct: r.targetReturn, stopPct: r.stopLoss, price: r.entryPrice ?? null, snap,
+      sessions: r.period === '6m' ? 126 : 63,
+    })
+    if (plan) r.planOdds = plan
   }
   return recs
 }
@@ -663,6 +672,8 @@ Respond ONLY with a JSON object — no markdown, no explanation, just the JSON:
             regime:       macroData?.regime?.regime ?? null,
             modelVersion: llmUsed === 'claude' ? 'claude-sonnet-4-6' : GROQ_MODEL,
             quant:        r.quant?.stamp ?? null,
+            modelOdds:    r.planOdds?.odds ? { pTarget: r.planOdds.odds.pTarget, pStop: r.planOdds.odds.pStop, sessions: r.planOdds.odds.sessions } : null,
+            stopNoise:    r.planOdds?.stop?.level ?? null,
           },
         })))
     } catch (e) { console.warn('[recommendations] learning-store record failed:', e.message) }

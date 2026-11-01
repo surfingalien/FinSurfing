@@ -485,6 +485,12 @@ export default function AIBrainView({ portfolio, onAnalyze }) {
                     ⚠️ {earningsImminentCount} earnings ≤7d
                   </span>
                 )}
+                {analysis?.slate?.effectiveBets != null && (
+                  <span title={`Average pairwise correlation ${analysis.slate.avgCorrelation} over ${analysis.slate.observations} days of returns`}
+                    className={`flex items-center gap-1 px-2.5 py-1 rounded-lg border ${analysis.slate.effectiveBets < analysis.slate.picks / 2 ? 'bg-amber-500/10 border-amber-500/20 text-amber-300' : 'bg-slate-500/10 border-slate-500/20 text-slate-400'}`}>
+                    ≈ {analysis.slate.effectiveBets} independent bets in {analysis.slate.picks} picks
+                  </span>
+                )}
                 {analysis?.thresholdApplied != null && (
                   <span className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-500/10 border border-slate-500/20 text-slate-400">
                     🎯 auto-filtered · score ≥ {analysis.thresholdApplied}

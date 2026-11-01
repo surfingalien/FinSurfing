@@ -28,6 +28,7 @@ const { requireAuth } = require('../middleware/auth')
 const { computeATR, computeRSI } = require('../lib/technical-indicators')
 const planCheck = require('../lib/plan-check')
 const quantSnapshot = require('../lib/quant-snapshot')
+const planOdds = require('../lib/plan-odds')
 const { wrapUntrusted, UNTRUSTED_POLICY } = require('../lib/untrusted')
 
 const aiRouter = getRouter('agents')
@@ -245,7 +246,14 @@ function quantFacts(bars, benchBars = null) {
   const ms = bs => (bs || []).map(b => ({ ...b, t: b.t * 1000 }))     // chart timestamps are seconds
   const snap = quantSnapshot.symbolSnapshot(ms(bars), { benchBars: benchBars?.length >= 60 ? ms(benchBars) : null })
   if (snap.insufficient) return null
-  return { stamp: quantSnapshot.stampOf(snap), evidence: quantSnapshot.evidenceItems(snap), line: quantSnapshot.snapshotLine('', snap).replace(/^:\s*/, '') }
+  return { snap, stamp: quantSnapshot.stampOf(snap), evidence: quantSnapshot.evidenceItems(snap), line: quantSnapshot.snapshotLine('', snap).replace(/^:\s*/, '') }
+}
+
+/** Odds and stop check of the pipeline's long levels (a swing plan: 21 sessions). Pure. */
+function levelOdds(levels, quant, sessions = 21) {
+  const e = Number(levels?.entry), t = Number(levels?.target_1), st = Number(levels?.stop_loss)
+  if (!quant?.snap || !(e > 0) || !(t > e) || !(st > 0) || !(st < e)) return null
+  return planOdds.planFacts({ targetPct: (t / e - 1) * 100, stopPct: (1 - st / e) * 100, sessions, snap: quant.snap, price: e })
 }
 const round2 = v => (v == null ? null : +v.toFixed(2))
 
@@ -360,6 +368,7 @@ Respond ONLY with JSON (no markdown):
       side: 'long', entry: facts.levels.entry, target: facts.levels.target_1, stop: facts.levels.stop_loss,
       price: facts.price, assetType, winProb: planCheck.winProbFor(assetType),
     })
+    const odds = levelOdds(facts.levels, quant)
     const p2d = {
       ...facts.levels,
       position_quality: facts.position_quality, volatility: facts.volatility,
@@ -367,6 +376,7 @@ Respond ONLY with JSON (no markdown):
       [`${facts.rangeLabel} high`]: facts.rangeHigh, [`${facts.rangeLabel} low`]: facts.rangeLow, rangePos: facts.rangePos,
       check: { verdict: check.verdict, line: planCheck.describeCheck(check) },
       ...(quant ? { quant: { stamp: quant.stamp, evidence: quant.evidence } } : {}),
+      ...(odds ? { planOdds: odds } : {}),
     }
 
     // ── Phase 3: Strategist ──
@@ -382,6 +392,7 @@ entry=$${p2d.entry}, stop=$${p2d.stop_loss}, T1=$${p2d.target_1}, T2=$${p2d.targ
 Code check of the long plan: ${p2d.check.line}
 ${quant ? `MEASURED QUANT CONTEXT (from a year of daily bars — context, not a signal): ${quant.line}
 Size the stop against the one-sigma 21-session move (1σ21d) and the 95% one-day VaR: a stop inside them is inside ordinary noise — say so if it is. "trending" or "mean-reverting" is a measured statistical test; "random walk" means neither was found.
+` : ''}${odds?.text ? `ODDS OF THE LEVELS (computed): ${odds.text} ${odds.stop?.text || ''} A setup worth taking must beat these no-skill odds — say why this one would, or rate it lower.
 ` : ''}
 Write a concise final recommendation (plain text, not JSON). Cover:
 ## Verdict — BULLISH / BEARISH / NEUTRAL
@@ -410,7 +421,7 @@ What to watch for trade confirmation.`
       ? { ...check, line: planCheck.describeCheck(check), strategistVerdict: verdict }
       : { verdict: 'no-trade', ok: true, strategistVerdict: verdict, line: `Strategist verdict ${verdict ?? 'unclear'} — the long levels are reference only.` }
     if (verdict === 'BULLISH')
-      planCheck.recordPlan({ surface: 'agent-hub', symbol: sym, check, price: facts.price, meta: { userId: req.user?.userId ?? null, trend: facts.trend, quant: quant?.stamp ?? null } })
+      planCheck.recordPlan({ surface: 'agent-hub', symbol: sym, check, price: facts.price, meta: { userId: req.user?.userId ?? null, trend: facts.trend, quant: quant?.stamp ?? null, modelOdds: odds?.odds ? { pTarget: odds.odds.pTarget, pStop: odds.odds.pStop, sessions: odds.odds.sessions } : null, stopNoise: odds?.stop?.level ?? null } })
 
     return res.json({
       symbol: sym,
@@ -432,4 +443,4 @@ What to watch for trade confirmation.`
 })
 
 module.exports = router
-module.exports._test = { barsFromChart, pipelineFacts, verdictOf, quantFacts }
+module.exports._test = { barsFromChart, pipelineFacts, verdictOf, quantFacts, levelOdds }
