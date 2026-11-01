@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-label="FinSurfing logo, option 4: App Icon">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1E3A8A"/><stop offset="1" stop-color="#060810"/>
+    </linearGradient>
+    <linearGradient id="gl" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#00FFCC"/><stop offset="1" stop-color="#2563EB"/>
+    </linearGradient>
+  </defs>
+  <rect width="120" height="120" rx="28" fill="url(#bg)"/>
+  <g transform="translate(14 10) scale(.77)">
+    <path d="M26 16 C14 44 30 66 60 68 C44 56 36 40 26 16 Z" fill="url(#gl)"/>
+    <path d="M94 16 C106 44 90 66 60 68 C76 56 84 40 94 16 Z" fill="url(#gl)"/>
+    <path fill-rule="evenodd" fill="#fff" d="M60 4 L68 36 L60 46 L52 36 Z M60 25 a3.2 3.2 0 1 0 .01 0 Z"/>
+    <path d="M57.5 48 L60 84 L62.5 48 Z" fill="#00FFCC"/>
+    <path d="M44 88 L60 97 L44 106 Z M76 88 L60 97 L76 106 Z" fill="#fff" opacity=".92"/>
+  </g>
+</svg>

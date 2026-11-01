@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-label="FinSurfing logo, option 1: Trishul Classic">
+  <!-- horns -->
+  <path d="M28 14 C16 44 32 66 60 68 C42 56 34 40 28 14 Z" fill="#0F172A"/>
+  <path d="M92 14 C104 44 88 66 60 68 C78 56 86 40 92 14 Z" fill="#0F172A"/>
+  <!-- centre spear with third eye -->
+  <path fill-rule="evenodd" fill="#0F172A" d="M60 4 L68 36 L60 46 L52 36 Z M60 25 a3.2 3.2 0 1 0 .01 0 Z"/>
+  <!-- namam -->
+  <path d="M57.5 48 L60 76 L62.5 48 Z" fill="#DC2626"/>
+  <!-- stem -->
+  <rect x="59" y="76" width="2" height="8" fill="#0F172A"/>
+  <!-- damru -->
+  <path d="M43 80 L60 89 L43 98 Z M77 80 L60 89 L77 98 Z" fill="#2563EB"/>
+  <circle cx="60" cy="89" r="2.6" fill="#0F172A"/>
+  <!-- lotus -->
+  <path d="M60 100 C54 104 54 110 60 116 C66 110 66 104 60 100 Z M60 116 C50 114 44 108 42 102 C50 102 56 107 60 116 Z M60 116 C70 114 76 108 78 102 C70 102 64 107 60 116 Z" fill="#2563EB" opacity=".85"/>
+</svg>

@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-label="FinSurfing logo, option 5: Sacred Seal">
+  <circle cx="60" cy="60" r="55" fill="#F9FAFB" stroke="#0F172A" stroke-width="3"/>
+  <circle cx="60" cy="60" r="48" fill="none" stroke="#2563EB" stroke-width="1.2" stroke-dasharray="2 3.2"/>
+  <g transform="translate(24 14) scale(.6)">
+    <path d="M26 16 C14 44 30 66 60 68 C44 56 36 40 26 16 Z" fill="#0F172A"/>
+    <path d="M94 16 C106 44 90 66 60 68 C76 56 84 40 94 16 Z" fill="#0F172A"/>
+    <path fill-rule="evenodd" fill="#0F172A" d="M60 4 L68 36 L60 46 L52 36 Z M60 25 a3.2 3.2 0 1 0 .01 0 Z"/>
+    <path d="M57.5 48 L60 84 L62.5 48 Z" fill="#DC2626"/>
+  </g>
+  <!-- trend line rising through the base, ending at the centre prong height -->
+  <path d="M22 88 L40 80 L52 86 L72 68 L98 60" fill="none" stroke="#2563EB" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="98" cy="60" r="4" fill="#2563EB"/>
+  <path d="M34 98 C44 92 50 104 60 98 S76 92 86 98" fill="none" stroke="#0F172A" stroke-width="3" stroke-linecap="round"/>
+</svg>
