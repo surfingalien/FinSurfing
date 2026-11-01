@@ -64,3 +64,18 @@ test('ml compare reports the baseline and a verdict; clustering returns embeddin
   const m = await post('/ml/compare', { symbol: 'AAA' }); expect(m.status).toBe(200); expect(m.body.baseline.accuracy).toBeGreaterThan(0.3); expect(m.body.verdict).toBeTruthy(); expect(m.body.results.length).toBe(12)
   const k = await post('/ml/cluster', { symbols: ['AAA', 'BBB', 'CCC', 'DDD', 'SPY'] }); expect(k.status).toBe(200); expect(k.body.symbols).toHaveLength(5)
 }, 120000)
+
+test('bars are cached for a few minutes (tab-flipping must not re-hit the data providers) and failures are not', async () => {
+  mockBars.mockClear()
+  await post('/volatility', { symbol: 'AAA' }); await post('/timeseries', { symbol: 'AAA' })
+  expect(mockBars.mock.calls.filter(c => c[0] === 'AAA' && c[1].range === '2y')).toHaveLength(1)   // volatility's 2y fetch, reused
+  mockBars.mockClear(); await post('/volatility', { symbol: 'ZZZZ' }); await post('/volatility', { symbol: 'ZZZZ' })
+  expect(mockBars.mock.calls.filter(c => c[0] === 'ZZZZ')).toHaveLength(2)                          // a failure is retried, not remembered
+})
+test('a basket that only partly loads reports how many loaded and why the rest did not', async () => {
+  const r = await post('/statarb', { symbols: ['AAA', 'BBB', 'CCC', 'ZZZZ'] })
+  expect(r.status).toBe(400); expect(r.body.error).toMatch(/only 3 of 4 symbols loaded \(need 4\).*ZZZZ: no price history/)
+})
+test('a pair with one unloadable symbol says why', async () => {
+  const r = await post('/pairs', { y: 'AAA', x: 'ZZZZ' }); expect(r.status).toBe(400); expect(r.body.error).toMatch(/ZZZZ: no price history/)
+})

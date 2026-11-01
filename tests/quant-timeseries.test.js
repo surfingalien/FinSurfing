@@ -63,3 +63,8 @@ test('2-state HMM separates a calm regime from a stressed one', () => {
   expect(h.probStressed[450]).toBeGreaterThan(0.8); expect(h.probStressed[100]).toBeLessThan(0.2)
   expect(h.transition[0][0] + h.transition[0][1]).toBeCloseTo(1, 9)
 })
+
+test('ADF re-fits the chosen lag on every available observation (matches statsmodels on a random walk: -2.538, not the truncated-sample -2.85)', () => {
+  const r = require('../lib/quant/linalg').rng(3); let p = 0; const rw = Array.from({ length: 600 }, () => (p += r.normal()))
+  const a = T.adf(rw); expect(a.lags).toBe(0); expect(a.stat).toBeCloseTo(-2.538, 2); expect(a.observations).toBe(599)
+})

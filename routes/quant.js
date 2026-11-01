@@ -45,16 +45,25 @@ const sym = (s, name = 'symbol') => { if (typeof s !== 'string' || !SYMBOL.test(
 const syms = (arr, { min = 1, max = 12 } = {}) => { if (!Array.isArray(arr)) bad('symbols must be an array'); const u = [...new Set(arr.map(s => sym(s)))]; if (u.length < min || u.length > max) bad(`between ${min} and ${max} distinct symbols are required`); return u }
 const keysFrom = req => ({ ...(req.headers['x-finnhub-key'] ? { 'x-finnhub-key': req.headers['x-finnhub-key'] } : {}), ...(req.headers['x-fmp-key'] ? { 'x-fmp-key': req.headers['x-fmp-key'] } : {}) })
 
+// Short-lived bar cache: flipping between Quant Lab tabs re-asks for the same history, and the upstream data
+// providers rate-limit. Only successes are cached; five minutes is far inside what a daily bar can change.
+const BAR_TTL_MS = 5 * 60_000, BAR_CACHE_MAX = 300
+const barCache = new Map()
 async function bars(symbol, range, req) {
+  const key = `${symbol}|${range}`, hit = barCache.get(key)
+  if (hit && Date.now() - hit.t < BAR_TTL_MS) return hit.bars
   const b = await fetchDailyBars(symbol, { range, headers: keysFrom(req), timeoutMs: 20_000 })
   if (!b.length) bad(`no price history for ${symbol}${b.reason ? ` (${b.reason})` : ''}`)
+  barCache.set(key, { t: Date.now(), bars: b })
+  if (barCache.size > BAR_CACHE_MAX) barCache.delete(barCache.keys().next().value)
   return b
 }
-async function barsMap(list, range, req) {
+async function barsMap(list, range, req, min = 1) {
   const out = {}; const got = await Promise.all(list.map(s => bars(s, range, req).then(b => [s, b], e => [s, e])))
   const failed = []
   for (const [s, b] of got) { if (b instanceof Error) failed.push(`${s}: ${b.message}`); else out[s] = b }
-  if (Object.keys(out).length < 1) bad(failed.join('; ') || 'no data')
+  const n = Object.keys(out).length
+  if (n < min) bad(`only ${n} of ${list.length} symbols loaded (need ${min})${failed.length ? ` — ${failed.join('; ')}` : ''}`)
   return { map: out, failed }
 }
 const RANGES = new Set(['1y', '2y', '5y'])
@@ -125,7 +134,7 @@ router.use(requireAuth)
 
 router.post('/optimize', heavy, route('quant/optimize', async (req, res) => {
   startJsonHeartbeat(res)
-  const list = syms(req.body?.symbols, { min: 2, max: 12 }), { map, failed } = await barsMap(list, rangeOf(req.body?.range, '5y'), req)
+  const list = syms(req.body?.symbols, { min: 2, max: 12 }), { map, failed } = await barsMap(list, rangeOf(req.body?.range, '5y'), req, 2)
   const r = optim.compareMethods(map, { cap: num(req.body?.cap, 'cap', { min: 0.1, max: 1, def: 0.6 }) })
   const f = Object.keys(map).length >= 2 ? (() => { const hrp = require('../lib/hrp'), al = hrp.alignReturns(map), lw = optim.ledoitWolf(al.returns), mu = L.columns(al.returns).map(c => L.mean(c) * 252), S = lw.cov.map(rw => rw.map(v => v * 252)); const ef = optim.efficientFrontier(mu, S, { points: 20 }); return { symbols: al.symbols, points: ef.points, minVariance: { ...ef.minVariance, w: undefined, weights: Object.fromEntries(al.symbols.map((s, i) => [s, +ef.minVariance.w[i].toFixed(4)])) }, maxSharpe: { ret: ef.maxSharpe.ret, vol: ef.maxSharpe.vol, sharpe: ef.maxSharpe.sharpe, weights: Object.fromEntries(al.symbols.map((s, i) => [s, +ef.maxSharpe.w[i].toFixed(4)])) }, note: 'Frontier uses unshrunk historical returns — it shows the shape of the trade-off, not a forecast.' } })() : null
   return { ...r, frontier: f, skipped: failed }
@@ -143,21 +152,21 @@ router.post('/timeseries', heavy, route('quant/timeseries', async req => {
   return out
 }))
 
-router.post('/pairs', heavy, route('quant/pairs', async req => { const y = sym(req.body?.y, 'y'), x = sym(req.body?.x, 'x'); if (y === x) bad('choose two different symbols'); const { map } = await barsMap([y, x], rangeOf(req.body?.range, '5y'), req); if (!map[y] || !map[x]) bad('could not load both symbols'); return { y, x, ...strat.testPair(map[y], map[x], { kalman: req.body?.kalman === true, entryZ: num(req.body?.entryZ, 'entryZ', { min: 0.5, max: 4, def: 2 }), costBps: num(req.body?.costBps, 'costBps', { min: 0, max: 100, def: 10 }) }) } }))
-router.post('/pairs/screen', heavy, route('quant/pairs/screen', async (req, res) => { startJsonHeartbeat(res); const list = syms(req.body?.symbols, { min: 3, max: 10 }), { map, failed } = await barsMap(list, rangeOf(req.body?.range, '5y'), req); return { ...strat.screenPairs(map), skipped: failed } }))
-router.post('/statarb', heavy, route('quant/statarb', async req => { const list = syms(req.body?.symbols, { min: 4, max: 20 }), { map, failed } = await barsMap(list, '2y', req); return { ...strat.statArbPca(map, { k: Math.round(num(req.body?.k, 'k', { min: 1, max: 5, def: 3 })) }), skipped: failed } }))
+router.post('/pairs', heavy, route('quant/pairs', async req => { const y = sym(req.body?.y, 'y'), x = sym(req.body?.x, 'x'); if (y === x) bad('choose two different symbols'); const { map, failed } = await barsMap([y, x], rangeOf(req.body?.range, '5y'), req, 2); if (!map[y] || !map[x]) bad(`could not load both symbols — ${failed.join('; ')}`); return { y, x, ...strat.testPair(map[y], map[x], { kalman: req.body?.kalman === true, entryZ: num(req.body?.entryZ, 'entryZ', { min: 0.5, max: 4, def: 2 }), costBps: num(req.body?.costBps, 'costBps', { min: 0, max: 100, def: 10 }) }) } }))
+router.post('/pairs/screen', heavy, route('quant/pairs/screen', async (req, res) => { startJsonHeartbeat(res); const list = syms(req.body?.symbols, { min: 3, max: 10 }), { map, failed } = await barsMap(list, rangeOf(req.body?.range, '5y'), req, 2); return { ...strat.screenPairs(map), skipped: failed } }))
+router.post('/statarb', heavy, route('quant/statarb', async req => { const list = syms(req.body?.symbols, { min: 4, max: 20 }), { map, failed } = await barsMap(list, '2y', req, 4); return { ...strat.statArbPca(map, { k: Math.round(num(req.body?.k, 'k', { min: 1, max: 5, def: 3 })) }), skipped: failed } }))
 router.post('/reversal', heavy, route('quant/reversal', async req => { const s = sym(req.body?.symbol), b = await bars(s, '5y', req); return { symbol: s, ...strat.shortTermReversal(b, { k: num(req.body?.k, 'k', { min: 0.5, max: 4, def: 1.5 }), hold: Math.round(num(req.body?.hold, 'hold', { min: 1, max: 10, def: 1 })) }) } }))
 
 router.post('/risk/capm', heavy, route('quant/risk/capm', async req => {
-  const s = sym(req.body?.symbol), bm = sym(req.body?.benchmark || 'SPY', 'benchmark'), { map } = await barsMap([s, bm], rangeOf(req.body?.range, '2y'), req)
-  if (!map[s] || !map[bm]) bad('could not load both series'); const hrp = require('../lib/hrp'), al = hrp.alignReturns({ [s]: map[s], [bm]: map[bm] })
+  const s = sym(req.body?.symbol), bm = sym(req.body?.benchmark || 'SPY', 'benchmark'), { map, failed } = await barsMap([s, bm], rangeOf(req.body?.range, '2y'), req, 2)
+  if (!map[s] || !map[bm]) bad(`could not load both series — ${failed.join('; ')}`); const hrp = require('../lib/hrp'), al = hrp.alignReturns({ [s]: map[s], [bm]: map[bm] })
   return { symbol: s, benchmark: bm, ...risk.capm(al.returns.map(r => r[al.symbols.indexOf(s)]), al.returns.map(r => r[al.symbols.indexOf(bm)]), { rf: num(req.body?.rf, 'rf', { min: 0, max: 0.3, def: 0.04 }) }), bootstrapSharpe: risk.bootstrapSharpe(al.returns.map(r => r[al.symbols.indexOf(s)]), { B: 400 }) }
 }))
-router.post('/risk/copula', heavy, route('quant/risk/copula', async req => { const a = sym(req.body?.a, 'a'), b = sym(req.body?.b, 'b'); const { map } = await barsMap([a, b], '5y', req); const hrp = require('../lib/hrp'), al = hrp.alignReturns(map); return { a, b, ...risk.gaussianCopula(al.returns.map(r => r[0]), al.returns.map(r => r[1])) } }))
-router.post('/risk/pca', heavy, route('quant/risk/pca', async req => { const list = syms(req.body?.symbols, { min: 3, max: 20 }), { map } = await barsMap(list, '2y', req), al = require('../lib/hrp').alignReturns(map), p = risk.pca(al.returns, { components: 3 }); return { symbols: al.symbols, explained: p.explained, cumulative: p.cumulative, loadings: p.loadings.map(v => Object.fromEntries(al.symbols.map((s, i) => [s, +v[i].toFixed(4)]))) } }))
+router.post('/risk/copula', heavy, route('quant/risk/copula', async req => { const a = sym(req.body?.a, 'a'), b = sym(req.body?.b, 'b'); const { map } = await barsMap([a, b], '5y', req, 2); const hrp = require('../lib/hrp'), al = hrp.alignReturns(map); return { a, b, ...risk.gaussianCopula(al.returns.map(r => r[0]), al.returns.map(r => r[1])) } }))
+router.post('/risk/pca', heavy, route('quant/risk/pca', async req => { const list = syms(req.body?.symbols, { min: 3, max: 20 }), { map } = await barsMap(list, '2y', req, 3), al = require('../lib/hrp').alignReturns(map), p = risk.pca(al.returns, { components: 3 }); return { symbols: al.symbols, explained: p.explained, cumulative: p.cumulative, loadings: p.loadings.map(v => Object.fromEntries(al.symbols.map((s, i) => [s, +v[i].toFixed(4)]))) } }))
 
 router.post('/ml/compare', heavy, route('quant/ml/compare', async (req, res) => { startJsonHeartbeat(res); const s = sym(req.body?.symbol), b = await bars(s, '5y', req); return { symbol: s, ...mlc.compareModels(b, { horizon: Math.round(num(req.body?.horizon, 'horizon', { min: 1, max: 20, def: 5 })) }) } }))
-router.post('/ml/cluster', heavy, route('quant/ml/cluster', async req => { const list = syms(req.body?.symbols, { min: 4, max: 30 }), { map, failed } = await barsMap(list, '2y', req); return { ...mlc.clusterSymbols(map, { k: Math.round(num(req.body?.k, 'k', { min: 2, max: 6, def: 3 })) }), skipped: failed } }))
+router.post('/ml/cluster', heavy, route('quant/ml/cluster', async req => { const list = syms(req.body?.symbols, { min: 4, max: 30 }), { map, failed } = await barsMap(list, '2y', req, 4); return { ...mlc.clusterSymbols(map, { k: Math.round(num(req.body?.k, 'k', { min: 2, max: 6, def: 3 })) }), skipped: failed } }))
 router.post('/ml/rl', heavy, route('quant/ml/rl', async (req, res) => { startJsonHeartbeat(res); const s = sym(req.body?.symbol), b = await bars(s, '5y', req); return { symbol: s, ...nn.qLearning(b) } }))
 
 module.exports = router
