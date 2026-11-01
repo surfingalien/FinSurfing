@@ -14,7 +14,7 @@ import {
   Network, Clock, Radio, BrainCircuit, FolderOpen,
   Search, DollarSign, LayoutGrid, CalendarDays, Zap, FileText, Boxes, Mountain,
   Share2,
-  Filter, Microscope,
+  Filter, Microscope, Calculator,
 } from 'lucide-react'
 
 // ── Sidebar nav groups ────────────────────────────────────────────────────────
@@ -84,6 +84,7 @@ export const NAV_GROUPS = [
     items: [
       { id: 'strategies', label: 'Strategies', icon: GitBranch },
       { id: 'backtest',   label: 'Backtester', icon: FlaskConical },
+      { id: 'quant-lab',  label: 'Quant Lab',  icon: Calculator },
     ],
   },
   {

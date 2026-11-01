@@ -42,3 +42,4 @@ data/ai-calls.jsonl
 trader/
 # /arena skill (.claude/skills/arena) run folders: hundreds of sub-agent files per run.
 .arena/
+tools/quant-validation/out/
