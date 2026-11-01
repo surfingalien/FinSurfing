@@ -37,6 +37,8 @@ test('calculators are public, whitelisted and size-capped', async () => {
   const list = await request(app).get('/api/quant/calc'); expect(list.body.calculators).toContain('merger-arb')
   const r = await post('/calc/merger-arb', { targetPrice: 47, cash: 50, daysToClose: 120, breakPrice: 35 }, false); expect(r.status).toBe(200); expect(r.body.impliedProbabilityOfClose).toBeCloseTo(0.8, 6)
   expect((await post('/calc/rm-rf', {}, false)).status).toBe(400)
+  const hs = await post('/calc/heston', { S: 100, K: 100, r: 0.03, T: 1, v0: 0.04, theta: 0.04, kappa: 2, xi: 0.5, rho: -0.7 }, false); expect(hs.status).toBe(200); expect(hs.body.price).toBeGreaterThan(5); expect(hs.body.impliedVol).toBeGreaterThan(0.15)
+  const sb = await post('/calc/sabr', { F: 100, T: 1, alpha: 0.2, beta: 1, rho: -0.4, nu: 0.5 }, false); expect(sb.body.smile).toHaveLength(5)
   expect((await post('/calc/merger-arb', { targetPrice: 47, cash: 50, daysToClose: 120, breakPrice: 99 }, false)).status).toBe(400)
   const st = await post('/risk/stress', { positions: [{ symbol: 'A', value: 1000, beta: 1.5 }] }, false); expect(st.body.scenarios.find(s => s.id === 'mkt-20').pnl).toBeCloseTo(-300, 6)
   expect((await post('/risk/bayes', { wins: 60, n: 100 }, false)).body.probAbove).toBeGreaterThan(0.95)

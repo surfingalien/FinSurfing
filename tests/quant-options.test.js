@@ -62,3 +62,22 @@ test('gamma scalping: realised > implied earns, realised < implied loses; identi
   const g = O.greeks({ ...base, r: 0, type: 'call' })
   expect(O.thetaGammaIdentity({ S: 100, gamma: g.gamma, sigmaImplied: 0.2 }).thetaYear).toBeCloseTo(O.greeks({ ...base, r: 0, type: 'call' }).theta, 1)
 })
+
+test('Heston collapses to Black–Scholes when vol-of-vol vanishes and gives a skew with negative correlation', () => {
+  const h = O.heston({ S: 100, K: 100, r: 0.05, T: 1, v0: 0.04, kappa: 2, theta: 0.04, xi: 0.0001, rho: -0.5 })
+  expect(h).toBeCloseTo(O.blackScholes({ ...base, type: 'call' }), 2)
+  const put = O.heston({ S: 100, K: 100, r: 0.05, T: 1, v0: 0.04, kappa: 2, theta: 0.04, xi: 0.0001, rho: -0.5, type: 'put' })
+  expect(put).toBeCloseTo(5.5735, 2)
+  const sk = k => O.hestonImpliedVol({ S: 100, K: k, r: 0.02, T: 0.5, v0: 0.04, kappa: 2, theta: 0.04, xi: 0.6, rho: -0.7 })
+  expect(sk(85)).toBeGreaterThan(sk(100)); expect(sk(100)).toBeGreaterThan(sk(115))
+  expect(() => O.heston({ S: 100, K: 100, r: 0, T: 1, v0: 0.04, kappa: 2, theta: 0.04, xi: 0.5, rho: 1 })).toThrow(/rho/)
+})
+test('SABR: flat when vol-of-vol is zero, downside skew for negative rho, ATM close to alpha for beta = 1', () => {
+  const flat = [80, 100, 120].map(K => O.sabrVol({ F: 100, K, T: 1, alpha: 0.2, beta: 1, rho: 0, nu: 0 }))
+  flat.forEach(v => expect(v).toBeCloseTo(0.2, 6))
+  const s = k => O.sabrVol({ F: 100, K: k, T: 1, alpha: 0.2, beta: 0.7, rho: -0.4, nu: 0.5 })
+  expect(s(80)).toBeGreaterThan(s(100)); expect(s(80)).toBeGreaterThan(s(120))          // skew: low strikes carry more vol
+  expect(s(120)).toBeGreaterThan(s(100))                                                       // and the smile curves up (vol-of-vol)
+  expect(O.sabrSmile({ F: 100, T: 1, alpha: 0.2, beta: 1, rho: 0, nu: 0.4, strikes: [90, 100, 110] })).toHaveLength(3)
+  expect(() => O.sabrVol({ F: 100, K: 100, T: 1, alpha: -1, beta: 1, rho: 0, nu: 0.4 })).toThrow()
+})

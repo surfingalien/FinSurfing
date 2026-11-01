@@ -95,6 +95,8 @@ const CALCS = {
   carry: calc.carryTrade, basis: calc.basisTrade, 'roll-yield': calc.rollYield, 'merger-arb': calc.mergerArb, convertible: calc.convertibleArb,
   merton: calc.merton, vasicek: calc.vasicek, 'yield-curve': a => calc.yieldCurve(a.rates || {}, { history: a.history }), dispersion: calc.dispersion,
   'vol-term-structure': a => calc.volTermStructure(a.points || []), skew: calc.skewMetrics, 'skew-delta': calc.skewAwareDelta,
+  heston: a => { const o = { ...a, type: a.type === 'put' ? 'put' : 'call' }; const price = opt.heston(o); return { price, impliedVol: opt.hestonImpliedVol(o), note: 'Fourier-inversion Heston price. v0 and theta are variances (σ²).' } },
+  sabr: a => ({ smile: opt.sabrSmile({ ...a, strikes: a.strikes || [0.8, 0.9, 1, 1.1, 1.2].map(m => m * a.F) }), note: 'Hagan et al. (2002) lognormal SABR implied volatility; alpha is on the scale of F^(1−β).' }),
   'market-making': calc.avellanedaStoikov, execution: calc.executionSchedule, shortfall: calc.implementationShortfall,
 }
 router.get('/calc', (_req, res) => res.json({ calculators: Object.keys(CALCS) }))

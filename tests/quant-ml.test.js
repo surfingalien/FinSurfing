@@ -42,3 +42,9 @@ test('t-SNE keeps neighbours together: 2-D embedding of three groups stays separ
   const { embedding } = M.tsne(X, { perplexity: 10, iters: 300, seed: 3 })
   expect(embedding).toHaveLength(90); expect(purity(M.kmeans(embedding, 3, { seed: 1 }).labels, truth)).toBeGreaterThan(0.9)
 })
+
+test('KNN regression recovers a smooth function', () => {
+  const g = L.rng(12), X = Array.from({ length: 600 }, () => [g.uniform() * 6]), y = X.map(r => Math.sin(r[0]) + 0.05 * g.normal())
+  const m = M.knnRegressor({ k: 10 }).fit(X, y), p = m.predict([[1.5], [3.0]])
+  expect(p[0]).toBeCloseTo(Math.sin(1.5), 1); expect(p[1]).toBeCloseTo(Math.sin(3.0), 1)
+})
