@@ -27,6 +27,7 @@ const { getRouter } = require('../lib/ai-router')
 const { requireAuth } = require('../middleware/auth')
 const { computeATR, computeRSI } = require('../lib/technical-indicators')
 const planCheck = require('../lib/plan-check')
+const quantSnapshot = require('../lib/quant-snapshot')
 const { wrapUntrusted, UNTRUSTED_POLICY } = require('../lib/untrusted')
 
 const aiRouter = getRouter('agents')
@@ -233,11 +234,19 @@ function barsFromChart(data) {
   const r = data?.chart?.result?.[0]
   const ts = r?.timestamp || []
   const q = r?.indicators?.quote?.[0] || {}
-  return ts.map((t, i) => ({ t, h: q.high?.[i], l: q.low?.[i], c: q.close?.[i] }))
+  return ts.map((t, i) => ({ t, o: q.open?.[i], h: q.high?.[i], l: q.low?.[i], c: q.close?.[i], v: q.volume?.[i] ?? 0 }))
     .filter(b => b.h > 0 && b.l > 0 && b.c > 0)
 }
 
 const mean = a => a.reduce((s, v) => s + v, 0) / a.length
+
+/** Measured quant evidence for the pipeline (lib/quant-snapshot.js); null when history is too short. Pure. */
+function quantFacts(bars, benchBars = null) {
+  const ms = bs => (bs || []).map(b => ({ ...b, t: b.t * 1000 }))     // chart timestamps are seconds
+  const snap = quantSnapshot.symbolSnapshot(ms(bars), { benchBars: benchBars?.length >= 60 ? ms(benchBars) : null })
+  if (snap.insufficient) return null
+  return { stamp: quantSnapshot.stampOf(snap), evidence: quantSnapshot.evidenceItems(snap), line: quantSnapshot.snapshotLine('', snap).replace(/^:\s*/, '') }
+}
 const round2 = v => (v == null ? null : +v.toFixed(2))
 
 /** Everything the pipeline states as a number, from the bars. Pure. */
@@ -309,15 +318,19 @@ router.post('/pipeline', async (req, res) => {
   try {
     // ── Phase 1: Analyst ──
     const p1t0 = Date.now()
-    const [quoteR, chartR, macroR] = await Promise.all([
+    const [quoteR, chartR, macroR, spyR] = await Promise.all([
       timedFetch(`${base}/api/quote?symbols=${enc}`,                         { headers: hdrs }),
       // A year: SMA200 and a real 52-week range need it (6 months gave neither)
       timedFetch(`${base}/api/chart?symbol=${enc}&interval=1d&range=1y`,     { headers: hdrs }),
       timedFetch(`${base}/api/macro/summary`,                                { headers: hdrs }),
+      // SPY for the beta in the quant evidence — best-effort
+      sym === 'SPY' ? Promise.resolve({ data: null }) : timedFetch(`${base}/api/chart?symbol=SPY&interval=1d&range=1y`, { headers: hdrs }),
     ])
 
     const q     = quoteR.data?.quoteResponse?.result?.[0] ?? null
-    const facts = pipelineFacts(barsFromChart(chartR.data), q?.regularMarketPrice)
+    const bars  = barsFromChart(chartR.data)
+    const facts = pipelineFacts(bars, q?.regularMarketPrice)
+    const quant = quantFacts(bars, barsFromChart(spyR?.data))
     // No price at all used to become $0 and every level was computed off it.
     if (!facts.price)
       return res.status(422).json({ error: `No price for ${sym}: ${quoteR.error || chartR.error || 'no data provider returned one'}` })
@@ -353,6 +366,7 @@ Respond ONLY with JSON (no markdown):
       atr14: facts.atr14, atrPct: facts.atrPct,
       [`${facts.rangeLabel} high`]: facts.rangeHigh, [`${facts.rangeLabel} low`]: facts.rangeLow, rangePos: facts.rangePos,
       check: { verdict: check.verdict, line: planCheck.describeCheck(check) },
+      ...(quant ? { quant: { stamp: quant.stamp, evidence: quant.evidence } } : {}),
     }
 
     // ── Phase 3: Strategist ──
@@ -366,7 +380,9 @@ Bear: ${(p1d.bear_points || []).join(' | ')}
 QUANT (computed in code; LONG levels only — this app does not short):
 entry=$${p2d.entry}, stop=$${p2d.stop_loss}, T1=$${p2d.target_1}, T2=$${p2d.target_2}, R/R=${p2d.risk_reward}, quality=${p2d.position_quality}, volatility=${p2d.volatility}
 Code check of the long plan: ${p2d.check.line}
-
+${quant ? `MEASURED QUANT CONTEXT (from a year of daily bars — context, not a signal): ${quant.line}
+Size the stop against the one-sigma 21-session move (1σ21d) and the 95% one-day VaR: a stop inside them is inside ordinary noise — say so if it is. "trending" or "mean-reverting" is a measured statistical test; "random walk" means neither was found.
+` : ''}
 Write a concise final recommendation (plain text, not JSON). Cover:
 ## Verdict — BULLISH / BEARISH / NEUTRAL
 One-sentence rationale with specific numbers.
@@ -394,7 +410,7 @@ What to watch for trade confirmation.`
       ? { ...check, line: planCheck.describeCheck(check), strategistVerdict: verdict }
       : { verdict: 'no-trade', ok: true, strategistVerdict: verdict, line: `Strategist verdict ${verdict ?? 'unclear'} — the long levels are reference only.` }
     if (verdict === 'BULLISH')
-      planCheck.recordPlan({ surface: 'agent-hub', symbol: sym, check, price: facts.price, meta: { userId: req.user?.userId ?? null, trend: facts.trend } })
+      planCheck.recordPlan({ surface: 'agent-hub', symbol: sym, check, price: facts.price, meta: { userId: req.user?.userId ?? null, trend: facts.trend, quant: quant?.stamp ?? null } })
 
     return res.json({
       symbol: sym,
@@ -416,4 +432,4 @@ What to watch for trade confirmation.`
 })
 
 module.exports = router
-module.exports._test = { barsFromChart, pipelineFacts, verdictOf }
+module.exports._test = { barsFromChart, pipelineFacts, verdictOf, quantFacts }

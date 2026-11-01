@@ -7,6 +7,7 @@ import { getApiKeyHeaders } from '../../../services/api'
 import { saveTelemetryRun } from './shared'
 import { useAuth } from '../../../contexts/AuthContext'
 import SynthesisPanel from './SynthesisPanel'
+import QuantEvidence from '../../shared/QuantEvidence'
 
 // ── ─────────────────────────────────────────────────────────────────────────────
 //    TAB 2 — Pipeline (3-phase sequential)
@@ -146,6 +147,7 @@ export default function PipelineTab() {
               <PhaseCard key={p.id} phase={p} active={p.status !== 'idle'} />
             ))}
           </div>
+          <QuantEvidence quant={result.phases?.find(p => p.id === 'quant')?.data?.quant} />
           {result.synthesis && (
             <SynthesisPanel text={result.synthesis} llmUsed={result.llmUsed} />
           )}

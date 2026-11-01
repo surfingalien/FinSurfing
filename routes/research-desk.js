@@ -27,6 +27,7 @@ const { THESIS_SCHEMA, BULL_SCHEMA, BEAR_SCHEMA, DECISION_SCHEMA } = require('..
 const { tryParseAiJson }       = require('../lib/ai-json')
 const { CircuitOpenError }     = require('../lib/circuit-breaker')
 const { fetchDailyBars }       = require('../lib/internal-api')
+const quantSnapshot            = require('../lib/quant-snapshot')
 const { compactTaLine }        = require('../lib/technical-indicators')
 const { isLastBarForming }     = require('../lib/bar-session')
 const { startJsonHeartbeat }   = require('../lib/http-heartbeat')
@@ -183,7 +184,7 @@ async function ownNoteFor(userId, sym) {
 async function gatherEvidence(sym, req) {
   const headers   = fwdKeys(req)
   const assetType = assetTypeOf(sym)
-  const [bars, fundamentals, macro, regimes, secFacts] = await Promise.all([
+  const [bars, fundamentals, macro, regimes, secFacts, spyBars] = await Promise.all([
     fetchDailyBars(sym, { range: '2y', headers, timeoutMs: 25_000 }),
     assetType === 'stock' ? fetchFundamentals(sym, headers) : Promise.resolve({ error: `not applicable to ${assetType}` }),
     macroSnapshot(),
@@ -191,6 +192,7 @@ async function gatherEvidence(sym, req) {
     // Reported figures straight from SEC filings — keyless, so the dossier keeps
     // its fundamentals when the FMP quota is spent.
     assetType === 'stock' ? require('../lib/sec-facts').getCompanyFacts(sym).catch(() => null) : Promise.resolve(null),
+    sym === 'SPY' ? Promise.resolve(null) : fetchDailyBars('SPY', { range: '2y', headers, timeoutMs: 10_000 }).catch(() => null),
   ])
   if (bars.length < 60) {
     const err = new Error(bars.length
@@ -200,6 +202,7 @@ async function gatherEvidence(sym, req) {
     throw err
   }
 
+  const quantSnap = quantSnapshot.symbolSnapshot(bars, { benchBars: spyBars?.length >= 60 ? spyBars : null })
   const taLine = compactTaLine(sym, bars.map(b => b.o ?? b.c), bars.map(b => b.h ?? b.c), bars.map(b => b.l ?? b.c), bars.map(b => b.c), bars.map(b => b.v ?? 0),
     { lastBarForming: isLastBarForming(bars, { isCrypto: isCryptoSymbol(sym) }) })
   let records = [], stats = null
@@ -219,12 +222,13 @@ async function gatherEvidence(sym, req) {
     exposure:   exposureFor(sym),
     track:      desk.trackFor(records, { symbol: sym, assetType, horizon }),
     ownNote:    await ownNoteFor(effectiveUserId(req), sym),
+    quant:      quantSnapshot.evidenceItems(quantSnap),
   })
   const bracketProb = require('../lib/bracket-prob')
   const winProb = bracketProb.winProbFor(bracketProb.loadStore(), { assetType }) || kelly.winProbFromStats(stats, { assetType })
   const levels = require('../lib/trade-levels').levelInputs(bars)
   const referenceLevels = levels ? require('../lib/trade-levels').tradeLevels({ price: facts.last, atr: levels.atr, support: levels.support, resistance: levels.resistance }) : null
-  return { sym, assetType, facts, items, gaps, winProb, levels, referenceLevels, company: fundamentals?.company?.name ?? null }
+  return { sym, assetType, facts, items, gaps, winProb, levels, referenceLevels, company: fundamentals?.company?.name ?? null, quant: quantSnapshot.stampOf(quantSnap), quantSnap }
 }
 
 // ── Journal ───────────────────────────────────────────────────────────────────
@@ -276,6 +280,9 @@ router.get('/track-record', requireAuth, (req, res) => {
       autoTune: stats.autoTune, baseline: stats.baseline,
       exitQuality: stats.exitQuality,
       byPriceRegime: stats.byPriceRegime,
+      // Measured quant evidence at scan time (lib/quant-snapshot.js) — scan-time
+      // conditions, so they are edge-report dimensions too.
+      byCharacter: stats.byCharacter, byVolBucket: stats.byVolBucket, byResidual: stats.byResidual,
     },
     // The benchmarks' current trend/volatility state and what followed each
     // state historically (last fetched by a scan or a dossier — no network here).
@@ -468,7 +475,7 @@ router.post('/:symbol/thesis', requireAuth, thesisLimit, async (req, res) => {
     try {
       learningStore.recordDecision({
         surface: 'research', symbol: sym, action: 'buy', price: ev.facts.last,
-        meta: { assetType: ev.assetType, targetReturn: judgement.zones.targetReturn, stopLoss: judgement.zones.stopLoss, horizonDays: judgement.horizonDays, thesisId: entry.id, method },
+        meta: { assetType: ev.assetType, targetReturn: judgement.zones.targetReturn, stopLoss: judgement.zones.stopLoss, horizonDays: judgement.horizonDays, thesisId: entry.id, method, quant: ev.quant ?? null },
       })
     } catch (e) { console.warn('[research-desk] learning-store write failed:', e.message) }
   }

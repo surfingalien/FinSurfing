@@ -5,6 +5,7 @@ import {
 import { useAIWatchlist } from '../../../hooks/useAIWatchlist'
 import { TYPE_CONFIG } from './config'
 import { signedPct } from '../../../utils/formatPct'
+import QuantEvidence from '../../shared/QuantEvidence'
 
 const RISK_CONFIG = {
   Low:    { color: 'text-emerald-400', bg: 'bg-emerald-500/10', dot: 'bg-emerald-400' },
@@ -131,6 +132,8 @@ export function RecCard({ rec, onAnalyze, liveQuote }) {
           )}
         </div>
       )}
+
+      <QuantEvidence quant={rec.quant} className="mb-2" />
 
       {/* Thesis */}
       <p className="text-xs text-slate-400 leading-relaxed mb-2">{rec.thesis}</p>

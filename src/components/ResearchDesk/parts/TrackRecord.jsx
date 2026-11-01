@@ -190,6 +190,19 @@ export default function TrackRecord({ data, onAdoptBrackets }) {
       </section>
 
       <section>
+        <h3 className="text-sm font-semibold mb-2 flex items-center gap-1.5"><Activity className="w-3.5 h-3.5" /> AI picks by measured quant context</h3>
+        {[['byCharacter', 'Price character'], ['byVolBucket', 'Volatility outlook'], ['byResidual', 'Against the rest of the scan']].some(([k]) => b?.[k] && Object.keys(b[k]).length) ? (
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+            {[['byCharacter', 'Price character'], ['byVolBucket', 'Volatility outlook'], ['byResidual', 'Against the rest of the scan']].flatMap(([k, title]) =>
+              Object.entries(b?.[k] || {}).map(([label, c]) => (
+                <Rate key={`${k}:${label}`} label={`${title}: ${label}`} rate={c.alphaWinRate} lo={c.alphaWinRateLo} hi={c.alphaWinRateHi} n={c.nBench} k={c.alphaWins} />
+              )))}
+          </div>
+        ) : <p className="text-[12px] text-slate-500">No resolved picks carry the quant stamp yet — every scan from prompt v8 on records it (volatility forecast, variance-ratio trend test, tail risk, peer residual).</p>}
+        <p className="text-[11px] text-slate-500 mt-1">Measured from a year of daily bars at scan time. A difference between rows counts only where the intervals do not overlap; the edge report applies the multiple-testing correction.</p>
+      </section>
+
+      <section>
         <h3 className="text-sm font-semibold mb-2 flex items-center gap-1.5"><Layers className="w-3.5 h-3.5" /> Factors that rank stocks</h3>
         {data.factors ? (
           <div className="space-y-2">

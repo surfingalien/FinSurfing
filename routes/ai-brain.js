@@ -42,6 +42,7 @@ const { canonicalizeEnums } = require('../lib/output-schema')
 const shadowBaseline        = require('../lib/shadow-baseline')
 const { outcomeRange }      = require('../lib/outcome-range')
 const { baselineFromBars }  = require('../lib/ml-baseline')
+const quantSnapshot         = require('../lib/quant-snapshot')
 const { factorScores, factorLine } = require('../lib/factor-model')
 const { startJsonHeartbeat } = require('../lib/http-heartbeat')
 const { guardAsync } = require('../lib/async-route')
@@ -79,7 +80,7 @@ const { PREDICTION_LOG } = require('../lib/prediction-log-path')
 // v6: constrained decoding — the scan is decoded against SCAN_SCHEMA
 // (lib/ai-schemas.js), so verdict/confidence/volumeSignal can only be the
 // declared values. Same prompt text; a different decoder is a different system.
-const SCAN_PROMPT_VERSION = 7
+const SCAN_PROMPT_VERSION = 8   // 8 = QUANT CONTEXT block (lib/quant-snapshot.js)
 
 // The fixed part of every scan prompt: role, output schema and scoring rules.
 // It contains NO interpolation, so it is byte-identical across scans and is
@@ -176,6 +177,7 @@ Rules:
 - highConviction: set true ONLY when ≥3 of these independent confirming signals are present: (1) opportunistic or cluster insider purchases in the CLASSIFIED INSIDER BUYS lines (last 90d), (2) analyst target >15% upside with ≥5 analysts, (3) volumeSignal=Confirming, (4) compositeScore ≥ 80, (5) ensemble cross-model confirmed, (6) macroScore ≥ 75 (clear macro tailwind), (7) OPTIONS FLOW P/C<0.70🟢 with at least 1 unusual-CALL (smart-money bullish positioning); otherwise false
 - catalyst: the single most time-sensitive trigger for this pick (e.g. "earnings beat expected next week", "Fed pivot boosts rate-sensitive sector", "breakout above 200-day MA"); required for all picks
 - thesisAssumptions: 3 specific, falsifiable conditions that must hold for the bull case to play out
+- QUANT CONTEXT lines are MEASURED from daily bars (context, not signals — never a fixed score adjustment). vol21f = forecast annual volatility for the next 21 sessions and 1σ21d its one-standard-deviation move: size targetReturn and stopLoss against it (a target several 1σ21d away is unlikely inside a short horizon; a stop inside VaR95 is inside an ordinary bad day). char = trend vs mean reversion from a variance-ratio test: a breakout/momentum thesis on a "mean-reverting" name, or a dip-buy on a "trending" one, must say why this time differs. state=stressed means the name is in its high-volatility regime. resid = how far the name has moved away from what the other names in THIS list explain (lagging ≠ cheap; it is a dislocation to explain). Low ADV / high impact = harder to enter and exit.
 - dataSource: always "live" — every symbol in the request carries a current price; use those prices, never remembered ones
 - Only rank symbols from the Universe list in the request
 - STRICTLY respect all ≤N word limits`
@@ -477,12 +479,22 @@ async function fetchTaSnapshot(universe, headers) {
   const patternMap = new Map()
   const ret20dMap  = new Map() // 20-day return per symbol for intra-universe RS ranking
   const levelMap   = new Map() // price/ATR/support/resistance per symbol (lib/trade-levels.js)
+  const quantMap   = new Map() // measured quant evidence per symbol (lib/quant-snapshot.js)
+  const quantBars  = {}        // one year of bars per symbol, for the cross-section
+  // SPY bars for beta (best effort: a missing benchmark only drops the beta field)
+  const benchBarsRef = { bars: null }
+  await fetchDailyBars('SPY', { range: '1y', headers, timeoutMs: 8_000 }).then(b => { if (b.length >= 60) benchBarsRef.bars = b }).catch(() => {})
   const queue = [...universe]
   const workers = Array.from({ length: 5 }, async () => {
     while (queue.length) {
       const sym = queue.shift()
       // Missing TA for one symbol is non-fatal — fetchDailyBars returns [] on failure
-      const bars = await fetchDailyBars(sym, { headers, timeoutMs: 12_000 })
+      // One year of bars feeds the quant evidence (volatility models need it); the technicals below still read the
+      // last six months, exactly the window they always used, so this does not move their inputs.
+      const yearBars = await fetchDailyBars(sym, { range: '1y', headers, timeoutMs: 12_000 })
+      const lastT = yearBars.length ? yearBars[yearBars.length - 1].t : 0
+      const bars = yearBars.filter(b => b.t >= lastT - 183 * 864e5)
+      if (yearBars.length >= 60) { quantBars[sym] = yearBars; const qs = quantSnapshot.symbolSnapshot(yearBars, { benchBars: benchBarsRef.bars }); if (!qs.insufficient) quantMap.set(sym, qs) }
       if (bars.length < 30) continue
       const li = levelInputs(bars)
       if (li) levelMap.set(sym, li)
@@ -521,7 +533,10 @@ async function fetchTaSnapshot(universe, headers) {
   }
 
   // Preserve universe order for deterministic prompts
-  return { lines: universe.map(s => bySymbol.get(s)).filter(Boolean), baselines, patternMap, rsRankMap, levelMap }
+  // Cross-section: how far each name sits from what the others in this list explain
+  const relMap = quantSnapshot.crossSection(quantBars)
+  const quantLines = universe.map(s => quantSnapshot.snapshotLine(s, quantMap.get(s), relMap.get(s))).filter(Boolean)
+  return { lines: universe.map(s => bySymbol.get(s)).filter(Boolean), baselines, patternMap, rsRankMap, levelMap, quantMap, relMap, quantLines }
 }
 
 // ── Discovery universe ────────────────────────────────────────────────────────
@@ -631,7 +646,7 @@ async function resolveUniverse({ symbols, scanMode, universeMode, fmpKey }) {
 function logPrediction(symbol, agents, zones, generatedAt, {
   baseline = null, optionsPcRatio = null, taPatterns = null, rsRankAtScan = null,
   regimeAtScan = null, priceRegimeAtScan = null, modelVersion = null, learningsVersion = null, metaProb = null,
-  horizon = null,
+  horizon = null, quantAtScan = null,
 } = {}) {
   try {
     const dir = path.dirname(PREDICTION_LOG)
@@ -722,6 +737,9 @@ function logPrediction(symbol, agents, zones, generatedAt, {
       // HORIZON_DAYS) — a 30-day window used to judge 6-month targets.
       horizon:           horizon ?? null,
       horizonDays:       HORIZON_DAYS[horizon] ?? null,
+      // Measured quant evidence the scan showed the model (lib/quant-snapshot.js): a condition KNOWN at scan time,
+      // so the track record can be sliced by it (byCharacter / byVolBucket / byResidual) — never an outcome.
+      quantAtScan:       quantAtScan ?? null,
       // outcome fields filled later by a scheduled job
       price7d: null, price30d: null, price90d: null,
     })
@@ -831,6 +849,13 @@ router.post('/analyze', requireAuth, brainLimit, guardAsync('ai-brain/analyze', 
       + 'FACTORS = deterministic multi-factor scores 0-100, 50=neutral (mom=momentum, trend, lowvol=low-volatility, comp=equal-weight composite) — comp ≥70 is strong multi-factor support, ≤30 a multi-factor headwind\n'
       + taResult.value.lines.join('\n')
   }
+
+  // Measured quant evidence per symbol (lib/quant-snapshot.js) — context, see SCAN_SYSTEM's QUANT CONTEXT rule
+  const quantMap = (taResult.status === 'fulfilled' && taResult.value.quantMap) || new Map()
+  const relMap   = (taResult.status === 'fulfilled' && taResult.value.relMap)   || new Map()
+  const quantSnippet = taResult.status === 'fulfilled' && taResult.value.quantLines?.length
+    ? '\n\nQUANT CONTEXT (measured from one year of daily bars — volatility forecast, trend/mean-reversion test, tail risk, regime, beta, liquidity, residual vs this list):\n' + taResult.value.quantLines.join('\n')
+    : ''
 
   // FRED macro regime snapshot
   let macroSnippet = ''
@@ -963,7 +988,7 @@ Analyze this universe for a ${horizonLabel} horizon. Today is ${todayLabel}.
 Universe: ${universe.join(', ')}
 Avoid holdings: ${holdingStr}
 ${scanMode.startsWith('mutualfunds') ? `\nNOTE: This universe contains mutual funds (category: ${scanMode === 'mutualfunds' ? 'Broad All-Category' : scanMode.replace('mutualfunds_','').toUpperCase()}). Score each fund on: (1) Fundamental = portfolio holdings quality, manager tenure & track record, alpha vs benchmark, (2) Technical = NAV trend, momentum, and performance relative to category peers, (3) Sentiment = fund flows, retail/institutional demand, manager commentary, (4) Macro = asset-class fit for current rate/growth/inflation regime, (5) Risk = expense ratio, max drawdown, concentration risk, redemption risk. Price targets refer to NAV zones. Omit stop-loss precision — use downside risk zones only.` : ''}${scanMode.startsWith('etfs_') ? `\nNOTE: This is an ETF sub-category scan (${scanMode.replace('etfs_','').toUpperCase()}). Scoring focus: (1) Fundamental = underlying index quality, holdings composition, expense ratio vs peers, (2) Technical = ETF price trend & momentum, discount/premium to NAV, options flow if available, (3) Sentiment = fund flows, AUM trend, institutional rotation signals, (4) Macro = how well this ETF category fits the current rate/sector/growth regime, (5) Risk = liquidity, tracking error, concentration, leverage if any.` : ''}${scanMode.startsWith('crypto_') ? `\nNOTE: This is a crypto sub-category scan (${scanMode.replace('crypto_','').toUpperCase()}). Scoring focus: (1) Fundamental = protocol TVL, revenue, developer activity, tokenomics, (2) Technical = price trend vs BTC, momentum, on-chain volume signal, (3) Sentiment = social dominance, whale flows, exchange inflows/outflows, (4) Macro = correlation to BTC cycle stage, risk-on/off regime, regulatory climate, (5) Risk = smart contract risk, liquidity depth, centralization risk. Consider current crypto market cycle phase.` : ''}${scanMode.startsWith('stocks_') ? `\nNOTE: This is a stock sector scan (GICS Sector: ${scanMode.replace('stocks_','').replace(/_/g,' ').toUpperCase()}). Scoring focus: (1) Fundamental = earnings growth, margins, valuation vs sector peers, balance sheet quality, (2) Technical = price trend, relative strength vs S&P 500, breakout/breakdown levels, (3) Sentiment = analyst upgrades/downgrades, short interest, insider activity, (4) Macro = sector-specific tailwinds/headwinds in the current rate/growth regime, (5) Risk = concentration risk, regulatory exposure, competitive moat strength.` : ''}
-${marketSnippet}${macroSnippet}${taSnippet}${earningsSnippet}${altDataSnippet}${optionsSnippet}
+${marketSnippet}${macroSnippet}${taSnippet}${quantSnippet}${earningsSnippet}${altDataSnippet}${optionsSnippet}
 
 Apply the instructions, JSON schema and rules from the system prompt. Respond ONLY with the JSON object.`
 
@@ -1177,6 +1202,12 @@ Apply the instructions, JSON schema and rules from the system prompt. Respond ON
     const priceRegimes = await priceRegimesP
     const priceRegimeOf = stock => priceRegime.labelFor(/-USD$/.test(stock.symbol) || String(stock.type || '').toLowerCase() === 'crypto' ? 'crypto' : 'stock', priceRegimes)
 
+    // Measured quant evidence on every card (shown, recorded; decides nothing yet)
+    for (const stock of data.rankedStocks) {
+      const qs = quantMap.get(stock.symbol)
+      if (qs) stock.quant = { stamp: quantSnapshot.stampOf(qs, relMap.get(stock.symbol)), evidence: quantSnapshot.evidenceItems(qs, relMap.get(stock.symbol)) }
+    }
+
     // Second opinion (meta-labelling): would this pick reach its target before
     // its stop, judged from scan-time facts by a model trained on this
     // system's own resolved picks? Shown on every card; it filters only when
@@ -1218,6 +1249,7 @@ Apply the instructions, JSON schema and rules from the system prompt. Respond ON
         learningsVersion,
         metaProb: stock.metaLabel?.prob ?? null,
         horizon,
+        quantAtScan: quantSnapshot.stampOf(quantMap.get(stock.symbol), relMap.get(stock.symbol)),
       })
     }
 

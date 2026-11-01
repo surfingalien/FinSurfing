@@ -36,6 +36,28 @@ const expectedValue = require('../lib/expected-value')
 const { computeStats, readPredictions } = require('../lib/brain-learnings')
 const { extractArrayObjects } = require('../lib/ai-json')
 const hrp = require('../lib/hrp')
+const quantSnapshot = require('../lib/quant-snapshot')
+
+/**
+ * Measured quant evidence on each pick (volatility outlook, trend vs mean
+ * reversion, tail risk, liquidity, beta, volatility state, and — with 3+ names —
+ * where it sits against the rest of the slate). Context only: nothing here
+ * changes which picks survive or how they are sized.
+ */
+function attachQuant(recs, yearBars, benchBars = null) {
+  const snaps = new Map(), forCross = {}
+  for (const [sym, b] of Object.entries(yearBars || {})) {
+    const snap = quantSnapshot.symbolSnapshot(b, { benchBars })
+    if (!snap.insufficient) { snaps.set(sym, snap); forCross[sym] = b }
+  }
+  const rel = Object.keys(forCross).length >= 3 ? quantSnapshot.crossSection(forCross) : new Map()
+  for (const r of recs || []) {
+    const sym = String(r.symbol || '').toUpperCase(), snap = snaps.get(sym)
+    if (!snap) continue
+    r.quant = { stamp: quantSnapshot.stampOf(snap, rel.get(sym)), evidence: quantSnapshot.evidenceItems(snap, rel.get(sym)) }
+  }
+  return recs
+}
 const { RECOMMENDATIONS_SCHEMA } = require('../lib/ai-schemas')
 const { canonicalizeEnums }      = require('../lib/output-schema')
 const { startJsonHeartbeat } = require('../lib/http-heartbeat')
@@ -533,15 +555,30 @@ Respond ONLY with a JSON object — no markdown, no explanation, just the JSON:
     // picks share one risk budget instead of each taking a full one. Six
     // months of daily bars; names without enough history are left out and
     // listed. Best-effort — a failure never costs the recommendations.
+    // One year of bars per pick also feeds the measured quant evidence
+    // (lib/quant-snapshot.js) shown on each card and stamped on the learning
+    // store, so the track record can be sliced by it. HRP keeps its six
+    // months: the allocation does not change because more history was fetched.
     let allocation = null
     try {
       const syms = [...new Set(data.recommendations.map(r => String(r.symbol).toUpperCase()))]
-      if (syms.length >= 2) {
+      if (syms.length >= 1) {
         const { fetchDailyBars } = require('../lib/internal-api')
-        const got = await Promise.allSettled(syms.map(sym => fetchDailyBars(sym, { range: '6mo', headers: fwdHeaders, timeoutMs: 8000 })))
-        const bars = {}
-        got.forEach((g, i) => { if (g.status === 'fulfilled' && g.value?.length > hrp.MIN_OBS) bars[syms[i]] = g.value })
-        const result = hrp.hrpWeights(hrp.alignReturns(bars))
+        const [got, spy] = await Promise.all([
+          Promise.allSettled(syms.map(sym => fetchDailyBars(sym, { range: '1y', headers: fwdHeaders, timeoutMs: 8000 }))),
+          fetchDailyBars('SPY', { range: '1y', headers: fwdHeaders, timeoutMs: 8000 }).catch(() => []),
+        ])
+        const yearBars = {}, bars = {}
+        got.forEach((g, i) => {
+          const b = g.status === 'fulfilled' ? g.value : null
+          if (!b?.length) return
+          yearBars[syms[i]] = b
+          const lastT = b[b.length - 1].t
+          const half = b.filter(x => x.t >= lastT - 183 * 864e5)
+          if (half.length > hrp.MIN_OBS) bars[syms[i]] = half
+        })
+        attachQuant(data.recommendations, yearBars, spy?.length >= 60 ? spy : null)
+        const result = syms.length >= 2 ? hrp.hrpWeights(hrp.alignReturns(bars)) : null
         if (result) {
           for (const r of data.recommendations) {
             const w = result.weights[String(r.symbol).toUpperCase()]
@@ -625,6 +662,7 @@ Respond ONLY with a JSON object — no markdown, no explanation, just the JSON:
             stopLoss:     r.stopLoss ?? null,
             regime:       macroData?.regime?.regime ?? null,
             modelVersion: llmUsed === 'claude' ? 'claude-sonnet-4-6' : GROQ_MODEL,
+            quant:        r.quant?.stamp ?? null,
           },
         })))
     } catch (e) { console.warn('[recommendations] learning-store record failed:', e.message) }
@@ -728,3 +766,4 @@ router.get('/personas', (req, res) => {
 })
 
 module.exports = router
+module.exports._test = { attachQuant }
