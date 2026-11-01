@@ -29,6 +29,7 @@ const { computeATR, computeRSI } = require('../lib/technical-indicators')
 const planCheck = require('../lib/plan-check')
 const quantSnapshot = require('../lib/quant-snapshot')
 const planOdds = require('../lib/plan-odds')
+const modelContest = require('../lib/model-contest')
 const { wrapUntrusted, UNTRUSTED_POLICY } = require('../lib/untrusted')
 
 const aiRouter = getRouter('agents')
@@ -364,11 +365,25 @@ Respond ONLY with JSON (no markdown):
     // ── Phase 2: Quant (code) ──
     const p2t0  = Date.now()
     const assetType = /-USD$/.test(sym) ? 'crypto' : 'stock'
+    const odds = levelOdds(facts.levels, quant)
+    // A model-contest winner on the generic track (lib/model-contest.js) scores
+    // this plan once it has beaten the current logistic on newer picks;
+    // otherwise the measured win rate as before.
+    const contestP = (() => {
+      try {
+        const store = modelContest.loadStore()
+        if (!store?.tracks?.generic?.winner || !odds) return null
+        const e = Number(facts.levels.entry)
+        return modelContest.winProbFor(store, modelContest.planLikeFrom({
+          targetReturn: (facts.levels.target_1 / e - 1) * 100, stopLoss: (1 - facts.levels.stop_loss / e) * 100,
+          assetType, quantStamp: quant?.stamp ?? null, planOdds: odds,
+        }), { track: 'generic', records: require('../lib/brain-learnings').readPredictions() })
+      } catch { return null }
+    })()
     const check = planCheck.checkPlan({
       side: 'long', entry: facts.levels.entry, target: facts.levels.target_1, stop: facts.levels.stop_loss,
-      price: facts.price, assetType, winProb: planCheck.winProbFor(assetType),
+      price: facts.price, assetType, winProb: contestP || planCheck.winProbFor(assetType),
     })
-    const odds = levelOdds(facts.levels, quant)
     const p2d = {
       ...facts.levels,
       position_quality: facts.position_quality, volatility: facts.volatility,

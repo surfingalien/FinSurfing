@@ -356,6 +356,40 @@ export default function TrackRecord({ data, onAdoptBrackets }) {
       </section>
 
       <section>
+        <h3 className="text-sm font-semibold mb-2">Model contest — can another algorithm beat the current one?</h3>
+        {data.modelContest?.tracks ? (
+          <div className="space-y-3">
+            {Object.values(data.modelContest.tracks).map(t => (
+              <div key={t.track} className="text-[12px] space-y-1">
+                <p className={t.winner ? 'text-emerald-400' : 'text-slate-400'}>
+                  <span className="font-semibold">{t.track === 'brain' ? 'AI Brain picks' : 'Any plan (Agent Hub, Research Desk, Buy Signals)'}:</span> {t.winner ? `${t.winner} now scores plans` : 'current logistic stays'} — {t.reason}.
+                </p>
+                {t.models?.length > 0 && (
+                  <div className="overflow-x-auto">
+                    <table className="text-[11px] w-full max-w-xl">
+                      <thead><tr className="text-slate-500 text-left"><th className="pr-3 font-normal">Model</th><th className="pr-3 font-normal">Brier</th><th className="font-normal">t vs current</th></tr></thead>
+                      <tbody>
+                        {t.models.map(m => (
+                          <tr key={m.name} className={m.name === t.winner ? 'text-emerald-400' : m.name === t.champion ? 'text-white' : 'text-slate-400'}>
+                            <td className="pr-3">{m.name}{m.name === t.champion ? ' (current)' : ''}</td>
+                            <td className="pr-3 font-mono">{m.brier}</td>
+                            <td className="font-mono">{m.tVsChampion ?? '—'}</td>
+                          </tr>
+                        ))}
+                        <tr className="text-slate-500"><td className="pr-3">base rate</td><td className="pr-3 font-mono">{t.reference?.baseRate}</td><td /></tr>
+                        <tr className="text-slate-500"><td className="pr-3">no-skill odds of the levels</td><td className="pr-3 font-mono">{t.reference?.noSkillOdds}</td><td /></tr>
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            ))}
+            <p className="text-[11px] text-slate-500">Eight classifiers from the Quant Lab predict whether each newer pick reached its target before its stop, trained only on picks whose outcome was already known (purged walk-forward). A challenger replaces the current logistic only with a lower error and a paired t above the threshold corrected for trying seven of them. Run nightly.</p>
+          </div>
+        ) : <p className="text-[12px] text-slate-500">Not run yet — the nightly cycle starts it once 150 picks have a target/stop outcome on their own horizon.</p>}
+      </section>
+
+      <section>
         <h3 className="text-sm font-semibold mb-2">Second check on AI Brain picks</h3>
         {data.metaLabel ? (
           <div className="text-[12px] space-y-1">

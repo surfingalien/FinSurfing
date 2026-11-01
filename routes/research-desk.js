@@ -301,6 +301,8 @@ router.get('/track-record', requireAuth, (req, res) => {
       events: s.events, params: s.params, groups: s.groups, strategies: s.strategies, oppVsRoutine: s.oppVsRoutine, caveats: s.caveats,
     } } catch { return null } })(),
     // Which win probability sizes trades: the bracket calibration, if adopted (lib/bracket-prob.js).
+    // Champion / challenger over the Quant Lab's classifiers (lib/model-contest.js)
+    modelContest: (() => { try { return require('../lib/model-contest').loadStore() } catch { return null } })(),
     bracketProb: (() => { try { const b = require('../lib/bracket-prob').loadStore(); return b && { adopted: b.adopted, rateAdopted: b.rateAdopted ?? false, reason: b.reason, validation: b.validation ?? null, labelled: b.labelled, trainedAt: b.trainedAt, rates: b.rates ?? null } } catch { return null } })(),
     // The second-opinion model on AI Brain picks (lib/meta-label.js).
     metaLabel: (() => { try { const m = require('../lib/meta-label').loadModel(); return m && { validated: m.validated, reason: m.reason, validation: m.validation ?? null, labelled: m.labelled, trainedAt: m.trainedAt } } catch { return null } })(),

@@ -38,6 +38,7 @@ const priceRegime           = require('../lib/price-regime')
 const metaLabel             = require('../lib/meta-label')
 const planOdds              = require('../lib/plan-odds')
 const slateDiversify        = require('../lib/slate-diversify')
+const modelContest          = require('../lib/model-contest')
 const kelly                 = require('../lib/kelly')
 const expectedValue         = require('../lib/expected-value')
 const { tryParseAiJson }    = require('../lib/ai-json')
@@ -1225,9 +1226,10 @@ Apply the instructions, JSON schema and rules from the system prompt. Respond ON
         return slateDiversify.diversify(Object.fromEntries(actionableSyms.filter(s => quantBarsBySym[s]).map(s => [s, quantBarsBySym[s]])))
       } catch (e) { console.warn('[ai-brain] slate diversification failed:', e.message); return null }
     })()
-    let sizingStats = null
-    try { sizingStats = require('../lib/brain-learnings').computeStats(require('../lib/brain-learnings').readPredictions()) } catch { /* cold start */ }
+    let sizingStats = null, predRecords = []
+    try { predRecords = require('../lib/brain-learnings').readPredictions(); sizingStats = require('../lib/brain-learnings').computeStats(predRecords) } catch { /* cold start */ }
     const bracketStore = (() => { try { return require('../lib/bracket-prob').loadStore() } catch { return null } })()
+    const contestStore = (() => { try { return modelContest.loadStore() } catch { return null } })()
     for (const stock of data.rankedStocks.filter(p => p.actionable !== false)) {
       const qs = quantMap.get(stock.symbol)
       const isCrypto = /-USD$/.test(stock.symbol) || String(stock.type || '').toLowerCase() === 'crypto'
@@ -1236,8 +1238,16 @@ Apply the instructions, JSON schema and rules from the system prompt. Respond ON
         targetPct: stock.targetReturn, stopPct: stock.stopLoss, price: stock.currentPrice, snap: qs,
         sessions: planOdds.sessionsFromCalendarDays(HORIZON_DAYS[horizon] ?? 30),
       })
+      // A contest winner (lib/model-contest.js) is used only once it has beaten
+      // the current logistic on newer picks; otherwise the existing chain.
+      const contestP = contestStore ? modelContest.winProbFor(contestStore, {
+        ...stock, assetType, quantAtScan: stock.quant?.stamp ?? null, priceRegimeAtScan: priceRegimeOf(stock),
+        rsRankAtScan: taRsRankMap.get(stock.symbol) ?? null, baselineProb: taBaselines.get(stock.symbol)?.prob ?? null,
+        modelOdds: stock.planOdds?.odds ? { pTarget: stock.planOdds.odds.pTarget } : null, stopNoise: stock.planOdds?.stop?.level ?? null,
+      }, { track: 'brain', records: predRecords }) : null
+      if (contestP) stock.contest = { prob: contestP.p, model: contestP.source }
       try {
-        const winProb = (bracketStore && require('../lib/bracket-prob').winProbFor(bracketStore, { assetType })) || kelly.winProbFromStats(sizingStats, { assetType })
+        const winProb = contestP || (bracketStore && require('../lib/bracket-prob').winProbFor(bracketStore, { assetType })) || kelly.winProbFromStats(sizingStats, { assetType })
         const ev = expectedValue.evaluateTrade({ winProb: winProb.p, targetReturn: stock.targetReturn, stopLoss: stock.stopLoss, assetType })
         const dailyVol = qs?.vol?.forecast21 > 0 ? qs.vol.forecast21 / Math.sqrt(252) : null
         stock.sizing = { ...kelly.sizeIfCalibrated(winProb, { winFrac: ev.netWinFrac, lossFrac: ev.netLossFrac, riskBudget: kelly.RISK_BUDGET, volFrac: dailyVol }), winProbSource: winProb.source ?? null }
