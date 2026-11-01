@@ -19,8 +19,9 @@ export default defineConfig({
     // Rollup only converts CommonJS to ES for node_modules by default — so the
     // source file must be added here, otherwise the bundle's namespace is empty
     // and portfolioPnl.* is undefined at runtime (build still "succeeds").
+    // Same for lib/horizon-setups.js (AI Advisory horizon cards, aiEngine.js).
     commonjsOptions: {
-      include: [/lib[\\/]portfolio-pnl/, /node_modules/],
+      include: [/lib[\\/]portfolio-pnl/, /lib[\\/]horizon-setups/, /node_modules/],
     },
     rollupOptions: {
       output: {

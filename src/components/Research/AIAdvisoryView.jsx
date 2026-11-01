@@ -323,7 +323,9 @@ export default function AIAdvisoryView({ portfolio }) {
                     <div className="glass rounded-xl p-4">
                       <div className="text-xs text-slate-400 font-semibold mb-3 flex items-center justify-between">
                         <span>90-Day Price Chart</span>
-                        <span className="text-[10px] text-slate-600">Swing TP / SL reference lines</span>
+                        <span className="text-[10px] text-slate-600">
+                          {advisory.horizons?.[1]?.valid === false ? 'No valid swing setup' : 'Swing TP / SL reference lines'}
+                        </span>
                       </div>
                       <PriceChart candles={candles} advisory={advisory} />
                     </div>

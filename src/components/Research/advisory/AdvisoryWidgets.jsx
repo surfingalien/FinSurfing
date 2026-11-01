@@ -4,6 +4,7 @@ import {
 } from 'recharts'
 import { fmt } from '../../../services/api'
 import { SIGNAL_TYPES } from '../../../services/aiEngine'
+import { signedPct, drawdownPct } from '../../../utils/formatPct'
 
 /* ── Signal badge ────────────────────────────────── */
 export function SignalBadge({ type, size = 'md' }) {
@@ -65,8 +66,17 @@ export function FactorBar({ factor }) {
 }
 
 /* ── Horizon card ────────────────────────────────── */
+// Setups come from lib/horizon-setups.js, which validates them: a setup whose
+// target is not above its entry (or stop not below it) arrives as
+// `valid: false` with a reason and no levels. Percents are precomputed there,
+// measured from the reference entry (the current price).
 export function HorizonCard({ h, active, onClick }) {
+  const valid = h.valid !== false
   const rr = h.rr >= 2 ? 'text-emerald-400' : h.rr >= 1.5 ? 'text-amber-400' : 'text-red-400'
+  const entryText = h.entryLow != null && h.entryHigh != null
+    ? `$${fmt(h.entryLow)}–$${fmt(h.entryHigh)}`
+    : `$${fmt(h.entry)}`
+  const fromEntry = `Measured from $${fmt(h.entry)}`
   return (
     <button onClick={onClick}
       className={`glass rounded-xl p-4 text-left transition-all border ${active ? 'border-mint-500/40 bg-mint-500/5' : 'border-white/[0.05] hover:border-white/[0.12]'}`}>
@@ -77,27 +87,37 @@ export function HorizonCard({ h, active, onClick }) {
             <Clock className="w-3 h-3" />{h.horizon}
           </div>
         </div>
-        <div className={`text-xl font-black font-mono ${rr}`}>{h.rr}:1</div>
+        {valid
+          ? <div className={`text-xl font-black font-mono ${rr}`} title="Reward / risk to TP1">{h.rr}:1</div>
+          : <div className="text-xl font-black font-mono text-slate-500">—</div>}
       </div>
-      <div className="space-y-1.5 text-xs">
-        <div className="flex justify-between">
-          <span className="text-slate-500">Entry</span>
-          <span className="font-mono text-white">{typeof h.entry === 'string' ? h.entry : `$${fmt(h.entry)}`}</span>
+      {valid ? (
+        <div className="space-y-1.5 text-xs">
+          <div className="flex justify-between">
+            <span className="text-slate-500">Entry</span>
+            <span className="font-mono text-white">{entryText}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-emerald-400">TP1</span>
+            <span className="font-mono text-emerald-400">${fmt(h.tp1)} <span className="text-[10px] text-slate-500" title={fromEntry}>({signedPct(h.tp1Pct, 1)})</span></span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-emerald-400">TP2</span>
+            <span className="font-mono text-emerald-400">${fmt(h.tp2)} <span className="text-[10px] text-slate-500" title={fromEntry}>({signedPct(h.tp2Pct, 1)})</span></span>
+          </div>
+          <div className="flex justify-between border-t border-white/[0.04] pt-1.5 mt-1.5">
+            <span className="text-red-400">Stop</span>
+            <span className="font-mono text-red-400">${fmt(h.stop)} <span className="text-[10px] text-slate-500" title={fromEntry}>({drawdownPct(h.stopPct, 1)})</span></span>
+          </div>
         </div>
-        <div className="flex justify-between">
-          <span className="text-emerald-400">TP1</span>
-          <span className="font-mono text-emerald-400">${fmt(h.tp1)} <span className="text-[10px] text-slate-500">(+{(((h.tp1 - h.stop) / Math.max(0.01, h.entry - h.stop || h.stop * 0.1) * 100)).toFixed(0)}% est.)</span></span>
+      ) : (
+        <div className="text-xs rounded-lg border border-white/[0.06] bg-white/[0.02] p-2.5">
+          <div className="font-semibold text-slate-300">No valid setup</div>
+          <div className="text-slate-500 mt-1">{h.reason}</div>
+          <div className="text-slate-600 mt-1">Price ${fmt(h.entry)}</div>
         </div>
-        <div className="flex justify-between">
-          <span className="text-emerald-400">TP2</span>
-          <span className="font-mono text-emerald-400">${fmt(h.tp2)}</span>
-        </div>
-        <div className="flex justify-between border-t border-white/[0.04] pt-1.5 mt-1.5">
-          <span className="text-red-400">Stop</span>
-          <span className="font-mono text-red-400">${fmt(h.stop)} <span className="text-[10px] text-slate-500">(-{h.stopPct}%)</span></span>
-        </div>
-      </div>
-      <p className="text-[10px] text-slate-600 mt-2 border-t border-white/[0.04] pt-2">{h.note}</p>
+      )}
+      {h.note && <p className="text-[10px] text-slate-600 mt-2 border-t border-white/[0.04] pt-2">{h.note}</p>}
     </button>
   )
 }
