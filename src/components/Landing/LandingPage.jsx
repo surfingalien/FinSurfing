@@ -17,6 +17,7 @@ import {
   Search, PieChart, Activity, ArrowRight, Star, Play,
   Check, Sparkles, Lock, LineChart,
 } from 'lucide-react'
+import BrandMark from '../shared/BrandMark'
 
 /* ── Scroll reveal ──────────────────────────────────────────
    IntersectionObserver rather than a scroll listener: it fires off the main
@@ -91,11 +92,7 @@ const TRUST = ['Yahoo Finance', 'Finnhub', 'FRED', 'SEC EDGAR', 'Polygon']
 function Logo({ dark = false }) {
   return (
     <div className="flex items-center gap-2">
-      <svg viewBox="0 0 32 32" fill="none" className="w-8 h-8" aria-hidden="true">
-        <path d="M4 22 L10 14 L16 18 L22 8 L28 12" stroke="#2563EB" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M4 22 L10 14 L16 18 L22 8 L28 12" stroke="#2563EB" strokeWidth="8" strokeLinecap="round" strokeLinejoin="round" opacity="0.12" />
-        <circle cx="16" cy="18" r="2.5" fill="#0F172A" />
-      </svg>
+      <BrandMark className="w-8 h-8" />
       <span className="font-bold text-xl tracking-tight">
         <span className={dark ? 'text-white' : 'text-slate-900'}>FIN</span>
         <span className="text-blue-600">SURF</span>

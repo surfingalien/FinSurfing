@@ -22,6 +22,7 @@ import CreatePortfolioModal from '../Portfolio/CreatePortfolioModal'
 import ChangePasswordModal from '../Auth/ChangePasswordModal'
 import ApiKeysModal from '../Settings/ApiKeysModal'
 import { Tooltip } from '../shared/Tooltip'
+import BrandMark from '../shared/BrandMark'
 
 // ── Nav item definitions ──────────────────────────────────────────────────────
 
@@ -231,11 +232,7 @@ export default function Sidebar({
                        ${collapsed ? 'justify-center px-0' : 'px-4 gap-2'}`}>
         <button onClick={() => handleTabChange('dashboard')}
           className="flex items-center gap-2 shrink-0 min-w-0">
-          <svg viewBox="0 0 32 32" fill="none" className="w-7 h-7 shrink-0">
-            <path d="M4 22 L10 14 L16 18 L22 8 L28 12" stroke="#00ffcc" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-            <path d="M4 22 L10 14 L16 18 L22 8 L28 12" stroke="#00ffcc" strokeWidth="8" strokeLinecap="round" strokeLinejoin="round" opacity="0.12"/>
-            <circle cx="16" cy="18" r="2.5" fill="#6366f1"/>
-          </svg>
+          <BrandMark className="w-7 h-7 shrink-0" />
           {!collapsed && (
             <span className="font-bold tracking-tight text-base whitespace-nowrap">
               <span className="text-white">FIN</span><span className="text-mint-400">SURF</span>
