@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-label="FinSurfing logo 2B Sunrise Lotus">
+<defs><linearGradient id="c" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FEF3C7"/><stop offset="1" stop-color="#F59E0B"/></linearGradient><linearGradient id="i" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F9A8D4"/><stop offset="1" stop-color="#DB2777"/></linearGradient><linearGradient id="o" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#BE185D"/><stop offset="1" stop-color="#4C1D95"/></linearGradient><linearGradient id="w" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#4C1D95"/><stop offset="1" stop-color="#2563EB"/></linearGradient><linearGradient id="w2" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#7C3AED"/><stop offset="1" stop-color="#06B6D4"/></linearGradient><radialGradient id="g" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#F472B6" stop-opacity=".35"/><stop offset="1" stop-color="#F472B6" stop-opacity="0"/></radialGradient></defs>
+<circle cx="60" cy="52" r="46" fill="url(#g)"/>
+<path d="M60 76 C40 82 20 76 6 61 C28 54 48 59 60 76Z" fill="url(#o)"/>
+<path d="M60 76 C80 82 100 76 114 61 C92 54 72 59 60 76Z" fill="url(#o)"/>
+<path d="M60 76 C41 72 27 58 22 34 C42 37 56 53 60 76Z" fill="url(#i)"/>
+<path d="M60 76 C79 72 93 58 98 34 C78 37 64 53 60 76Z" fill="url(#i)"/>
+<path d="M60 10 C47 30 45 56 60 78 C75 56 73 30 60 10Z" fill="url(#c)"/>
+<path d="M60 22 C55 36 55 52 60 66" fill="none" stroke="#fff" stroke-opacity=".55" stroke-width="2" stroke-linecap="round"/>
+<path d="M4 88 C18 80 30 96 46 88 S74 80 90 88 S110 94 116 88 L116 98 C104 104 96 96 84 98 S60 106 46 98 S20 104 4 98Z" fill="url(#w)"/>
+<path d="M14 108 C26 101 36 113 50 107 S74 101 86 107 S102 112 106 107" fill="none" stroke="url(#w2)" stroke-width="4" stroke-linecap="round"/>
+</svg>
