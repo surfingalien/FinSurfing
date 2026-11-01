@@ -5,7 +5,7 @@
  */
 
 const {
-  parseCsv, buildClass, classify, search, listSectors, sectorUniverse, stats,
+  parseCsv, forEachCsvRow, buildClass, classify, search, listSectors, sectorUniverse, stats,
   _setStoreForTests,
 } = require('../lib/symbol-db')
 
@@ -36,6 +36,44 @@ describe('parseCsv', () => {
 
   test('empty trailing fields are preserved', () => {
     expect(parseCsv('a,b,c\n1,,')).toEqual([['a', 'b', 'c'], ['1', '', '']])
+  })
+})
+
+// The pre-fix parser, kept verbatim as the reference the streaming one must match.
+function legacyParseCsv(text) {
+  const rows = []
+  let row = [], field = '', inQuotes = false
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i]
+    if (inQuotes) {
+      if (c === '"') { if (text[i + 1] === '"') { field += '"'; i++ } else inQuotes = false } else field += c
+    } else if (c === '"') { inQuotes = true }
+    else if (c === ',') { row.push(field); field = '' }
+    else if (c === '\n') { row.push(field); field = ''; rows.push(row); row = [] }
+    else if (c !== '\r') { field += c }
+  }
+  if (field !== '' || row.length) { row.push(field); rows.push(row) }
+  return rows
+}
+describe('parseCsv matches the legacy char-by-char parser exactly', () => {
+  test('on 400 random messy documents (quotes, escaped quotes, CRLF, empty fields, quotes mid-field)', () => {
+    let seed = 12345; const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296)
+    const alphabet = ['a', 'b', 'Z', ' ', ',', ',', '"', '"', '""', '\n', '\r\n', '\r', 'x,y', '"q,r"', '"a\nb"', '']
+    for (let d = 0; d < 400; d++) {
+      let text = ''; const len = Math.floor(rnd() * 60)
+      for (let k = 0; k < len; k++) text += alphabet[Math.floor(rnd() * alphabet.length)]
+      expect(parseCsv(text)).toEqual(legacyParseCsv(text))
+    }
+  })
+  test('forEachCsvRow streams the same rows without retaining them', () => {
+    const seen = []; forEachCsvRow('h1,h2\n1,"a,b"\n2,c', r => seen.push(r))
+    expect(seen).toEqual([['h1', 'h2'], ['1', 'a,b'], ['2', 'c']])
+  })
+  test('a large file parses quickly (no per-character string growth)', () => {
+    const line = 'AAPL,"Apple Inc.","Makes iPhones, Macs and a very long summary of the business that goes on and on",Information Technology,Technology Hardware,United States,Mega Cap\n'
+    const text = 'symbol,name,summary,sector,industry,country,market_cap\n' + line.repeat(60000)   // ~10 MB
+    const t0 = Date.now(); let n = 0; forEachCsvRow(text, () => { n++ })
+    expect(n).toBe(60001); expect(Date.now() - t0).toBeLessThan(3000)
   })
 })
 
