@@ -1,8 +1,15 @@
+import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { sharedCjs } from './tools/vite-shared-cjs.mjs'
+
+const ROOT = fileURLToPath(new URL('.', import.meta.url))
 
 export default defineConfig({
-  plugins: [react()],
+  // sharedCjs: lib/ files the browser shares with the server + Jest are CommonJS;
+  // it converts the ones listed in its SHARED_CJS to ES modules in dev and in
+  // the build alike (see tools/vite-shared-cjs.mjs).
+  plugins: [react(), sharedCjs(ROOT)],
   server: {
     port: 5173,
     proxy: {
@@ -14,15 +21,6 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
-    // lib/portfolio-pnl.js is a CommonJS module (module.exports) shared with the
-    // server + Jest. Client code imports it via `import * as portfolioPnl`, but
-    // Rollup only converts CommonJS to ES for node_modules by default — so the
-    // source file must be added here, otherwise the bundle's namespace is empty
-    // and portfolioPnl.* is undefined at runtime (build still "succeeds").
-    // Same for lib/horizon-setups.js (AI Advisory horizon cards, aiEngine.js).
-    commonjsOptions: {
-      include: [/lib[\\/]portfolio-pnl/, /lib[\\/]horizon-setups/, /node_modules/],
-    },
     rollupOptions: {
       output: {
         manualChunks: {
