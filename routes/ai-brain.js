@@ -638,13 +638,17 @@ async function resolveUniverse({ symbols, scanMode, universeMode, fmpKey }) {
     return poolSet.has(sym) ? sector : null
   }
   const movers = filterMovers(await getMovers(fmpKey).catch(() => []), { sector, sectorOf })
+  // After-close discovery lists (lib/discovery-sources.js): peer dislocations and
+  // stretched cointegrated pairs. Stale or missing lists add nothing.
+  const discovered = (() => { try { const d = require('../lib/discovery-sources'); return d.candidatesFor(d.loadStore(), sector) } catch { return [] } })()
   const { symbols: universe, sources } = buildScanUniverse({
-    curated, movers, pool,
+    curated, movers, pool, discovered,
     recent: _recentByMode.get(scanMode) || [],
     fixed:  scanMode === 'broad' ? BROAD_FIXED : [],
     seed:   Date.now(),
   })
-  return { universe, sources }
+  const discoveryNotes = Object.fromEntries(discovered.filter(d => sources[d.symbol] === 'dislocation' || sources[d.symbol] === 'pair').map(d => [d.symbol, d.why]))
+  return { universe, sources, discoveryNotes }
 }
 
 // Write a prediction record for future win-rate tracking
@@ -777,7 +781,7 @@ router.post('/analyze', requireAuth, brainLimit, guardAsync('ai-brain/analyze', 
     return res.status(400).json({ error: 'horizon must be 3m, 6m, or 12m' })
 
   const fmpKey = (req.headers['x-fmp-key'] || '').trim() || process.env.FMP_API_KEY || null
-  const { universe: requested, sources: universeSources } = await resolveUniverse({ symbols, scanMode, universeMode, fmpKey })
+  const { universe: requested, sources: universeSources, discoveryNotes = null } = await resolveUniverse({ symbols, scanMode, universeMode, fmpKey })
   const holdingStr   = holdings.length ? holdings.join(', ') : 'none'
   const horizonLabel = { '3m': '3-month', '6m': '6-month', '12m': '12-month' }[horizon]
   const generatedAt  = new Date().toISOString()
@@ -1125,6 +1129,7 @@ Apply the instructions, JSON schema and rules from the system prompt. Respond ON
             entryMid: midOf(stock.entryZoneLow, stock.entryZoneHigh),
           })
       if (universeSources?.[stock.symbol]) stock.universeSource = universeSources[stock.symbol]
+      if (discoveryNotes?.[stock.symbol]) stock.discoveryNote = discoveryNotes[stock.symbol]
     }
 
     // How wide the real outcomes of picks like this have been (lib/outcome-range.js):
@@ -1378,6 +1383,7 @@ Apply the instructions, JSON schema and rules from the system prompt. Respond ON
       universeAnalyzed: universe,
       universeRequested: requested,
       universeSources,
+      discoveryNotes,
       unpricedSymbols:  unpriced,
       liveDataSymbols:  liveQuotes.map(q => q.symbol),
       llmUsed,
@@ -1611,3 +1617,4 @@ router.get('/activity', requireAuth, (req, res) => {
 module.exports = router
 // Exported for unit tests
 module.exports.buildActivityFeed = buildActivityFeed
+module.exports.getLivePool = getLivePool
