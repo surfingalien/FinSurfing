@@ -2,9 +2,9 @@
  * CommonJS modules the browser shares with the server — one implementation,
  * served to the browser as an ES module in dev AND in the production build.
  *
- * lib/portfolio-pnl.js is CommonJS (`module.exports`) because the server and
- * Jest `require()` it, and src/ imports the same file so the P&L math has one
- * source of truth. Browsers only run ES modules. `vite build` used to convert
+ * lib/portfolio-pnl.js (and lib/horizon-setups.js) are CommonJS
+ * (`module.exports`) because the server and Jest `require()` them, and src/
+ * imports the same files so each piece of math has one source of truth. Browsers only run ES modules. `vite build` used to convert
  * it through build.commonjsOptions.include, but the dev server serves files
  * outside node_modules untouched, so `npm run dev` died on `module.exports`
  * ("module is not defined") and rendered a blank page. This plugin does the
@@ -19,7 +19,7 @@ import { createRequire } from 'node:module'
 import path from 'node:path'
 
 // Repo-relative paths of the CommonJS files src/ may import.
-export const SHARED_CJS = ['lib/portfolio-pnl.js']
+export const SHARED_CJS = ['lib/portfolio-pnl.js', 'lib/horizon-setups.js']
 
 const IDENTIFIER = /^[A-Za-z_$][\w$]*$/
 const posix = p => p.split(path.sep).join('/')

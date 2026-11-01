@@ -6,8 +6,9 @@ import { sharedCjs } from './tools/vite-shared-cjs.mjs'
 const ROOT = fileURLToPath(new URL('.', import.meta.url))
 
 export default defineConfig({
-  // sharedCjs: lib/portfolio-pnl.js is CommonJS shared with the server + Jest;
-  // it converts it to an ES module in dev and in the build alike (see the file).
+  // sharedCjs: lib/ files the browser shares with the server + Jest are CommonJS;
+  // it converts the ones listed in its SHARED_CJS to ES modules in dev and in
+  // the build alike (see tools/vite-shared-cjs.mjs).
   plugins: [react(), sharedCjs(ROOT)],
   server: {
     port: 5173,
