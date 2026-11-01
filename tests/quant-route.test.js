@@ -61,7 +61,7 @@ test('volatility, timeseries, capm, pairs and statarb answer for known symbols a
   expect((await post('/pairs', { y: 'AAA', x: 'AAA' })).status).toBe(400)
 })
 test('ml compare reports the baseline and a verdict; clustering returns embeddings', async () => {
-  const m = await post('/ml/compare', { symbol: 'AAA' }); expect(m.status).toBe(200); expect(m.body.baseline.accuracy).toBeGreaterThan(0.3); expect(m.body.verdict).toBeTruthy(); expect(m.body.results.length).toBe(12)
+  const m = await post('/ml/compare', { symbol: 'AAA' }); expect(m.status).toBe(200); expect(m.body.baseline.accuracy).toBeGreaterThan(0.3); expect(m.body.verdict).toBeTruthy(); expect(m.body.results.length).toBe(13)
   const k = await post('/ml/cluster', { symbols: ['AAA', 'BBB', 'CCC', 'DDD', 'SPY'] }); expect(k.status).toBe(200); expect(k.body.symbols).toHaveLength(5)
 }, 120000)
 
@@ -78,4 +78,35 @@ test('a basket that only partly loads reports how many loaded and why the rest d
 })
 test('a pair with one unloadable symbol says why', async () => {
   const r = await post('/pairs', { y: 'AAA', x: 'ZZZZ' }); expect(r.status).toBe(400); expect(r.body.error).toMatch(/ZZZZ: no price history/)
+})
+
+describe('round 2 endpoints', () => {
+  test('hedging lab, SABR calibration and exotics are public pure maths', async () => {
+    const h = await post('/options/hedging', { T: 0.1, paths: 200, sigmaImplied: 0.2, sigmaRealized: 0.3 }, false)
+    expect(h.status).toBe(200); expect(h.body.rows).toHaveLength(4); expect(h.body.discrete.points).toHaveLength(3)
+    const O = require('../lib/quant/options'), quotes = [80, 90, 100, 110, 120].map(K => ({ strike: K, iv: O.sabrVol({ F: 100, K, T: 1, beta: 1, alpha: 0.2, rho: -0.3, nu: 0.5 }) }))
+    const s = await post('/options/calibrate-sabr', { F: 100, T: 1, beta: 1, quotes }, false); expect(s.status).toBe(200); expect(s.body.rho).toBeCloseTo(-0.3, 2)
+    expect((await post('/options/calibrate-sabr', { F: 100, T: 1, quotes: quotes.slice(0, 2) }, false)).status).toBe(400)
+    const a = await post('/options/exotic', { kind: 'asian', paths: 4000 }, false); expect(a.status).toBe(200); expect(a.body.varianceReduction).toBeGreaterThan(5)
+    const b = await post('/options/exotic', { kind: 'barrier', H: 80, barrier: 'down-and-out', paths: 4000, steps: 50 }, false); expect(b.body.analytic).toBeGreaterThan(0)
+    expect((await post('/options/exotic', { kind: 'barrier', H: 80, barrier: 'sideways' }, false)).status).toBe(400)
+    expect((await post('/options/exotic', { kind: 'rainbow' }, false)).status).toBe(400)
+  })
+  test('new calculators answer', async () => {
+    for (const [name, body] of [['parity', { call: 10, put: 5, S: 100, K: 100, r: 0.05, T: 1 }], ['theta-gamma', { S: 100, K: 100, sigma: 0.16, T: 0.25 }], ['capacity', { edgeBps: 20, adv: 1e6, price: 50, dailyVol: 0.02 }], ['leverage', { equity: 1e5, leverage: 2 }], ['short-sale', { price: 50, shares: 100, days: 30 }], ['order-book', { quantity: 10, asks: [{ price: 10, size: 20 }], bids: [{ price: 9.9, size: 5 }] }], ['latency', { dailyVol: 0.02, latencyMs: 50 }], ['ito', { paths: 2000 }], ['turnover', { from: { A: 1 }, to: { B: 1 } }]]) {
+      const r = await post(`/calc/${name}`, body, false); expect([name, r.status]).toEqual([name, 200])
+    }
+  })
+  test('market-data round 2 endpoints need sign-in and answer when signed in', async () => {
+    for (const p of ['/vrp', '/optimize/walk-forward', '/risk/var-backtest', '/risk/premium', '/ml/walk-forward']) expect((await post(p, { symbol: 'AAA' }, false)).status).toBe(401)
+    const v = await post('/vrp', { symbol: 'AAA', impliedVol: 0.3 }); expect(v.status).toBe(200); expect(v.body.snapshot.vrp).toBeDefined(); expect(v.body.history).toBeUndefined()
+    const noIv = await post('/vrp', { symbol: 'AAA' }); expect(noIv.status).toBe(400); expect(noIv.body.error).toMatch(/SPY, VOO, IVV/)   // no implied vol and not an S&P tracker
+    const w = await post('/optimize/walk-forward', { symbols: ['AAA', 'BBB', 'CCC'], lookback: 126 }); expect(w.status).toBe(200); expect(w.body.methods).toHaveLength(6)
+    const vb = await post('/risk/var-backtest', { symbol: 'AAA' }); expect(vb.status).toBe(200); expect(vb.body.methods).toHaveLength(5)
+    const rp = await post('/risk/premium', { symbol: 'AAA' }); expect(rp.status).toBe(200); expect(rp.body.lo).toBeLessThan(rp.body.hi)
+    const t = await post('/timeseries', { symbol: 'AAA' }); expect(t.body.varianceRatio).toHaveLength(4); expect(t.body.kalmanLevel.series.length).toBe(250)
+  })
+  test('ML walk-forward CV answers', async () => {
+    const m = await post('/ml/walk-forward', { symbol: 'AAA', folds: 3 }); expect(m.status).toBe(200); expect(m.body.results.length).toBeGreaterThan(5); expect(m.body.importance.features).toHaveLength(12)
+  }, 120000)
 })

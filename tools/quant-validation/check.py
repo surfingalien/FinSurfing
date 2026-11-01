@@ -136,6 +136,50 @@ from sklearn.manifold import TSNE, trustworthiness
 t=D['tsne']; X=np.array(t['X']); mine=trustworthiness(X,np.array(t['emb']),n_neighbors=10); sk=trustworthiness(X,TSNE(2,perplexity=15,random_state=0,init='pca').fit_transform(X),n_neighbors=10)
 rec('t-SNE neighbourhood preservation vs scikit-learn','trustworthiness (k=10)',mine,sk,0.06,False,f'mine {mine:.3f} vs sklearn {sk:.3f}')
 
+
+# ---------- round 2
+ex=D['exotics']; b=ex['base']
+def bsproc(S,q,r,sig): return ql.BlackScholesMertonProcess(ql.QuoteHandle(ql.SimpleQuote(S)),ql.YieldTermStructureHandle(ql.FlatForward(today,q,dc)),ql.YieldTermStructureHandle(ql.FlatForward(today,r,dc)),ql.BlackVolTermStructureHandle(ql.BlackConstantVol(today,cal,sig,dc)))
+pr=bsproc(b['S'],b['q'],b['r'],b['sigma']); mT=mat(b['T'])
+for g in ex['geo']:
+    for t in ['call','put']:
+        fixes=[today+int(round(365*(k+1)/g['n'])) for k in range(g['n'])]
+        o=ql.DiscreteAveragingAsianOption(ql.Average.Geometric,1.0,0,fixes,ql.PlainVanillaPayoff(ql.Option.Call if t=='call' else ql.Option.Put,b['K']),ql.EuropeanExercise(mT))
+        o.setPricingEngine(ql.AnalyticDiscreteGeometricAveragePriceAsianEngine(pr))
+        rec('Geometric Asian closed form vs QuantLib',f"{t} n={g['n']}",g[t],o.NPV(),2e-3,True,'fixing dates rounded to whole days')
+fixes=[today+int(round(365*(k+1)/52)) for k in range(52)]
+o=ql.DiscreteAveragingAsianOption(ql.Average.Arithmetic,0.0,0,fixes,ql.PlainVanillaPayoff(ql.Option.Call,b['K']),ql.EuropeanExercise(mT))
+o.setPricingEngine(ql.MCDiscreteArithmeticAPEngine(pr,'pseudorandom',antitheticVariate=True,controlVariate=True,requiredSamples=200000,seed=42))
+am=ex['asianMc']; rec('Arithmetic Asian MC (control variate) vs QuantLib MC','call n=52',am['price'],o.NPV(),max(4*am['se'],0.01)/o.NPV(),True,f"se {am['se']:.4f}")
+bt={'down-and-out':ql.Barrier.DownOut,'down-and-in':ql.Barrier.DownIn,'up-and-out':ql.Barrier.UpOut,'up-and-in':ql.Barrier.UpIn}
+for x in ex['barrier']:
+    o=ql.BarrierOption(bt[x['barrier']],x['H'],0.0,ql.PlainVanillaPayoff(ql.Option.Call if x['type']=='call' else ql.Option.Put,b['K']),ql.EuropeanExercise(mT)); o.setPricingEngine(ql.AnalyticBarrierEngine(pr)); ref=o.NPV()
+    rec('Barrier closed form vs QuantLib AnalyticBarrierEngine',f"{x['barrier']} {x['type']} H={x['H']}",x['analytic'],ref,1e-6 if ref>1e-6 else 1,ref>1e-6)
+    rec('Barrier MC (Brownian bridge) vs QuantLib analytic (in standard errors)',f"{x['barrier']} {x['type']} H={x['H']}",(x['mc']-ref)/x['se'],0,3.0,False,f"MC {x['mc']:.4f} ± {x['se']:.4f} vs {ref:.4f}")
+for x in ex['lookback']:
+    o=ql.ContinuousFloatingLookbackOption(b['S'],ql.FloatingTypePayoff(ql.Option.Call if x['type']=='call' else ql.Option.Put),ql.EuropeanExercise(mT)); o.setPricingEngine(ql.AnalyticContinuousFloatingLookbackEngine(pr))
+    rec('Lookback closed form vs QuantLib',x['type'],x['analytic'],o.NPV(),1e-6,True)
+sf=D['sabrFit']; strikes=[q_['strike'] for q_ in sf['quotes']]; vols=[q_['iv'] for q_ in sf['quotes']]
+try:
+    si=ql.SABRInterpolation(strikes,vols,1.0,100.0,0.05,0.7,0.5,0.0,False,True,False,False)   # calibrates in the constructor
+    qlsse=sum((ql.sabrVolatility(k,100.0,1.0,si.alpha(),si.beta(),si.nu(),si.rho())-v)**2 for k,v in zip(strikes,vols)); mine=sum((f['model']-f['market'])**2 for f in sf['fit']['fitted'])
+    rec('SABR calibration vs QuantLib SABRInterpolation','excess fit error vs QuantLib (0 = as good or better)',max(mine/qlsse-1,0),0,0.05,False,f'SSE ratio ours/QuantLib {mine/qlsse:.2f}; '+f"alpha {sf['fit']['alpha']:.4f}/{si.alpha():.4f} rho {sf['fit']['rho']:.3f}/{si.rho():.3f} nu {sf['fit']['nu']:.3f}/{si.nu():.3f}")
+    rec('SABR calibration vs planted truth (noisy quotes)','rho (truth -0.40)',sf['fit']['rho'],-0.4,0.06); rec('SABR calibration vs planted truth (noisy quotes)','nu (truth 0.60)',sf['fit']['nu'],0.6,0.06); rec('SABR calibration vs planted truth (noisy quotes)','alpha (truth 0.06)',sf['fit']['alpha'],0.06,0.005)
+except Exception as e:
+    rows.append(('SABR calibration vs QuantLib SABRInterpolation','QuantLib call failed: '+str(e)[:60],0,0,0,0,True,'skipped'))
+from sklearn.svm import SVC
+k=D['ksvm']; Z=np.array(k['Z']); y=np.array(k['y']); m=SVC(C=1,gamma='scale').fit(Z,y); ref=m.decision_function(Z); mine=np.array(k['dec'])
+rec('Kernel SVM (RBF) vs scikit-learn SVC','support vectors',k['nsv'],m.n_support_.sum(),2); rec('Kernel SVM (RBF) vs scikit-learn SVC','decision function max diff',np.abs(mine-ref).max(),0,0.02); rec('Kernel SVM (RBF) vs scikit-learn SVC','same class on every point',((mine>0)==(ref>0)).mean(),1,1e-9)
+from arch.unitroot import VarianceRatio
+vr=D['vr']
+for res in vr['res']:
+    a=VarianceRatio(np.array(vr['p']),lags=res['q'],trend='c',debiased=True,robust=True,overlap=True)
+    rec('Variance ratio vs arch','VR q=%d'%res['q'],res['vr'],a.vr,1e-6,True); rec('Variance ratio vs arch','robust z q=%d'%res['q'],res['zRobust'],a.stat,0.05,True)
+for kp in D['kupiec']:
+    x,n,p=kp['x'],kp['n'],kp['p']; ph=x/n
+    lr=-2*((n-x)*math.log(1-p)+x*math.log(p)-((n-x)*math.log(1-ph) if ph<1 else 0)-(x*math.log(ph) if x>0 else 0))
+    rec('Kupiec POF vs scipy chi2',f'{x}/{n} at {p}',kp['pValue'],st.chi2.sf(lr,1),1e-8)
+
 by=collections.OrderedDict()
 for g,n,m,r,d,tol,ok,note in rows: by.setdefault(g,[]).append((n,m,r,d,tol,ok,note))
 tot=sum(len(v) for v in by.values()); fails=0

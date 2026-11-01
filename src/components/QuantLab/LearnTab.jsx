@@ -2,7 +2,7 @@
 import { useMemo, useState } from 'react'
 import { Search, ExternalLink } from 'lucide-react'
 import { Card } from './shared'
-import { TERMS, STRATEGIES, MODELS, ML_ALGOS, BIG_O } from './reference'
+import { TERMS, STRATEGIES, MODELS, ML_ALGOS, BIG_O, PLAYBOOK } from './reference'
 
 const go = where => { window.location.hash = `#/${where}` }
 function Where({ where }) {
@@ -26,7 +26,7 @@ function Section({ title, rows, cols = 3 }) {
 export default function LearnTab() {
   const [q, setQ] = useState('')
   const f = useMemo(() => { const s = q.trim().toLowerCase(); return rows => (s ? rows.filter(r => r.slice(0, 2).join(' ').toLowerCase().includes(s)) : rows) }, [q])
-  const implemented = [...TERMS, ...STRATEGIES, ...MODELS.map(m => [m[0], '', m[1]]), ...ML_ALGOS.map(m => [m[0], '', m[1]])]
+  const implemented = [...TERMS, ...STRATEGIES, ...PLAYBOOK, ...MODELS.map(m => [m[0], '', m[1]]), ...ML_ALGOS.map(m => [m[0], '', m[1]])]
   const built = implemented.filter(r => r[2]).length
   return (
     <div className="space-y-4">
@@ -34,8 +34,9 @@ export default function LearnTab() {
         <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
         <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search terms, strategies, models…" className="w-full pl-9 pr-3 py-2 rounded-xl bg-slate-500/10 border border-slate-500/20 text-sm text-white focus:outline-none focus:border-mint-400/60" />
       </div>
-      <p className="text-[11px] text-slate-500">{built} of {implemented.length} entries link to something you can run in FinSurfing. The rest are definitions — deliberately not implemented (they need data or infrastructure this app does not have, or are concepts rather than tools).</p>
+      <p className="text-[11px] text-slate-500">{built} of {implemented.length} entries link to something you can run in FinSurfing. Every entry now links to something you can run.</p>
       <Section title="Strategies" rows={f(STRATEGIES)} />
+      <Section title="Gamma scalping playbook" rows={f(PLAYBOOK)} />
       <Section title="Quant models" rows={f(MODELS.map(m => [m[0], '', m[1]]))} />
       <Section title="Machine-learning algorithms" rows={f(ML_ALGOS.map(m => [m[0], '', m[1]]))} />
       <Card title="Cost cheatsheet (time · memory · accuracy)">

@@ -32,3 +32,12 @@ test('clusterSymbols groups symbols by risk fingerprint and flags nothing silent
   expect(r.symbols).toHaveLength(8); expect(new Set(r.symbols.slice(0, 4).map(x => x.kmeans)).size).toBe(1); expect(r.symbols[0].kmeans).not.toBe(r.symbols[7].kmeans); expect(r.symbols[0].x).not.toBeNull()
   expect(() => C.clusterSymbols({ A: set.A })).toThrow()
 })
+
+test('purged walk-forward CV: noise beats the baseline in no consistent way; a real signal does, and its feature ranks first', () => {
+  const noise = C.walkForwardModels(bars(1200, 11), { folds: 4, only: ['Logistic regression', 'Gaussian naive Bayes', 'Decision tree'] })
+  expect(noise.results.length).toBe(3); expect(noise.verdict).toMatch(/No model/); expect(noise.purgedAndEmbargoed).toBe(5)
+  const sig = C.walkForwardModels(bars(1500, 12, { ar: 0.4 }), { horizon: 1, folds: 4, only: ['Logistic regression'] })
+  expect(sig.results[0].meanEdgeVsBaseline).toBeGreaterThan(0.03)
+  expect(sig.importance.features[0].feature).toBe('ret1')                    // yesterday's return carries the planted signal
+  expect(() => C.walkForwardModels(bars(300, 13), { folds: 5 })).toThrow(/folds/)
+})

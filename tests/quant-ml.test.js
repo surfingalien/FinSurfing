@@ -7,13 +7,13 @@ function blobs(n, seed, sep = 2) { const g = L.rng(seed), X = [], y = []; for (l
 function xor(n, seed) { const g = L.rng(seed), X = [], y = []; for (let i = 0; i < n; i++) { const a = g.uniform() * 2 - 1, b = g.uniform() * 2 - 1; X.push([a, b]); y.push(a * b > 0 ? 1 : 0) } return { X, y } }
 const acc = (p, y) => p.filter((v, i) => (v > 0.5 ? 1 : 0) === y[i]).length / y.length
 
-test.each(['logistic', 'knn', 'gaussianNB', 'decisionTree', 'randomForest', 'gradientBoosting', 'linearSVM', 'lda', 'qda'])('%s separates two blobs out of sample', name => {
+test.each(['logistic', 'knn', 'gaussianNB', 'decisionTree', 'randomForest', 'gradientBoosting', 'linearSVM', 'kernelSVM', 'lda', 'qda'])('%s separates two blobs out of sample', name => {
   const tr = blobs(400, 1), te = blobs(400, 2), m = M[name]().fit(tr.X, tr.y), p = m.predictProba(te.X)
   expect(acc(p, te.y)).toBeGreaterThan(0.8); p.forEach(v => { expect(v).toBeGreaterThan(0); expect(v).toBeLessThan(1) })
 })
 test('non-linear models solve XOR; linear ones cannot', () => {
   const tr = xor(800, 3), te = xor(400, 4)
-  for (const name of ['decisionTree', 'randomForest', 'gradientBoosting', 'knn', 'qda']) expect(acc(M[name](name === 'decisionTree' ? { maxDepth: 6 } : {}).fit(tr.X, tr.y).predictProba(te.X), te.y)).toBeGreaterThan(0.85)
+  for (const name of ['decisionTree', 'randomForest', 'gradientBoosting', 'knn', 'qda', 'kernelSVM']) expect(acc(M[name](name === 'decisionTree' ? { maxDepth: 6 } : {}).fit(tr.X, tr.y).predictProba(te.X), te.y)).toBeGreaterThan(0.85)
   for (const name of ['logistic', 'linearSVM']) expect(acc(M[name]().fit(tr.X, tr.y).predictProba(te.X), te.y)).toBeLessThan(0.65)
 })
 test('on pure noise no model beats a coin by much (the honest result)', () => {

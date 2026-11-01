@@ -5,13 +5,14 @@
  */
 import { useState } from 'react'
 import { RunPanel, Card, Note, Stat, ResultView, MiniLine, MiniScatter, fmt, pct } from './shared'
+import { SubTabs, HedgingLab, CalibrationTab, ExoticsTab, VrpTab, WalkForwardTab, VarBacktestPanel, RiskPremiumPanel, MlWalkForwardPanel } from './advanced'
 
 const sel = (name, label, options, def) => ({ name, label, type: 'select', options, default: def })
 const num = (name, label, def, hint) => ({ name, label, type: 'number', default: def, hint })
 const txt = (name, label, def, hint, wide) => ({ name, label, type: 'text', default: def, hint, wide })
 
 /* ── Options ───────────────────────────────────────────────────────────────── */
-export function OptionsTab() {
+function OptionsPricer() {
   return (
     <div className="space-y-8">
       <RunPanel title="Price an option four ways" endpoint="/api/quant/options/price"
@@ -50,8 +51,14 @@ export function OptionsTab() {
   )
 }
 
+export function OptionsTab() {
+  const [w, setW] = useState('pricer')
+  return (<div className="space-y-4"><SubTabs tabs={[['pricer', 'Pricer & Greeks'], ['hedging', 'Hedging lab'], ['calibration', 'Calibration'], ['exotics', 'Exotics']]} value={w} onChange={setW} />
+    {w === 'pricer' && <OptionsPricer />}{w === 'hedging' && <HedgingLab />}{w === 'calibration' && <CalibrationTab />}{w === 'exotics' && <ExoticsTab />}</div>)
+}
+
 /* ── Portfolio ─────────────────────────────────────────────────────────────── */
-export function PortfolioTab() {
+function PortfolioSplit() {
   return (
     <RunPanel title="Portfolio optimisers, scored out of sample" endpoint="/api/quant/optimize" needsAuth
       blurb="Builds equal-weight, inverse-vol, minimum-variance, max-Sharpe, risk-parity and HRP portfolios from the first 70% of history (Ledoit–Wolf shrunk covariance, expected returns shrunk halfway to the mean) and scores each on the final 30% it never saw."
@@ -74,8 +81,13 @@ export function PortfolioTab() {
   )
 }
 
+export function PortfolioTab() {
+  const [w, setW] = useState('split')
+  return (<div className="space-y-4"><SubTabs tabs={[['split', 'Train / test split'], ['walk', 'Walk-forward backtest']]} value={w} onChange={setW} />{w === 'split' ? <PortfolioSplit /> : <WalkForwardTab />}</div>)
+}
+
 /* ── Volatility ────────────────────────────────────────────────────────────── */
-export function VolatilityTab() {
+function VolEstimators() {
   return (
     <RunPanel title="Volatility models" endpoint="/api/quant/volatility" needsAuth
       blurb="Rolling (O(1) Welford update), EWMA, GARCH(1,1), range-based estimators and a HAR forecast — then how much to hold to target 15% volatility."
@@ -101,6 +113,11 @@ export function VolatilityTab() {
   )
 }
 
+export function VolatilityTab() {
+  const [w, setW] = useState('est')
+  return (<div className="space-y-4"><SubTabs tabs={[['est', 'Estimators & forecasts'], ['vrp', 'Variance risk premium']]} value={w} onChange={setW} />{w === 'est' ? <VolEstimators /> : <VrpTab />}</div>)
+}
+
 /* ── Time series ───────────────────────────────────────────────────────────── */
 export function SeriesTab() {
   return (
@@ -120,6 +137,8 @@ export function SeriesTab() {
           </Card>
           {d.arima && <Card title={`ARIMA(${d.arima.p},${d.arima.d},${d.arima.q}) forecast`}><MiniLine data={d.arima.forecast} xKey="step" lines={[{ key: 'mean', name: 'forecast' }, { key: 'lo', name: '95% low', color: '#64748b' }, { key: 'hi', name: '95% high', color: '#64748b' }]} /><div className="mt-2"><Note>{d.arima.note}. A price forecast this near a random walk is mostly a band; read the width, not the middle line.</Note></div></Card>}
           {d.regimes && <Card title="Regimes (2-state hidden Markov model)"><div className="grid sm:grid-cols-3 gap-3 mb-3"><Stat label="Now" value={d.regimes.currentState} sub={`P(stressed) ${pct(d.regimes.currentProbStressed, 0)}`} />{d.regimes.states.map(s => <Stat key={s.name} label={`${s.name} state`} value={pct(s.annualVol, 1)} sub={`avg stay ${fmt(s.expectedDurationDays, 0)} days`} />)}</div></Card>}
+          {d.varianceRatio && <Card title="Random-walk (martingale) test — Lo–MacKinlay variance ratios"><ResultView data={d.varianceRatio.map(v => ({ horizonDays: v.q, varianceRatio: v.vr, robustZ: v.zRobust, pValue: v.pValueRobust, verdict: v.verdict }))} /><div className="mt-2"><Note>VR = 1 for a random walk; above 1 means returns trend, below 1 that they revert. The robust z allows for volatility clustering.</Note></div></Card>}
+          {d.kalmanLevel && <Card title={`Kalman-filtered level (last 250 days, gain ${fmt(d.kalmanLevel.gain, 3)})`}><MiniLine data={d.kalmanLevel.series} xKey="i" lines={[{ key: 'price', color: '#64748b' }, { key: 'level', name: 'filtered level', color: '#00ffcc' }]} /></Card>}
           {d.cycles && <Card title="Dominant cycles (FFT)"><ResultView data={d.cycles} /><div className="mt-2"><Note>Spectral peaks of noise are common. A cycle explaining only a few percent of power is not a signal.</Note></div></Card>}
         </>
       )} />
@@ -156,10 +175,12 @@ export function StrategiesTab() {
 /* ── Risk ──────────────────────────────────────────────────────────────────── */
 export function RiskTab() {
   const [which, setWhich] = useState('stress')
-  const tabs = [['stress', 'Stress test'], ['capm', 'CAPM & ratios'], ['mc', 'Monte Carlo VaR'], ['copula', 'Copula'], ['pca', 'PCA'], ['impact', 'Market impact'], ['bayes', 'Bayesian win rate']]
+  const tabs = [['stress', 'Stress test'], ['varbt', 'VaR backtest'], ['capm', 'CAPM & ratios'], ['premium', 'Risk premium'], ['mc', 'Monte Carlo VaR'], ['copula', 'Copula'], ['pca', 'PCA'], ['impact', 'Market impact'], ['bayes', 'Bayesian win rate']]
   return (
     <div className="space-y-4">
       <div className="flex gap-2 flex-wrap">{tabs.map(([k, l]) => <button key={k} onClick={() => setWhich(k)} className={`px-3 py-1.5 rounded-lg text-xs ${which === k ? 'bg-mint-400/15 text-mint-400 border border-mint-400/30' : 'text-slate-400 border border-slate-500/20'}`}>{l}</button>)}</div>
+      {which === 'varbt' && <VarBacktestPanel key="vb" />}
+      {which === 'premium' && <RiskPremiumPanel key="rp" />}
       {which === 'stress' && <RunPanel key="a" title="Stress test" endpoint="/api/quant/risk/stress"
         blurb="Each scenario shocks the market and every position moves by its beta (unknown beta is assumed 1 and listed). Add a per-position shock to override."
         fields={[{ name: 'positions', label: 'Positions (JSON)', type: 'textarea', rows: 6, wide: true, default: '[\n {"symbol":"NVDA","value":30000,"beta":1.8},\n {"symbol":"JNJ","value":20000,"beta":0.6},\n {"symbol":"GLD","value":10000,"beta":0.1}\n]' }]}
@@ -194,12 +215,12 @@ export function RiskTab() {
 /* ── ML models ─────────────────────────────────────────────────────────────── */
 export function ModelsTab() {
   const [which, setWhich] = useState('compare')
-  const tabs = [['compare', 'Model comparison'], ['cluster', 'Clustering'], ['rl', 'Reinforcement learning']]
+  const tabs = [['compare', 'Model comparison'], ['walk', 'Walk-forward CV'], ['cluster', 'Clustering'], ['rl', 'Reinforcement learning']]
   return (
     <div className="space-y-4">
       <div className="flex gap-2 flex-wrap">{tabs.map(([k, l]) => <button key={k} onClick={() => setWhich(k)} className={`px-3 py-1.5 rounded-lg text-xs ${which === k ? 'bg-mint-400/15 text-mint-400 border border-mint-400/30' : 'text-slate-400 border border-slate-500/20'}`}>{l}</button>)}</div>
-      {which === 'compare' && <RunPanel key="a" title="Twelve models, one honest test" endpoint="/api/quant/ml/compare" needsAuth runLabel="Train & test"
-        blurb="Logistic, KNN, naive Bayes, tree, random forest, gradient boosting, SVM, LDA, QDA, MLP, 1-D CNN and LSTM predict whether the stock is higher N days later. Trained on the first 65%, a purge gap, then scored on data they never saw — against the do-nothing baseline, with the interval widened for having tried twelve models. This takes up to a minute."
+      {which === 'compare' && <RunPanel key="a" title="Thirteen models, one honest test" endpoint="/api/quant/ml/compare" needsAuth runLabel="Train & test"
+        blurb="Logistic, KNN, naive Bayes, tree, random forest, gradient boosting, linear and RBF-kernel SVM, LDA, QDA, MLP, 1-D CNN and LSTM predict whether the stock is higher N days later. Trained on the first 65%, a purge gap, then scored on data they never saw — against the do-nothing baseline, with the interval widened for having tried thirteen models. This takes up to a minute."
         fields={[{ name: 'symbol', label: 'Symbol', type: 'symbol', default: 'SPY' }, num('horizon', 'Horizon (days)', 5)]}
         render={d => (
           <>
@@ -212,6 +233,7 @@ export function ModelsTab() {
             </Card>
           </>
         )} />}
+      {which === 'walk' && <MlWalkForwardPanel key="w" />}
       {which === 'cluster' && <RunPanel key="b" title="Cluster symbols by risk fingerprint" endpoint="/api/quant/ml/cluster" needsAuth
         blurb="k-means, hierarchical and DBSCAN on return, volatility, downside volatility, 6-month return and drawdown; t-SNE for a 2-D map. DBSCAN's −1 marks outliers."
         fields={[{ name: 'symbols', label: 'Symbols (4–30)', type: 'symbols', default: 'AAPL, MSFT, NVDA, TSLA, JNJ, KO, PG, XOM, CVX, JPM, GLD, TLT', wide: true }, num('k', 'Clusters', 3)]}
@@ -236,6 +258,15 @@ function TsneMap({ rows }) {
 /* ── Calculators ───────────────────────────────────────────────────────────── */
 const J = (s) => s.trim()
 const CALCS = [
+  ['parity', 'Put–call parity arbitrage', [num('call', 'Call price', 10.45), num('put', 'Put price', 5.57), num('S', 'Spot', 100), num('K', 'Strike', 100), num('r', 'Rate', 0.05), num('T', 'Years', 1), num('costPerShare', 'Round-trip cost per share', 0.02)]],
+  ['theta-gamma', 'Theta–gamma & rule of 16', [num('S', 'Spot', 100), num('K', 'Strike', 100), num('sigma', 'Implied vol', 0.16), num('T', 'Years', 0.25)]],
+  ['capacity', 'Strategy capacity', [num('edgeBps', 'Gross edge per trade (bps)', 25), num('adv', 'Average daily volume (shares)', 2000000), num('price', 'Price', 50), num('dailyVol', 'Daily volatility', 0.02), num('positionWeight', 'Position weight in the portfolio', 0.05), num('maxEdgeShare', 'Share of edge impact may consume', 0.5)]],
+  ['leverage', 'Leverage & margin call', [num('equity', 'Your equity', 100000), num('leverage', 'Leverage (×)', 2), num('maintenance', 'Maintenance margin', 0.25), sel('side', 'Side', ['long', 'short'], 'long'), num('annualBorrowRate', 'Borrow rate', 0.06), num('days', 'Holding days', 30)]],
+  ['short-sale', 'Short selling cost', [num('price', 'Price', 50), num('shares', 'Shares', 1000), num('days', 'Holding days', 90), num('borrowFeeAnnual', 'Borrow fee / yr', 0.01), num('dividendYield', 'Dividend yield', 0.02), num('targetPrice', 'Your target price', 42)]],
+  ['order-book', 'Order book walk (market order fill)', [sel('side', 'Side', ['buy', 'sell'], 'buy'), num('quantity', 'Quantity', 1500), { name: 'bids', label: 'Bids (JSON)', type: 'textarea', rows: 3, default: '[{"price":99.98,"size":500},{"price":99.95,"size":800},{"price":99.9,"size":2000}]' }, { name: 'asks', label: 'Asks (JSON)', type: 'textarea', rows: 3, default: '[{"price":100.02,"size":400},{"price":100.05,"size":700},{"price":100.12,"size":1500}]' }]],
+  ['latency', 'Cost of latency', [num('dailyVol', 'Daily volatility', 0.02), num('latencyMs', 'Latency (ms)', 50), num('notional', 'Order size ($)', 100000), num('tradesPerDay', 'Trades per day', 100)]],
+  ['ito', "Itô's lemma — volatility drag", [num('mu', 'Drift μ', 0.08), num('sigma', 'Volatility σ', 0.3), num('T', 'Years', 10), num('paths', 'Paths', 20000)]],
+  ['turnover', 'Turnover & cost drag', [{ name: 'from', label: 'Current weights (JSON)', type: 'textarea', rows: 2, default: '{"SPY":0.6,"TLT":0.4}' }, { name: 'to', label: 'Target weights (JSON)', type: 'textarea', rows: 2, default: '{"SPY":0.5,"TLT":0.3,"GLD":0.2}' }, num('costBps', 'Cost (bps per side)', 10), num('rebalancesPerYear', 'Rebalances per year', 12)]],
   ['carry', 'Carry trade (FX)', [num('rateLong', 'Rate of currency you hold', 0.05), num('rateShort', 'Rate of currency you fund in', 0.01), num('fxVol', 'FX volatility', 0.08)]],
   ['basis', 'Basis trade / cash-and-carry', [num('spot', 'Spot', 100), num('futures', 'Futures price', 104), num('days', 'Days to expiry', 365), num('rate', 'Financing rate', 0.04), num('yieldOrConvenience', 'Yield / convenience', 0), num('costPerUnit', 'Round-trip cost per unit', 0.2)]],
   ['roll-yield', 'Roll yield', [num('near', 'Near contract', 100), num('far', 'Far contract', 102), num('daysBetween', 'Days between', 30)]],
@@ -255,12 +286,13 @@ const CALCS = [
   ['shortfall', 'Implementation shortfall', [sel('side', 'Side', ['buy', 'sell'], 'buy'), num('arrival', 'Arrival price', 100), num('avgFill', 'Average fill', 100.12)]],
 ]
 const parseJsonish = (v, f) => (f.type === 'textarea' || ['weights', 'vols'].includes(f.name) ? JSON.parse(v) : v)
+const CALC_INTRO = 'Calculators over numbers you enter — for the strategies that need data this app has no feed for (futures curves, deal terms, CDS spreads, convertible quotes, option chains, order books) and for the trading-mechanics concepts (margin, borrow, latency, capacity, turnover).'
 export function CalculatorsTab() {
   const [name, setName] = useState('merger-arb')
   const def = CALCS.find(c => c[0] === name)
   return (
     <div className="space-y-4">
-      <Note>These strategies need data this app does not have (futures curves, deal terms, CDS spreads, convertible quotes, option chains), so each is a calculator over the numbers you enter. They show what the trade pays if it works and what the market is implying.</Note>
+      <Note>{CALC_INTRO}</Note>
       <div className="flex gap-2 flex-wrap">{CALCS.map(([k, l]) => <button key={k} onClick={() => setName(k)} className={`px-3 py-1.5 rounded-lg text-xs ${name === k ? 'bg-mint-400/15 text-mint-400 border border-mint-400/30' : 'text-slate-400 border border-slate-500/20'}`}>{l}</button>)}</div>
       <RunPanel key={name} title={def[1]} endpoint={`/api/quant/calc/${name}`} runLabel="Calculate" fields={def[2]}
         toBody={v => Object.fromEntries(def[2].map(f => [f.name, f.type === 'number' ? (v[f.name] === '' ? undefined : Number(v[f.name])) : parseJsonish(String(v[f.name]), f)]))}

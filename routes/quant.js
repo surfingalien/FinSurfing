@@ -28,6 +28,10 @@ const calc  = require('../lib/quant/calculators')
 const mlc   = require('../lib/quant/ml-compare')
 const nn    = require('../lib/quant/neural')
 const L     = require('../lib/quant/linalg')
+const hedge = require('../lib/quant/hedging')
+const exo   = require('../lib/quant/exotics')
+const vrpQ  = require('../lib/quant/vrp')
+const varB  = require('../lib/quant/var-backtest')
 
 const router = express.Router()
 const light = rateLimit({ windowMs: 60_000, max: 60, message: { error: 'Too many requests — wait a minute' } })
@@ -100,12 +104,40 @@ router.post('/options/gamma-scalp', light, route('quant/options/gamma-scalp', re
   return opt.simulateGammaScalp({ S: num(b.S, 'S', { min: 0.01, max: 1e6, def: 100 }), K: num(b.K, 'K', { min: 0.01, max: 1e6, def: 100 }), r: 0, sigmaImplied: num(b.sigmaImplied, 'sigmaImplied', { min: 0.01, max: 3, def: 0.2 }), sigmaRealized: num(b.sigmaRealized, 'sigmaRealized', { min: 0.01, max: 3, def: 0.25 }), days: Math.round(num(b.days, 'days', { min: 5, max: 250, def: 60 })), T: num(b.T, 'T', { min: 0.05, max: 3, def: 0.5 }), rehedgesPerDay: Math.round(num(b.rehedgesPerDay, 'rehedgesPerDay', { min: 1, max: 8, def: 1 })), seed: Math.round(num(b.seed, 'seed', { min: 1, max: 1e6, def: 3 })), costBps: num(b.costBps, 'costBps', { min: 0, max: 100, def: 0 }) })
 }))
 
+const quoteList = (arr, { needT = false } = {}) => {
+  if (!Array.isArray(arr) || arr.length < 3 || arr.length > 60) bad('quotes: 3–60 rows of {strike, iv' + (needT ? ', T' : '') + '}')
+  return arr.map(x => ({ strike: num(x.strike, 'strike', { min: 0.0001 }), iv: num(x.iv, 'iv (decimal)', { min: 0.001, max: 5 }), ...(needT ? { T: num(x.T, 'T', { min: 1 / 365, max: 10 }) } : {}) }))
+}
+router.post('/options/hedging', heavy, route('quant/options/hedging', req => {
+  const b = req.body || {}
+  const args = { S: num(b.S, 'S', { min: 0.01, max: 1e6, def: 100 }), K: num(b.K, 'K', { min: 0.01, max: 1e6, def: 100 }), T: num(b.T, 'T', { min: 0.02, max: 1, def: 0.25 }), sigmaImplied: num(b.sigmaImplied, 'sigmaImplied', { min: 0.01, max: 3, def: 0.2 }), sigmaRealized: num(b.sigmaRealized, 'sigmaRealized', { min: 0.01, max: 3, def: 0.25 }), costBps: num(b.costBps, 'costBps', { min: 0, max: 100, def: 5 }), riskAversion: num(b.riskAversion, 'riskAversion', { min: 0.01, max: 100, def: 1 }), type: b.type === 'put' ? 'put' : 'call', paths: Math.round(num(b.paths, 'paths', { min: 100, max: 3000, def: 1000 })), seed: Math.round(num(b.seed, 'seed', { min: 1, max: 1e6, def: 1 })) }
+  return { ...hedge.compareHedging(args), discrete: hedge.discreteHedgingError({ S: args.S, K: args.K, T: args.T, sigma: args.sigmaImplied, type: args.type, counts: [8, 32, 128], paths: Math.min(args.paths, 1000) }) }
+}))
+router.post('/options/calibrate-sabr', light, route('quant/options/calibrate-sabr', req => {
+  const b = req.body || {}
+  return opt.calibrateSabr({ F: num(b.F, 'F (forward)', { min: 1e-6 }), T: num(b.T, 'T', { min: 1 / 365, max: 30 }), beta: num(b.beta, 'beta', { min: 0, max: 1, def: 1 }), quotes: quoteList(b.quotes) })
+}))
+router.post('/options/calibrate-heston', heavy, route('quant/options/calibrate-heston', (req, res) => {
+  startJsonHeartbeat(res); const b = req.body || {}
+  return opt.calibrateHeston({ S: num(b.S, 'S', { min: 0.0001 }), r: num(b.r, 'r', { min: -0.2, max: 1, def: 0.03 }), q: num(b.q, 'q', { min: 0, max: 1, def: 0 }), quotes: quoteList(b.quotes, { needT: true }), maxIter: 300 })
+}))
+router.post('/options/exotic', heavy, route('quant/options/exotic', req => {
+  const b = req.body || {}, kind = b.kind
+  const a = { S: num(b.S, 'S', { min: 0.01, max: 1e6, def: 100 }), r: num(b.r, 'r', { min: -0.2, max: 1, def: 0.04 }), q: num(b.q, 'q', { min: 0, max: 1, def: 0 }), sigma: num(b.sigma, 'sigma', { min: 0.01, max: 3, def: 0.25 }), T: num(b.T, 'T', { min: 1 / 365, max: 10, def: 1 }), type: b.type === 'put' ? 'put' : 'call', paths: Math.round(num(b.paths, 'paths', { min: 1000, max: 40000, def: 20000 })), seed: 1 }
+  if (kind === 'asian') return { kind, ...exo.asian({ ...a, K: num(b.K, 'K', { min: 0.01, def: a.S }), fixings: Math.round(num(b.fixings, 'fixings', { min: 2, max: 365, def: 52 })) }) }
+  if (kind === 'barrier') return { kind, ...exo.barrier({ ...a, K: num(b.K, 'K', { min: 0.01, def: a.S }), H: num(b.H, 'H (barrier)', { min: 0.01 }), barrier: ['up-and-out', 'down-and-out', 'up-and-in', 'down-and-in'].includes(b.barrier) ? b.barrier : bad('barrier must be up-and-out, down-and-out, up-and-in or down-and-in'), steps: Math.round(num(b.steps, 'steps', { min: 10, max: 365, def: 100 })) }) }
+  if (kind === 'lookback') return { kind, ...exo.lookback({ ...a, steps: Math.round(num(b.steps, 'steps', { min: 10, max: 365, def: 100 })) }) }
+  bad('kind must be asian, barrier or lookback')
+}))
+
 const CALCS = {
   carry: calc.carryTrade, basis: calc.basisTrade, 'roll-yield': calc.rollYield, 'merger-arb': calc.mergerArb, convertible: calc.convertibleArb,
   merton: calc.merton, vasicek: calc.vasicek, 'yield-curve': a => calc.yieldCurve(a.rates || {}, { history: a.history }), dispersion: calc.dispersion,
   'vol-term-structure': a => calc.volTermStructure(a.points || []), skew: calc.skewMetrics, 'skew-delta': calc.skewAwareDelta,
   heston: a => { const o = { ...a, type: a.type === 'put' ? 'put' : 'call' }; const price = opt.heston(o); return { price, impliedVol: opt.hestonImpliedVol(o), note: 'Fourier-inversion Heston price. v0 and theta are variances (σ²).' } },
   sabr: a => ({ smile: opt.sabrSmile({ ...a, strikes: a.strikes || [0.8, 0.9, 1, 1.1, 1.2].map(m => m * a.F) }), note: 'Hagan et al. (2002) lognormal SABR implied volatility; alpha is on the scale of F^(1−β).' }),
+  parity: calc.parityArbitrage, 'theta-gamma': calc.thetaGamma, capacity: calc.capacity, leverage: calc.leverageMargin, 'short-sale': calc.shortSale,
+  'order-book': calc.orderBookWalk, latency: calc.latencyCost, ito: a => calc.itoDemo({ ...a, paths: Math.min(Number(a.paths) || 20000, 50000) }), turnover: calc.turnover,
   'market-making': calc.avellanedaStoikov, execution: calc.executionSchedule, shortfall: calc.implementationShortfall,
 }
 router.get('/calc', (_req, res) => res.json({ calculators: Object.keys(CALCS) }))
@@ -149,6 +181,8 @@ router.post('/timeseries', heavy, route('quant/timeseries', async req => {
   tryit('autocorrelation', () => ({ acf: ts.acf(lr, 10), ljungBox: ts.ljungBox(lr, 10) })); tryit('cycles', () => ts.dominantCycles(lr.slice(-512)))
   tryit('arima', () => { const m = ts.arima(c.slice(-500).map(Math.log), { horizon: 10 }); return { ...m, forecast: m.forecast.map(f => ({ step: f.step, mean: Math.exp(f.mean), lo: Math.exp(f.lo), hi: Math.exp(f.hi) })) } })
   tryit('regimes', () => ts.hmm2(lr))
+  tryit('varianceRatio', () => [2, 5, 10, 20].map(q => ts.varianceRatio(c.map(Math.log), q)))
+  tryit('kalmanLevel', () => { const lp = c.slice(-250).map(Math.log), k = ts.kalmanLocalLevel(lp); return { gain: k.gain, series: lp.map((v, i) => ({ i, price: Math.exp(v), level: Math.exp(k.level[i]) })) } })
   return out
 }))
 
@@ -168,5 +202,32 @@ router.post('/risk/pca', heavy, route('quant/risk/pca', async req => { const lis
 router.post('/ml/compare', heavy, route('quant/ml/compare', async (req, res) => { startJsonHeartbeat(res); const s = sym(req.body?.symbol), b = await bars(s, '5y', req); return { symbol: s, ...mlc.compareModels(b, { horizon: Math.round(num(req.body?.horizon, 'horizon', { min: 1, max: 20, def: 5 })) }) } }))
 router.post('/ml/cluster', heavy, route('quant/ml/cluster', async req => { const list = syms(req.body?.symbols, { min: 4, max: 30 }), { map, failed } = await barsMap(list, '2y', req, 4); return { ...mlc.clusterSymbols(map, { k: Math.round(num(req.body?.k, 'k', { min: 2, max: 6, def: 3 })) }), skipped: failed } }))
 router.post('/ml/rl', heavy, route('quant/ml/rl', async (req, res) => { startJsonHeartbeat(res); const s = sym(req.body?.symbol), b = await bars(s, '5y', req); return { symbol: s, ...nn.qLearning(b) } }))
+
+router.post('/vrp', heavy, route('quant/vrp', async req => {
+  const s = sym(req.body?.symbol || 'SPY'), b = await bars(s, '5y', req), horizon = Math.round(num(req.body?.horizon, 'horizon', { min: 5, max: 63, def: 21 }))
+  let vix = null, vixError = null
+  if (s === 'SPY' || s === 'VOO' || s === 'IVV') { try { vix = await vrpQ.fetchVix({ start: '2019-01-01' }) } catch (e) { vixError = e.message } }
+  const iv = req.body?.impliedVol != null && req.body.impliedVol !== '' ? num(req.body.impliedVol, 'impliedVol (decimal)', { min: 0.01, max: 5 }) : vix ? vix[vix.length - 1].value / 100 : bad(vixError ? `VIX history is unavailable right now (${vixError}) — enter the implied volatility (decimal) instead` : 'enter the implied volatility (decimal) — only S&P 500 trackers (SPY, VOO, IVV) get it automatically from VIX')
+  const out = { symbol: s, impliedSource: req.body?.impliedVol != null && req.body.impliedVol !== '' ? 'entered' : `VIX ${vix[vix.length - 1].date} (FRED)`, snapshot: vrpQ.vrpSnapshot(b, { impliedVol: iv, horizon }) }
+  if (vix) { try { out.history = vrpQ.vrpHistory(b, vix, { horizon }) } catch (e) { out.historyError = e.message } } else if (vixError) out.historyError = vixError
+  return out
+}))
+router.post('/optimize/walk-forward', heavy, route('quant/optimize/walk-forward', async (req, res) => {
+  startJsonHeartbeat(res)
+  const list = syms(req.body?.symbols, { min: 2, max: 10 }), { map, failed } = await barsMap(list, '5y', req, 2)
+  return { ...optim.walkForward(map, { lookback: Math.round(num(req.body?.lookback, 'lookback', { min: 60, max: 756, def: 252 })), rebalance: Math.round(num(req.body?.rebalance, 'rebalance', { min: 5, max: 126, def: 21 })), costBps: num(req.body?.costBps, 'costBps', { min: 0, max: 200, def: 10 }), cap: num(req.body?.cap, 'cap', { min: 0.1, max: 1, def: 0.6 }) }), skipped: failed }
+}))
+router.post('/risk/var-backtest', heavy, route('quant/risk/var-backtest', async req => {
+  const s = sym(req.body?.symbol), b = await bars(s, '5y', req)
+  return { symbol: s, ...varB.backtestVar(L.logReturnsOf(b.map(x => x.c)), { level: num(req.body?.level, 'level', { min: 0.9, max: 0.999, def: 0.99 }), window: Math.round(num(req.body?.window, 'window', { min: 100, max: 750, def: 250 })) }) }
+}))
+router.post('/risk/premium', heavy, route('quant/risk/premium', async req => {
+  const s = sym(req.body?.symbol), b = await bars(s, '5y', req)
+  return { symbol: s, ...risk.riskPremium(L.returnsOf(b.map(x => x.c)), { rf: num(req.body?.rf, 'rf', { min: 0, max: 0.3, def: 0.04 }), B: 800 }) }
+}))
+router.post('/ml/walk-forward', heavy, route('quant/ml/walk-forward', async (req, res) => {
+  startJsonHeartbeat(res); const s = sym(req.body?.symbol), b = await bars(s, '5y', req)
+  return { symbol: s, ...mlc.walkForwardModels(b, { horizon: Math.round(num(req.body?.horizon, 'horizon', { min: 1, max: 20, def: 5 })), folds: Math.round(num(req.body?.folds, 'folds', { min: 3, max: 8, def: 5 })) }) }
+}))
 
 module.exports = router

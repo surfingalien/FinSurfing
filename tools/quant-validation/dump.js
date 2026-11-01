@@ -36,4 +36,17 @@ out.ml={};for(const [nm,mk] of [['circles',mkCircles],['blobs',mkBlobs]]){const 
 // ---- clustering
 const cg=L.rng(31),cx=[],ct=[];[[0,0],[7,0],[3.5,6]].forEach((c,k)=>{for(let i=0;i<50;i++){cx.push([c[0]+cg.normal()*0.7,c[1]+cg.normal()*0.7]);ct.push(k)}});out.cl={X:cx,truth:ct,km:ML.kmeans(cx,3,{seed:3}).labels,hc:ML.hierarchical(cx,3).labels,db:ML.dbscan(cx,{eps:1.2,minPts:4}).labels};
 const tg=L.rng(32),tx=[];[0,1,2].forEach(k=>{for(let i=0;i<40;i++)tx.push(Array.from({length:8},(_,j)=>(j===k?6:0)+tg.normal()*0.6))});out.tsne={X:tx,emb:ML.tsne(tx,{perplexity:15,iters:400,seed:2}).embedding};
+
+// ---- round 2: exotics, calibration, kernel SVM, variance ratio, Kupiec
+const X=require(R+'exotics'),TSm=require(R+'timeseries'),VB=require(R+'var-backtest');
+const ex={S:100,K:100,r:0.05,q:0.01,sigma:0.25,T:1};
+out.exotics={base:ex,geo:[12,52,252].map(n=>({n,call:X.geometricAsian({...ex,n,type:'call'}),put:X.geometricAsian({...ex,n,type:'put'})})),
+  asianMc:X.asian({...ex,fixings:52,paths:60000,seed:5}),
+  barrier:[['down-and-out','call',85],['down-and-in','call',85],['up-and-out','call',130],['up-and-in','call',130],['down-and-out','put',80],['up-and-out','put',120],['down-and-in','put',80],['up-and-in','put',120]].map(([b,t,H])=>({barrier:b,type:t,H,analytic:X.barrierAnalytic({...ex,H,type:t,barrier:b}),...(m=>({mc:m.price,se:m.se}))(X.barrier({...ex,H,type:t,barrier:b,steps:100,paths:30000,seed:7}))})),
+  lookback:['call','put'].map(t=>({type:t,analytic:X.lookbackAnalytic({...ex,type:t})}))};
+const sq=[70,80,90,95,100,105,110,120,130].map(K=>({strike:K,iv:O.sabrVol({F:100,K,T:1,beta:0.7,alpha:0.06,rho:-0.4,nu:0.6})+0.002*Math.sin(K)}));out.sabrFit={quotes:sq,fit:O.calibrateSabr({F:100,T:1,beta:0.7,quotes:sq})};
+const sv=L.rng(41),sX=[],sy=[];for(let i=0;i<600;i++){const c=i%2,rad=(c?1.6:0.7)+0.25*sv.normal(),a=sv.uniform()*6.283;sX.push([rad*Math.cos(a),rad*Math.sin(a),sv.normal()]);sy.push(c)}
+const sscZ=ML.scaler(sX).transform(sX),km=ML.kernelSVM({C:1}).fit(sX,sy);out.ksvm={Z:sscZ,y:sy,dec:km.decisionFunction(sX),nsv:km.supportVectors};
+const vrr=L.rng(42);let lp=0,e0=0;const lps=Array.from({length:2000},()=>{e0=0.15*e0+0.01*vrr.normal();return(lp+=e0)});out.vr={p:lps,res:[2,5,10].map(q=>TSm.varianceRatio(lps,q))};
+out.kupiec=[[10,1000,0.01],[25,1000,0.01],[3,500,0.05],[40,500,0.05]].map(([x,n,p])=>({x,n,p,...VB.kupiec(x,n,p)}));
 require('fs').mkdirSync(path.join(__dirname,'out'),{recursive:true});require('fs').writeFileSync(path.join(__dirname,'out','dump.json'),JSON.stringify(out));console.log('dumped',Object.keys(out).join(','));

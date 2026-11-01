@@ -15,7 +15,7 @@ export const TERMS = [
   ['Autocorrelation', 'Correlation with own past', Q('series')], ['Cointegration', 'Shared long-run relationship', Q('strategies')], ['Regression', 'Model variable relationships', Q('risk')],
   ['Regularization', 'Penalize model complexity', Q('models')], ['Cross-validation', 'Test on held-out folds', 'strategies'], ['Signal', 'Predictive trading indicator', 'research-desk'],
   ['Covariance', 'How assets move together', Q('portfolio')], ['PCA', 'Reduce dimensions, keep variance', Q('risk')], ['Kalman filter', 'Estimate a hidden state', Q('strategies')],
-  ['Martingale', 'Fair game, no drift', null], ['Brownian motion', 'Continuous random walk', Q('options')], ['Monte Carlo', 'Simulate with random draws', Q('options')],
+  ['Martingale', 'Fair game, no drift', Q('series')], ['Brownian motion', 'Continuous random walk', Q('options')], ['Monte Carlo', 'Simulate with random draws', Q('options')],
   ['Bootstrap', 'Resample to estimate error', Q('risk')], ['P-value', 'Odds of result under null', 'brain-activity'], ['Bayesian inference', 'Update beliefs with data', Q('risk')],
   ['Maximum likelihood', 'Parameters that best fit data', Q('vol')], ['Bias–variance', 'Accuracy vs stability trade-off', Q('models')], ['Delta', 'Option sensitivity to spot', Q('options')],
   ['Gamma', 'Rate of change of delta', Q('options')], ['Vega', 'Sensitivity to volatility', Q('options')], ['Implied volatility', 'Market-expected volatility', Q('options')],
@@ -24,24 +24,24 @@ export const TERMS = [
   ['Alpha decay', 'Signal fading over time', 'research-desk'], ['Kelly criterion', 'Optimal bet sizing', 'buy-signals'], ['Value at Risk', 'Loss threshold at confidence', 'analytics'],
   ['Expected shortfall', 'Average loss beyond VaR', 'analytics'], ['Fat tails', 'Extremes likelier than normal', 'tail-ridge'], ['Efficient frontier', 'Max return per risk level', Q('portfolio')],
   ['Out-of-sample', 'Data unseen in fitting', 'research-desk'], ['Walk-forward', 'Rolling train–test validation', 'research-desk'], ['Hedging', 'Offset an exposure', Q('options')],
-  ["Itô's lemma", 'Calculus for random processes', null], ['Information ratio', 'Active return per tracking risk', Q('risk')],
+  ["Itô's lemma", 'Calculus for random processes', Q('calculators')], ['Information ratio', 'Active return per tracking risk', Q('risk')],
   ['Heteroskedasticity', 'Non-constant error variance', Q('vol')], ['Multicollinearity', 'Correlated predictors', Q('risk')], ['Sortino ratio', 'Return per downside risk', 'analytics'],
   ['Calmar ratio', 'Return over max drawdown', 'backtest'], ['Treynor ratio', 'Return per unit of beta', Q('risk')], ["Jensen's alpha", 'CAPM-adjusted excess return', Q('risk')],
   ['CAPM', 'Risk–return pricing model', Q('risk')], ['Fama–French', 'Multi-factor return model', 'research-desk'], ['Factor exposure', 'Loading on risk drivers', 'research-desk'],
-  ['Risk premium', 'Reward for bearing risk', null], ['GARCH', 'Models volatility clustering', Q('vol')], ['ARIMA', 'Time-series forecasting model', Q('series')],
+  ['Risk premium', 'Reward for bearing risk', Q('risk')], ['GARCH', 'Models volatility clustering', Q('vol')], ['ARIMA', 'Time-series forecasting model', Q('series')],
   ['Ornstein–Uhlenbeck', 'Mean-reverting process', Q('strategies')], ['Hurst exponent', 'Trending vs reverting measure', Q('series')], ['Random walk', 'Unpredictable price path', Q('series')],
   ['Fourier transform', 'Split into frequencies', Q('series')], ['Eigenvalue', 'Variance along a component', Q('risk')], ['Cholesky', 'Sample correlated randoms', Q('risk')],
   ['Gradient descent', 'Iteratively minimize loss', Q('models')], ['Random forest', 'Ensemble of decision trees', Q('models')], ['Feature engineering', 'Craft predictive inputs', Q('models')],
   ['Data snooping', 'Over-testing the same data', 'research-desk'], ['Multiple testing', 'Inflated false discoveries', 'research-desk'], ['Information coefficient', 'Signal–return rank correlation', 'research-desk'],
-  ['Turnover', 'Portfolio trading frequency', null], ['Transaction costs', 'Fees eroding returns', 'backtest'], ['Market making', 'Quote both sides for spread', Q('calculators')],
-  ['Order book', 'Live bids and asks', null], ['Latency', 'Delay in execution speed', null], ['VWAP', 'Volume-weighted average price', Q('calculators')],
-  ['TWAP', 'Time-weighted average price', Q('calculators')], ['Short selling', 'Profit from falling prices', null], ['Leverage', 'Borrowed capital amplifies', null],
-  ['Margin call', 'Demand for more collateral', null], ['Pairs trading', 'Long–short related assets', Q('strategies')], ['Statistical arbitrage', 'Many small mean-reverting bets', Q('strategies')],
+  ['Turnover', 'Portfolio trading frequency', Q('portfolio')], ['Transaction costs', 'Fees eroding returns', 'backtest'], ['Market making', 'Quote both sides for spread', Q('calculators')],
+  ['Order book', 'Live bids and asks', Q('calculators')], ['Latency', 'Delay in execution speed', Q('calculators')], ['VWAP', 'Volume-weighted average price', Q('calculators')],
+  ['TWAP', 'Time-weighted average price', Q('calculators')], ['Short selling', 'Profit from falling prices', Q('calculators')], ['Leverage', 'Borrowed capital amplifies', Q('calculators')],
+  ['Margin call', 'Demand for more collateral', Q('calculators')], ['Pairs trading', 'Long–short related assets', Q('strategies')], ['Statistical arbitrage', 'Many small mean-reverting bets', Q('strategies')],
   ['Risk parity', 'Equal risk contribution', Q('portfolio')], ['Black–Litterman', 'Blend views with equilibrium', 'buy-signals'], ['Kurtosis', 'Tail heaviness measure', 'tail-ridge'],
   ['Skewness', 'Return asymmetry', 'tail-ridge'], ['Theta', 'Option time decay', Q('options')], ['Rho', 'Sensitivity to interest rates', Q('options')],
   ['Volatility smile', 'IV varies by strike', Q('calculators')], ['Put–call parity', 'Option price relationship', Q('options')], ['Convexity', 'Curvature of price response', Q('options')],
   ['Regime switching', 'Shifting market states', Q('series')], ['Tail risk', 'Rare extreme losses', 'tail-ridge'], ['Stress testing', 'Simulate extreme scenarios', Q('risk')],
-  ['Position sizing', 'Capital allocated per trade', 'buy-signals'], ['Capacity', 'Max capital a strategy handles', null],
+  ['Position sizing', 'Capital allocated per trade', 'buy-signals'], ['Capacity', 'Max capital a strategy handles', Q('calculators')],
 ]
 
 // [name, one-liner, where]
@@ -60,8 +60,8 @@ export const STRATEGIES = [
 
 export const MODELS = [
   ['Black–Scholes', Q('options')], ['Monte Carlo simulation', Q('options')], ['Binomial tree', Q('options')], ['Value at Risk', 'analytics'], ['GARCH volatility', Q('vol')],
-  ['CAPM', Q('risk')], ['Factor models', 'research-desk'], ['Kalman filter', Q('strategies')], ['Hidden Markov model', Q('series')], ['Heston stochastic volatility', Q('calculators')],
-  ['Vasicek rate model', Q('calculators')], ['SABR volatility model', Q('calculators')], ['Copula models', Q('risk')], ['ARIMA forecasting', Q('series')], ['Principal components (PCA)', Q('risk')],
+  ['CAPM', Q('risk')], ['Factor models', 'research-desk'], ['Kalman filter', Q('strategies')], ['Hidden Markov model', Q('series')], ['Heston stochastic volatility', Q('options')],
+  ['Vasicek rate model', Q('calculators')], ['SABR volatility model', Q('options')], ['Copula models', Q('risk')], ['ARIMA forecasting', Q('series')], ['Principal components (PCA)', Q('risk')],
   ['Portfolio optimisation', Q('portfolio')], ['Option Greeks', Q('options')], ['Merton credit-risk model', Q('calculators')], ['ML alpha models', Q('models')], ['Risk parity model', Q('portfolio')],
 ]
 
@@ -70,6 +70,14 @@ export const ML_ALGOS = [
   ['Random forest', Q('models')], ['Gradient boosting', Q('models')], ['Support vector machine', Q('models')], ['k-means clustering', Q('models')], ['Hierarchical clustering', Q('models')],
   ['DBSCAN', Q('models')], ['PCA', Q('risk')], ['t-SNE', Q('models')], ['Linear discriminant analysis', Q('models')], ['Quadratic discriminant analysis', Q('models')],
   ['KNN regression', Q('models')], ['Neural network (MLP)', Q('models')], ['Convolutional network', Q('models')], ['Recurrent network (LSTM)', Q('models')], ['Reinforcement learning (Q-learning)', Q('models')],
+]
+
+// The Gamma Scalping playbook, item by item
+export const PLAYBOOK = [
+  ['Theta–gamma identity', 'θ = −½ΓS²σ²: theta is the rent for gamma; rule of 16', Q('calculators')], ['Daily scalp P&L', '½ΓS²[(ΔS/S)² − σ²Δt]: did the move beat implied?', Q('options')],
+  ['Path dependence', 'Dollar gamma weights realised vol — moves near the strike pay most', Q('options')], ['Which vol to hedge', 'Hedge at realised to lock V(σr) − V(σi); at implied for a smooth path', Q('options')],
+  ['Discrete hedging', 'Hedging noise ∝ 1/√N (Derman–Kamal)', Q('options')], ['No-trade band', 'With costs, hedge at the edges of a band (Whalley–Wilmott)', Q('options')],
+  ['Variance risk premium', 'Implied above realised on average; the edge is forecasting realised', Q('vol')], ['Skew-aware delta', 'Δ_BS + vega·∂σ/∂S: the smile moves with spot', Q('calculators')],
 ]
 
 // [method, time, memory, accuracy, best for]

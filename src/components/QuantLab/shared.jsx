@@ -22,7 +22,7 @@ export const fmt = (v, dp = 4) => {
 export const pct = (v, dp = 1) => (v == null || !Number.isFinite(v) ? '—' : `${(v * 100).toFixed(dp)}%`)
 const label = k => k.replace(/([A-Z])/g, ' $1').replace(/[-_]/g, ' ').replace(/^./, c => c.toUpperCase())
 const PCT_EXACT = new Set(['annualisedSpread', 'impliedSpread', 'marketSpread', 'spreadGap', 'annualisedBasis', 'rollYield', 'annualCarry', 'breakevenAdverseMove', 'conversionPremiumPct', 'investmentPremiumPct'])
-const isPctKey = k => PCT_EXACT.has(k) || (/(vol|return|rate|yield|share|probability|prob|drawdown|capture|alpha|weight|shrink|accuracy|winRate|explained|cumulative|exposure|tracking|Pct$)/i.test(k) && !/(logLoss|brier|ratio|stat|hurst|beta|r2|sharpe|lags|days|halfLife|vega|rho|upside)/i.test(k))
+const isPctKey = k => PCT_EXACT.has(k) || (/(vol|return|rate|yield|share|probability|prob|drawdown|capture|alpha|weight|shrink|accuracy|winRate|explained|cumulative|exposure|tracking|vrp|implied|realized|cagr|turnover|costDrag|averageVar|edgeVs|Pct$)/i.test(k) && !/(logLoss|brier|ratio|stat|hurst|beta|r2|sharpe|lags|days|halfLife|vega|rho|upside|vrpVariance|rebalances)/i.test(k))
 
 export function Card({ title, children, className = '' }) {
   return (

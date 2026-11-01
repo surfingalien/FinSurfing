@@ -21,5 +21,5 @@ test('every reference link targets an existing Quant Lab tab or app route', () =
 })
 test('the reference carries the full vocabulary, strategy, model and algorithm lists', () => {
   const rows = name => (ref.match(new RegExp(`export const ${name} = \\[([\\s\\S]*?)\\n\\]`))[1].match(/\[['"]/g) || []).length
-  expect(rows('TERMS')).toBe(100); expect(rows('STRATEGIES')).toBe(30); expect(rows('MODELS')).toBe(20); expect(rows('ML_ALGOS')).toBe(20)
+  expect(rows('TERMS')).toBe(100); expect(rows('PLAYBOOK')).toBe(8); expect(ref.match(/, null\]/g)).toBeNull(); expect(rows('STRATEGIES')).toBe(30); expect(rows('MODELS')).toBe(20); expect(rows('ML_ALGOS')).toBe(20)
 })
