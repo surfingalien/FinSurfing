@@ -66,3 +66,22 @@ test('the insider study endpoints: sign-in to read, admin to run', async () => {
   expect(s.body).toEqual({ symbol: 'PFE', recent: null })
   expect((await request(app).post('/api/evolution/insiders/run').set('Authorization', `Bearer ${sign('user')}`)).status).toBe(403)
 })
+
+test('discovery lists: readable when signed in with their age and whether scans still use them; rebuilding is admin-only', async () => {
+  const disc = require('../lib/discovery-sources')
+  expect((await request(app).get('/api/evolution/discovery')).status).toBe(401)
+  const empty = await request(app).get('/api/evolution/discovery').set('Authorization', `Bearer ${sign('user')}`)
+  expect(empty.body).toMatchObject({ store: null, ageHours: null, usedByScans: false, zMin: disc.Z_MIN })
+
+  disc.saveStore({ at: new Date(Date.now() - 2 * 3600 * 1000).toISOString(), zMin: 2, sectors: { Energy: { names: 20, dislocations: [{ symbol: 'XOM', residualZ: -2.3, factorR2: 0.6 }], pairs: [], pairsTested: 190, pairsCointegrated: 12, expectedFalsePositives: 9.5 } } })
+  const fresh = await request(app).get('/api/evolution/discovery').set('Authorization', `Bearer ${sign('user')}`)
+  expect(fresh.body.usedByScans).toBe(true)
+  expect(fresh.body.ageHours).toBeCloseTo(2, 0)
+  expect(fresh.body.store.sectors.Energy.dislocations[0].symbol).toBe('XOM')
+
+  disc.saveStore({ at: '2026-01-01T22:40:00Z', zMin: 2, sectors: {} })
+  const stale = await request(app).get('/api/evolution/discovery').set('Authorization', `Bearer ${sign('user')}`)
+  expect(stale.body.usedByScans).toBe(false)
+
+  expect((await request(app).post('/api/evolution/discovery/run').set('Authorization', `Bearer ${sign('user')}`)).status).toBe(403)
+})

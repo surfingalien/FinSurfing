@@ -40,11 +40,11 @@ export default function CommandPalette({ open, onClose, onNavigate }) {
       : NAV_COMMANDS
 
     const items = matches.map(c => ({
-      key: `nav:${c.id}`,
+      key: `nav:${c.id}:${c.param || ''}`,
       icon: c.icon,
       label: c.label,
       hint: c.group,
-      run: () => onNavigate(c.id),
+      run: () => onNavigate(c.id, c.param),
     }))
 
     // Ticker-shaped query → offer direct symbol analysis first

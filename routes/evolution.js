@@ -105,6 +105,30 @@ router.post('/factors/run', requireAuth, requireAdmin, (req, res) => {
   res.json({ ok: true, status: 'running', message: 'Factor mining started. Poll GET /api/evolution/factors.' })
 })
 
+// ── Discovery lists (lib/discovery-sources.js) ──────────────────────────────
+// The after-close lists scans draw from: names lagging their sector's factors
+// and the cheap legs of stretched cointegrated pairs. Read-only here; the job
+// discovery-refresh writes them weekdays at 5:40 PM ET.
+router.get('/discovery', requireAuth, (req, res) => {
+  const disc = require('../lib/discovery-sources')
+  const store = disc.loadStore()
+  const ageMs = store?.at ? Date.now() - Date.parse(store.at) : null
+  res.json({
+    store, zMin: disc.Z_MIN, poolCap: disc.POOL_CAP,
+    ageHours: ageMs == null ? null : +(ageMs / 3600000).toFixed(1),
+    // Same rule as candidatesFor: lists older than this add nothing to scans.
+    usedByScans: ageMs != null && ageMs <= disc.MAX_AGE_MS,
+  })
+})
+
+// Admin-only: rebuild the lists now (one year of bars for ~20 names per sector).
+router.post('/discovery/run', requireAuth, requireAdmin, (req, res) => {
+  require('../lib/scheduled-jobs').discoveryRefresh()
+    .then(r => console.log('[evolution] discovery refresh:', JSON.stringify(r)))
+    .catch(e => console.warn('[evolution] discovery refresh failed:', e.message))
+  res.json({ ok: true, status: 'running', message: 'Discovery refresh started. Poll GET /api/evolution/discovery.' })
+})
+
 // ── Post-earnings drift study (lib/pead.js) ─────────────────────────────────
 
 router.get('/pead', requireAuth, (req, res) => {

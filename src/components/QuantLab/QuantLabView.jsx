@@ -8,11 +8,12 @@ import { useEffect, useState } from 'react'
 import { FlaskConical } from 'lucide-react'
 import { OptionsTab, PortfolioTab, VolatilityTab, SeriesTab, StrategiesTab, RiskTab, ModelsTab, CalculatorsTab } from './tabs'
 import LearnTab from './LearnTab'
+import DiscoveryTab from './DiscoveryTab'
 import { QUANT_TABS } from './reference'
 
 const TABS = [
   ['options', 'Options', OptionsTab], ['portfolio', 'Portfolio', PortfolioTab], ['vol', 'Volatility', VolatilityTab], ['series', 'Time series', SeriesTab],
-  ['strategies', 'Strategies', StrategiesTab], ['risk', 'Risk', RiskTab], ['models', 'ML models', ModelsTab], ['calculators', 'Calculators', CalculatorsTab], ['learn', 'Learn', LearnTab],
+  ['strategies', 'Strategies', StrategiesTab], ['risk', 'Risk', RiskTab], ['models', 'ML models', ModelsTab], ['calculators', 'Calculators', CalculatorsTab], ['discovery', 'Discovery', DiscoveryTab], ['learn', 'Learn', LearnTab],
 ]
 
 export default function QuantLabView({ section }) {
@@ -26,7 +27,7 @@ export default function QuantLabView({ section }) {
         <div className="w-9 h-9 rounded-xl bg-mint-400/10 border border-mint-400/25 flex items-center justify-center"><FlaskConical className="w-5 h-5 text-mint-400" /></div>
         <div>
           <h1 className="text-xl font-bold text-white">Quant Lab</h1>
-          <p className="text-xs text-slate-400 mt-0.5">Pricing, optimisation, volatility, time-series, risk and machine-learning tools — all deterministic maths, tested, and judged out of sample. Not investment advice.</p>
+          <p className="text-xs text-slate-400 mt-0.5">Pricing, optimisation, volatility, time-series, risk and machine-learning tools, plus the discovery lists the AI Brain scans draw from — all deterministic maths, tested, and judged out of sample. Not investment advice.</p>
         </div>
       </header>
       <nav className="flex gap-1.5 overflow-x-auto pb-1" aria-label="Quant Lab sections">
