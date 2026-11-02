@@ -46,11 +46,16 @@ test('the full scan yields between holdings, reports ML luck, and survives a hol
   let yields = 0
   const bars = { AAA: stock(2, 1), BBB: stock(3, 0.5) }
   const out = await hs.scanHoldings([{ symbol: 'AAA', shares: 5 }, { symbol: 'BBB', shares: 5 }, { symbol: 'ZZZ', shares: 1 }], bars, { benchBars: spy, includeMl: true, yieldFn: async () => { yields++ } })
-  expect(yields).toBe(2)
+  expect(yields).toBeGreaterThanOrEqual(2)          // at least once per holding (ML adds more)
   expect(out.holdings.find(h => h.symbol === 'ZZZ').error).toMatch(/no price history/)
   expect(out.holdings[0].quant.vol.forecast21).toBeGreaterThan(0)
-  expect(out.ml).toMatchObject({ holdingsTested: 2, modelsPerHolding: 3, folds: 5 })
-  expect(out.ml.expectedByLuck).toBeCloseTo(2 * 3 / 32, 1)
+  expect(out.ml).toMatchObject({ holdingsTested: 2, modelsPerHolding: 8, folds: 5 })
+  expect(out.ml.expectedByLuck).toBeCloseTo(2 * 8 / 32, 1)
+  // The best model on each holding is also run as a trading rule through the backtester.
+  const ms = out.holdings[0].ml.asStrategy
+  expect(ms).toMatchObject({ model: out.holdings[0].ml.models[0].model })
+  expect(['validated', 'mixed', 'rejected', 'insufficient_trades']).toContain(ms.verdict)
+  expect(Array.isArray(out.ml.asStrategyValidated)).toBe(true)
   expect(out.strategies.tested).toBe(2)
 })
 

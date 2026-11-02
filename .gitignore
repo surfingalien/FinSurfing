@@ -49,3 +49,4 @@ data/strategy-versions.jsonl
 data/agent-desk.jsonl
 data/agent-desk-state.json
 data/ops-alerts.json
+data/strategy-brain.json
