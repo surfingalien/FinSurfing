@@ -12,6 +12,10 @@
  *                            on a SERVER price, so it is scored later.
  *   GET  /calibration        the engine's measured record, overall and per
  *                            signal type, with Wilson intervals.
+ *   POST /persona-record     the Advisory page's rule-based persona calls
+ *                            (Buy/Overweight/Sell/Underweight; Hold is not
+ *                            scored), on a server price, once a day each.
+ *   GET  /persona-calibration each persona's measured record.
  */
 const express = require('express')
 const { requireAuth } = require('../middleware/auth')
@@ -85,6 +89,39 @@ router.post('/record', async (req, res) => {
     learningStore.recordDecision(decision)
     _recent.set(key, Date.now())
     res.json({ recorded: true, price: decision.price, priceAsOf: decision.meta.priceAsOf, action: decision.action })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+// The Advisory page's five rule-based personas: every directional call they make
+// on a symbol, recorded once a day per user + symbol + persona on a SERVER price.
+router.post('/persona-record', async (req, res) => {
+  const { symbol, calls } = req.body || {}
+  const sym = cleanSymbol(symbol)
+  if (!sym || !Array.isArray(calls) || !calls.length) return res.status(400).json({ error: 'symbol and calls are required' })
+  const userId = req.user?.userId ?? null
+  const wanted = calls.slice(0, engine.PERSONA_IDS.length)
+    .filter(c => engine.PERSONA_IDS.includes(c?.persona) && engine.PERSONA_ACTION[c?.action])
+    .filter(c => { const last = _recent.get(`${userId}:${sym}:persona:${c.persona}`); return !(last && Date.now() - last < DEDUPE_MS) })
+  if (!wanted.length) return res.json({ recorded: 0, reason: 'no new directional calls (Hold is not scored; each persona is recorded once a day)' })
+  const bars = await fetchDailyBars(sym, { range: '1mo', headers: fwd(req), timeoutMs: 10_000 })
+  const lastBar = bars.at?.(-1)
+  if (!(lastBar?.c > 0)) return res.json({ recorded: 0, reason: `no server price for ${sym}` })
+  const priceAsOf = new Date(lastBar.t).toISOString().slice(0, 10)
+  const decisions = wanted.map(c => engine.decisionFromPersona({ symbol: sym, ...c }, { price: lastBar.c, userId, priceAsOf })).filter(Boolean)
+  try {
+    learningStore.recordDecisions(decisions)
+    for (const d of decisions) _recent.set(`${userId}:${sym}:persona:${d.meta.ruleSet}`, Date.now())
+    res.json({ recorded: decisions.length, personas: decisions.map(d => d.meta.ruleSet), price: lastBar.c, priceAsOf })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+router.get('/persona-calibration', (req, res) => {
+  try {
+    res.json(engine.personaCalibration(learningStore.readDecisions(), learningStore.calibrate, { minSample: learningStore.MIN_SAMPLE }))
   } catch (e) {
     res.status(500).json({ error: e.message })
   }

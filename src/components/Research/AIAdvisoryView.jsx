@@ -12,6 +12,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import PriceChart from './advisory/PriceChart'
 import PortfolioScanTab from './advisory/PortfolioScanTab'
 import ForecastPanel from './advisory/ForecastPanel'
+import TimesFMCard from './advisory/TimesFMCard'
 
 /* ── Main AIAdvisoryView ─────────────────────────── */
 export default function AIAdvisoryView({ portfolio }) {
@@ -32,6 +33,8 @@ export default function AIAdvisoryView({ portfolio }) {
   const [btState,     setBtState]     = useState({ loading: false, error: null })
   const [calibration, setCalibration] = useState(null)
   const [recorded,    setRecorded]    = useState(null)
+  // Server TimesFM forecast — shown only when the microservice answers
+  const [tfm,         setTfm]         = useState({ data: null, loading: false })
 
   const portfolioSymbols = portfolio?.positions?.map(p => p.symbol) ?? []
   const allSymbols = [...new Set([...portfolioSymbols,
@@ -49,7 +52,7 @@ export default function AIAdvisoryView({ portfolio }) {
     if (!sym) return
     const s = sym.toUpperCase()
     setQuery(s); setResults([]); setLoading(true); setError(null); setAdvisory(null); setCandles(null); setForecast(null)
-    setBacktest(null); setRecorded(null); setBtState({ loading: false, error: null })
+    setBacktest(null); setRecorded(null); setBtState({ loading: false, error: null }); setTfm({ data: null, loading: false })
 
     try {
       const [daily, weekly, qs, fund, newsData] = await Promise.allSettled([
@@ -100,6 +103,11 @@ export default function AIAdvisoryView({ portfolio }) {
         setBacktest(d); setBtState({ loading: false, error: null })
       })
       .catch(e => setBtState({ loading: false, error: e.message }))
+    setTfm({ data: null, loading: true })
+    authFetch(`/api/forecast/${encodeURIComponent(sym)}`)
+      .then(r => r.json())
+      .then(d => setTfm({ data: d?.error ? null : d, loading: false }))
+      .catch(() => setTfm({ data: null, loading: false }))
     authFetch('/api/advisory-engine/calibration').then(r => r.json()).then(d => { if (!d.error) setCalibration(d) }).catch(() => {})
     authFetch('/api/advisory-engine/record', {
       method: 'POST',
@@ -429,6 +437,7 @@ export default function AIAdvisoryView({ portfolio }) {
 
                 {/* ── ML Forecast section ── */}
                 {forecast && <ForecastPanel forecast={forecast} symbol={advisory.symbol} />}
+                <TimesFMCard forecast={tfm.data} loading={tfm.loading} />
 
                 {/* Compliance */}
                 <div className="text-center text-xs text-slate-600 border-t border-white/[0.04] pt-3">

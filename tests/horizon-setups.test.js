@@ -8,7 +8,7 @@
  */
 
 const {
-  generateHorizonSetups, longSetupProblem, swingTarget, roundPrice,
+  generateHorizonSetups, longSetupProblem, swingTarget, roundPrice, targetUnderResistance,
 } = require('../lib/horizon-setups')
 
 const byLabel = (setups, label) => setups.find(s => s.label === label)
@@ -164,5 +164,36 @@ describe('percent labels — measured from the entry, as percents', () => {
     expect(lt.entry).toBe(200)
     expect(lt.entryLow).toBe(194)
     expect(lt.entryHigh).toBe(202)
+  })
+})
+
+// Moved from tests/advisory-long-setup.test.js when advisoryLongSetup was removed
+// with its unreachable page: these helpers still back the horizon cards.
+describe('shared helpers', () => {
+  test('targetUnderResistance: floor defaults to the price; a higher floor skips more levels', () => {
+    const atPrice = targetUnderResistance({ price: 100, target: 110, resistance: [101, 105], buffer: 0.995 })
+    expect(atPrice.level).toBe(101)                  // 100.495 > 100
+    const atTop = targetUnderResistance({ price: 100, floor: 100.5, target: 110, resistance: [101, 105], buffer: 0.995 })
+    expect(atTop.level).toBe(105)                    // 100.495 ≤ 100.5
+    expect(atTop.bypassed).toEqual([101])
+    expect(atTop.source).toBe('resistance')
+  })
+
+  test('swingTarget keeps its behaviour through the shared helper', () => {
+    expect(swingTarget(344.63, 7.1, [346.02, 352])).toEqual({
+      tp1: 352 * 0.99, source: 'resistance', level: 352, bypassed: [346.02],
+    })
+    expect(swingTarget(100, 2, [130]).source).toBe('atr')
+  })
+
+  test('longSetupProblem checks every entry: an inverted range, or a price outside it', () => {
+    expect(longSetupProblem({ entry: 100, entryLow: 100.8, entryHigh: 100.5, stop: 95, tp1: 110, tp2: 120 }))
+      .toMatch(/inverted/)
+    // price above the range top: a target between the range top and the price is under an entry
+    expect(longSetupProblem({ entry: 100, entryLow: 97, entryHigh: 99, stop: 95, tp1: 99.5, tp2: 120 }))
+      .toMatch(/Target \$99\.50 is not above entry \$100\.00/)
+    // price below the range bottom: a stop between them is above an entry
+    expect(longSetupProblem({ entry: 100, entryLow: 101, entryHigh: 102, stop: 100.5, tp1: 110, tp2: 120 }))
+      .toMatch(/Stop \$100\.50 is not below entry \$100\.00/)
   })
 })
