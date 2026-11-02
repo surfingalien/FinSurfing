@@ -47,6 +47,7 @@ export const NAV_GROUPS = [
     label: 'Research',
     items: [
       { id: 'research-desk',   label: 'Research Desk',   icon: Microscope, tag: 'NEW', auth: true },
+      { id: 'quant-lab',       label: 'Quant Lab',       icon: Calculator, tag: 'NEW' },
       { id: 'screener',        label: 'Screener',        icon: Filter, auth: true },
       { id: 'ai-brain',        label: 'AI Brain Scan',   icon: Brain, auth: true },
       { id: 'recommendations', label: 'Advisory',        icon: Lightbulb, auth: true },
@@ -84,7 +85,6 @@ export const NAV_GROUPS = [
     items: [
       { id: 'strategies', label: 'Strategies', icon: GitBranch },
       { id: 'backtest',   label: 'Backtester', icon: FlaskConical },
-      { id: 'quant-lab',  label: 'Quant Lab',  icon: Calculator },
     ],
   },
   {
@@ -127,4 +127,10 @@ export const ALL_TABS = new Set([
 export const NAV_COMMANDS = [
   ...NAV_GROUPS.flatMap(g => g.items.map(i => ({ ...i, group: g.label }))),
   { id: 'portfolios', label: 'Manage Portfolios', icon: FolderOpen, group: 'Account' },
+  // Quant Lab sections are tabs inside one page; list them so ⌘K finds
+  // "volatility", "options" or "ML" directly (deep link #/quant-lab/<section>).
+  ...[['options', 'Options pricing'], ['portfolio', 'Portfolio optimisers'], ['vol', 'Volatility'], ['series', 'Time series'],
+      ['strategies', 'Pairs & stat-arb'], ['risk', 'Risk statistics'], ['models', 'ML models (algorithms)'], ['calculators', 'Calculators'],
+      ['discovery', 'Discovery lists'], ['learn', 'Learn (quant reference)']]
+    .map(([param, label]) => ({ id: 'quant-lab', param, label: `Quant Lab · ${label}`, icon: Calculator, group: 'Quant Lab' })),
 ]
