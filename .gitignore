@@ -45,3 +45,7 @@ trader/
 tools/quant-validation/out/
 data/model-contest.json
 data/discovery.json
+data/strategy-versions.jsonl
+data/agent-desk.jsonl
+data/agent-desk-state.json
+data/ops-alerts.json
