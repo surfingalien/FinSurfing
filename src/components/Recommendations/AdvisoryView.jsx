@@ -3,6 +3,7 @@ import { Brain, Shield, Target, Flame, Leaf, Search } from 'lucide-react'
 import { fmt, fmtPct, fmtLarge, fetchSummary, fetchChart, calcRSI, calcSMA } from '../../services/api'
 import { SectionCard, LoadingPulse } from '../shared/StockCard'
 import { searchSymbol } from '../../services/api'
+import { useAuth } from '../../contexts/AuthContext'
 
 const PERSONAS = [
   {
@@ -62,7 +63,7 @@ const PERSONAS = [
     border: 'border-mint-500/20',
     text: 'text-mint-400',
     desc: 'Sustainable investing — quality companies with responsible practices',
-    style: 'Balances financial performance with ESG scores, clean energy leaders, and governance quality.',
+    style: 'Financial quality and stability only — this app has no ESG ratings feed, so check MSCI or Sustainalytics yourself before treating a call here as ESG-screened.',
     weights: { revenueGrowth: 0.20, earningsGrowth: 0.15, momentum: 0.15, valuation: 0.20, stability: 0.30 },
   },
 ]
@@ -147,7 +148,60 @@ function scoreForPersona(persona, summary, chartData) {
   return Math.min(100, Math.max(0, Math.round(score)))
 }
 
+/**
+ * Inputs the score could not see. scoreForPersona treats each as neutral
+ * (no points either way) — said on the card, so a score built on half the data
+ * does not read like one built on all of it.
+ */
+function missingInputs(persona, summary, chartData) {
+  const w = persona.weights, out = []
+  if (!summary) return ['fundamentals']
+  if (isEtfLike(summary)) {
+    if (summary.beta == null && w.stability > 0) out.push('beta')
+    if (summary.dividendYield == null && w.valuation > 0) out.push('dividend yield')
+    if ((summary.low52 == null || summary.high52 == null) && w.momentum > 0) out.push('52-week range')
+  } else {
+    if (summary.revenueGrowth == null && w.revenueGrowth > 0) out.push('revenue growth')
+    if (summary.earningsGrowth == null && w.earningsGrowth > 0) out.push('earnings growth')
+    if (summary.pe == null && w.valuation > 0) out.push('P/E')
+    if (summary.beta == null && w.stability > 0) out.push('beta')
+  }
+  if ((chartData?.length ?? 0) <= 20 && w.momentum > 0) out.push('price momentum (too little history)')
+  return out
+}
+
+const pct = v => (v == null ? '—' : `${Math.round(v * 100)}%`)
+
+/** A persona's measured record from /api/advisory-engine/persona-calibration. */
+function PersonaRecord({ cal, minSample, signedIn }) {
+  if (!signedIn) return <p className="text-[11px] text-slate-500">Sign in to see how this persona's calls have actually done.</p>
+  if (!cal) return <p className="text-[11px] text-slate-500">Loading the measured record…</p>
+  const line = (side, label) => {
+    const c = cal[side]
+    if (!c?.recorded) return <div key={side} className="text-slate-500">{label}: none recorded yet.</div>
+    if (!c.sufficient) return <div key={side} className="text-slate-500">{label}: uncalibrated — {c.n ?? 0} of {minSample} scored ({c.recorded} recorded).</div>
+    return (
+      <div key={side} className="text-slate-300">
+        {label}: <span className="font-mono text-white">{c.wins} of {c.nScored}</span> right after a week — {pct(c.winRate)} (95%: {pct(c.winRateLo)}–{pct(c.winRateHi)})
+        {c.alphaWinRate != null ? `; ${pct(c.alphaWinRate)} beat the market` : ''}.
+      </div>
+    )
+  }
+  return (
+    <div className="text-[11px] space-y-0.5">
+      {line('long', 'Buy / Overweight calls')}
+      {line('short', 'Sell / Underweight calls')}
+    </div>
+  )
+}
+
 function personaRecommendation(persona, score, summary) {
+  // No fundamentals at all: only the price-based persona can make a call. The
+  // others used to say Buy or Sell off momentum alone — a call resting on data
+  // they never saw, which the measured record would then score.
+  if (!summary && persona.id !== 'momentum') {
+    return { action: 'Hold', rationale: 'No fundamentals were available for this symbol, so this persona makes no call.' }
+  }
   const pe   = summary?.pe ?? null
   const beta = summary?.beta ?? 1
   const rg   = (summary?.revenueGrowth ?? 0) * 100
@@ -197,8 +251,8 @@ function personaRecommendation(persona, score, summary) {
     if (pe != null && pe < 15 && score >= 60) return { action: 'Buy', rationale: `Low P/E (${fmt(pe)}×) with solid fundamentals. Classic value opportunity.` }
     if (pe != null && pe < 25 && score >= 50) return { action: 'Buy', rationale: `Reasonably valued at ${fmt(pe)}× earnings. Margin of safety present.` }
     if (pe != null && pe < 35) return { action: 'Hold', rationale: `Fairly valued. Wait for a better entry below ${fmt(pe * 0.85, 0)}×.` }
-    if (pe == null && score >= 55) return { action: 'Hold', rationale: `No P/E data available. Use technical signals and sector context for sizing.` }
-    return { action: 'Sell', rationale: pe != null ? `Expensive at ${fmt(pe)}× earnings. Value investors would require a significant pullback.` : `Insufficient fundamental data for value assessment.` }
+    if (pe == null) return { action: 'Hold', rationale: `No P/E available, so there is no value call to make.` }
+    return { action: 'Sell', rationale: `Expensive at ${fmt(pe)}× earnings. Value investors would require a significant pullback.` }
   }
   if (persona.id === 'momentum') {
     if (score >= 65) return { action: 'Buy', rationale: `Strong technical momentum. Price above key moving averages with healthy RSI.` }
@@ -211,7 +265,7 @@ function personaRecommendation(persona, score, summary) {
     return { action: 'Underweight', rationale: `Higher volatility (beta ${fmt(beta, 2)}) than ideal for defensive allocation.` }
   }
   if (persona.id === 'esg') {
-    if (score >= 60) return { action: 'Buy', rationale: `Strong financial performance. Generally associated with responsible business practices.` }
+    if (score >= 60) return { action: 'Buy', rationale: `Strong financial profile. No ESG ratings are loaded here — verify the ESG case separately before relying on this.` }
     if (score >= 45) return { action: 'Hold', rationale: `Adequate profile. Research ESG ratings from MSCI or Sustainalytics for conviction.` }
     return { action: 'Hold', rationale: `Financial metrics need improvement. ESG leadership requires both financial and sustainability quality.` }
   }
@@ -250,6 +304,11 @@ export default function AdvisoryView({ portfolio }) {
   const [taxTips, setTaxTips] = useState([])
   const [loading, setLoading] = useState(false)
   const [activePersona, setActivePersona] = useState('growth')
+  const [missing, setMissing] = useState({})
+  // The measured half (server): each persona's directional call is recorded on a
+  // server price and scored a week later; the record per persona comes back here.
+  const { authFetch, isAuthenticated } = useAuth()
+  const [personaCal, setPersonaCal] = useState(null)
 
   const analyze = useCallback(async (sym) => {
     setLoading(true)
@@ -260,17 +319,27 @@ export default function AdvisoryView({ portfolio }) {
       ])
       setSummary(sum)
       setChartData(chart.candles || [])
-      const sc = {}, rec = {}
+      const sc = {}, rec = {}, miss = {}
       for (const p of PERSONAS) {
         sc[p.id] = scoreForPersona(p, sum, chart.candles || [])
         rec[p.id] = personaRecommendation(p, sc[p.id], sum)
+        miss[p.id] = missingInputs(p, sum, chart.candles || [])
       }
       setScores(sc)
       setRecommendations(rec)
+      setMissing(miss)
       setTaxTips(taxAdvice(sum))
+      if (isAuthenticated) {
+        // Best-effort: recording or reading the record never blocks the page.
+        authFetch('/api/advisory-engine/persona-record', {
+          method: 'POST',
+          body: { symbol: sym, calls: PERSONAS.map(p => ({ persona: p.id, action: rec[p.id]?.action, score: sc[p.id], missing: miss[p.id] })) },
+        }).catch(() => {})
+        authFetch('/api/advisory-engine/persona-calibration').then(r => r.json()).then(d => { if (!d.error) setPersonaCal(d) }).catch(() => {})
+      }
     } catch (e) { console.warn(e) }
     setLoading(false)
-  }, [])
+  }, [isAuthenticated])  // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSearch = async (q) => {
     setInputVal(q)
@@ -351,7 +420,7 @@ export default function AdvisoryView({ portfolio }) {
                         <div className="flex-1 bg-white/[0.06] rounded-full h-1">
                           <div className="h-1 rounded-full transition-all" style={{ width: `${s}%`, background: p.color }} />
                         </div>
-                        <span className="text-[10px] font-mono text-slate-500 w-7">{s}</span>
+                        <span className="text-[10px] font-mono text-slate-500 w-7" title="Fit score from hand-set weights — not a probability">{s}</span>
                       </div>
                     </div>
                   </div>
@@ -375,7 +444,8 @@ export default function AdvisoryView({ portfolio }) {
                     </div>
                     <div className="ml-auto text-right">
                       <div className={`text-2xl font-bold font-mono ${activeP.text}`}>{scores[activeP.id]}</div>
-                      <div className="text-xs text-slate-500">Score / 100</div>
+                      <div className="text-xs text-slate-500">Fit score / 100</div>
+                      <div className="text-[10px] text-slate-600">hand-set weights, not a forecast</div>
                     </div>
                   </div>
 
@@ -387,6 +457,16 @@ export default function AdvisoryView({ portfolio }) {
                       <span className="text-xs text-slate-400">for {symbol}</span>
                     </div>
                     <p className="text-sm text-slate-300 leading-relaxed">{recommendations[activeP.id]?.rationale}</p>
+                  </div>
+
+                  {missing[activeP.id]?.length > 0 && (
+                    <p className="text-[11px] text-amber-400 mb-2">Scored without: {missing[activeP.id].join(', ')} — each counted as neutral.</p>
+                  )}
+
+                  <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-3 mb-3">
+                    <div className="text-[11px] font-semibold text-slate-300 mb-1">How {activeP.name}'s calls have done</div>
+                    <PersonaRecord cal={personaCal?.byPersona?.[activeP.id]} minSample={personaCal?.minSample ?? 8} signedIn={isAuthenticated} />
+                    <p className="text-[10px] text-slate-500 mt-1">Every Buy, Overweight, Sell or Underweight call on this page is recorded at the last close and scored a week later. Hold is not scored.</p>
                   </div>
 
                   <div className="text-xs text-slate-500 italic">Strategy: {activeP.style}</div>
@@ -448,8 +528,9 @@ export default function AdvisoryView({ portfolio }) {
           <Brain className="w-10 h-10 text-mint-400 opacity-60" />
           <div className="text-base font-semibold text-white">5-Persona Advisory Engine</div>
           <div className="text-sm text-slate-500 max-w-md">
-            Search for any stock or ETF to get personalized recommendations from five distinct investment personas —
-            Growth Hawk, Value Seeker, Momentum Trader, Defensive Shield, and ESG Conscious.
+            Search for any stock or ETF to see how five rule-based investment personas — Growth Hawk, Value Seeker,
+            Momentum Trader, Defensive Shield and ESG Conscious — would read it. Each uses fixed, hand-set weights;
+            every call is recorded and scored, so each persona's real hit rate builds up over time.
           </div>
           <div className="mt-2 space-y-2">
             <div className="text-[10px] text-slate-600 uppercase tracking-wider">Stocks</div>

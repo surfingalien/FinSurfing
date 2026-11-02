@@ -85,6 +85,35 @@ describe('recording and calibration', () => {
   })
 })
 
+describe('Advisory page personas', () => {
+  test('only directional calls are recorded, on the server price, tagged with the persona outside byPersona', () => {
+    expect(E.decisionFromPersona({ symbol: 'aapl', persona: 'growth', action: 'Hold' }, { price: 100 })).toBeNull()
+    expect(E.decisionFromPersona({ symbol: 'aapl', persona: 'buffett', action: 'Buy' }, { price: 100 })).toBeNull()
+    expect(E.decisionFromPersona({ symbol: 'aapl', persona: 'value', action: 'Buy' }, { price: 0 })).toBeNull()
+    const d = E.decisionFromPersona({ symbol: 'aapl', persona: 'value', action: 'Overweight', score: 61.6, missing: ['P/E', 7] }, { price: 190, userId: 'u1' })
+    expect(d).toMatchObject({ surface: 'persona-rules', symbol: 'AAPL', action: 'buy', price: 190 })
+    expect(d.meta).toMatchObject({ ruleSet: 'value', call: 'Overweight', score: 62, missing: ['P/E'] })
+    expect(d.meta.persona).toBeUndefined()
+    expect(E.decisionFromPersona({ symbol: 'X', persona: 'defensive', action: 'Underweight' }, { price: 5 }).action).toBe('reduce')
+    expect(E.decisionFromPersona({ symbol: 'X', persona: 'momentum', action: 'Sell' }, { price: 5 }).action).toBe('sell')
+  })
+  test('each persona has a long and a short-side record, withheld below the minimum sample', () => {
+    const ls = require('../lib/learning-store')
+    const mk = (ruleSet, action, ret) => ({ surface: 'persona-rules', symbol: 'A', action, price: 100, meta: { ruleSet }, outcome: { retPct: ret } })
+    const rows = [
+      ...Array.from({ length: 9 }, (_, i) => mk('growth', 'buy', i < 6 ? 3 : -3)),
+      mk('growth', 'sell', -2), mk('value', 'buy', 1),
+      { surface: 'advisory', symbol: 'A', action: 'buy', price: 1, meta: { persona: 'growth' }, outcome: { retPct: 5 } },
+    ]
+    const c = E.personaCalibration(rows, ls.calibrate, { minSample: 8 })
+    expect(c.recorded).toBe(11)
+    expect(c.byPersona.growth.long).toMatchObject({ recorded: 9, sufficient: true, wins: 6 })
+    expect(c.byPersona.growth.short).toMatchObject({ recorded: 1, sufficient: false })
+    expect(c.byPersona.value.long.sufficient).toBe(false)
+    expect(c.byPersona.esg.recorded).toBe(0)
+  })
+})
+
 describe('route', () => {
   const request = require('supertest')
   const express = require('express')
@@ -125,5 +154,23 @@ describe('route', () => {
     const cal = await auth(request(app).get('/api/advisory-engine/calibration'))
     expect(cal.body.bySignal.BUY.recorded).toBe(1)
     expect(cal.body.bySignal.BUY.sufficient).toBe(false)
+  })
+  test('persona calls are recorded once a day each, Holds skipped, and show in the persona record', async () => {
+    expect((await request(app).post('/api/advisory-engine/persona-record').send({ symbol: 'MSFT', calls: [] })).status).toBe(401)
+    expect((await auth(request(app).post('/api/advisory-engine/persona-record').send({ symbol: 'MSFT', calls: [] }))).status).toBe(400)
+    const calls = [
+      { persona: 'growth', action: 'Buy', score: 72 }, { persona: 'value', action: 'Hold', score: 40 },
+      { persona: 'defensive', action: 'Underweight', score: 30 }, { persona: 'nonsense', action: 'Buy' },
+    ]
+    const first = await auth(request(app).post('/api/advisory-engine/persona-record').send({ symbol: 'MSFT', calls }))
+    expect(first.body.recorded).toBe(2)
+    expect(first.body.personas.sort()).toEqual(['defensive', 'growth'])
+    expect(first.body.price).toBeCloseTo(bars(1300, 9).at(-1).c, 6)
+    const again = await auth(request(app).post('/api/advisory-engine/persona-record').send({ symbol: 'MSFT', calls }))
+    expect(again.body.recorded).toBe(0)
+    const cal = await auth(request(app).get('/api/advisory-engine/persona-calibration'))
+    expect(cal.body.byPersona.growth.long.recorded).toBe(1)
+    expect(cal.body.byPersona.defensive.short.recorded).toBe(1)
+    expect(cal.body.byPersona.value.recorded).toBe(0)
   })
 })
