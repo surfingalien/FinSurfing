@@ -433,7 +433,10 @@ router.post('/:symbol/thesis', requireAuth, thesisLimit, async (req, res) => {
   // 'debate': separate bull → bear (sees the bull) → decision calls; 'single':
   // one call writes both sides. Same judge either way; the method is recorded
   // so which one produces better outcomes is measured, not assumed.
-  const method = req.body?.method === 'debate' ? 'debate' : 'single'
+  // A request that names no method gets the default an admin approved on the
+  // Agent Desk (from the measured single-vs-debate record); 'single' otherwise.
+  const asked = req.body?.method
+  const method = asked === 'debate' || asked === 'single' ? asked : require('../lib/agent-desk').researchDefaultMethod()
   let thesis = null, llmUsed = null
   try {
     if (method === 'debate') {

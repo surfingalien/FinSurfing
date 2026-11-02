@@ -28,7 +28,8 @@ test('a T1 touch books half and moves the stop to breakeven; the next dip exits 
   global.fetch = jest.fn(async () => quote({ NVDA: 107 }))
   const first = await jobs._paperManageForTests()
   expect(first.exits).toEqual([expect.objectContaining({ symbol: 'NVDA', kind: 't1', ok: true })])
-  expect(pb.loadPortfolio().positions.NVDA).toMatchObject({ bracket: { t1Done: true, stop: 100 } })
+  // Breakeven is the FILL price (the quote plus 5bps of slippage), not the quote.
+  expect(pb.loadPortfolio().positions.NVDA).toMatchObject({ bracket: { t1Done: true, stop: 100.05 } })
   expect(pb.loadPortfolio().positions.NVDA.shares).toBeCloseTo(shares / 2, 4)
 
   global.fetch = jest.fn(async () => quote({ NVDA: 99 }))
@@ -47,7 +48,8 @@ test('a gap through the stop fills at the worse current price, never at the stop
   const out = await jobs._paperManageForTests()
   expect(out.exits[0]).toMatchObject({ kind: 'stop', ok: true })
   const sell = pb.loadTrades().filter(t => t.side === 'sell').at(-1)
-  expect(sell).toMatchObject({ price: 88, exitKind: 'stop' })
+  // …and pays slippage on top: the fill is below the quote, never above it.
+  expect(sell).toMatchObject({ quotePrice: 88, price: 87.956, slippageBps: 5, exitKind: 'stop' })
 })
 
 test('off unless the kill switch is on', async () => {
@@ -91,7 +93,7 @@ describe('paper executor', () => {
     expect(out.cutoff).toBeNull()                                   // no validated cutoff ⇒ no score filter
     expect(out.executed.map(e => e.symbol)).toEqual(['AAA'])         // a 60 is no longer screened out
     expect(out.rejected).toEqual([expect.objectContaining({ symbol: 'BBB', reason: expect.stringMatching(/above the entry range/) })])
-    expect(pb.loadTrades().filter(t => t.side === 'buy').at(-1)).toMatchObject({ symbol: 'AAA', price: 100.5 })
+    expect(pb.loadTrades().filter(t => t.side === 'buy').at(-1)).toMatchObject({ symbol: 'AAA', quotePrice: 100.5, price: 100.5502 })
     expect(pb.loadPortfolio().positions.AAA.bracket.holdDays).toBe(91)   // the 3-month scan's horizon
   })
 

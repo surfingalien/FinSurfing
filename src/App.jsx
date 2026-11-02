@@ -60,6 +60,7 @@ const PatternFinderView      = lazy(() => import('./components/PatternFinder/Pat
 const DividendView           = lazy(() => import('./components/Dividend/DividendView'))
 const ScreenerView           = lazy(() => import('./components/Screener/ScreenerView'))
 const QuantLabView           = lazy(() => import('./components/QuantLab/QuantLabView'))
+const AgentDeskView          = lazy(() => import('./components/AgentDesk/AgentDeskView'))
 const HeatmapView            = lazy(() => import('./components/Heatmap/HeatmapView'))
 const EconCalendarView       = lazy(() => import('./components/EconCalendar/EconCalendarView'))
 const SentimentView          = lazy(() => import('./components/Sentiment/SentimentView'))
@@ -273,6 +274,7 @@ function MainApp({ onSignIn }) {
     'dividend-screen': () => <DividendView onAnalyze={navigateToAnalyze} />,
     'screener': () => <ScreenerView onAnalyze={navigateToAnalyze} />,
     'quant-lab': () => <QuantLabView section={route.param} />,
+    'agent-desk':      () => <AgentDeskView />,
     'heatmap':         () => <HeatmapView />,
     'calendar':        () => <EconCalendarView />,
     'sentiment':       () => <SentimentView />,

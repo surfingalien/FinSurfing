@@ -14,7 +14,7 @@ import {
   Network, Clock, Radio, BrainCircuit, FolderOpen,
   Search, DollarSign, LayoutGrid, CalendarDays, Zap, FileText, Boxes, Mountain,
   Share2,
-  Filter, Microscope, Calculator,
+  Filter, Microscope, Calculator, Gauge,
 } from 'lucide-react'
 
 // ── Sidebar nav groups ────────────────────────────────────────────────────────
@@ -71,6 +71,7 @@ export const NAV_GROUPS = [
   {
     label: 'Agents & Labs',
     items: [
+      { id: 'agent-desk',   label: 'Agent Desk',   icon: Gauge, tag: 'NEW', auth: true },
       { id: 'research',     label: 'AI Agent',     icon: Bot, auth: true },
       { id: 'agent-hub',    label: 'Agent Hub',    icon: Network, auth: true },
       { id: 'agentic-os',   label: 'Agentic OS',   icon: BrainCircuit, auth: true },
