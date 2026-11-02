@@ -160,6 +160,8 @@ export default function AgentDeskView() {
         )}
       </Card>
 
+      <ImpactCard impact={d.impact} />
+
       <Card title="Strategy experiments — one targeted fix, tested against its parent">
         <p className="text-[11px] text-slate-500 mb-2">Development 60% (diagnosis, thresholds) · validation 20% (choose) · final test 20% (one look). Kept only if it beats the parent on validation and the final test, net of costs, in both trend regimes, and still trades.</p>
         {!d.experiments.length ? <p className="text-xs text-slate-500">No experiments yet.</p> : (
@@ -211,6 +213,57 @@ export default function AgentDeskView() {
         </div>
       </Card>
     </div>
+  )
+}
+
+const IMPACT_TONE = { helped: 'text-mint-400', improving: 'text-mint-400', resolved: 'text-mint-400', hurt: 'text-red-400', worse: 'text-red-400' }
+
+/** Did what was approved help? Each approved change re-measured on data after its approval. */
+function ImpactCard({ impact }) {
+  const pctv = v => (v == null ? '—' : `${Math.round(v * 100)}%`)
+  return (
+    <Card title="Impact — did approved changes help?">
+      <p className="text-[11px] text-slate-500 mb-2">
+        Each change you approved is re-measured every cycle on data that arrived AFTER the approval — nothing it was chosen on. A strategy version is traded forward next to the version it replaced, on the same bars, net of costs.
+        Research and Brain changes are judged on resolved outcomes. Until there is enough new data each says "too early" rather than a number.
+      </p>
+      {!impact ? <p className="text-xs text-slate-500">No measurement yet — it runs at the start of every cycle.</p> : (
+        <div className="space-y-3">
+          <p className="text-xs text-slate-300">
+            {impact.summary.versionsMeasured
+              ? <>{impact.summary.helped} of {impact.summary.versionsMeasured} approved strategy versions beat what they replaced (mean {impact.summary.meanExcessPct >= 0 ? '+' : ''}{impact.summary.meanExcessPct}% since approval){impact.summary.hurt ? `; ${impact.summary.hurt} did worse` : ''}.</>
+              : 'No approved strategy version has enough trading since approval to judge yet.'}
+            {impact.summary.tooEarly ? ` ${impact.summary.tooEarly} still too early.` : ''} <span className="text-slate-500">Measured {when(impact.measuredAt)}.</span>
+          </p>
+          {impact.strategies.length > 0 && (
+            <div className="overflow-x-auto">
+              <table className="text-[11px] w-full">
+                <thead><tr className="text-slate-500 text-left">{['Strategy', 'Change', 'Since', 'New version', 'Replaced', 'Difference', 'Verdict'].map(h => <th key={h} className="font-medium pr-3 pb-1 whitespace-nowrap">{h}</th>)}</tr></thead>
+                <tbody>{impact.strategies.map(x => (
+                  <tr key={x.experimentId} className="border-t border-slate-500/10">
+                    <td className="pr-3 py-1 text-slate-300 whitespace-nowrap">{x.symbol} {x.parentVersion ? `${x.parentVersion} → ` : ''}{x.version}</td>
+                    <td className="pr-3 text-slate-400">{x.change || '—'}</td>
+                    <td className="pr-3 text-slate-400 whitespace-nowrap">{x.since || '—'}</td>
+                    <td className="pr-3 tabular-nums text-slate-300">{x.versionResult ? `${x.versionResult.totalReturn}% (${x.versionResult.trades} trades)` : '—'}</td>
+                    <td className="pr-3 tabular-nums text-slate-300">{x.parent ? `${x.parent.totalReturn}% (${x.parent.trades} trades)` : '—'}</td>
+                    <td className="pr-3 tabular-nums text-slate-300">{x.excessPct != null ? `${x.excessPct >= 0 ? '+' : ''}${x.excessPct}%` : '—'}</td>
+                    <td className={`pr-3 ${IMPACT_TONE[x.verdict] || 'text-slate-400'}`}>{x.verdict}{x.reason ? <span className="text-slate-500"> — {x.reason}</span> : null}</td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </div>
+          )}
+          {impact.research && (
+            <p className="text-xs text-slate-300">Research default <b>{impact.research.method}</b> (approved {String(impact.research.approvedAt).slice(0, 10)}): win rate before {pctv(impact.research.before.winRate)} (n={impact.research.before.n}) vs after {pctv(impact.research.after.winRate)} (n={impact.research.after.n}) — <span className={IMPACT_TONE[impact.research.verdict] || 'text-slate-400'}>{impact.research.verdict}</span>.</p>
+          )}
+          {impact.brain.length > 0 && (
+            <ul className="text-xs text-slate-300 space-y-0.5">
+              {impact.brain.map((b, i) => <li key={i}>{b.title}: {b.metric} was {pctv(b.then)}, now {b.now == null ? 'below the threshold' : pctv(b.now)} — <span className={IMPACT_TONE[b.verdict] || 'text-slate-400'}>{b.verdict}</span></li>)}
+            </ul>
+          )}
+        </div>
+      )}
+    </Card>
   )
 }
 

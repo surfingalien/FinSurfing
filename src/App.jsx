@@ -273,7 +273,7 @@ function MainApp({ onSignIn }) {
     'pattern-finder': () => <PatternFinderView onAnalyze={navigateToAnalyze} />,
     'dividend-screen': () => <DividendView onAnalyze={navigateToAnalyze} />,
     'screener': () => <ScreenerView onAnalyze={navigateToAnalyze} />,
-    'quant-lab': () => <QuantLabView section={route.param} />,
+    'quant-lab': () => <QuantLabView section={route.param} positions={portfolio.positions} />,
     'agent-desk':      () => <AgentDeskView />,
     'heatmap':         () => <HeatmapView />,
     'calendar':        () => <EconCalendarView />,

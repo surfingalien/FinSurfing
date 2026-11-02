@@ -58,7 +58,7 @@ test('a cycle covers strategies, the Brain and Research, and only PROPOSES', asy
   const d = deps()
   const out = await desk.runCycle({ deps: d })
   expect(out.ran).toBe(true)
-  expect(out.steps.map(s => s.name)).toEqual(['strategy', 'brain', 'research'])
+  expect(out.steps.map(s => s.name)).toEqual(['impact', 'strategy', 'brain', 'research'])
   expect(out.proposals.map(p => p.type).sort()).toEqual(['brain-finding', 'research-default-method', 'strategy-version'])
   // Nothing applied: the library is untouched and the research default is unchanged.
   expect(d.library.rows).toHaveLength(1)
@@ -107,7 +107,7 @@ test('the spend cap stops model calls; the env can never raise it past the ceili
 test('a pause during a cycle stops it at the next step', async () => {
   const d = deps({ brainInputs: async () => { desk.pause({ by: 'admin@test' }); return {} } })
   const out = await desk.runCycle({ deps: d })
-  expect(out.steps.map(s => s.name)).toEqual(['strategy', 'brain', 'halted'])
+  expect(out.steps.map(s => s.name)).toEqual(['impact', 'halted'])
   expect(out.steps.at(-1).reason).toMatch(/paused/)
 })
 
@@ -140,4 +140,48 @@ test('strategies examined in the last 14 days are not re-examined; weakest first
   const now = Date.parse('2026-11-20T00:00:00Z')
   const lib = [{ id: 'a', fitness: 50 }, { id: 'b', fitness: 5 }, { id: 'c', fitness: 1, status: 'retired' }, { id: 'd', fitness: 3 }]
   expect(desk.strategiesToImprove(lib, [{ strategyId: 'd', at: '2026-11-15T00:00:00Z' }], { now }).map(e => e.id)).toEqual(['b', 'a'])
+})
+
+describe('impact — did approved changes help?', () => {
+  const { rng } = require('../lib/quant/linalg')
+  const toSeries = require('../lib/brain-evolution').toSeries
+  // 600 daily bars ending today; a choppy random walk so the SMA rule trades.
+  const bars = (() => { const r = rng(11); let p = 100; const end = Date.now(); return Array.from({ length: 600 }, (_, i) => { p *= Math.exp(0.0002 + 0.015 * r.normal()); return { t: end - (599 - i) * 86_400_000, o: p, h: p * 1.01, l: p * 0.99, c: p, v: 1e6 } }) })()
+
+  test('a version approved today is too early; one approved 200 days ago is traded forward against its retired parent', async () => {
+    const lib = fakeLibrary([ENTRY])
+    const base = { strategyId: 'lib1', symbol: 'TEST', status: 'approved', libraryId: 'v11', version: 'v1.1', parentVersion: 'v1.0', change: 'skip stretched entries', filter: { op: '<=', left: { feature: 'zscore20' }, right: { const: 1 } }, parentSpec: { strategy: 'sma_crossover', params: { fastPeriod: 3, slowPeriod: 10 }, symbol: 'TEST' } }
+    sv.appendVersion({ ...base, id: 'e-new', approvedAt: new Date().toISOString() })
+    sv.appendVersion({ ...base, id: 'e-old', approvedAt: new Date(Date.now() - 200 * 86_400_000).toISOString() })
+    const out = await desk.measureImpact({ fetchBars: async () => bars, toSeries, costBps: () => 10, versions: sv, library: lib, brain: {} })
+    const byId = Object.fromEntries(out.strategies.map(x => [x.experimentId, x]))
+    expect(byId['e-new'].verdict).toBe('too-early')
+    expect(['helped', 'hurt', 'same', 'no-trades-yet']).toContain(byId['e-old'].verdict)
+    if (byId['e-old'].versionResult) expect(byId['e-old'].excessPct).toBeCloseTo(byId['e-old'].versionResult.totalReturn - byId['e-old'].parent.totalReturn, 1)
+    expect(out.summary.tooEarly).toBeGreaterThanOrEqual(1)
+  })
+
+  test('research default: before vs after the approval, too early under 20 resolved', () => {
+    const at = '2026-10-01T00:00:00Z'
+    const row = (day, win, method = 'debate') => ({ surface: 'research', at: `2026-${day}T00:00:00Z`, action: 'buy', meta: { method }, outcome: { retPct: win ? 2 : -2 } })
+    const before = Array.from({ length: 40 }, (_, i) => row('09-0' + ((i % 9) + 1), i % 4 === 0, 'single'))
+    const afterFew = Array.from({ length: 10 }, (_, i) => row('10-1' + (i % 9), true))
+    expect(desk.researchImpact([...before, ...afterFew], at, 'debate').verdict).toBe('too-early')
+    const afterMany = Array.from({ length: 40 }, (_, i) => row('10-1' + (i % 9), i % 5 !== 0))
+    const r = desk.researchImpact([...before, ...afterMany], at, 'debate')
+    expect(r).toMatchObject({ verdict: 'helped', before: { n: 40 }, after: { n: 40 }, afterDefault: { n: 40 } })
+  })
+
+  test('an acknowledged finding is re-measured: then vs now, resolved when it no longer fires', async () => {
+    await desk.runCycle({ deps: deps() })
+    const bp = desk.proposalsOf(desk.readLog()).find(p => p.type === 'brain-finding')
+    expect(bp.metric).toMatchObject({ value: 0.45, better: 'lower' })
+    desk.decide(bp.id, 'approved', { by: 'admin@test' })
+    const better = { stats: { exitQuality: { ready: true, winnersNearStop: { rate: 0.38, lo: 0.31, hi: 0.45, n: 90 } } } }
+    let out = await desk.measureImpact({ fetchBars: async () => [], toSeries, costBps: () => 10, versions: sv, library: fakeLibrary([]), brain: better })
+    expect(out.brain[0]).toMatchObject({ then: 0.45, now: 0.38, verdict: 'improving' })
+    out = await desk.measureImpact({ fetchBars: async () => [], toSeries, costBps: () => 10, versions: sv, library: fakeLibrary([]), brain: {} })
+    expect(out.brain[0].verdict).toBe('resolved')
+    expect(desk.impactHeadline(out)).toMatch(/1 of 1 findings improving/)
+  })
 })
