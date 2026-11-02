@@ -89,4 +89,4 @@ export const BIG_O = [
 ]
 
 /** Every `where` that is a Quant Lab tab. */
-export const QUANT_TABS = ['options', 'portfolio', 'vol', 'series', 'strategies', 'risk', 'models', 'calculators', 'discovery', 'learn']
+export const QUANT_TABS = ['holdings', 'options', 'portfolio', 'vol', 'series', 'strategies', 'risk', 'models', 'calculators', 'discovery', 'learn']

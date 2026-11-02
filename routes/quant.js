@@ -6,7 +6,8 @@
  *   pure maths, public   POST /options/*, /calc/:name, /risk/stress|impact|montecarlo|bayes
  *                        — no market data, no AI, no cost: inputs in, numbers out (size-capped)
  *   market-data, sign-in POST /optimize, /volatility, /timeseries, /pairs, /pairs/screen, /statarb, /reversal,
- *                        /risk/capm, /risk/copula, /risk/pca, /ml/compare, /ml/cluster, /ml/rl
+ *                        /risk/capm, /risk/copula, /risk/pca, /ml/compare, /ml/cluster, /ml/rl,
+ *                        /holdings-scan (every tool above across the user's holdings at once)
  *                        — fetch daily bars over loopback, so they need a user and a tighter rate limit;
  *                        the slow ones are heartbeated (clients must check `data.error` as well as `res.ok`)
  * Nothing here calls a language model. Tests: tests/quant-route.test.js
@@ -78,7 +79,9 @@ const rangeOf = (r, def = '2y') => (RANGES.has(r) ? r : def)
 // still go to guardAsync as 500s so they are never mistaken for bad input.
 const isBug = e => e instanceof TypeError || e instanceof RangeError || e instanceof ReferenceError || e instanceof SyntaxError
 const route = (name, fn) => guardAsync(name, async (req, res) => {
-  try { res.json(await fn(req, res)) } catch (e) {
+  // Await first, THEN look up res.json: `res.json(await fn())` reads res.json before fn runs, i.e. before
+  // startJsonHeartbeat replaces it, so any request that heartbeated (> 15 s) failed with "Cannot set headers".
+  try { const out = await fn(req, res); res.json(out) } catch (e) {
     if (isBug(e)) throw e
     return res.status(res.headersSent ? 200 : 400).json({ error: e.message })
   }
@@ -170,6 +173,44 @@ router.post('/optimize', heavy, route('quant/optimize', async (req, res) => {
   const r = optim.compareMethods(map, { cap: num(req.body?.cap, 'cap', { min: 0.1, max: 1, def: 0.6 }) })
   const f = Object.keys(map).length >= 2 ? (() => { const hrp = require('../lib/hrp'), al = hrp.alignReturns(map), lw = optim.ledoitWolf(al.returns), mu = L.columns(al.returns).map(c => L.mean(c) * 252), S = lw.cov.map(rw => rw.map(v => v * 252)); const ef = optim.efficientFrontier(mu, S, { points: 20 }); return { symbols: al.symbols, points: ef.points, minVariance: { ...ef.minVariance, w: undefined, weights: Object.fromEntries(al.symbols.map((s, i) => [s, +ef.minVariance.w[i].toFixed(4)])) }, maxSharpe: { ret: ef.maxSharpe.ret, vol: ef.maxSharpe.vol, sharpe: ef.maxSharpe.sharpe, weights: Object.fromEntries(al.symbols.map((s, i) => [s, +ef.maxSharpe.w[i].toFixed(4)])) }, note: 'Frontier uses unshrunk historical returns — it shows the shape of the trade-off, not a forecast.' } })() : null
   return { ...r, frontier: f, skipped: failed }
+}))
+
+// The whole Quant Lab across the user's holdings (lib/holdings-scan.js): per-holding quant snapshot,
+// catalog strategies judged on two disjoint windows, opt-in walk-forward ML, and portfolio-level risk.
+// Positions come from the page's active portfolio (shares only — prices are the server's last closes).
+const _holdingsCache = new Map()
+router.post('/holdings-scan', heavy, route('quant/holdings-scan', async (req, res) => {
+  const raw = Array.isArray(req.body?.positions) ? req.body.positions : bad('positions must be an array of { symbol, shares }')
+  const merged = new Map()
+  for (const p of raw) {
+    const s = sym(p?.symbol), sh = num(p?.shares, `shares of ${s}`, { min: 0, max: 1e12 })
+    if (sh > 0) merged.set(s, (merged.get(s) || 0) + sh)
+  }
+  const hs = require('../lib/holdings-scan')
+  const positions = [...merged].map(([symbol, shares]) => ({ symbol, shares })).slice(0, hs.MAX_HOLDINGS)
+  if (!positions.length) bad('no holdings with shares to scan')
+  const includeMl = req.body?.includeMl === true
+  const key = `${req.user?.userId}|${includeMl}|${positions.map(p => `${p.symbol}:${p.shares}`).sort().join(',')}`
+  const hit = _holdingsCache.get(key)
+  if (hit && Date.now() - hit.t < 30 * 60_000) return { ...hit.body, cached: true }
+  startJsonHeartbeat(res)
+  // Five downloads at a time: a 30-holding portfolio fetched all at once trips the providers' rate limits.
+  const map = {}, failed = []
+  const queue = positions.map(p => p.symbol)
+  await Promise.all(Array.from({ length: 5 }, async () => {
+    for (let s = queue.shift(); s; s = queue.shift()) {
+      try { map[s] = await bars(s, '5y', req) } catch (e) { failed.push(`${s}: ${e.message}`) }
+    }
+  }))
+  if (!Object.keys(map).length) bad(`no holding had price history — ${failed.join('; ')}`)
+  let bench = null
+  try { bench = await bars('SPY', '5y', req) } catch { /* beta and stress fall back to beta 1 */ }
+  let library = []
+  try { library = require('../lib/strategy-library').readLibrary() } catch { /* empty library */ }
+  const body = { ...(await hs.scanHoldings(positions, map, { benchBars: bench, library, includeMl })), skipped: failed, truncated: merged.size > hs.MAX_HOLDINGS ? merged.size - hs.MAX_HOLDINGS : 0 }
+  _holdingsCache.set(key, { t: Date.now(), body })
+  if (_holdingsCache.size > 200) _holdingsCache.delete(_holdingsCache.keys().next().value)
+  return body
 }))
 
 router.post('/volatility', heavy, route('quant/volatility', async req => { const s = sym(req.body?.symbol), b = await bars(s, rangeOf(req.body?.range, '2y'), req); return { symbol: s, ...vol.volatilityReport(b, { window: Math.round(num(req.body?.window, 'window', { min: 5, max: 120, def: 21 })) }) } }))

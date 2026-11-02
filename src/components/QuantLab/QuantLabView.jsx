@@ -1,6 +1,6 @@
 /**
  * QuantLab — the quant toolbox in one place: option pricing, portfolio optimisers, volatility models, time-series
- * diagnostics, pairs and stat-arb, risk statistics, a machine-learning comparison bench, relative-value
+ * diagnostics, pairs and stat-arb, risk statistics, a machine-learning comparison bench, a scan of the user's own holdings with all of them, relative-value
  * calculators and a linked quant reference. Every tool is deterministic maths (lib/quant/*); no language model is
  * involved. Pure-maths tools work for guests; tools that need market data ask for a sign-in.
  */
@@ -9,15 +9,16 @@ import { FlaskConical } from 'lucide-react'
 import { OptionsTab, PortfolioTab, VolatilityTab, SeriesTab, StrategiesTab, RiskTab, ModelsTab, CalculatorsTab } from './tabs'
 import LearnTab from './LearnTab'
 import DiscoveryTab from './DiscoveryTab'
+import HoldingsTab from './HoldingsTab'
 import { QUANT_TABS } from './reference'
 
 const TABS = [
-  ['options', 'Options', OptionsTab], ['portfolio', 'Portfolio', PortfolioTab], ['vol', 'Volatility', VolatilityTab], ['series', 'Time series', SeriesTab],
+  ['holdings', 'My holdings', HoldingsTab], ['options', 'Options', OptionsTab], ['portfolio', 'Portfolio', PortfolioTab], ['vol', 'Volatility', VolatilityTab], ['series', 'Time series', SeriesTab],
   ['strategies', 'Strategies', StrategiesTab], ['risk', 'Risk', RiskTab], ['models', 'ML models', ModelsTab], ['calculators', 'Calculators', CalculatorsTab], ['discovery', 'Discovery', DiscoveryTab], ['learn', 'Learn', LearnTab],
 ]
 
-export default function QuantLabView({ section }) {
-  const [tab, setTab] = useState(QUANT_TABS.includes(section) ? section : 'options')
+export default function QuantLabView({ section, positions = [] }) {
+  const [tab, setTab] = useState(QUANT_TABS.includes(section) ? section : 'holdings')
   useEffect(() => { if (QUANT_TABS.includes(section)) setTab(section) }, [section])
   const pick = id => { setTab(id); window.history.replaceState(null, '', `#/quant-lab/${id}`) }
   const Active = TABS.find(t => t[0] === tab)[2]
@@ -36,7 +37,7 @@ export default function QuantLabView({ section }) {
             className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap border ${tab === id ? 'bg-mint-400/15 text-mint-400 border-mint-400/30' : 'text-slate-400 border-slate-500/20 hover:text-white'}`}>{label}</button>
         ))}
       </nav>
-      <Active />
+      <Active positions={positions} />
     </div>
   )
 }
