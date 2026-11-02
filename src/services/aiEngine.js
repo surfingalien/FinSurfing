@@ -15,7 +15,7 @@
 import { calcSMA, calcEMA, calcRSI, calcMACD, calcBollinger } from './api'
 import {
   calcATR, detectTrend, findSwingPoints, findKeyLevels,
-  detectDivergence, generateAdvisory as baseAdvisory
+  detectDivergence,
 } from './research'
 import * as portfolioPnl from '../../lib/portfolio-pnl.js'
 import * as horizonSetups from '../../lib/horizon-setups.js'
