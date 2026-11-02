@@ -100,7 +100,10 @@ test('the spend cap stops model calls; the env can never raise it past the ceili
 
   process.env.AGENT_MONTHLY_BUDGET_USD = '1000000'
   expect(desk.budgetUsd()).toBe(desk.BUDGET_CEILING_USD)
-  expect(desk.budgetStatus(new Date(), { spendSince: () => ({ costUsd: 1 }) })).toMatchObject({ spentUsd: 1, exhausted: false })
+  // One budget for both autonomous researchers: the desk's own calls and the Strategy Brain's.
+  const seen = []
+  expect(desk.budgetStatus(new Date(), { spendSince: (_since, { prefix }) => { seen.push(prefix); return { costUsd: 1 } } })).toMatchObject({ spentUsd: 2, exhausted: false })
+  expect(seen.sort()).toEqual(['agent-desk', 'strategy-brain'])
   expect(typeof audit.spendSince).toBe('function')
 })
 

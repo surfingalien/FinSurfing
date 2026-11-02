@@ -10,10 +10,11 @@ import { OptionsTab, PortfolioTab, VolatilityTab, SeriesTab, StrategiesTab, Risk
 import LearnTab from './LearnTab'
 import DiscoveryTab from './DiscoveryTab'
 import HoldingsTab from './HoldingsTab'
+import StrategyBrainTab from './StrategyBrainTab'
 import { QUANT_TABS } from './reference'
 
 const TABS = [
-  ['holdings', 'My holdings', HoldingsTab], ['options', 'Options', OptionsTab], ['portfolio', 'Portfolio', PortfolioTab], ['vol', 'Volatility', VolatilityTab], ['series', 'Time series', SeriesTab],
+  ['holdings', 'My holdings', HoldingsTab], ['brain', 'Strategy Brain', StrategyBrainTab], ['options', 'Options', OptionsTab], ['portfolio', 'Portfolio', PortfolioTab], ['vol', 'Volatility', VolatilityTab], ['series', 'Time series', SeriesTab],
   ['strategies', 'Strategies', StrategiesTab], ['risk', 'Risk', RiskTab], ['models', 'ML models', ModelsTab], ['calculators', 'Calculators', CalculatorsTab], ['discovery', 'Discovery', DiscoveryTab], ['learn', 'Learn', LearnTab],
 ]
 

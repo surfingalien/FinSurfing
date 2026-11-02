@@ -48,7 +48,7 @@ export default function HoldingsTab({ positions = [] }) {
             {state.loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />} {state.loading ? 'Scanning…' : 'Scan holdings'}
           </button>
           <label className="flex items-center gap-1.5 text-xs text-slate-400">
-            <input type="checkbox" checked={includeMl} onChange={e => setIncludeMl(e.target.checked)} /> Include ML models (walk-forward, slower)
+            <input type="checkbox" checked={includeMl} onChange={e => setIncludeMl(e.target.checked)} /> Include ML models (8 models, walk-forward, slower)
           </label>
           {d?.cached && <span className="text-[11px] text-slate-500">from a scan in the last 30 minutes</span>}
         </div>
@@ -141,7 +141,10 @@ function HoldingsTable({ holdings, showMl }) {
                   {!h.strategies?.rows?.length && <span className="text-slate-500">{h.strategies?.summary}</span>}
                   {h.strategies?.library?.length > 0 && <div className="text-mint-400">library: {h.strategies.library.map(l => `${l.name} ${l.version}`).join(', ')}</div>}
                 </td>
-                {showMl && <td className="pr-3">{h.ml?.error ? <span className="text-slate-500">{h.ml.error}</span> : h.ml ? (h.ml.passed.length ? <span className="text-amber-300">{h.ml.passed.join(', ')} beat the baseline in every fold</span> : <span className="text-slate-400">no model beat the baseline in every fold</span>) : '—'}</td>}
+                {showMl && <td className="pr-3">
+                  {h.ml?.error ? <span className="text-slate-500">{h.ml.error}</span> : h.ml ? (h.ml.passed.length ? <span className="text-amber-300">{h.ml.passed.join(', ')} beat the baseline in every fold</span> : <span className="text-slate-400">no model beat the baseline in every fold</span>) : '—'}
+                  {h.ml?.asStrategy && <div className="whitespace-nowrap"><span className="text-slate-500">as a rule ({h.ml.asStrategy.model}):</span> <span className={VERDICT_TONE[h.ml.asStrategy.verdict] || 'text-slate-400'}>{h.ml.asStrategy.verdict}</span>{h.ml.asStrategy.older && h.ml.asStrategy.recent ? <span className="text-slate-500"> · α {fmt(h.ml.asStrategy.older.alpha, 1)}% / {fmt(h.ml.asStrategy.recent.alpha, 1)}%</span> : null}</div>}
+                </td>}
               </tr>
             )
           })}</tbody>
@@ -158,6 +161,7 @@ function Summary({ d }) {
       <ul className="text-xs text-slate-300 space-y-1 list-disc pl-4">
         <li>Strategies: {d.strategies.withValidatedRule.length ? d.strategies.withValidatedRule.map(x => `${x.symbol} (${x.rules.join(', ')})`).join('; ') : 'no catalog rule held up in both windows on any holding'} — {d.strategies.tested} holding(s) tested.</li>
         {d.ml && <li>ML: {d.ml.passed.length} holding(s) where a model beat the baseline in all {d.ml.folds} folds{d.ml.passed.length ? ` (${d.ml.passed.map(x => x.symbol).join(', ')})` : ''}; about {d.ml.expectedByLuck} would pass by luck alone with {d.ml.holdingsTested} holdings × {d.ml.modelsPerHolding} models.</li>}
+        {d.ml && <li>ML as a trading rule (the best model per holding, next-day fills, costs, both windows): {d.ml.asStrategyValidated?.length ? d.ml.asStrategyValidated.map(x => `${x.symbol} (${x.model})`).join(', ') : 'none held up'}. The Strategy Brain tests these properly across many symbols every night.</li>}
         {d.portfolio?.effectiveBets != null && <li>Diversification: about {d.portfolio.effectiveBets} independent bet(s) across {d.portfolio.weights.length} holdings.</li>}
       </ul>
     </Card>

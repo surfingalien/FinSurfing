@@ -130,7 +130,7 @@ export const NAV_COMMANDS = [
   { id: 'portfolios', label: 'Manage Portfolios', icon: FolderOpen, group: 'Account' },
   // Quant Lab sections are tabs inside one page; list them so ⌘K finds
   // "volatility", "options" or "ML" directly (deep link #/quant-lab/<section>).
-  ...[['holdings', 'My holdings (scan the portfolio)'], ['options', 'Options pricing'], ['portfolio', 'Portfolio optimisers'], ['vol', 'Volatility'], ['series', 'Time series'],
+  ...[['holdings', 'My holdings (scan the portfolio)'], ['brain', 'Strategy Brain (autonomous strategy research)'], ['options', 'Options pricing'], ['portfolio', 'Portfolio optimisers'], ['vol', 'Volatility'], ['series', 'Time series'],
       ['strategies', 'Pairs & stat-arb'], ['risk', 'Risk statistics'], ['models', 'ML models (algorithms)'], ['calculators', 'Calculators'],
       ['discovery', 'Discovery lists'], ['learn', 'Learn (quant reference)']]
     .map(([param, label]) => ({ id: 'quant-lab', param, label: `Quant Lab · ${label}`, icon: Calculator, group: 'Quant Lab' })),
