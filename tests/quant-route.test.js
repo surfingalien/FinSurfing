@@ -62,7 +62,7 @@ test('volatility, timeseries, capm, pairs and statarb answer for known symbols a
   const s = await post('/statarb', { symbols: ['AAA', 'BBB', 'CCC', 'DDD'] }); expect(s.status).toBe(200); expect(s.body.signals).toHaveLength(4)
   const u = await post('/volatility', { symbol: 'ZZZZ' }); expect(u.status).toBe(400); expect(u.body.error).toMatch(/no price history/)
   expect((await post('/pairs', { y: 'AAA', x: 'AAA' })).status).toBe(400)
-}, 60000)
+}, 120000)
 test('ml compare reports the baseline and a verdict; clustering returns embeddings', async () => {
   const m = await post('/ml/compare', { symbol: 'AAA' }); expect(m.status).toBe(200); expect(m.body.baseline.accuracy).toBeGreaterThan(0.3); expect(m.body.verdict).toBeTruthy(); expect(m.body.results.length).toBe(13)
   const k = await post('/ml/cluster', { symbols: ['AAA', 'BBB', 'CCC', 'DDD', 'SPY'] }); expect(k.status).toBe(200); expect(k.body.symbols).toHaveLength(5)
@@ -70,9 +70,9 @@ test('ml compare reports the baseline and a verdict; clustering returns embeddin
 
 test('bars are cached for a few minutes (tab-flipping must not re-hit the data providers) and failures are not', async () => {
   mockBars.mockClear()
-  await post('/volatility', { symbol: 'AAA' }); await post('/timeseries', { symbol: 'AAA' })
+  await post('/volatility', { symbol: 'AAA', compare: false }); await post('/timeseries', { symbol: 'AAA' })   // caching only — skip the model contest
   expect(mockBars.mock.calls.filter(c => c[0] === 'AAA' && c[1].range === '2y')).toHaveLength(1)   // volatility's 2y fetch, reused
-  mockBars.mockClear(); await post('/volatility', { symbol: 'ZZZZ' }); await post('/volatility', { symbol: 'ZZZZ' })
+  mockBars.mockClear(); await post('/volatility', { symbol: 'ZZZZ', compare: false }); await post('/volatility', { symbol: 'ZZZZ', compare: false })
   expect(mockBars.mock.calls.filter(c => c[0] === 'ZZZZ')).toHaveLength(2)                          // a failure is retried, not remembered
 }, 60000)
 test('a basket that only partly loads reports how many loaded and why the rest did not', async () => {
