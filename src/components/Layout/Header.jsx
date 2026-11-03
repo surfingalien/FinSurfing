@@ -16,6 +16,7 @@ import { TICKER_SYMBOLS } from '../../data/portfolio'
 import { fmt, fmtPct } from '../../services/api'
 import { useProMode } from '../../contexts/ProModeContext'
 import { useLightMode } from '../../contexts/LightModeContext'
+import VersionSwitch from '../../v2/VersionSwitch'
 
 export default function Header({ onMobileMenuOpen, onOpenPalette }) {
   const [tickerData, setTickerData] = useState([])
@@ -147,6 +148,11 @@ export default function Header({ onMobileMenuOpen, onOpenPalette }) {
           <kbd className="hidden sm:block text-[9px] border border-white/[0.08] rounded px-1 py-px">⌘K</kbd>
         </button>
       )}
+
+      {/* Layout version: v1 (this one) or the v2 workspace layout */}
+      <div className="shrink-0 px-2 h-full flex items-center border-l border-white/[0.06]">
+        <VersionSwitch />
+      </div>
 
       {/* Theme toggle — light is the default, so this switches to dark */}
       <button
