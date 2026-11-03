@@ -25,8 +25,10 @@ export function useAuthedJson(url, deps = []) {
 export function usePublicJson(url) {
   const [state, setState] = useState({ data: null, error: null })
   useEffect(() => {
+    if (!url) { setState({ data: null, error: null }); return }
     let live = true
-    fetch(url, { headers: getApiKeyHeaders() }).then(r => r.json()).then(j => { if (live) setState({ data: j, error: j?.error ?? null }) })
+    setState({ data: null, error: null })
+    fetch(url, { headers: getApiKeyHeaders() }).then(async r => { const j = await r.json(); if (live) setState({ data: j, error: j?.error ?? (r.ok ? null : `HTTP ${r.status}`) }) })
       .catch(e => { if (live) setState({ data: null, error: e.message }) })
     return () => { live = false }
   }, [url])

@@ -34,6 +34,7 @@ const V3HomeView             = lazy(() => import('./v3/pages/HomeView'))
 const V3BrainView            = lazy(() => import('./v3/pages/BrainView'))
 const V3MarketsView          = lazy(() => import('./v3/pages/MarketsView'))
 const V3DiscoverView         = lazy(() => import('./v3/pages/DiscoverView'))
+const V3ResearchView         = lazy(() => import('./v3/pages/ResearchView'))
 
 const DashboardView          = lazy(() => import('./components/Dashboard/DashboardView'))
 const PortfolioView          = lazy(() => import('./components/Portfolio/PortfolioView'))
@@ -270,8 +271,6 @@ function MainApp({ onSignIn }) {
     'backtest':       () => <BacktestView />,
     'buy-signals':    () => <BuySignalsView portfolio={portfolio} onAnalyze={navigateToAnalyze} />,
     'ai-brain':       () => <AIBrainView portfolio={portfolio} onAnalyze={navigateToAnalyze} />,
-    macro: () => <V3MarketsView onNavigate={navigateTo} />,
-    screener: () => <V3DiscoverView onNavigate={navigateTo} onAnalyze={navigateToAnalyze} />,
     'brain-activity': () => <BrainActivityView onAnalyze={navigateToAnalyze} />,
     'market-focus':   () => <MarketFocusView portfolio={portfolio} watchlist={watchlist.symbols} />,
     'ai-watchlist':   () => <AIWatchlistView onAnalyze={navigateToAnalyze} />,
@@ -413,6 +412,7 @@ function MainApp({ onSignIn }) {
       />
     ),
     macro: () => <V3MarketsView onNavigate={navigateTo} />,
+    'research-desk': () => <V3ResearchView symbol={route.tab === 'research-desk' ? route.param : null} onSymbol={s => navigate('research-desk', s)} onSignIn={onSignIn} />,
     screener: () => <V3DiscoverView onNavigate={navigateTo} onAnalyze={navigateToAnalyze} />,
     'brain-activity': () => <V3BrainView onNavigate={navigateTo} onAnalyze={navigateToAnalyze} onSignIn={onSignIn} />,
   }
