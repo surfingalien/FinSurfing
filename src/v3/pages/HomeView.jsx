@@ -25,7 +25,7 @@ import PortfolioRisk from '../../components/Dashboard/widgets/PortfolioRisk'
 import MarketNewsFeed from '../../components/Dashboard/widgets/MarketNewsFeed'
 import FearGreedGauge from '../../components/Dashboard/widgets/FearGreedGauge'
 import SentimentPulseWidget from '../../components/Sentiment/SentimentPulseWidget'
-import { Card, Badge, Spark, Empty, money, pct, signCls, Bar } from '../ui'
+import { Card, Badge, Spark, Empty, Gauge, money, pct, signCls, Bar } from '../ui'
 import { useAuthedJson, usePublicJson } from '../data'
 
 const INDEXES = [
@@ -220,21 +220,6 @@ function PortfolioCard({ portfolio, onNavigate }) {
 }
 
 /* ── Macro regime ────────────────────────────────────────────────────────── */
-function Gauge({ value, label, tone }) {
-  const r = 80, c = Math.PI * r
-  const v = Math.max(0, Math.min(100, value ?? 0))
-  return (
-    <div className="v3-gauge">
-      <svg viewBox="0 0 200 116">
-        <path d="M20 100 A80 80 0 0 1 180 100" className="v3-gauge-track" />
-        <path d="M20 100 A80 80 0 0 1 180 100" className={`v3-gauge-val ${tone}`} strokeDasharray={`${(v / 100) * c} ${c}`} />
-      </svg>
-      <div className="v3-gauge-num v3-num">{value == null ? '—' : Math.round(v)}</div>
-      <div className={`v3-gauge-label ${tone}`}>{label}</div>
-    </div>
-  )
-}
-
 function RegimeCard({ onNavigate }) {
   const { data, error } = usePublicJson('/api/macro/indicators')
   const reg = data?.regime

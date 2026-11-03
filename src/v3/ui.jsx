@@ -67,3 +67,19 @@ export function Spark({ values = [], up = true }) {
     </svg>
   )
 }
+
+// Half-circle gauge, 0–100.
+export function Gauge({ value, label, tone }) {
+  const r = 80, c = Math.PI * r
+  const v = Math.max(0, Math.min(100, value ?? 0))
+  return (
+    <div className="v3-gauge">
+      <svg viewBox="0 0 200 116">
+        <path d="M20 100 A80 80 0 0 1 180 100" className="v3-gauge-track" />
+        <path d="M20 100 A80 80 0 0 1 180 100" className={`v3-gauge-val ${tone}`} strokeDasharray={`${(v / 100) * c} ${c}`} />
+      </svg>
+      <div className="v3-gauge-num v3-num">{value == null ? '—' : Math.round(v)}</div>
+      <div className={`v3-gauge-label ${tone}`}>{label}</div>
+    </div>
+  )
+}

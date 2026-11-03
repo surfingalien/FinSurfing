@@ -223,6 +223,9 @@ html.v3.v3 .v2-switch-btn.is-on { background: var(--accent); color: var(--accent
   .v3-ticker-status { padding-right: 16px; }
 }
 @media (max-width: 640px) {
+  .v3-ind, .v3-regimes { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .v3-fg { grid-template-columns: minmax(0, 1fr); }
+  .v3-odds li { grid-template-columns: minmax(0, 1fr) 60px 38px; }
   .v3-search span, .v3-search kbd, .v3-ask span, .v3-ticker-clock { display: none; }
   .v3-search { flex: 0 0 38px; justify-content: center; padding: 0; }
   .v3-top-actions .v3-icon { width: 32px; }
@@ -638,7 +641,39 @@ html.v3.v3 ::-webkit-scrollbar-thumb { background: var(--line-2); }
 .v3-sched span { font-size: 12px; color: var(--muted); }
 .v3-sched em { font-style: normal; font-family: var(--f-mono); font-size: 11px; color: var(--faint); }
 
+/* ── Markets ── */
+.v3-ind { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.v3-ind-tile { display: flex; flex-direction: column; gap: 4px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; min-width: 0; }
+.v3-ind-tile > span { font-size: 12.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.v3-ind-tile b { font-size: 18px; font-weight: 500; }
+.v3-ind-tile em { font-style: normal; font-size: 11px; color: var(--faint); }
+.v3-ind-tile em i { font-style: normal; }
+.v3-h4.first { margin-top: 0; }
+.v3-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.v3-chips span { font-size: 12px; padding: 4px 9px; border-radius: 6px; background: var(--panel-2); color: var(--muted); }
+.v3-chips span.up { background: var(--up-soft); color: var(--up); }
+.v3-chips span.down { background: var(--down-soft); color: var(--down); }
+.v3-callout { margin-top: 14px; padding: 12px; border-radius: 10px; background: var(--panel-2); font-size: 13px; line-height: 1.5; color: var(--muted); }
+.v3-callout b { color: var(--fg); }
+.v3-regimes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.v3-regimes > div { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 2px 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; }
+.v3-regimes > div.on { border-color: var(--accent); background: var(--accent-soft); }
+.v3-regimes span { font-size: 13px; font-weight: 500; }
+.v3-regimes b { font-size: 13px; text-align: right; }
+.v3-regimes em { grid-column: 1 / -1; font-style: normal; font-size: 11px; color: var(--faint); }
+.v3-fg { display: grid; grid-template-columns: 220px 1fr; gap: 18px; align-items: center; }
+.v3-kv { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.v3-kv li { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+.v3-kv li:last-child { border-bottom: 0; }
+.v3-kv span { color: var(--muted); }
+.v3-odds { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.v3-odds li { display: grid; grid-template-columns: minmax(0, 1fr) 120px 42px; align-items: center; gap: 12px; font-size: 13px; }
+.v3-odds li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.v3-odds li b { text-align: right; font-size: 13px; }
+.v3-odds .v3-bar i.up { background: var(--accent); }
+
 @media (max-width: 1180px) {
+  .v3-ind { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .v3-loop { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .v3-step::after { display: none; }
   .v3-tiles, .v3-sched { grid-template-columns: repeat(2, minmax(0, 1fr)); }
