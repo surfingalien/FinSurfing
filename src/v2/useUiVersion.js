@@ -1,8 +1,8 @@
 /**
  * useUiVersion.js
  *
- * Which interface is showing: 'v1' (the current layout, the default) or 'v2'
- * (the workspace layout in this folder). The choice is per browser, kept in
+ * Which interface is showing: 'v1' (the current layout, the default), 'v2'
+ * (the workspace layout in this folder) or 'v3' (the redesign in src/v3). The choice is per browser, kept in
  * localStorage, and can be set for one link with ?ui=v2 or ?ui=v1. Nothing
  * here touches the server, the routes or any stored data, so switching back
  * and forth only changes the frame around the same pages.
@@ -11,7 +11,7 @@
 import { useSyncExternalStore, useCallback } from 'react'
 
 export const UI_VERSION_KEY = 'finsurf_ui_version'
-export const UI_VERSIONS = ['v1', 'v2']
+export const UI_VERSIONS = ['v1', 'v2', 'v3']
 const DEFAULT_VERSION = 'v1'
 
 const listeners = new Set()

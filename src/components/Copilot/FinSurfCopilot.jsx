@@ -100,6 +100,13 @@ const PROVIDERS = [
 
 export default function FinSurfCopilot({ portfolio = [], watchlist = [] }) {
   const [open, setOpen] = useState(false)
+  // Other parts of the app (the v3 top bar's "Ask Copilot") open the panel
+  // with a window event instead of reaching into this component.
+  useEffect(() => {
+    const onOpen = () => setOpen(true)
+    window.addEventListener('finsurf:open-copilot', onOpen)
+    return () => window.removeEventListener('finsurf:open-copilot', onOpen)
+  }, [])
   const [messages, setMessages] = useState([{ role: 'assistant', content: WELCOME }])
   const [input, setInput] = useState('')
   const [streaming, setStreaming] = useState(false)

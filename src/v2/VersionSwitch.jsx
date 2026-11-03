@@ -22,7 +22,8 @@ export default function VersionSwitch({ className = '' }) {
   return (
     <div className={`v2-switch ${className}`} role="group" aria-label="Interface version">
       {btn('v1', 'v1', 'Current layout')}
-      {btn('v2', 'v2', 'New workspace layout (preview)')}
+      {btn('v2', 'v2', 'Workspace layout')}
+      {btn('v3', 'v3', 'Redesign (preview)')}
     </div>
   )
 }

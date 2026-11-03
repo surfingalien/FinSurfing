@@ -27,6 +27,17 @@ const PortfolioSetupWizard   = lazy(() => import('./components/Portfolio/Portfol
 const FinSurfCopilot         = lazy(() => import('./components/Copilot/FinSurfCopilot'))
 // v2 workspace layout — its own chunk, loaded only when someone switches to v2
 const V2Shell                = lazy(() => import('./v2/V2Shell'))
+// v3 redesign — its own chunk too, loaded only when someone switches to v3
+const V3Shell                = lazy(() => import('./v3/V3Shell'))
+// v3 pages rebuilt from the Dev preview; any tab not listed keeps its live v1 view
+const V3HomeView             = lazy(() => import('./v3/pages/HomeView'))
+const V3BrainView            = lazy(() => import('./v3/pages/BrainView'))
+const V3MarketsView          = lazy(() => import('./v3/pages/MarketsView'))
+const V3DiscoverView         = lazy(() => import('./v3/pages/DiscoverView'))
+const V3ResearchView         = lazy(() => import('./v3/pages/ResearchView'))
+const V3QuantView            = lazy(() => import('./v3/pages/QuantView'))
+const V3AgentsView           = lazy(() => import('./v3/pages/AgentsView'))
+const V3PortfolioView        = lazy(() => import('./v3/pages/PortfolioV3View'))
 
 const DashboardView          = lazy(() => import('./components/Dashboard/DashboardView'))
 const PortfolioView          = lazy(() => import('./components/Portfolio/PortfolioView'))
@@ -387,12 +398,36 @@ function MainApp({ onSignIn }) {
     </div>
   )
 
-  if (uiVersion !== 'v2') return v1Layout
+  if (uiVersion !== 'v2' && uiVersion !== 'v3') return v1Layout
+
+  const Shell = uiVersion === 'v3' ? V3Shell : V2Shell
+
+  // v3 replaces these pages with rebuilt ones; every other tab renders the
+  // same live view as v1 (and the sign-in screen still guards AUTH_TABS).
+  const v3Views = {
+    dashboard: () => (
+      <V3HomeView
+        portfolio={portfolio}
+        watchlist={watchlist}
+        onNavigate={navigateTo}
+        onAnalyze={navigateToAnalyze}
+        onSignIn={onSignIn}
+      />
+    ),
+    macro: () => <V3MarketsView onNavigate={navigateTo} />,
+    'research-desk': () => <V3ResearchView symbol={route.tab === 'research-desk' ? route.param : null} onSymbol={s => navigate('research-desk', s)} onSignIn={onSignIn} />,
+    screener: () => <V3DiscoverView onNavigate={navigateTo} onAnalyze={navigateToAnalyze} />,
+    'brain-activity': () => <V3BrainView onNavigate={navigateTo} onAnalyze={navigateToAnalyze} onSignIn={onSignIn} />,
+    'quant-lab': () => <V3QuantView section={route.param} positions={portfolio.positions} onNavigate={navigateTo} onSignIn={onSignIn} />,
+    'agent-desk': () => <V3AgentsView onSignIn={onSignIn} />,
+    portfolio: () => <V3PortfolioView portfolio={portfolio} portfolioId={activePortfolioId} authFetch={isAuthenticated ? authFetch : null}
+      portfolioName={portfolios?.find?.(p => p.id === activePortfolioId)?.name} onNavigate={navigateTo} onAnalyze={navigateToAnalyze} />,
+  }
 
   return (
     <>
       <Suspense fallback={<LoadingScreen fullScreen />}>
-        <V2Shell
+        <Shell
           activeTab={activeTab}
           onNavigate={navigateTo}
           onOpenPalette={() => setPaletteOpen(true)}
@@ -401,9 +436,9 @@ function MainApp({ onSignIn }) {
           mainRef={mainRef}
         >
           <Suspense fallback={<LoadingScreen />}>
-            <div key={activeTab}>{renderView()}</div>
+            <div key={activeTab}>{(uiVersion === 'v3' && v3Views[activeTab]) ? v3Views[activeTab]() : renderView()}</div>
           </Suspense>
-        </V2Shell>
+        </Shell>
       </Suspense>
       {overlays}
     </>
