@@ -180,6 +180,21 @@ for kp in D['kupiec']:
     lr=-2*((n-x)*math.log(1-p)+x*math.log(p)-((n-x)*math.log(1-ph) if ph<1 else 0)-(x*math.log(ph) if x>0 else 0))
     rec('Kupiec POF vs scipy chi2',f'{x}/{n} at {p}',kp['pValue'],st.chi2.sf(lr,1),1e-8)
 
+
+# GARCH family vs arch (data ×100 → log-likelihood shifts by n·ln 100)
+for fam in D['volFamily']:
+    r=np.array(fam['r'])*100; n=len(r); shift=n*math.log(100)
+    specs={'arch':dict(vol='ARCH',p=1),'garch':dict(vol='GARCH',p=1,q=1),'gjr':dict(vol='GARCH',p=1,o=1,q=1),'egarch':dict(vol='EGARCH',p=1,o=1,q=1),'aparch':dict(vol='APARCH',p=1,o=1,q=1)}
+    for m,kw in specs.items():
+        res=arch_model(r,mean='Zero',dist='normal',**kw).fit(disp='off',options={'maxiter':2000}); pa=res.params; mine=fam['fits'][m]; P=mine['params']
+        grp=f"{m.upper()} vs arch package (MLE, {fam['kind']} data)"
+        rec(grp,'log-likelihood',mine['logLik'],res.loglikelihood+shift,0.5,False,'Nelder–Mead vs SLSQP; ≤0.5 log-lik units')
+        if m in ('arch','garch','gjr'): rec(grp,'alpha',P['alpha'],pa['alpha[1]'],0.03)
+        if m in ('garch','gjr','egarch','aparch'): rec(grp,'beta',P['beta'],pa['beta[1]'],0.03)
+        if m=='gjr': rec(grp,'gamma',P['gamma'],pa['gamma[1]'],0.04)
+        if m=='egarch': rec(grp,'alpha',P['alpha'],pa['alpha[1]'],0.03); rec(grp,'gamma',P['gamma'],pa['gamma[1]'],0.03)
+        if m=='aparch': rec(grp,'gamma',P['gamma'],pa['gamma[1]'],0.1); rec(grp,'delta',P['delta'],pa['delta'],0.1)
+
 by=collections.OrderedDict()
 for g,n,m,r,d,tol,ok,note in rows: by.setdefault(g,[]).append((n,m,r,d,tol,ok,note))
 tot=sum(len(v) for v in by.values()); fails=0

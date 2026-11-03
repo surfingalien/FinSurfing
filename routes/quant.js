@@ -6,7 +6,7 @@
  *   pure maths, public   POST /options/*, /calc/:name, /risk/stress|impact|montecarlo|bayes
  *                        — no market data, no AI, no cost: inputs in, numbers out (size-capped)
  *   market-data, sign-in POST /optimize, /volatility, /timeseries, /pairs, /pairs/screen, /statarb, /reversal,
- *                        /risk/capm, /risk/copula, /risk/pca, /ml/compare, /ml/cluster, /ml/rl,
+ *                        /risk/capm, /risk/copula, /risk/pca, /risk/dcc, /ml/compare, /ml/cluster, /ml/rl,
  *                        /holdings-scan (every tool above across the user's holdings at once)
  *                        — fetch daily bars over loopback, so they need a user and a tighter rate limit;
  *                        the slow ones are heartbeated (clients must check `data.error` as well as `res.ok`)
@@ -21,6 +21,8 @@ const { fetchDailyBars } = require('../lib/internal-api')
 
 const opt   = require('../lib/quant/options')
 const vol   = require('../lib/quant/volatility')
+const volModels = require('../lib/quant/vol-models')
+const dccLib = require('../lib/quant/dcc')
 const optim = require('../lib/quant/optimize')
 const ts    = require('../lib/quant/timeseries')
 const risk  = require('../lib/quant/risk')
@@ -213,7 +215,22 @@ router.post('/holdings-scan', heavy, route('quant/holdings-scan', async (req, re
   return body
 }))
 
-router.post('/volatility', heavy, route('quant/volatility', async req => { const s = sym(req.body?.symbol), b = await bars(s, rangeOf(req.body?.range, '2y'), req); return { symbol: s, ...vol.volatilityReport(b, { window: Math.round(num(req.body?.window, 'window', { min: 5, max: 120, def: 21 })) }) } }))
+router.post('/volatility', heavy, route('quant/volatility', async (req, res) => {
+  const s = sym(req.body?.symbol), b = await bars(s, rangeOf(req.body?.range, '2y'), req)
+  const out = { symbol: s, ...vol.volatilityReport(b, { window: Math.round(num(req.body?.window, 'window', { min: 5, max: 120, def: 21 })) }) }
+  // The GARCH family on 5 years of daily log returns, then the walk-forward contest between them (seconds of CPU → heartbeat).
+  startJsonHeartbeat(res)
+  try {
+    const b5 = await bars(s, '5y', req), c = b5.map(x => x.c), r = []
+    for (let i = 1; i < c.length; i++) if (c[i - 1] > 0 && c[i] > 0) r.push(Math.log(c[i] / c[i - 1]))
+    out.family = { observations: r.length, ...volModels.fitAll(r) }
+    if (req.body?.compare !== false) {
+      try { out.comparison = await volModels.compareModels(r, { refitEvery: 63 }) } catch (e) { out.comparisonError = e.message }
+    }
+    try { out.forecastStudy = require('../lib/vol-forecast-study').summary() } catch { /* study not run yet */ }
+  } catch (e) { out.familyError = e.message }
+  return out
+}))
 
 router.post('/timeseries', heavy, route('quant/timeseries', async req => {
   const s = sym(req.body?.symbol), b = await bars(s, rangeOf(req.body?.range, '5y'), req), c = b.map(x => x.c), lr = L.logReturnsOf(c), out = { symbol: s, observations: c.length }
@@ -239,6 +256,12 @@ router.post('/risk/capm', heavy, route('quant/risk/capm', async req => {
 }))
 router.post('/risk/copula', heavy, route('quant/risk/copula', async req => { const a = sym(req.body?.a, 'a'), b = sym(req.body?.b, 'b'); const { map } = await barsMap([a, b], '5y', req, 2); const hrp = require('../lib/hrp'), al = hrp.alignReturns(map); return { a, b, ...risk.gaussianCopula(al.returns.map(r => r[0]), al.returns.map(r => r[1])) } }))
 router.post('/risk/pca', heavy, route('quant/risk/pca', async req => { const list = syms(req.body?.symbols, { min: 3, max: 20 }), { map } = await barsMap(list, '2y', req, 3), al = require('../lib/hrp').alignReturns(map), p = risk.pca(al.returns, { components: 3 }); return { symbols: al.symbols, explained: p.explained, cumulative: p.cumulative, loadings: p.loadings.map(v => Object.fromEntries(al.symbols.map((s, i) => [s, +v[i].toFixed(4)]))) } }))
+router.post('/risk/dcc', heavy, route('quant/risk/dcc', async (req, res) => {
+  const list = syms(req.body?.symbols, { min: 2, max: 20 }), { map } = await barsMap(list, '5y', req, 2), al = require('../lib/hrp').alignReturns(map)
+  startJsonHeartbeat(res)
+  const w = al.symbols.map(() => 1 / al.symbols.length)
+  return { ...dccLib.dcc(al.returns, { symbols: al.symbols, weights: w }), weighting: 'equal weights' }
+}))
 
 router.post('/ml/compare', heavy, route('quant/ml/compare', async (req, res) => { startJsonHeartbeat(res); const s = sym(req.body?.symbol), b = await bars(s, '5y', req); return { symbol: s, ...mlc.compareModels(b, { horizon: Math.round(num(req.body?.horizon, 'horizon', { min: 1, max: 20, def: 5 })) }) } }))
 router.post('/ml/cluster', heavy, route('quant/ml/cluster', async req => { const list = syms(req.body?.symbols, { min: 4, max: 30 }), { map, failed } = await barsMap(list, '2y', req, 4); return { ...mlc.clusterSymbols(map, { k: Math.round(num(req.body?.k, 'k', { min: 2, max: 6, def: 3 })) }), skipped: failed } }))

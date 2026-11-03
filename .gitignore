@@ -30,6 +30,7 @@ data/last-quotes.json
 data/ai-brain-shadow.jsonl
 data/factor-library.json
 data/pead-study.json
+data/vol-forecast-study.json
 data/meta-label.json
 data/thirteenf.json
 data/bracket-prob.json

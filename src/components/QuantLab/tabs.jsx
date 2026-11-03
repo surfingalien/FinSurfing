@@ -5,6 +5,7 @@
  */
 import { useState } from 'react'
 import { RunPanel, Card, Note, Stat, ResultView, MiniLine, MiniScatter, fmt, pct } from './shared'
+import DccView from './DccView'
 import { SubTabs, HedgingLab, CalibrationTab, ExoticsTab, VrpTab, WalkForwardTab, VarBacktestPanel, RiskPremiumPanel, MlWalkForwardPanel } from './advanced'
 
 const sel = (name, label, options, def) => ({ name, label, type: 'select', options, default: def })
@@ -87,10 +88,90 @@ export function PortfolioTab() {
 }
 
 /* ── Volatility ────────────────────────────────────────────────────────────── */
+const FAMILY_ORDER = ['arch', 'garch', 'gjr', 'egarch', 'aparch', 'ewma']
+const paramText = p => Object.entries(p || {}).map(([k, v]) => `${k} ${Math.abs(v) < 0.001 && v !== 0 ? v.toExponential(2) : fmt(v, 3)}`).join(' · ')
+
+function VolFamily({ d }) {
+  const fam = d.family
+  if (!fam) return d.familyError ? <Note tone="warn">GARCH family: {d.familyError}</Note> : null
+  const rows = FAMILY_ORDER.filter(m => fam.models?.[m]).map(m => fam.models[m])
+  const bestAic = Math.min(...rows.filter(r => r.aic != null).map(r => r.aic))
+  const chart = Array.from({ length: 21 }, (_, i) => Object.fromEntries([['day', i + 1], ...rows.map(r => [r.model, r.forecastPath[i]])]))
+  const c = d.comparison, st = d.forecastStudy
+  return (
+    <>
+      <Card title={`GARCH family — ${fam.observations} daily returns (5 years), Gaussian maximum likelihood`}>
+        <p className="text-[11px] text-slate-500 mb-2">GJR, EGARCH and APARCH let a fall raise volatility more than a rise of the same size (the leverage effect); APARCH also fits the power δ. Fits are cross-checked against the Python <span className="font-mono">arch</span> library. Lower AIC = better in-sample fit after the parameter penalty — the out-of-sample contest below is the test that counts.</p>
+        <div className="overflow-x-auto">
+          <table className="text-[11px] w-full">
+            <thead><tr className="text-slate-500 text-left">{['Model', 'Parameters', 'Persistence', 'Leverage', 'AIC', 'Tomorrow', 'Next 21d', 'Long-run'].map(h => <th key={h} className="font-medium pr-3 pb-1 whitespace-nowrap">{h}</th>)}</tr></thead>
+            <tbody>{rows.map(r => (
+              <tr key={r.model} className="border-t border-slate-500/10 align-top">
+                <td className="pr-3 py-1 text-slate-200 whitespace-nowrap">{r.label}</td>
+                <td className="pr-3 text-slate-400 font-mono">{paramText(r.params)}</td>
+                <td className="pr-3 tabular-nums text-slate-300">{fmt(r.persistence, 3)}{r.halfLifeDays ? <span className="text-slate-500"> ({fmt(r.halfLifeDays, 0)}d)</span> : null}</td>
+                <td className="pr-3 text-slate-300">{r.leverage == null ? '—' : r.leverage ? 'yes' : 'no'}</td>
+                <td className={`pr-3 tabular-nums ${r.aic === bestAic ? 'text-mint-400' : 'text-slate-300'}`}>{r.aic == null ? '—' : fmt(r.aic, 1)}</td>
+                <td className="pr-3 tabular-nums text-slate-300">{pct(r.nextDayVol)}</td>
+                <td className="pr-3 tabular-nums text-slate-300">{pct(r.forecastVol21)}</td>
+                <td className="tabular-nums text-slate-400">{pct(r.longRunVol)}</td>
+              </tr>
+            ))}</tbody>
+          </table>
+        </div>
+        {Object.keys(fam.errors || {}).length > 0 && <div className="mt-2"><Note tone="warn">Not fitted: {Object.entries(fam.errors).map(([m, e]) => `${m} (${e})`).join('; ')}</Note></div>}
+        <div className="mt-3"><MiniLine data={chart} xKey="day" lines={rows.map(r => ({ key: r.model, name: r.label }))} yFmt={v => pct(v, 0)} height={180} /></div>
+      </Card>
+      {c ? (
+        <Card title={`Which forecasts best? Walk-forward contest over the last ${c.testDays} days`}>
+          <p className="text-[11px] text-slate-500 mb-2">Each model is refitted every {c.refitEvery} days on data before the test day only, forecasts the next day's variance, and is scored by QLIKE (lower is better). Diebold–Mariano t vs {c.reference.toUpperCase()}: below −{fmt(c.tBar, 2)} is a win by more than chance (corrected for the models tried).</p>
+          <table className="text-[11px] w-full">
+            <thead><tr className="text-slate-500 text-left">{['Rank', 'Model', 'QLIKE', 'DM t vs GARCH', 'Verdict'].map(h => <th key={h} className="font-medium pr-3 pb-1">{h}</th>)}</tr></thead>
+            <tbody>{c.ranking.map((r, i) => (
+              <tr key={r.model} className="border-t border-slate-500/10">
+                <td className="pr-3 py-1 text-slate-400">{i + 1}</td>
+                <td className="pr-3 text-slate-200">{r.label}</td>
+                <td className="pr-3 tabular-nums text-slate-300">{fmt(r.qlike, 4)}</td>
+                <td className="pr-3 tabular-nums text-slate-300">{r.vsGarch ? fmt(r.vsGarch.t, 2) : 'reference'}</td>
+                <td className={r.vsGarch?.better ? 'text-mint-400' : r.vsGarch?.worse ? 'text-amber-300' : 'text-slate-500'}>{!r.vsGarch ? '—' : r.vsGarch.better ? 'better' : r.vsGarch.worse ? 'worse' : 'no clear difference'}</td>
+              </tr>
+            ))}</tbody>
+          </table>
+          <div className="mt-2"><Note>{c.verdict}</Note></div>
+        </Card>
+      ) : d.comparisonError ? <Note tone="warn">Out-of-sample contest: {d.comparisonError}</Note> : null}
+      {st && (
+        <Card title="Does any of these replace the app's 21-day forecast?">
+          {!st.ran ? <p className="text-xs text-slate-400">{st.note} It runs every Saturday: ~70 large caps, every 21 sessions, each model vs the current median forecast that sizes stops and feeds the AI Brain.</p> : (
+            <>
+              <p className="text-xs text-slate-300 mb-2">{st.reason}. <span className="text-slate-500">Last run {new Date(st.at).toLocaleDateString()} — {st.symbols} symbols, {st.dates} dates.</span></p>
+              <table className="text-[11px] w-full">
+                <thead><tr className="text-slate-500 text-left">{['Model', 'QLIKE (21d)', 'vs current', 't (dates)', ''].map(h => <th key={h} className="font-medium pr-3 pb-1">{h}</th>)}</tr></thead>
+                <tbody>
+                  <tr className="border-t border-slate-500/10"><td className="pr-3 py-1 text-slate-200">Current median</td><td className="pr-3 tabular-nums text-slate-300">{fmt(st.currentLoss, 4)}</td><td /><td /><td className="text-slate-500">{st.adopted ? 'replaced' : 'in use'}</td></tr>
+                  {st.results.map(r => (
+                    <tr key={r.model} className="border-t border-slate-500/10">
+                      <td className="pr-3 py-1 text-slate-200">{r.label}</td>
+                      <td className="pr-3 tabular-nums text-slate-300">{fmt(r.meanLoss, 4)}</td>
+                      <td className="pr-3 tabular-nums text-slate-300">{r.meanDiff == null ? '—' : `${r.meanDiff > 0 ? '+' : ''}${fmt(r.meanDiff, 4)}`}</td>
+                      <td className="pr-3 tabular-nums text-slate-300">{fmt(r.t, 2)}</td>
+                      <td className={st.adopted === r.model ? 'text-mint-400' : 'text-slate-500'}>{st.adopted === r.model ? 'in use' : r.beats ? 'also beat it' : ''}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          )}
+        </Card>
+      )}
+    </>
+  )
+}
+
 function VolEstimators() {
   return (
     <RunPanel title="Volatility models" endpoint="/api/quant/volatility" needsAuth
-      blurb="Rolling (O(1) Welford update), EWMA, GARCH(1,1), range-based estimators and a HAR forecast — then how much to hold to target 15% volatility."
+      blurb="Rolling (O(1) Welford update), EWMA, range-based estimators, the GARCH family (ARCH, GARCH, GJR-GARCH, EGARCH, APARCH) with a walk-forward contest between them, a HAR forecast — then how much to hold to target 15% volatility. Takes ~10 seconds."
       fields={[{ name: 'symbol', label: 'Symbol', type: 'symbol', default: 'SPY' }, num('window', 'Rolling window (days)', 21)]}
       render={d => {
         const n = Math.min(d.rolling.series.length, d.ewma.series.length)
@@ -105,6 +186,7 @@ function VolEstimators() {
               <div className="mt-3"><MiniLine data={rows} xKey="i" lines={[{ key: 'rolling' }, { key: 'ewma' }]} yFmt={v => pct(v, 0)} /></div>
             </Card>
             {d.garch && <Card title="GARCH(1,1)"><div className="grid sm:grid-cols-4 gap-3 mb-3"><Stat label="Persistence α+β" value={fmt(d.garch.persistence, 3)} sub={`half-life ${fmt(d.garch.halfLifeDays, 1)}d`} /><Stat label="Long-run vol" value={pct(d.garch.longRunVol)} /><Stat label="Today" value={pct(d.garch.currentVol)} /><Stat label="Tomorrow" value={pct(d.garch.nextDayVol)} /></div><MiniLine data={d.garch.forecast.map((v, i) => ({ day: i + 1, vol: v }))} xKey="day" lines={[{ key: 'vol', name: 'forecast vol' }]} yFmt={v => pct(v, 0)} height={160} />{d.garch.note && <div className="mt-2"><Note tone="warn">{d.garch.note}</Note></div>}</Card>}
+            <VolFamily d={d} />
             {d.har && <Card title="HAR (daily squared returns)"><ResultView data={{ nextDayVol: d.har.nextDayVol, r2: d.har.r2, coefficients: d.har.coef, note: d.har.note }} /></Card>}
             <Card title="Volatility targeting"><Stat label="Position scale for a 15% target (max 1×)" value={`${fmt(d.volTarget15, 2)}×`} /></Card>
           </>
@@ -175,7 +257,7 @@ export function StrategiesTab() {
 /* ── Risk ──────────────────────────────────────────────────────────────────── */
 export function RiskTab() {
   const [which, setWhich] = useState('stress')
-  const tabs = [['stress', 'Stress test'], ['varbt', 'VaR backtest'], ['capm', 'CAPM & ratios'], ['premium', 'Risk premium'], ['mc', 'Monte Carlo VaR'], ['copula', 'Copula'], ['pca', 'PCA'], ['impact', 'Market impact'], ['bayes', 'Bayesian win rate']]
+  const tabs = [['stress', 'Stress test'], ['varbt', 'VaR backtest'], ['capm', 'CAPM & ratios'], ['premium', 'Risk premium'], ['mc', 'Monte Carlo VaR'], ['copula', 'Copula'], ['pca', 'PCA'], ['dcc', 'DCC correlations'], ['impact', 'Market impact'], ['bayes', 'Bayesian win rate']]
   return (
     <div className="space-y-4">
       <div className="flex gap-2 flex-wrap">{tabs.map(([k, l]) => <button key={k} onClick={() => setWhich(k)} className={`px-3 py-1.5 rounded-lg text-xs ${which === k ? 'bg-mint-400/15 text-mint-400 border border-mint-400/30' : 'text-slate-400 border border-slate-500/20'}`}>{l}</button>)}</div>
@@ -201,6 +283,10 @@ export function RiskTab() {
       {which === 'pca' && <RunPanel key="e" title="Principal components" endpoint="/api/quant/risk/pca" needsAuth
         fields={[{ name: 'symbols', label: 'Symbols (3–20)', type: 'symbols', default: 'AAPL, MSFT, JPM, XOM, JNJ, KO', wide: true }]}
         render={d => <><Card title="Variance explained"><ResultView data={{ explained: d.explained, cumulative: d.cumulative }} /></Card><Card title="Loadings"><ResultView data={d.loadings} /></Card></>} />}
+      {which === 'dcc' && <RunPanel key="g" title="DCC-GARCH — correlations that move" endpoint="/api/quant/risk/dcc" needsAuth
+        blurb="Each symbol gets a GARCH(1,1); a DCC(1,1) then lets the correlations move day by day. Compares today's correlations and the VaR they imply (equal weights) with the five-year averages. Your own portfolio: Quant Lab → My holdings."
+        fields={[{ name: 'symbols', label: 'Symbols (2–20)', type: 'symbols', default: 'SPY, TLT, GLD, QQQ, XLE', wide: true }]}
+        render={d => <DccView d={d} title={`DCC-GARCH — ${d.symbols.join(', ')} (${d.days} days)`} />} />}
       {which === 'impact' && <RunPanel key="f" title="Market impact (square-root law)" endpoint="/api/quant/risk/impact"
         fields={[num('shares', 'Shares', 50000), num('price', 'Price', 50), num('adv', 'Average daily volume', 1000000), num('dailyVol', 'Daily volatility (decimal)', 0.02), num('spreadBps', 'Quoted spread (bps)', 5)]}
         render={d => <Card><ResultView data={d} /></Card>} />}

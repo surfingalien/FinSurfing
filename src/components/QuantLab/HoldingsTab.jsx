@@ -10,6 +10,7 @@ import { useState } from 'react'
 import { Play, Loader2, Lock } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { Card, Note, Stat, fmt, pct } from './shared'
+import DccView from './DccView'
 
 const usd = v => (v == null || !Number.isFinite(v) ? '—' : `${v < 0 ? '−' : ''}$${Math.abs(v).toLocaleString(undefined, { maximumFractionDigits: 0 })}`)
 const p1 = v => pct(v, 1)
@@ -68,6 +69,7 @@ export default function HoldingsTab({ positions = [] }) {
 function PortfolioRisk({ p }) {
   if (!p || p.error) return <Note tone="warn">Portfolio risk: {p?.error || 'unavailable'}</Note>
   return (
+    <>
     <Card title="Portfolio risk">
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
         <Stat label="Value" value={usd(p.totalValue)} sub={`${p.weights.length} holdings`} />
@@ -114,6 +116,8 @@ function PortfolioRisk({ p }) {
       {p.excluded?.length > 0 && <p className="text-[11px] text-slate-500 mt-2">Left out of portfolio risk (under 120 days of history): {p.excluded.join(', ')}</p>}
       {p.observations && <p className="text-[11px] text-slate-500 mt-1">{p.observations} common trading days; covariance shrunk (Ledoit–Wolf).</p>}
     </Card>
+    {p.dcc ? <DccView d={p.dcc} usdValues={p.dcc.portfolioUsd} /> : p.dccError ? <Note>Time-varying correlations (DCC-GARCH): {p.dccError}.</Note> : null}
+    </>
   )
 }
 
