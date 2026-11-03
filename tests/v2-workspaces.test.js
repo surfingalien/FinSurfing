@@ -42,3 +42,31 @@ test('v1 stays the default and v2 is loaded lazily', () => {
   expect(app).toMatch(/const V2Shell\s*=\s*lazy\(\(\) => import\('\.\/v2\/V2Shell'\)\)/)
   expect(app).toMatch(/if \(uiVersion !== 'v2'\) return v1Layout/)
 })
+
+// Everything v1 offers outside the pages themselves (sidebar + header) must
+// have a home in v2 as well.
+test('v2 carries every control v1 has around the pages', () => {
+  const shell = src('v2/V2Shell.jsx') + src('v2/V2Ticker.jsx')
+  const needs = {
+    'portfolio account switcher': /<AccountSwitcher/,
+    'create portfolio': /<CreatePortfolioModal/,
+    'manage portfolios': /onNavigate\('portfolios'\)/,
+    'API keys': /<ApiKeysModal/,
+    'API keys required warning': /hasAnyKey/,
+    'change password': /<ChangePasswordModal/,
+    'sign out': /onLogout=\{logout\}/,
+    'sign in': /onClick=\{onSignIn\}/,
+    'command palette': /onClick=\{onOpenPalette\}/,
+    'light/dark theme': /toggleLightMode\(\)/,
+    'pro mode': /toggleProMode\(\)/,
+    'version switch': /<VersionSwitch/,
+    'alerts badge': /triggeredCount/,
+    'live ticker': /subscribeQuotes\(TICKER_SYMBOLS/,
+    'market status + clock': /etMarketOpen/,
+    'locked pages for guests': /p\.auth && !isAuthenticated/,
+    'admin only for admins': /user\?\.role === 'admin'/,
+    'NEW / LIVE tags': /p\.tag/,
+  }
+  const missing = Object.entries(needs).filter(([, re]) => !re.test(shell)).map(([k]) => k)
+  expect(missing).toEqual([])
+})

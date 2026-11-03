@@ -7,19 +7,22 @@
  * workspaces in a rail, the pages of the open workspace as tabs along the top.
  */
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import {
   Home, Globe, Microscope, Sparkles, Brain, Calculator, Bot, PieChart, ShieldCheck,
-  Search, Sun, Moon, Lock, LogIn, LogOut, Bell, KeyRound,
+  Search, Sun, Moon, Lock, LogIn, LogOut, Bell, KeyRound, Terminal, FolderOpen, Settings,
 } from 'lucide-react'
 import { NAV_COMMANDS } from '../navigation'
 import { useAuth } from '../contexts/AuthContext'
 import { useLightMode } from '../contexts/LightModeContext'
 import { useProMode } from '../contexts/ProModeContext'
+import { useApiKeys } from '../contexts/ApiKeysContext'
 import BrandMark from '../components/shared/BrandMark'
 import AccountSwitcher from '../components/Portfolio/AccountSwitcher'
 import CreatePortfolioModal from '../components/Portfolio/CreatePortfolioModal'
 import ApiKeysModal from '../components/Settings/ApiKeysModal'
+import ChangePasswordModal from '../components/Auth/ChangePasswordModal'
+import V2Ticker from './V2Ticker'
 import VersionSwitch from './VersionSwitch'
 import WORKSPACES from './workspaces.json'
 import './v2.css'
@@ -44,12 +47,53 @@ function readLast() {
   try { return JSON.parse(window.sessionStorage.getItem(LAST_KEY)) || {} } catch { return {} }
 }
 
+// Signed-in menu: the same entries as v1's sidebar user menu.
+function AccountMenu({ user, onNavigate, onKeys, onPassword, onLogout }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef(null)
+  useEffect(() => {
+    const h = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', h)
+    return () => document.removeEventListener('mousedown', h)
+  }, [])
+  const initials = user?.displayName
+    ? user.displayName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
+    : user?.email?.[0]?.toUpperCase() ?? '?'
+  const item = (Icon, label, fn, danger) => (
+    <button type="button" className={`v2-menu-item ${danger ? 'is-danger' : ''}`}
+      onClick={() => { setOpen(false); fn() }}>
+      <Icon className="w-3.5 h-3.5" /> {label}
+    </button>
+  )
+  return (
+    <div ref={ref} className="v2-menu-wrap">
+      <button type="button" className="v2-avatar" onClick={() => setOpen(v => !v)}
+        title={user?.displayName || user?.email} aria-expanded={open}>
+        {initials}
+      </button>
+      {open && (
+        <div className="v2-menu" role="menu">
+          <div className="v2-menu-head">
+            <b>{user?.displayName || 'Account'}</b>
+            <span>{user?.email}</span>
+          </div>
+          {item(FolderOpen, 'Manage Portfolios', () => onNavigate('portfolios'))}
+          {item(Settings, 'API Keys', onKeys)}
+          {item(KeyRound, 'Change Password', onPassword)}
+          {item(LogOut, 'Sign Out', onLogout, true)}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function V2Shell({
   activeTab, onNavigate, onOpenPalette, onSignIn, triggeredCount = 0, mainRef, children,
 }) {
   const { user, isAuthenticated, logout } = useAuth()
   const { lightMode, toggleLightMode } = useLightMode()
   const { proMode, toggleProMode } = useProMode()
+  const { hasAnyKey } = useApiKeys()
 
   const workspaces = useMemo(
     () => WORKSPACES.filter(w => !w.admin || user?.role === 'admin'),
@@ -73,14 +117,20 @@ export default function V2Shell({
     onNavigate(last && w.tabs.includes(last) ? last : w.tabs[0])
   }
 
+  // Light and Pro are mutually exclusive, exactly as in v1's header.
   const toggleTheme = () => {
     if (!lightMode && proMode) toggleProMode()
     toggleLightMode()
+  }
+  const togglePro = () => {
+    if (!proMode && lightMode) toggleLightMode()
+    toggleProMode()
   }
 
   const page = PAGE[activeTab]
   const [showKeys, setShowKeys] = useState(false)
   const [showCreate, setShowCreate] = useState(false)
+  const [showPw, setShowPw] = useState(false)
 
   return (
     <div className="v2-root">
@@ -132,8 +182,14 @@ export default function V2Shell({
                 />
               </div>
             )}
-            <button type="button" className="v2-icon-btn" onClick={() => setShowKeys(true)} title="API keys">
-              <KeyRound className="w-4 h-4" />
+            <button
+              type="button"
+              className={`v2-icon-btn ${hasAnyKey ? '' : 'is-warn'}`}
+              onClick={() => setShowKeys(true)}
+              title={hasAnyKey ? 'API keys' : 'API keys — required: add a data provider key'}
+            >
+              <Settings className="w-4 h-4" />
+              {!hasAnyKey && <span className="v2-dot" />}
             </button>
             <button
               type="button"
@@ -152,11 +208,23 @@ export default function V2Shell({
             >
               {lightMode ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
             </button>
+            <button
+              type="button"
+              className={`v2-icon-btn ${proMode ? 'is-on' : ''}`}
+              onClick={togglePro}
+              title={proMode ? 'Exit Pro Mode' : 'Pro Mode (terminal look)'}
+            >
+              <Terminal className="w-4 h-4" />
+            </button>
             <VersionSwitch />
             {isAuthenticated ? (
-              <button type="button" className="v2-icon-btn" onClick={logout} title={`Sign out ${user?.email ?? ''}`}>
-                <LogOut className="w-4 h-4" />
-              </button>
+              <AccountMenu
+                user={user}
+                onNavigate={onNavigate}
+                onKeys={() => setShowKeys(true)}
+                onPassword={() => setShowPw(true)}
+                onLogout={logout}
+              />
             ) : (
               <button type="button" className="v2-signin" onClick={onSignIn}>
                 <LogIn className="w-3.5 h-3.5" />
@@ -165,6 +233,8 @@ export default function V2Shell({
             )}
           </div>
         </header>
+
+        <V2Ticker />
 
         {/* ── Pages of this workspace ── */}
         <div className="v2-tabs" role="tablist" aria-label={`${current.label} pages`}>
@@ -184,7 +254,9 @@ export default function V2Shell({
                 title={locked ? 'Sign in to use this page' : p.label}
               >
                 {Icon && <Icon className="w-3.5 h-3.5 shrink-0" />}
-                <span>{id === 'portfolios' ? 'Accounts' : p.label}</span>
+                <span>{id === 'portfolios' ? 'Manage Portfolios' : p.label}</span>
+                {p.tag && <em className="v2-tag">{p.tag}</em>}
+                {id === 'alerts' && triggeredCount > 0 && <em className="v2-tag is-alert">{triggeredCount}</em>}
                 {locked && <Lock className="w-3 h-3 opacity-60" />}
               </button>
             )
@@ -204,6 +276,7 @@ export default function V2Shell({
 
       {showCreate && <CreatePortfolioModal onClose={() => setShowCreate(false)} />}
       {showKeys && <ApiKeysModal onClose={() => setShowKeys(false)} />}
+      {showPw && <ChangePasswordModal onClose={() => setShowPw(false)} />}
     </div>
   )
 }

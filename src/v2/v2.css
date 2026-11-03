@@ -184,6 +184,56 @@ html.pro-mode .v2-root {
   color: var(--v2-muted);
 }
 
+
+/* ── Ticker strip ── */
+.v2-ticker {
+  display: flex;
+  align-items: center;
+  height: 30px;
+  border-bottom: 1px solid var(--v2-line);
+  font-size: 11px;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+.v2-ticker-live { padding: 0 10px; font-weight: 700; font-size: 10px; color: var(--v2-accent); border-right: 1px solid var(--v2-line); height: 100%; display: flex; align-items: center; }
+.v2-ticker-track-wrap { flex: 1; min-width: 0; overflow: hidden; }
+.v2-ticker-item { display: inline-flex; gap: 6px; margin-right: 26px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--v2-muted); }
+.v2-ticker-item b { color: var(--v2-ink); font-weight: 600; }
+.v2-ticker-empty { color: var(--v2-muted); padding: 0 12px; }
+.v2-up { color: #10b981; }
+.v2-down { color: #ef4444; }
+.v2-ticker-status { display: flex; align-items: center; gap: 6px; padding: 0 12px; height: 100%; border-left: 1px solid var(--v2-line); color: var(--v2-muted); white-space: nowrap; }
+.v2-ticker-status i { width: 6px; height: 6px; border-radius: 50%; background: #64748b; }
+.v2-ticker-status i.is-open { background: #10b981; }
+.v2-ticker-clock { font-family: ui-monospace, monospace; padding-left: 8px; border-left: 1px solid var(--v2-line); }
+
+/* ── Small marks ── */
+.v2-icon-btn.is-on { color: var(--v2-accent); background: var(--v2-accent-soft); }
+.v2-icon-btn.is-warn { color: #f59e0b; }
+.v2-dot { position: absolute; top: 6px; right: 6px; width: 7px; height: 7px; border-radius: 50%; background: #f59e0b; }
+.v2-tag { font-style: normal; font-size: 9px; font-weight: 700; padding: 1px 5px; border-radius: 4px; background: var(--v2-accent-soft); color: var(--v2-accent); }
+.v2-tag.is-alert { background: #ef4444; color: #fff; }
+
+/* ── Account menu ── */
+.v2-menu-wrap { position: relative; }
+.v2-avatar {
+  width: 30px; height: 30px; border-radius: 50%;
+  background: linear-gradient(135deg, #34d399, #6366f1);
+  color: #0a0e1a; font-size: 11px; font-weight: 700;
+}
+.v2-menu {
+  position: absolute; right: 0; top: calc(100% + 6px); z-index: 60;
+  min-width: 210px; padding: 4px 0; border-radius: 12px;
+  background: var(--v2-panel); border: 1px solid var(--v2-line);
+  box-shadow: 0 16px 40px -12px rgba(0, 0, 0, 0.45);
+}
+.v2-menu-head { display: flex; flex-direction: column; gap: 2px; padding: 10px 14px; border-bottom: 1px solid var(--v2-line); margin-bottom: 4px; }
+.v2-menu-head b { font-size: 12px; }
+.v2-menu-head span { font-size: 11px; color: var(--v2-muted); overflow: hidden; text-overflow: ellipsis; }
+.v2-menu-item { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 14px; font-size: 12px; color: var(--v2-ink); text-align: left; }
+.v2-menu-item:hover { background: var(--v2-hover); }
+.v2-menu-item.is-danger { color: #ef4444; }
+
 /* ── Phones: rail becomes a bottom bar ── */
 @media (max-width: 1100px) { .v2-ws-blurb { display: none; } .v2-search { width: 200px; } }
 
@@ -205,5 +255,7 @@ html.pro-mode .v2-root {
   .v2-account, .v2-ws-blurb, .v2-search-text, .v2-search kbd, .v2-signin span { display: none; }
   .v2-search { width: 32px; padding: 0; justify-content: center; margin-left: auto; }
   .v2-tabs { padding: 8px 10px; }
+  .v2-ticker-clock, .v2-ticker-status { display: none; }
+  .v2-top-actions { gap: 2px; }
   .v2-footer { flex-direction: column; gap: 2px; }
 }
