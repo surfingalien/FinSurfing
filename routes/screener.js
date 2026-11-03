@@ -43,6 +43,7 @@ const router   = express.Router()
 const aiRouter = getRouter('screener')
 
 const fmp     = require('../lib/fmp')
+const { FMP_SECTORS } = require('../lib/scan-universe')
 const FMP_KEY = () => process.env.FMP_API_KEY || null
 
 /** How many candidates get the expensive per-symbol enrichment. */
@@ -87,7 +88,10 @@ async function fmpCandidates({ sector, minMarketCap, minYield }, key) {
     isActivelyTrading: true,
     isEtf:             false,
     limit:             CANDIDATE_LIMIT,
-    sector:            sector || null,
+    // The sector pills use GICS names ("Information Technology"); FMP's screener
+    // only knows its own ("Technology") and answers an unknown name with an empty
+    // list, so every sector run came back with nothing.
+    sector:            sector ? (FMP_SECTORS[sector] || sector) : null,
   }
   // FMP signals plan/rate problems in the body; lib/fmp throws them, which
   // surfaces the reason instead of an empty screen.
@@ -116,12 +120,18 @@ async function fmpCandidates({ sector, minMarketCap, minYield }, key) {
 
 /** Stage 1b — the keyless fallback when FMP is unavailable. */
 function symbolDbCandidates({ sector }) {
+  let universe = []
   try {
-    const universe = sector
+    universe = sector
       ? symbolDb.sectorUniverse(sector, { size: ENRICH_LIMIT, minCap: 'Mid Cap' })
-      : []
-    return universe.map(symbol => ({ symbol, name: null, sector: sector ?? null, dividendYield: null }))
-  } catch { return [] }
+      // "All sectors" used to fall back to nothing at all. Take the largest names of every sector instead.
+      : [...new Set(Object.keys(FMP_SECTORS).flatMap(sec => symbolDb.sectorUniverse(sec, { size: 4, minCap: 'Large Cap' })))]
+  } catch { universe = [] }
+  // The symbol index loads after boot; until it has, "All sectors" still has a list of liquid large caps to rank.
+  if (!universe.length && !sector) {
+    try { universe = require('../lib/factor-mining').FALLBACK_UNIVERSE.slice(0, ENRICH_LIMIT) } catch { universe = [] }
+  }
+  return universe.map(symbol => ({ symbol, name: null, sector: sector ?? null, dividendYield: null }))
 }
 
 /** Stage 2 — per-symbol fundamentals for the shortlist. */
@@ -257,18 +267,23 @@ router.post('/run', requireAuth, screenerLimit, async (req, res) => {
 
     try {
       candidates = await fmpCandidates({ sector, minMarketCap, minYield }, key)
+      if (!candidates.length) notes.push('the bulk screener returned no companies for these filters — fell back to the local symbol index')
     } catch (e) {
       notes.push(`bulk screener unavailable (${e.message}) — fell back to the local symbol index`)
+    }
+    if (!candidates.length) {
       candidateSource = 'symbol-db'
       candidates = symbolDbCandidates({ sector })
     }
 
     if (!candidates.length) {
+      // Say why: the reason (a refused FMP plan, an index still loading) was in `notes`, which pages did not show.
+      const base = sector
+        ? `No candidates for sector "${sector}" above a $${(minMarketCap / 1e9).toFixed(1)}B market cap`
+        : 'No candidates matched the filters'
       return res.json({
         ranked: [], excluded: [], candidateSource, notes,
-        error: sector
-          ? `No candidates for sector "${sector}" above a $${(minMarketCap / 1e9).toFixed(1)}B market cap`
-          : 'No candidates matched the filters',
+        error: notes.length ? `${base} (${notes.join('; ')})` : base,
       })
     }
 
