@@ -1,0 +1,26 @@
+/* v1/v2 toggle — loaded in both layouts, so it is styled on its own classes only. */
+.v2-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  background: rgba(148, 163, 184, 0.08);
+  flex-shrink: 0;
+}
+.v2-switch-btn {
+  font: 600 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.04em;
+  padding: 4px 8px;
+  border-radius: 6px;
+  color: #94a3b8;
+  background: transparent;
+  transition: background-color 0.15s, color 0.15s;
+}
+.v2-switch-btn:hover { color: #e2e8f0; }
+.v2-switch-btn.is-on { background: #00ffcc; color: #04120e; }
+html.light-mode .v2-switch-btn { color: #64748b; }
+html.light-mode .v2-switch-btn:hover { color: #0f172a; }
+html.light-mode .v2-switch-btn.is-on { background: #2563eb; color: #ffffff; }
+html.pro-mode .v2-switch-btn.is-on { background: #4af626; color: #000; }

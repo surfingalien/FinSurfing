@@ -1,0 +1,11 @@
+[
+  { "id": "home",      "label": "Home",          "blurb": "Your day at a glance",                    "tabs": ["dashboard", "market-focus", "watchlist", "alerts"] },
+  { "id": "markets",   "label": "Markets",       "blurb": "What the whole market is doing",         "tabs": ["heatmap", "macro", "calendar", "sentiment", "polymarket"] },
+  { "id": "research",  "label": "Research Desk", "blurb": "Everything about one stock",              "tabs": ["research-desk", "analyze", "tradingview", "filings", "exposure", "dcf-valuation", "pattern-finder", "relationship-graph"] },
+  { "id": "discover",  "label": "Discover",      "blurb": "Find the next idea",                      "tabs": ["screener", "recommendations", "buy-signals", "dividend-screen", "ai-watchlist"] },
+  { "id": "brain",     "label": "AI Brain",      "blurb": "Scans, and how they turned out",          "tabs": ["ai-brain", "brain-activity", "trade-timeline", "probability-lattice"] },
+  { "id": "quant",     "label": "Quant Lab",     "blurb": "Models, strategies and backtests",        "tabs": ["quant-lab", "strategies", "backtest"] },
+  { "id": "agents",    "label": "Agents",        "blurb": "AI agents that research for you",         "tabs": ["agent-desk", "research", "agent-hub", "second-brain", "agentic-os", "quantmind"] },
+  { "id": "portfolio", "label": "Portfolio",     "blurb": "Holdings, risk and planning",             "tabs": ["portfolio", "portfolios", "analytics", "risk-rules", "trade-setups", "rebalancer", "tail-ridge", "goals", "montecarlo"] },
+  { "id": "admin",     "label": "Admin",         "blurb": "Administration",                          "tabs": ["admin"], "admin": true }
+]

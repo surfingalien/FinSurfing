@@ -19,11 +19,14 @@ import { useAlertStream, formatAnalysisToast } from './hooks/useAlertStream'
 import { useToast } from './components/shared/ToastNotifications'
 import SignInRequired from './components/shared/SignInRequired'
 import { AUTH_TABS } from './navigation'
+import { useUiVersion } from './v2/useUiVersion'
 
 // ── Lazy views — each becomes its own chunk, loaded on first visit ────────────
 const AuthPage               = lazy(() => import('./components/Auth/AuthPage'))
 const PortfolioSetupWizard   = lazy(() => import('./components/Portfolio/PortfolioSetupWizard'))
 const FinSurfCopilot         = lazy(() => import('./components/Copilot/FinSurfCopilot'))
+// v2 workspace layout — its own chunk, loaded only when someone switches to v2
+const V2Shell                = lazy(() => import('./v2/V2Shell'))
 
 const DashboardView          = lazy(() => import('./components/Dashboard/DashboardView'))
 const PortfolioView          = lazy(() => import('./components/Portfolio/PortfolioView'))
@@ -171,6 +174,7 @@ function MainApp({ onSignIn }) {
   // Hash routing: #/<tab>[/<param>] — deep links + browser back/forward
   const [route, navigate] = useHashRoute()
   const activeTab = route.tab
+  const [uiVersion] = useUiVersion()
 
   const [analyzeSymbol, setAnalyzeSymbol] = useState('AAPL')
   const [wizardDone,    setWizardDone]    = useState(false)
@@ -311,7 +315,29 @@ function MainApp({ onSignIn }) {
     )
   }
 
-  return (
+  // Shared by both layouts: ⌘K palette and the Copilot float over either one.
+  const overlays = (
+    <>
+      {/* ── Command palette (⌘K) ── */}
+      <CommandPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        onNavigate={navigateTo}
+      />
+
+      {/* ── FinSurf Copilot — floating agentic AI panel (signed-in only) ── */}
+      {isAuthenticated && (
+        <Suspense fallback={null}>
+          <FinSurfCopilot
+            portfolio={portfolio.positions}
+            watchlist={watchlist.symbols}
+          />
+        </Suspense>
+      )}
+    </>
+  )
+
+  const v1Layout = (
     <div className="app-shell flex h-screen overflow-hidden">
       {/* ── Sidebar ── */}
       <Sidebar
@@ -357,23 +383,30 @@ function MainApp({ onSignIn }) {
         </main>
       </div>
 
-      {/* ── Command palette (⌘K) ── */}
-      <CommandPalette
-        open={paletteOpen}
-        onClose={() => setPaletteOpen(false)}
-        onNavigate={navigateTo}
-      />
-
-      {/* ── FinSurf Copilot — floating agentic AI panel (signed-in only) ── */}
-      {isAuthenticated && (
-        <Suspense fallback={null}>
-          <FinSurfCopilot
-            portfolio={portfolio.positions}
-            watchlist={watchlist.symbols}
-          />
-        </Suspense>
-      )}
+      {overlays}
     </div>
+  )
+
+  if (uiVersion !== 'v2') return v1Layout
+
+  return (
+    <>
+      <Suspense fallback={<LoadingScreen fullScreen />}>
+        <V2Shell
+          activeTab={activeTab}
+          onNavigate={navigateTo}
+          onOpenPalette={() => setPaletteOpen(true)}
+          onSignIn={onSignIn}
+          triggeredCount={alertsHook.triggered.length}
+          mainRef={mainRef}
+        >
+          <Suspense fallback={<LoadingScreen />}>
+            <div key={activeTab}>{renderView()}</div>
+          </Suspense>
+        </V2Shell>
+      </Suspense>
+      {overlays}
+    </>
   )
 }
 

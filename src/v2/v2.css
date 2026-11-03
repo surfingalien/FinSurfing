@@ -1,0 +1,209 @@
+/*
+ * v2 workspace layout. Everything is scoped to .v2-root so loading this file
+ * can never restyle v1; the pages inside keep the app's shared classes and
+ * theme overrides exactly as they are.
+ */
+.v2-root {
+  --v2-bg: #060810;
+  --v2-panel: #0b0f1a;
+  --v2-line: rgba(255, 255, 255, 0.07);
+  --v2-ink: #e2e8f0;
+  --v2-muted: #8b95a7;
+  --v2-accent: #00ffcc;
+  --v2-accent-ink: #04120e;
+  --v2-accent-soft: rgba(0, 255, 204, 0.10);
+  --v2-hover: rgba(255, 255, 255, 0.05);
+
+  display: flex;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  background: var(--v2-bg);
+  color: var(--v2-ink);
+}
+html.light-mode .v2-root {
+  --v2-bg: #f9fafb;
+  --v2-panel: #ffffff;
+  --v2-line: #e2e8f0;
+  --v2-ink: #0f172a;
+  --v2-muted: #64748b;
+  --v2-accent: #2563eb;
+  --v2-accent-ink: #ffffff;
+  --v2-accent-soft: rgba(37, 99, 235, 0.08);
+  --v2-hover: rgba(15, 23, 42, 0.04);
+}
+html.pro-mode .v2-root {
+  --v2-bg: #000000;
+  --v2-panel: #050505;
+  --v2-accent: #4af626;
+  --v2-accent-ink: #000000;
+  --v2-accent-soft: rgba(74, 246, 38, 0.08);
+}
+
+/* ── Rail ── */
+.v2-rail {
+  width: 84px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  padding: 10px 6px;
+  background: var(--v2-panel);
+  border-right: 1px solid var(--v2-line);
+  overflow-y: auto;
+}
+.v2-rail-brand { display: flex; justify-content: center; padding: 4px 0 12px; }
+.v2-rail-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 9px 2px;
+  border-radius: 10px;
+  color: var(--v2-muted);
+  font-size: 10.5px;
+  font-weight: 500;
+  line-height: 1.15;
+  text-align: center;
+  transition: background-color 0.15s, color 0.15s;
+}
+.v2-rail-item:hover { background: var(--v2-hover); color: var(--v2-ink); }
+.v2-rail-item.is-on { background: var(--v2-accent-soft); color: var(--v2-accent); }
+
+/* ── Main column ── */
+.v2-main-col { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow: hidden; }
+
+.v2-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 52px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--v2-line);
+  background: var(--v2-panel);
+  flex-shrink: 0;
+}
+.v2-top-title { display: flex; align-items: baseline; gap: 10px; min-width: 0; flex: 1 1 auto; overflow: hidden; }
+.v2-ws-name { font-size: 16px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.v2-ws-blurb { font-size: 12px; color: var(--v2-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.v2-search {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  width: 280px;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid var(--v2-line);
+  background: var(--v2-bg);
+  color: var(--v2-muted);
+  font-size: 12px;
+}
+.v2-search:hover { color: var(--v2-ink); }
+.v2-search-text { flex: 1; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.v2-search kbd { font: 10px ui-monospace, monospace; border: 1px solid var(--v2-line); border-radius: 4px; padding: 1px 4px; }
+
+.v2-account { width: 200px; }
+.v2-top-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.v2-icon-btn {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  color: var(--v2-muted);
+}
+.v2-icon-btn:hover { background: var(--v2-hover); color: var(--v2-ink); }
+.v2-badge {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 3px;
+  border-radius: 999px;
+  background: #ef4444;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 15px;
+}
+.v2-signin {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 8px;
+  background: var(--v2-accent);
+  color: var(--v2-accent-ink);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* ── Workspace tabs ── */
+.v2-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--v2-line);
+  overflow-x: auto;
+  scrollbar-width: none;
+  flex-shrink: 0;
+}
+.v2-tabs::-webkit-scrollbar { display: none; }
+.v2-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 11px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  color: var(--v2-muted);
+  font-size: 12.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: background-color 0.15s, color 0.15s;
+}
+.v2-tab:hover { background: var(--v2-hover); color: var(--v2-ink); }
+.v2-tab.is-on { background: var(--v2-accent-soft); border-color: var(--v2-accent); color: var(--v2-accent); }
+
+.v2-content { flex: 1; overflow-y: auto; }
+.v2-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 20px;
+  border-top: 1px solid var(--v2-line);
+  font-size: 11px;
+  color: var(--v2-muted);
+}
+
+/* ── Phones: rail becomes a bottom bar ── */
+@media (max-width: 1100px) { .v2-ws-blurb { display: none; } .v2-search { width: 200px; } }
+
+@media (max-width: 767px) {
+  .v2-root { flex-direction: column-reverse; }
+  .v2-rail {
+    width: 100%;
+    flex-direction: row;
+    gap: 0;
+    padding: 4px 4px calc(4px + env(safe-area-inset-bottom));
+    border-right: 0;
+    border-top: 1px solid var(--v2-line);
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+  .v2-rail-brand { display: none; }
+  .v2-rail-item { flex: 0 0 auto; min-width: 64px; padding: 6px 4px; font-size: 10px; }
+  .v2-top { padding: 0 10px; gap: 8px; }
+  .v2-account, .v2-ws-blurb, .v2-search-text, .v2-search kbd, .v2-signin span { display: none; }
+  .v2-search { width: 32px; padding: 0; justify-content: center; margin-left: auto; }
+  .v2-tabs { padding: 8px 10px; }
+  .v2-footer { flex-direction: column; gap: 2px; }
+}
