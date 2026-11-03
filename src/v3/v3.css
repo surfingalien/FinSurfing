@@ -66,6 +66,8 @@ html.v3.v3 body {
   min-height: 0;
 }
 .v3-brand { display: flex; align-items: center; gap: 10px; padding: 0 6px; }
+.v3-brand-mark { width: 30px; height: 30px; border-radius: 9px; background: var(--accent); display: grid; place-items: center; flex: none; }
+.v3-brand-mark svg { width: 20px; height: 20px; stroke: var(--accent-ink); }
 .v3-brand-name { font-family: var(--f-display); font-weight: 700; font-size: 19px; letter-spacing: -.01em; color: var(--fg); }
 .v3-brand-name span { color: var(--accent); }
 .v3-drawer-close { display: none; margin-left: auto; color: var(--muted); }
@@ -151,9 +153,9 @@ html.v3.v3 body {
 .v3-btn.primary:hover { filter: brightness(1.06); }
 
 /* Version switch inside v3 */
-.v3-root .v2-switch { border-color: var(--line); background: var(--panel); }
-.v3-root .v2-switch-btn { color: var(--muted); font-family: var(--f-mono); }
-.v3-root .v2-switch-btn.is-on { background: var(--accent); color: var(--accent-ink); }
+html.v3.v3 .v2-switch { border-color: var(--line); background: var(--panel); }
+html.v3.v3 .v2-switch-btn { color: var(--muted); font-family: var(--f-mono); }
+html.v3.v3 .v2-switch-btn.is-on { background: var(--accent); color: var(--accent-ink); }
 
 /* Ticker */
 .v3-ticker { display: flex; align-items: center; height: 32px; border-top: 1px solid var(--line); font-size: 12px; overflow: hidden; }
@@ -174,6 +176,18 @@ html.v3.v3 body {
 .v3-vhead { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px 24px; flex-wrap: wrap; margin-bottom: 18px; }
 .v3-eyebrow { font-family: var(--f-mono); font-size: 11.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
 .v3-vhead h1 { font-family: var(--f-display); font-weight: 700; font-size: clamp(22px, 2.4vw, 30px); letter-spacing: -.015em; line-height: 1.12; color: var(--fg); margin: 0; }
+.v3-tabs {
+  display: flex; gap: 2px; margin: -4px 0 18px; border-bottom: 1px solid var(--line);
+  overflow-x: auto; scrollbar-width: none;
+}
+.v3-tabs::-webkit-scrollbar { display: none; }
+.v3-tabs button {
+  display: inline-flex; align-items: center; gap: 6px; flex: none;
+  padding: 9px 12px 10px; margin-bottom: -1px; border-bottom: 2px solid transparent;
+  font-size: 13.5px; font-weight: 500; color: var(--muted); white-space: nowrap;
+}
+.v3-tabs button:hover { color: var(--fg); }
+.v3-tabs button.on { color: var(--fg); border-bottom-color: var(--accent); }
 .v3-seg {
   display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 3px;
   border: 1px solid var(--line); border-radius: 10px; background: var(--panel);

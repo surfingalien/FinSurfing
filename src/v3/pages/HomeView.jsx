@@ -102,7 +102,7 @@ function IndexTiles() {
 }
 
 /* ── Market Focus ────────────────────────────────────────────────────────── */
-const ACTION_TONE = { Buy: 'up', 'Buy dip': 'up', Hold: 'neutral', Watch: 'warn', Trim: 'down', Cut: 'down', Skip: 'neutral' }
+const ACTION_TONE = { buy: 'up', 'buy dip': 'up', hold: 'neutral', watch: 'warn', trim: 'down', cut: 'down', sell: 'down', skip: 'neutral' }
 
 function FocusCard({ focus, onNavigate, onSignIn }) {
   if (!focus.isAuthenticated) {
@@ -129,7 +129,7 @@ function FocusCard({ focus, onNavigate, onSignIn }) {
               <button key={x.symbol} type="button" className="v3-mini" onClick={() => onNavigate('research-desk', x.symbol)}>
                 <div className="v3-mini-h">
                   <b className="v3-num">{x.symbol}</b>
-                  <Badge tone={ACTION_TONE[x.action] ?? 'neutral'}>{(x.action || x.priority || '').toUpperCase()}</Badge>
+                  <Badge tone={ACTION_TONE[String(x.action || '').toLowerCase()] ?? 'neutral'}>{(x.action || x.priority || '').toUpperCase()}</Badge>
                 </div>
                 <p>{x.prediction || x.signal}</p>
                 {(x.priceTarget != null || x.stopWatch != null) && (

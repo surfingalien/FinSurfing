@@ -21,7 +21,6 @@ import { useAuth } from '../contexts/AuthContext'
 import { useLightMode } from '../contexts/LightModeContext'
 import { useProMode } from '../contexts/ProModeContext'
 import { useApiKeys } from '../contexts/ApiKeysContext'
-import BrandMark from '../components/shared/BrandMark'
 import AccountSwitcher from '../components/Portfolio/AccountSwitcher'
 import CreatePortfolioModal from '../components/Portfolio/CreatePortfolioModal'
 import ApiKeysModal from '../components/Settings/ApiKeysModal'
@@ -59,7 +58,12 @@ function useV3Theme() {
   const { lightMode } = useLightMode()
   const { proMode } = useProMode()
   const [theme, setTheme] = useState(() => {
-    try { return window.localStorage.getItem(THEME_KEY) === 'light' ? 'light' : 'dark' } catch { return 'dark' }
+    // A saved choice wins; otherwise follow the system, as the Dev preview does.
+    try {
+      const saved = window.localStorage.getItem(THEME_KEY)
+      if (saved === 'light' || saved === 'dark') return saved
+      return window.matchMedia?.('(prefers-color-scheme: light)').matches ? 'light' : 'dark'
+    } catch { return 'dark' }
   })
   const restore = useRef({ lightMode, proMode })
   restore.current = { lightMode, proMode }
@@ -211,7 +215,9 @@ export default function V3Shell({
       {/* ── Rail ── */}
       <aside className="v3-rail" aria-label="Workspaces">
         <div className="v3-brand">
-          <BrandMark className="w-[30px] h-[30px]" />
+          <span className="v3-brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" strokeWidth="2.2" strokeLinecap="round"><path d="M3 15c3 0 3-4 6-4s3 4 6 4 3-6 6-6" /><path d="M3 19h18" opacity=".55" /></svg>
+          </span>
           <span className="v3-brand-name">Fin<span>Surfing</span></span>
           <button type="button" className="v3-drawer-close" onClick={() => setDrawer(false)} aria-label="Close menu">
             <X className="w-5 h-5" />
@@ -304,7 +310,9 @@ export default function V3Shell({
                 ))}
               </div>
             )}
-            <div className="v3-seg" role="tablist" aria-label={`${current.label} pages`}>
+          </div>
+          {current.tabs.length > 1 && (
+            <div className="v3-tabs" role="tablist" aria-label={`${current.label} pages`}>
               {current.tabs.map(id => {
                 const p = PAGE[id] ?? { label: id }
                 const locked = !!p.auth && !isAuthenticated
@@ -321,7 +329,7 @@ export default function V3Shell({
                 )
               })}
             </div>
-          </div>
+          )}
 
           <div className="v3-body">
             <HeroContext.Provider value={heroCtx}>{children}</HeroContext.Provider>
