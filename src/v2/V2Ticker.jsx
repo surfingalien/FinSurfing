@@ -15,7 +15,8 @@ function etMarketOpen(now) {
   return day >= 1 && day <= 5 && mins >= 570 && mins < 960
 }
 
-export default function V2Ticker() {
+// `prefix` picks the class names, so the v3 layout can style the same strip.
+export default function V2Ticker({ prefix = 'v2' }) {
   const [rows, setRows] = useState([])
   const [now, setNow] = useState(new Date())
   const mapRef = useRef({})
@@ -47,25 +48,25 @@ export default function V2Ticker() {
   const open = etMarketOpen(now)
 
   return (
-    <div className="v2-ticker">
-      <span className="v2-ticker-live">LIVE</span>
-      <div className="v2-ticker-track-wrap">
+    <div className={`${prefix}-ticker`}>
+      <span className={`${prefix}-ticker-live`}>LIVE</span>
+      <div className={`${prefix}-ticker-track-wrap`}>
         <div className="ticker-track">
           {rows.length === 0 ? (
-            <span className="v2-ticker-empty">Loading market data…</span>
+            <span className={`${prefix}-ticker-empty`}>Loading market data…</span>
           ) : [...rows, ...rows].map((q, i) => (
-            <span key={i} className="v2-ticker-item">
+            <span key={i} className={`${prefix}-ticker-item`}>
               <b>{q.symbol}</b>
               <span>${fmt(q.price)}</span>
-              <span className={(q.changePct || 0) >= 0 ? 'v2-up' : 'v2-down'}>{fmtPct(q.changePct)}</span>
+              <span className={(q.changePct || 0) >= 0 ? `${prefix}-up` : `${prefix}-down`}>{fmtPct(q.changePct)}</span>
             </span>
           ))}
         </div>
       </div>
-      <span className="v2-ticker-status">
+      <span className={`${prefix}-ticker-status`}>
         <i className={open ? 'is-open' : ''} />
         {open ? 'Market open' : 'Market closed'}
-        <span className="v2-ticker-clock">
+        <span className={`${prefix}-ticker-clock`}>
           {now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
         </span>
       </span>
