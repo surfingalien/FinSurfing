@@ -38,7 +38,7 @@ const ICONS = {
 
 const PAGE = Object.fromEntries(NAV_COMMANDS.filter(c => !c.param).map(c => [c.id, c]))
 PAGE.admin = PAGE.admin || { id: 'admin', label: 'Admin', icon: ShieldCheck }
-const PAGE_LABEL = { portfolios: 'Manage Portfolios' }
+const PAGE_LABEL = { portfolios: 'Manage Portfolios', 'brain-activity': 'Overview' }
 
 export function workspaceOf(tab) {
   return WORKSPACES.find(w => w.tabs.includes(tab)) ?? WORKSPACES[0]

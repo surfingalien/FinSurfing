@@ -580,12 +580,76 @@ html.v3.v3 ::-webkit-scrollbar-thumb { background: var(--line-2); }
 /* Hero actions (workspace header) */
 .v3-hero-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
+/* ── AI Brain ── */
+.v3-loop { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; }
+.v3-step { position: relative; display: flex; flex-direction: column; gap: 4px; padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+.v3-step:not(:last-child)::after { content: "→"; position: absolute; right: -11px; top: 50%; transform: translateY(-50%); color: var(--accent); font-size: 12px; z-index: 1; }
+.v3-step-n { font-family: var(--f-mono); font-size: 11px; color: var(--accent); font-weight: 600; }
+.v3-step b { font-size: 14px; }
+.v3-step span:last-child { font-size: 12.5px; line-height: 1.45; color: var(--muted); }
+.v3-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.v3-tile { display: flex; flex-direction: column; gap: 4px; padding: 14px 16px; }
+.v3-tile-l { font-size: 12.5px; color: var(--muted); }
+.v3-tile b { font-size: 21px; font-weight: 500; }
+.v3-tile-s { font-size: 12px; color: var(--faint); }
+.v3-calib { position: relative; display: flex; gap: 8%; height: 200px; padding: 0 4% 40px 40px; }
+.v3-calib-axis { position: absolute; top: 0; right: 0; bottom: 40px; left: 40px; }
+.v3-calib-grid { position: absolute; left: 0; right: 0; border-top: 1px solid var(--line); }
+.v3-calib-grid span { position: absolute; left: -38px; top: -7px; font-family: var(--f-mono); font-size: 10px; color: var(--faint); }
+.v3-calib-col { position: relative; flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; }
+.v3-calib-plot { position: relative; width: 56%; height: 100%; }
+.v3-calib-bar { position: absolute; left: 0; right: 0; bottom: 0; border-radius: 4px 4px 0 0; background: var(--accent); opacity: .85; }
+.v3-calib-range { position: absolute; left: 50%; width: 2px; margin-left: -1px; background: var(--fg); z-index: 1; }
+.v3-calib-col b { position: absolute; bottom: -22px; font-size: 13px; }
+.v3-calib-col span { position: absolute; bottom: -38px; font-family: var(--f-mono); font-size: 10.5px; color: var(--faint); white-space: nowrap; }
+.v3-h4 { font-size: 13.5px; font-weight: 600; margin: 22px 0 8px; }
+.v3-stack { display: flex; height: 14px; border-radius: 7px; overflow: hidden; gap: 2px; }
+.v3-stack .up { background: var(--up); } .v3-stack .down { background: var(--down); } .v3-stack .muted { background: var(--muted); }
+.v3-legend-dot { margin-top: 8px; flex-wrap: wrap; }
+.v3-legend-dot span::before { width: 8px; height: 8px; border-radius: 2px; background: transparent; }
+.v3-legend-dot .up::before { background: var(--up); } .v3-legend-dot .down::before { background: var(--down); } .v3-legend-dot .muted::before { background: var(--muted); }
+.v3-learn { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.v3-learn li { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; font-size: 13px; line-height: 1.45; }
+.v3-learn li > span:nth-child(2) { flex: 1; min-width: 0; }
+.v3-cite { font-style: normal; font-family: var(--f-mono); font-size: 11px; color: var(--faint); }
+.v3-learn li.is-hidden > span:nth-child(2) { color: var(--faint); text-decoration: line-through; }
+.v3-lbtn { display: inline-flex; align-items: center; gap: 4px; flex: none; height: 26px; padding: 0 9px; border: 1px solid var(--line); border-radius: 7px; font-size: 12px; color: var(--muted); background: var(--panel); }
+.v3-lbtn:hover:not(:disabled) { color: var(--fg); border-color: var(--line-2); }
+.v3-lbtn.on { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 50%, var(--line)); }
+.v3-lbtn:disabled { opacity: .5; }
+.v3-addrule { display: flex; gap: 8px; margin-top: 12px; }
+.v3-addrule input { flex: 1; min-width: 0; height: 36px; padding: 0 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel-2); color: var(--fg); font-size: 13px; }
+.v3-addrule input:focus { outline: none; border-color: var(--accent); }
+.v3-addrule .v3-btn { height: 36px; }
+.v3-table-static tbody tr { cursor: default; }
+.v3-table-static td { padding-right: 10px; }
+.v3-muted { color: var(--muted); font-size: 12.5px; }
+.v3-list { list-style: none; margin: 0; padding: 0; }
+.v3-list li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.v3-list li:last-child { border-bottom: 0; }
+.v3-list li > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.v3-list b { font-size: 13.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.v3-list span { font-size: 12px; color: var(--muted); }
+.v3-list em { font-style: normal; font-family: var(--f-mono); }
+.v3-sched { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.v3-sched > div { display: flex; flex-direction: column; gap: 4px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; }
+.v3-sched > div.is-off { opacity: .55; }
+.v3-sched b { font-size: 13px; }
+.v3-sched span { font-size: 12px; color: var(--muted); }
+.v3-sched em { font-style: normal; font-family: var(--f-mono); font-size: 11px; color: var(--faint); }
+
 @media (max-width: 1180px) {
+  .v3-loop { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .v3-step::after { display: none; }
+  .v3-tiles, .v3-sched { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .v3-idx { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .v3-span-4, .v3-span-5, .v3-span-6, .v3-span-7, .v3-span-8 { grid-column: span 12; }
   .v3-grid-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 640px) {
+  .v3-loop { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .v3-sched { grid-template-columns: minmax(0, 1fr); }
+  .v3-learn li { flex-wrap: wrap; }
   .v3-idx { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .v3-grid-3, .v3-grid-4 { grid-template-columns: minmax(0, 1fr); }
   .v3-heat { grid-template-columns: repeat(2, minmax(0, 1fr)); }
