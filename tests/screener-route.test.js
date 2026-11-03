@@ -20,7 +20,8 @@ jest.mock('../lib/ai-router', () => ({
 }))
 jest.mock('../lib/symbol-db', () => ({
   listSectors: () => [{ sector: 'Technology', count: 900 }],
-  sectorUniverse: () => ['AAA', 'BBB'],
+  // 'Nowhere' has no companies in the index either; every other sector has two.
+  sectorUniverse: (sector) => (sector === 'Nowhere' ? [] : ['AAA', 'BBB']),
 }))
 
 process.env.NODE_ENV     = 'test'
@@ -177,11 +178,43 @@ describe('POST /api/screener/run', () => {
     expect(res.body.ranked.length).toBeGreaterThan(0)
   })
 
-  test('no candidates returns an explicit reason, not a bare empty list', async () => {
+  test('no candidates anywhere returns an explicit reason, not a bare empty list', async () => {
     mockFetch([['stable/company-screener', []]])
     const res = await run({ sector: 'Nowhere', explain: false })
     expect(res.body.ranked).toEqual([])
     expect(res.body.error).toMatch(/No candidates/)
+    expect(res.body.error).toMatch(/returned no companies/)   // the reason travels in the error the page shows
+  })
+
+  test('an empty bulk-screener answer falls back to the local index (it used to end the run)', async () => {
+    mockFetch([
+      ['stable/company-screener', []],
+      ['key-metrics-ttm', metrics()],
+      ['ratios-ttm',      ratios()],
+    ])
+    const res = await run({ sector: 'Technology', explain: false })
+    expect(res.body.candidateSource).toBe('symbol-db')
+    expect(res.body.ranked.length).toBeGreaterThan(0)
+  })
+
+  test('"All sectors" falls back to every sector\'s large caps, not to nothing', async () => {
+    mockFetch([
+      ['key-metrics-ttm', metrics()],
+      ['ratios-ttm',      ratios()],
+    ])   // the bulk screener 404s
+    const res = await run({ explain: false })
+    expect(res.body.candidateSource).toBe('symbol-db')
+    expect(res.body.ranked.length).toBeGreaterThan(0)
+  })
+
+  test('GICS sector names from the pills are sent to FMP under FMP\'s own names', async () => {
+    mockFetch([['stable/company-screener', [candidate('SOLID', 100, 3)]], ['key-metrics-ttm', metrics()], ['ratios-ttm', ratios()]])
+    await run({ sector: 'Information Technology', explain: false })
+    const url = global.fetch.mock.calls.map(c => String(c[0])).find(u => u.includes('company-screener'))
+    expect(new URL(url).searchParams.get('sector')).toBe('Technology')
+    await run({ sector: 'Consumer Discretionary', explain: false })
+    const urls = global.fetch.mock.calls.map(c => String(c[0])).filter(u => u.includes('company-screener'))
+    expect(new URL(urls[urls.length - 1]).searchParams.get('sector')).toBe('Consumer Cyclical')
   })
 
   test('candidates with no usable fundamentals report why', async () => {

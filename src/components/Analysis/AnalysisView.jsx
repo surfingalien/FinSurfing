@@ -56,8 +56,8 @@ function deriveSignals(candles, indicators) {
     if (last > s20 && last > s50) signals.push({ name: 'SMA Trend', signal: 'Buy', value: `${fmt(s20)} / ${fmt(s50)}`, desc: 'Price above both SMA20 and SMA50' })
     else if (last < s20 && last < s50) signals.push({ name: 'SMA Trend', signal: 'Sell', value: `${fmt(s20)} / ${fmt(s50)}`, desc: 'Price below both SMA20 and SMA50' })
     else signals.push({ name: 'SMA Trend', signal: 'Hold', value: `${fmt(s20)} / ${fmt(s50)}`, desc: 'Price between moving averages' })
-    if (s20 > s50) signals.push({ name: 'Golden Cross', signal: 'Buy', value: '—', desc: 'SMA20 above SMA50 — bullish crossover' })
-    else signals.push({ name: 'Death Cross', signal: 'Sell', value: '—', desc: 'SMA20 below SMA50 — bearish crossover' })
+    if (s20 > s50) signals.push({ name: 'SMA20 vs SMA50', signal: 'Buy', value: '—', desc: 'SMA20 above SMA50 (a state, not a fresh cross)' })
+    else signals.push({ name: 'SMA20 vs SMA50', signal: 'Sell', value: '—', desc: 'SMA20 below SMA50 (a state, not a fresh cross)' })
   }
   if (lastMACD.macd !== null && lastMACD.signal !== null) {
     if (lastMACD.macd > lastMACD.signal) signals.push({ name: 'MACD', signal: 'Buy', value: lastMACD.hist?.toFixed(3), desc: 'MACD line above signal — bullish momentum' })
@@ -543,23 +543,41 @@ export default function AnalysisView({ defaultSymbol }) {
                     {aiSignal.action}
                   </span>
                   <div className="text-right">
-                    <div className="text-xs text-slate-500">Confidence</div>
-                    <div className="text-sm font-bold text-white">{(aiSignal.confidence * 100).toFixed(0)}%</div>
+                    {/* A vote count across the indicators that fired, not a measured probability. */}
+                    <div className="text-xs text-slate-500">Indicators agreeing</div>
+                    <div className="text-sm font-bold text-white">{aiSignal.total ? `${aiSignal.agree} of ${aiSignal.total}` : '—'}</div>
                   </div>
                 </div>
-                {aiSignal.action !== 'HOLD' && (
+                {aiSignal.action === 'BUY' && (
                   <div className="grid grid-cols-2 gap-2 mb-3">
                     <div className="p-2 rounded-lg bg-red-500/10 border border-red-500/20">
-                      <div className="text-[10px] text-red-400 font-medium">Stop Loss</div>
+                      <div className="text-[10px] text-red-400 font-medium">Stop Loss (below)</div>
                       <div className="text-xs font-mono text-white">${fmt(aiSignal.stopLoss)}</div>
                     </div>
                     <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
-                      <div className="text-[10px] text-emerald-400 font-medium">Take Profit</div>
+                      <div className="text-[10px] text-emerald-400 font-medium">Take Profit (above)</div>
                       <div className="text-xs font-mono text-white">${fmt(aiSignal.takeProfit)}</div>
                     </div>
                     <div className="col-span-2 p-2 rounded-lg bg-white/[0.04] border border-white/[0.06]">
-                      <div className="text-[10px] text-slate-500 font-medium">Risk / Reward</div>
+                      <div className="text-[10px] text-slate-500 font-medium">Risk / Reward (2 ATR stop, 3 ATR target)</div>
                       <div className="text-xs font-mono text-white">1 : {aiSignal.riskReward}</div>
+                    </div>
+                  </div>
+                )}
+                {aiSignal.action === 'SELL' && (
+                  // A SELL is bearish: its levels are a SHORT trade (stop above the price, target below), which read as
+                  // backwards under "Stop Loss / Take Profit" on a long-only app. Label them for what they are.
+                  <div className="mb-3 space-y-2">
+                    <p className="text-[11px] text-slate-400">Bearish: if you hold it, this is an exit signal; no new long. Levels from {aiSignal.price != null ? `$${fmt(aiSignal.price)}` : 'the last price'}:</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="p-2 rounded-lg bg-red-500/10 border border-red-500/20">
+                        <div className="text-[10px] text-red-400 font-medium">Downside target (below)</div>
+                        <div className="text-xs font-mono text-white">${fmt(aiSignal.takeProfit)}</div>
+                      </div>
+                      <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                        <div className="text-[10px] text-emerald-400 font-medium">Bearish view wrong above</div>
+                        <div className="text-xs font-mono text-white">${fmt(aiSignal.stopLoss)}</div>
+                      </div>
                     </div>
                   </div>
                 )}

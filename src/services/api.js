@@ -449,8 +449,9 @@ export function generateSignal(candles) {
   else if (rsiVal !== null && rsiVal > 45 && rsiVal < 60) bull.push(`Healthy RSI ${rsiVal?.toFixed(0)}`)
 
   // MACD
-  if (macdNow?.hist !== null && macdNow.hist > 0 && macdNow.macd > 0) bull.push('MACD bullish crossover')
-  if (macdNow?.hist !== null && macdNow.hist < 0 && macdNow.macd < 0) bear.push('MACD bearish crossover')
+  // Not a crossover (no cross is detected) — the MACD line's position against its signal line and zero.
+  if (macdNow?.hist !== null && macdNow.hist > 0 && macdNow.macd > 0) bull.push('MACD above its signal line and zero')
+  if (macdNow?.hist !== null && macdNow.hist < 0 && macdNow.macd < 0) bear.push('MACD below its signal line and zero')
 
   // Ichimoku
   if (aboveCloud === true)  bull.push('Price above Ichimoku cloud')
@@ -482,9 +483,14 @@ export function generateSignal(candles) {
 
   const slDist = Math.abs(price - stopLoss) || 1
   const tpDist = Math.abs(takeProfit - price)
+  // `confidence` is the share of firing indicators that agree (3 of 3 → 0.95 after the cap) — a vote count,
+  // not a measured probability. `agree`/`total` let the card say so.
   return {
     action,
     confidence: +confidence.toFixed(2),
+    agree:      action === 'BUY' ? bull.length : action === 'SELL' ? bear.length : 0,
+    total:      bull.length + bear.length,
+    price,
     stopLoss,
     takeProfit,
     riskReward: +(tpDist / slDist).toFixed(2),

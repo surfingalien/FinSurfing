@@ -71,7 +71,11 @@ router.get('/', async (req, res) => {
     })
     if (!r2.ok) {
       const errBody = await r2.json().catch(() => ({}))
-      const errMsg  = errBody.error || errBody.message || `Adanos HTTP ${r2.status}`
+      // Adanos (FastAPI) puts its reason in `detail`; reading only error/message left the page with a bare "HTTP 401".
+      const reason  = errBody.detail || errBody.error || errBody.message
+      const errMsg  = r2.status === 401 || r2.status === 403
+        ? `Adanos rejected the API key (${reason || `HTTP ${r2.status}`}) — set a valid ADANOS_API_KEY in the server environment (free keys: adanos.com/register)`
+        : reason ? `Adanos: ${reason}` : `Adanos HTTP ${r2.status}`
       return res.status(502).json({ enabled: true, provider: 'adanos', error: errMsg, stocks: [] })
     }
 
