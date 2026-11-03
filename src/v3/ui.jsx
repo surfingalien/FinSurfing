@@ -83,3 +83,30 @@ export function Gauge({ value, label, tone }) {
     </div>
   )
 }
+
+// Multi-series line chart. series: [{ values: (number|null)[], cls, area? }],
+// every series on one index axis; labels: up to 5 x-axis strings.
+export function LineChart({ series, labels = [], height = 200, label, fmtY }) {
+  const n = Math.max(0, ...series.map(s => s.values.length))
+  const vals = series.flatMap(s => s.values).filter(v => v != null && Number.isFinite(v))
+  if (n < 2 || !vals.length) return null
+  const lo = Math.min(...vals), hi = Math.max(...vals)
+  const W = 600, H = height
+  const X = i => (i / Math.max(1, n - 1)) * W
+  const Y = v => H - 6 - ((v - lo) / (hi - lo || 1)) * (H - 12)
+  const path = arr => arr.map((v, i) => v == null ? null : `${X(i).toFixed(1)},${Y(v).toFixed(1)}`).filter(Boolean).join(' ')
+  return (
+    <div className="v3-chart">
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" aria-label={label}>
+        {[0.25, 0.5, 0.75].map(f => <line key={f} className="v3-grid-line" x1="0" x2={W} y1={H * f} y2={H * f} />)}
+        {series.filter(s => s.area).map((s, k) => {
+          const pts = s.values.map((v, i) => v == null ? null : [X(i), Y(v)]).filter(Boolean)
+          return pts.length > 1 ? <polygon key={`a${k}`} className="v3-area" points={`${pts[0][0]},${H} ${pts.map(p => p.join(',')).join(' ')} ${pts.at(-1)[0]},${H}`} /> : null
+        })}
+        {series.map((s, k) => <polyline key={k} className={s.cls || 'v3-line-main'} points={path(s.values)} />)}
+      </svg>
+      {fmtY && <div className="v3-chart-y"><span>{fmtY(hi)}</span><span>{fmtY(lo)}</span></div>}
+      {labels.length > 0 && <div className="v3-chart-x">{labels.map((l, i) => <span key={i}>{l}</span>)}</div>}
+    </div>
+  )
+}

@@ -35,6 +35,9 @@ const V3BrainView            = lazy(() => import('./v3/pages/BrainView'))
 const V3MarketsView          = lazy(() => import('./v3/pages/MarketsView'))
 const V3DiscoverView         = lazy(() => import('./v3/pages/DiscoverView'))
 const V3ResearchView         = lazy(() => import('./v3/pages/ResearchView'))
+const V3QuantView            = lazy(() => import('./v3/pages/QuantView'))
+const V3AgentsView           = lazy(() => import('./v3/pages/AgentsView'))
+const V3PortfolioView        = lazy(() => import('./v3/pages/PortfolioV3View'))
 
 const DashboardView          = lazy(() => import('./components/Dashboard/DashboardView'))
 const PortfolioView          = lazy(() => import('./components/Portfolio/PortfolioView'))
@@ -415,6 +418,10 @@ function MainApp({ onSignIn }) {
     'research-desk': () => <V3ResearchView symbol={route.tab === 'research-desk' ? route.param : null} onSymbol={s => navigate('research-desk', s)} onSignIn={onSignIn} />,
     screener: () => <V3DiscoverView onNavigate={navigateTo} onAnalyze={navigateToAnalyze} />,
     'brain-activity': () => <V3BrainView onNavigate={navigateTo} onAnalyze={navigateToAnalyze} onSignIn={onSignIn} />,
+    'quant-lab': () => <V3QuantView section={route.param} positions={portfolio.positions} onNavigate={navigateTo} onSignIn={onSignIn} />,
+    'agent-desk': () => <V3AgentsView onSignIn={onSignIn} />,
+    portfolio: () => <V3PortfolioView portfolio={portfolio} portfolioId={activePortfolioId} authFetch={isAuthenticated ? authFetch : null}
+      portfolioName={portfolios?.find?.(p => p.id === activePortfolioId)?.name} onNavigate={navigateTo} onAnalyze={navigateToAnalyze} />,
   }
 
   return (
