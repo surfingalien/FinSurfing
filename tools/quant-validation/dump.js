@@ -49,4 +49,7 @@ const sv=L.rng(41),sX=[],sy=[];for(let i=0;i<600;i++){const c=i%2,rad=(c?1.6:0.7
 const sscZ=ML.scaler(sX).transform(sX),km=ML.kernelSVM({C:1}).fit(sX,sy);out.ksvm={Z:sscZ,y:sy,dec:km.decisionFunction(sX),nsv:km.supportVectors};
 const vrr=L.rng(42);let lp=0,e0=0;const lps=Array.from({length:2000},()=>{e0=0.15*e0+0.01*vrr.normal();return(lp+=e0)});out.vr={p:lps,res:[2,5,10].map(q=>TSm.varianceRatio(lps,q))};
 out.kupiec=[[10,1000,0.01],[25,1000,0.01],[3,500,0.05],[40,500,0.05]].map(([x,n,p])=>({x,n,p,...VB.kupiec(x,n,p)}));
+// GARCH family (vol-models) on two asymmetric simulated series — checked against arch's MLE
+const VMd=require(R+'vol-models');const famSim=(kind,seed)=>{const q=L.rng(seed);let hv=1e-4;const rr=[];for(let i=0;i<2500;i++){const z=q.normal(),e=Math.sqrt(hv)*z;rr.push(e);hv=kind==='gjr'?2e-6+(0.03+(e<0?0.12:0))*e*e+0.88*hv:Math.exp(-0.3+0.12*(Math.abs(z)-Math.sqrt(2/Math.PI))-0.1*z+0.966*Math.log(hv))}const mu=L.mean(rr);return rr.map(v=>v-mu)};
+out.volFamily=[['gjr',21],['egarch',22]].map(([kind,seed])=>{const rr=famSim(kind,seed);return{kind,r:rr,fits:Object.fromEntries(['arch','garch','gjr','egarch','aparch'].map(m=>{const f=VMd.fit(m,rr);return[m,{params:f.params,logLik:f.logLik,persistence:f.persistence}]}))}});
 require('fs').mkdirSync(path.join(__dirname,'out'),{recursive:true});require('fs').writeFileSync(path.join(__dirname,'out','dump.json'),JSON.stringify(out));console.log('dumped',Object.keys(out).join(','));

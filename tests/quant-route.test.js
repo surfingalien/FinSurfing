@@ -53,13 +53,16 @@ test('optimize compares methods out of sample and returns a frontier', async () 
 })
 test('volatility, timeseries, capm, pairs and statarb answer for known symbols and 400 for unknown ones', async () => {
   const v = await post('/volatility', { symbol: 'AAA' }); expect(v.status).toBe(200); expect(v.body.garch.persistence).toBeGreaterThan(0); expect(v.body.yangZhang).toBeGreaterThan(0)
+  expect(Object.keys(v.body.family.models).sort()).toEqual(['aparch', 'arch', 'egarch', 'garch', 'gjr', 'ewma'].sort()); expect(v.body.comparison.ranking).toHaveLength(6); expect(v.body.forecastStudy.ran).toBe(false)
+  const d = await post('/risk/dcc', { symbols: ['AAA', 'BBB', 'CCC'] }); expect(d.status).toBe(200); expect(d.body.symbols).toEqual(['AAA', 'BBB', 'CCC']); expect(d.body.portfolio.var95_1d_dcc).toBeGreaterThan(0)
+  expect((await post('/risk/dcc', { symbols: ['AAA'] })).status).toBe(400)
   const t = await post('/timeseries', { symbol: 'AAA' }); expect(t.status).toBe(200); expect(t.body.arima.forecast).toHaveLength(10); expect(t.body.regimes.states).toHaveLength(2)
   const c = await post('/risk/capm', { symbol: 'AAA', benchmark: 'SPY' }); expect(c.status).toBe(200); expect(typeof c.body.beta).toBe('number')
   const p = await post('/pairs', { y: 'AAA', x: 'BBB' }); expect(p.status).toBe(200); expect(p.body.formation.cointegrated5pct).toBe(false)
   const s = await post('/statarb', { symbols: ['AAA', 'BBB', 'CCC', 'DDD'] }); expect(s.status).toBe(200); expect(s.body.signals).toHaveLength(4)
   const u = await post('/volatility', { symbol: 'ZZZZ' }); expect(u.status).toBe(400); expect(u.body.error).toMatch(/no price history/)
   expect((await post('/pairs', { y: 'AAA', x: 'AAA' })).status).toBe(400)
-})
+}, 120000)
 test('ml compare reports the baseline and a verdict; clustering returns embeddings', async () => {
   const m = await post('/ml/compare', { symbol: 'AAA' }); expect(m.status).toBe(200); expect(m.body.baseline.accuracy).toBeGreaterThan(0.3); expect(m.body.verdict).toBeTruthy(); expect(m.body.results.length).toBe(13)
   const k = await post('/ml/cluster', { symbols: ['AAA', 'BBB', 'CCC', 'DDD', 'SPY'] }); expect(k.status).toBe(200); expect(k.body.symbols).toHaveLength(5)
@@ -67,11 +70,11 @@ test('ml compare reports the baseline and a verdict; clustering returns embeddin
 
 test('bars are cached for a few minutes (tab-flipping must not re-hit the data providers) and failures are not', async () => {
   mockBars.mockClear()
-  await post('/volatility', { symbol: 'AAA' }); await post('/timeseries', { symbol: 'AAA' })
+  await post('/volatility', { symbol: 'AAA', compare: false }); await post('/timeseries', { symbol: 'AAA' })   // caching only — skip the model contest
   expect(mockBars.mock.calls.filter(c => c[0] === 'AAA' && c[1].range === '2y')).toHaveLength(1)   // volatility's 2y fetch, reused
-  mockBars.mockClear(); await post('/volatility', { symbol: 'ZZZZ' }); await post('/volatility', { symbol: 'ZZZZ' })
+  mockBars.mockClear(); await post('/volatility', { symbol: 'ZZZZ', compare: false }); await post('/volatility', { symbol: 'ZZZZ', compare: false })
   expect(mockBars.mock.calls.filter(c => c[0] === 'ZZZZ')).toHaveLength(2)                          // a failure is retried, not remembered
-})
+}, 60000)
 test('a basket that only partly loads reports how many loaded and why the rest did not', async () => {
   const r = await post('/statarb', { symbols: ['AAA', 'BBB', 'CCC', 'ZZZZ'] })
   expect(r.status).toBe(400); expect(r.body.error).toMatch(/only 3 of 4 symbols loaded \(need 4\).*ZZZZ: no price history/)

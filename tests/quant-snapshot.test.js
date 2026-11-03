@@ -33,7 +33,7 @@ test('too little history is reported, not guessed; prompt line and stamp only ca
   expect(Q.symbolSnapshot(bars(30, 6)).insufficient).toBe(true); expect(Q.snapshotLine('X', Q.symbolSnapshot(bars(30, 6)))).toBeNull(); expect(Q.stampOf(null)).toBeNull()
   const s = Q.symbolSnapshot(bars(300, 7)), line = Q.snapshotLine('ABC', s, { residualZ: -1.8, view: 'cheap vs peers', peers: 6 })
   expect(line).toMatch(/^ABC: vol21f=\d+%/); expect(line).toMatch(/resid=-1.8z/); expect(line).not.toMatch(/NaN|undefined/)
-  const st = Q.stampOf(s, { residualZ: -1.8 }); expect(Object.keys(st)).toEqual(['vol21', 'character', 'vr5', 'hurst', 'var95', 'probStressed', 'beta', 'advUsd', 'residualZ']); expect(st.residualZ).toBe(-1.8)
+  const st = Q.stampOf(s, { residualZ: -1.8 }); expect(Object.keys(st)).toEqual(['vol21', 'volMethod', 'character', 'vr5', 'hurst', 'var95', 'probStressed', 'beta', 'advUsd', 'residualZ']); expect(st.residualZ).toBe(-1.8)
 })
 test('cross-section finds the name that lagged its peers', () => {
   const g = L.rng(8), f = Array.from({ length: 200 }, () => 0.01 * g.normal()), map = {}
