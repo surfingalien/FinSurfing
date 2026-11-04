@@ -100,3 +100,28 @@ test('a symbol with no price data is recorded but never counted against the meth
   const st = brain.readState()
   for (const [id, a] of Object.entries(st.arms || {})) if (id.startsWith('ml:') || id === 'catalog-grid') expect(a.tries).toBe(0)
 })
+
+test('the bracket arm trades catalog draws under a stored bracket + slippage, and the CPCV gate holds', async () => {
+  const lib = fakeLibrary()
+  const seen = []
+  const D = {
+    ...deps(), library: lib,
+    toSeries: () => ({ timestamps: [1], closes: [1], opens: [1], highs: [1], lows: [1], volumes: [1] }),
+    strategyLab: {
+      selectionProblem: require('../lib/strategy-lab').selectionProblem,
+      evaluateProposals: (cfgs, _t, _c, _cap, exec) => {
+        seen.push(exec)
+        return cfgs.map((p, i) => ({ ...p, verdict: 'validated', metrics: { alpha: 2 }, deflated: { pass: true }, pbo: { overfit: false }, cpcv: { generalises: i === 0, medianSharpe: i === 0 ? 0.8 : -0.2 } }))
+      },
+    },
+    rng: () => rng(4),
+    now: () => new Date(Date.UTC(2026, 10, 4)),
+  }
+  const r = await brain.runExperiment(brain.arms().find(a => a.id === 'catalog-bracket'), 'AAA', { ...D, fetchBars: async () => Array.from({ length: 600 }, () => ({})) })
+  expect(seen[0].exits).toBeDefined()
+  expect(seen[0].slippage).toEqual({ model: 'range', rangeK: 0.1 })
+  expect(seen[0].highs).toBeDefined()
+  expect(r.admitted).toBe(1)                                          // only the draw whose selection generalises
+  expect(lib.rows[0].params.exec.exits).toEqual(seen[0].exits)        // forward re-tests use the same bracket
+  expect(Object.keys(r.reasons).some(k => /CPCV/.test(k))).toBe(true)
+})

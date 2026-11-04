@@ -79,6 +79,11 @@ export default function BacktestView() {
   const [result,          setResult]           = useState(null)
   const [loading,         setLoading]          = useState(false)
   const [error,           setError]            = useState(null)
+  // Execution model (lib/execution-model.js): slippage beyond the flat cost and bracket exits like the paper broker's.
+  const [slipModel,       setSlipModel]        = useState('none')
+  const [maxPart,         setMaxPart]          = useState('')
+  const [exitMode,        setExitMode]         = useState('signal')   // 'signal' | 'pct' | 'atr'
+  const [exitVals,        setExitVals]         = useState({ stop: 8, t1: 10, target: 20, trail: '', hold: 63 })
 
   const strategy = STRATEGIES.find(s => s.id === strategyId)
 
@@ -112,7 +117,7 @@ export default function BacktestView() {
       const r = await fetch('/api/backtest', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...getApiKeyHeaders() },
-        body: JSON.stringify({ symbol: sym, strategy: strategyId, params, range, initialCapital }),
+        body: JSON.stringify({ symbol: sym, strategy: strategyId, params, range, initialCapital, ...executionBody() }),
       })
       const data = await r.json()
       if (!r.ok) throw new Error(data.error || 'Backtest failed')
@@ -122,7 +127,19 @@ export default function BacktestView() {
     } finally {
       setLoading(false)
     }
-  }, [symbol, strategyId, range, initialCapital, paramValues, strategy])
+  }, [symbol, strategyId, range, initialCapital, paramValues, strategy, slipModel, maxPart, exitMode, exitVals])
+
+  function executionBody() {
+    const out = {}
+    const mp = Number(maxPart)
+    if (slipModel !== 'none' || mp > 0) out.slippage = { model: slipModel, ...(mp > 0 ? { maxParticipation: mp / 100 } : {}) }
+    if (exitMode !== 'signal') {
+      const v = k => (exitVals[k] === '' || exitVals[k] == null ? undefined : Number(exitVals[k]))
+      const sfx = exitMode === 'atr' ? 'Atr' : 'Pct'
+      out.exits = { [`stop${sfx}`]: v('stop'), [`t1${sfx}`]: v('t1'), [`target${sfx}`]: v('target'), trailPct: v('trail'), maxHoldBars: v('hold') }
+    }
+    return out
+  }
 
   const m = result?.metrics
 
@@ -239,6 +256,47 @@ export default function BacktestView() {
           </div>
         </div>
 
+        {/* Row 4: execution model */}
+        <div className="grid sm:grid-cols-2 gap-4">
+          <div>
+            <label className="text-xs text-slate-500 mb-1.5 block">Slippage (on top of the round-trip cost)</label>
+            <select value={slipModel} onChange={e => setSlipModel(e.target.value)}
+              className="w-full bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500/50">
+              <option value="none">None — flat cost only</option>
+              <option value="range">Range — 10% of the previous day's high–low range</option>
+              <option value="impact">Market impact — √(order ÷ average daily volume) × daily volatility</option>
+            </select>
+            <div className="flex items-center gap-2 mt-2">
+              <label className="text-[10px] text-slate-600">Max share of daily volume per order (%)</label>
+              <input type="number" value={maxPart} min={0.1} max={100} step={0.5} placeholder="no cap" onChange={e => setMaxPart(e.target.value)}
+                className="w-24 bg-white/[0.04] border border-white/[0.08] rounded-lg px-2.5 py-1 text-sm text-white font-mono" />
+            </div>
+            <p className="text-[10px] text-slate-600 mt-1">Uses only the days before each fill. Market impact matters with large capital or thinly traded stocks.</p>
+          </div>
+          <div>
+            <label className="text-xs text-slate-500 mb-1.5 block">Exits</label>
+            <select value={exitMode} onChange={e => setExitMode(e.target.value)}
+              className="w-full bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500/50">
+              <option value="signal">The strategy's sell signal only</option>
+              <option value="pct">Bracket in % of entry (like the paper broker)</option>
+              <option value="atr">Bracket in ATR multiples (wider for volatile stocks)</option>
+            </select>
+            {exitMode !== 'signal' && (
+              <div className="flex flex-wrap gap-3 mt-2">
+                {[['stop', exitMode === 'atr' ? 'Stop (ATR)' : 'Stop %'], ['t1', exitMode === 'atr' ? 'T1 — sell half (ATR)' : 'T1 % — sell half'], ['target', exitMode === 'atr' ? 'Target (ATR)' : 'Target %'], ['trail', 'Trailing stop %'], ['hold', 'Max days held']].map(([k, label]) => (
+                  <div key={k} className="flex flex-col gap-1">
+                    <label className="text-[10px] text-slate-600">{label}</label>
+                    <input type="number" value={exitVals[k]} min={0} step={k === 'hold' ? 1 : 0.5} placeholder="off"
+                      onChange={e => setExitVals(v => ({ ...v, [k]: e.target.value }))}
+                      className="w-24 bg-white/[0.04] border border-white/[0.08] rounded-lg px-2.5 py-1.5 text-sm text-white font-mono" />
+                  </div>
+                ))}
+              </div>
+            )}
+            {exitMode !== 'signal' && <p className="text-[10px] text-slate-600 mt-1">After T1 the stop moves to breakeven. A day that touches both the stop and a target counts as the stop; a gap past a level fills at the open.</p>}
+          </div>
+        </div>
+
         {/* Run button */}
         <button
           onClick={run}
@@ -271,6 +329,8 @@ export default function BacktestView() {
               {m.costBps != null && (
                 <> · {m.fill === 'close' ? 'same-bar fills' : 'next-bar fills'} · {m.costBps}bps round-trip costs (${(m.costPaid ?? 0).toLocaleString()} paid)</>
               )}
+              {m.slippage && <> · {m.slippage} slippage (${(m.slippagePaid ?? 0).toLocaleString()}){m.partialFills ? ` · ${m.partialFills} orders cut by the volume cap` : ''}{m.capUnavailable ? ` · volume cap not applied on ${m.capUnavailable} orders (no volume data)` : ''}</>}
+              {m.exitsByKind && Object.keys(m.exitsByKind).length > 0 && <> · exits: {Object.entries(m.exitsByKind).map(([k, v]) => `${k} ×${v}`).join(', ')}</>}
             </span>
           </div>
 
