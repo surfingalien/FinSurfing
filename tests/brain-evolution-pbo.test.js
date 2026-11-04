@@ -34,5 +34,5 @@ test('a batch that passes is admitted with its PBO on the admission record', asy
   expect(r).toMatchObject({ overfit: 0, stored: 1 })
   expect(mockRecord.mock.calls[0][1].pbo).toBe(p)
   const entry = jest.requireActual('../lib/strategy-library').buildEntry({ symbol: 'AAA', strategy: 'sma_crossover', params: {}, metrics: { alpha: 5, sharpeRatio: 1 }, verdict: 'validated', deflated: { dsr: 0.9, nTrials: 3, srStar: 0.01 }, pbo: p })
-  expect(entry.admission).toEqual({ dsr: 0.9, nTrials: 3, srStar: 0.01, pbo: 0.1 })
+  expect(entry.admission).toEqual({ dsr: 0.9, nTrials: 3, srStar: 0.01, pbo: 0.1, cpcvMedianSharpe: null })
 })

@@ -15,6 +15,7 @@
 // Shared risk-free rate so backtest Sharpe/Sortino use the same hurdle as
 // the live portfolio analytics (was a hardcoded 5% vs 4.5% elsewhere)
 const { RISK_FREE_ANNUAL } = require('../lib/portfolio-metrics')
+const EM = require('../lib/execution-model')
 
 // ── Series helpers ────────────────────────────────────────────────────────────
 
@@ -175,36 +176,76 @@ function simulateWithSignals(timestamps, closes, signals, initialCapital = 10000
   const fill    = opts.fill === 'close' ? 'close' : DEFAULT_FILL
   const opens   = Array.isArray(opts.opens) ? opts.opens : null
   const half    = costBps / 2 / 10_000
+  // Execution model (lib/execution-model.js): slippage beyond the flat cost, a volume cap, bracket exits.
+  // All off unless asked for, so an existing caller scores exactly as before.
+  const bars     = { closes, opens, highs: opts.highs || null, lows: opts.lows || null, volumes: opts.volumes || null }
+  const slippage = opts.slippage && opts.slippage.model && opts.slippage.model !== 'none' ? opts.slippage : (opts.slippage?.maxParticipation ? opts.slippage : null)
+  const exitsCfg = opts.exits || null
 
   let cash   = initialCapital
   let shares = 0
   let entryPrice = null      // net of cost — what the position actually cost
   let entryDate  = null
+  let entryBar   = null
   let pending    = 0         // order carried to the next bar under 'next' fills
   let costPaid   = 0
+  let slippagePaid = 0
+  let partialFills = 0
+  let capUnavailable = 0
+  let bracket = null
+  const exitsByKind = {}
 
-  const execute = (side, px, date) => {
+  const sellLot = (qty, px, date, kind, i) => {
+    const slip   = slippage ? EM.slipFraction(i, qty, bars, slippage) : 0
+    const sellPx = px * (1 - half - slip)
+    const pnl    = ((sellPx - entryPrice) / entryPrice) * 100
+    const duration = Math.round((new Date(date) - new Date(entryDate)) / 86_400_000)
+    cash        += qty * sellPx
+    costPaid    += qty * px * half
+    slippagePaid += qty * px * slip
+    shares      -= qty
+    const t = { type: 'sell', date, price: +px.toFixed(4), netPrice: +sellPx.toFixed(4), shares: qty, pnl: +pnl.toFixed(2), durationDays: duration }
+    if (kind) { t.exitKind = kind; exitsByKind[kind] = (exitsByKind[kind] || 0) + 1 }
+    if (slip) t.slippageBps = +(slip * 1e4).toFixed(2)
+    trades.push(t)
+    if (shares <= 0) { shares = 0; entryPrice = null; entryDate = null; entryBar = null; bracket = null }
+  }
+
+  // Returns true when the order filled completely (an exit cut by the volume cap carries over).
+  const execute = (side, px, date, i) => {
     if (side === 1 && shares === 0) {
-      const buyPx = px * (1 + half)
-      const qty = Math.floor(cash / buyPx)
-      if (qty <= 0) return
+      let qty = Math.floor(cash / (px * (1 + half)))
+      if (qty <= 0) return true
+      let slip = slippage ? EM.slipFraction(i, qty, bars, slippage) : 0
+      qty = Math.floor(cash / (px * (1 + half + slip)))
+      const cap = slippage ? EM.participationCap(i, bars, slippage) : Infinity
+      if (cap === null) capUnavailable++
+      else if (qty > cap) { qty = cap; partialFills++; slip = EM.slipFraction(i, qty, bars, slippage) }
+      if (qty <= 0) return true
+      const buyPx = px * (1 + half + slip)
       shares     = qty
       cash      -= qty * buyPx
       costPaid  += qty * px * half
+      slippagePaid += qty * px * slip
       entryPrice = buyPx
       entryDate  = date
-      trades.push({ type: 'buy', date, price: +px.toFixed(4), netPrice: +buyPx.toFixed(4), shares })
-    } else if (side === -1 && shares > 0) {
-      const sellPx   = px * (1 - half)
-      const pnl      = ((sellPx - entryPrice) / entryPrice) * 100
-      const duration = Math.round((new Date(date) - new Date(entryDate)) / 86_400_000)
-      cash     += shares * sellPx
-      costPaid += shares * px * half
-      trades.push({ type: 'sell', date, price: +px.toFixed(4), netPrice: +sellPx.toFixed(4), shares, pnl: +pnl.toFixed(2), durationDays: duration })
-      shares     = 0
-      entryPrice = null
-      entryDate  = null
+      entryBar   = i
+      bracket    = exitsCfg ? EM.bracketFor(px, i, bars, exitsCfg) : null
+      const t = { type: 'buy', date, price: +px.toFixed(4), netPrice: +buyPx.toFixed(4), shares }
+      if (slip) t.slippageBps = +(slip * 1e4).toFixed(2)
+      if (bracket) t.bracket = { stop: bracket.stop && +bracket.stop.toFixed(4), t1: bracket.t1 && +bracket.t1.toFixed(4), target: bracket.target && +bracket.target.toFixed(4) }
+      trades.push(t)
+      return true
     }
+    if (side === -1 && shares > 0) {
+      const cap = slippage ? EM.participationCap(i, bars, slippage) : Infinity
+      if (cap === null) capUnavailable++
+      const qty = cap === null ? shares : Math.min(shares, Math.max(1, cap))
+      if (qty < shares) partialFills++
+      sellLot(qty, px, date, exitsCfg ? 'signal' : null, i)
+      return shares === 0
+    }
+    return true
   }
 
   for (let i = 0; i < n; i++) {
@@ -214,15 +255,25 @@ function simulateWithSignals(timestamps, closes, signals, initialCapital = 10000
     // Yesterday's signal fills at today's open (or close when opens are absent).
     if (pending) {
       const o = opens?.[i]
-      execute(pending, Number.isFinite(o) && o > 0 ? o : price, date)
-      pending = 0
+      const done = execute(pending, Number.isFinite(o) && o > 0 ? o : price, date, i)
+      pending = done ? 0 : pending
+    }
+
+    // Bracket exits are resting orders: they act on the bars AFTER the entry bar, at their own levels.
+    if (bracket && shares > 0 && i > entryBar) {
+      const hit = EM.bracketStep(bracket, i, bars)
+      if (hit) {
+        const qty = hit.fraction >= 1 ? shares : Math.max(1, Math.floor(shares * hit.fraction))
+        sellLot(Math.min(qty, shares), hit.price, date, hit.kind, i)
+        if (shares === 0 && pending === -1) pending = 0
+      }
     }
 
     equity.push({ date, value: +(cash + shares * price).toFixed(2) })
 
     if (signals[i] === 1 || signals[i] === -1) {
-      if (fill === 'close') execute(signals[i], price, date)
-      else pending = signals[i]
+      if (fill === 'close') execute(signals[i], price, date, i)
+      else if (!(pending === -1 && signals[i] === 1)) pending = signals[i]
     }
   }
 
@@ -328,6 +379,8 @@ function simulateWithSignals(timestamps, closes, signals, initialCapital = 10000
       costBps,
       fill,
       costPaid:         +costPaid.toFixed(2),
+      ...(slippage ? { slippage: slippage.model || 'none', slippagePaid: +slippagePaid.toFixed(2), partialFills, capUnavailable } : {}),
+      ...(exitsCfg ? { exits: exitsCfg, exitsByKind } : {}),
     }
   }
 }
