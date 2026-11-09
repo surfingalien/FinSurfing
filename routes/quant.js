@@ -209,7 +209,22 @@ router.post('/holdings-scan', heavy, route('quant/holdings-scan', async (req, re
   try { bench = await bars('SPY', '5y', req) } catch { /* beta and stress fall back to beta 1 */ }
   let library = []
   try { library = require('../lib/strategy-library').readLibrary() } catch { /* empty library */ }
-  const body = { ...(await hs.scanHoldings(positions, map, { benchBars: bench, library, includeMl })), skipped: failed, truncated: merged.size > hs.MAX_HOLDINGS ? merged.size - hs.MAX_HOLDINGS : 0 }
+  // Earnings quality (SEC filings) and dated catalysts per holding — best-effort, three at a time (SEC asks for ≤10 requests/s).
+  const filings = {}
+  const today = new Date().toISOString().slice(0, 10)
+  const fq = positions.map(p => p.symbol).filter(s => map[s] && !require('../lib/crypto-classify').isCryptoSymbol(s))
+  await Promise.all(Array.from({ length: 3 }, async () => {
+    for (let s = fq.shift(); s; s = fq.shift()) {
+      try {
+        const facts = await require('../lib/sec-facts').getCompanyFacts(s).catch(() => null)
+        const quality = facts ? require('../lib/earnings-quality').qualityAt(facts, today) : null
+        const CAT = require('../lib/catalysts')
+        const inputs = await CAT.gatherInputs(s, { headers: keysFrom(req), lastFiled: quality?.lastFiled ?? null })
+        filings[s] = { quality, events: CAT.buildCatalysts({ today, ...inputs }) }
+      } catch { /* this holding just shows no quality / calendar */ }
+    }
+  }))
+  const body = { ...(await hs.scanHoldings(positions, map, { benchBars: bench, library, includeMl, filings })), skipped: failed, truncated: merged.size > hs.MAX_HOLDINGS ? merged.size - hs.MAX_HOLDINGS : 0 }
   _holdingsCache.set(key, { t: Date.now(), body })
   if (_holdingsCache.size > 200) _holdingsCache.delete(_holdingsCache.keys().next().value)
   return body
