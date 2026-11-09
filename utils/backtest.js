@@ -10,6 +10,14 @@
  *   rsi_threshold  — buy when RSI < oversold, sell when RSI > overbought
  *   macd_signal    — buy when MACD line crosses above signal line, sell on cross below
  *   bb_reversion   — buy at lower band touch, sell at upper band touch
+ *   donchian_breakout  — buy a close above the prior N-bar high, sell a close below the prior M-bar low
+ *   range_breakout_atr — the same breakout, only on a bar whose true range is ≥ k × the prior ATR
+ *                        (volatility expansion); exit below the prior M-bar low
+ *   adx_trend          — long while ADX ≥ threshold, +DI > −DI and close > its SMA; out when any fails
+ *
+ * The last three read highs/lows when given (`ohlc` argument) and fall back to
+ * closes otherwise. Every level at bar i reads bars ≤ i (the channel uses bars
+ * BEFORE i), and the order fills on the next bar.
  */
 
 // Shared risk-free rate so backtest Sharpe/Sortino use the same hurdle as
@@ -86,11 +94,86 @@ function bbSeries(closes, period = 20, mult = 2) {
   return { upper, lower }
 }
 
+/** Highest high of bars [i−period, i−1] (excludes bar i), NaN until warm. */
+function priorMax(xs, period) {
+  return xs.map((_, i) => {
+    if (i < period) return NaN
+    let m = -Infinity
+    for (let j = i - period; j < i; j++) m = Math.max(m, xs[j])
+    return m
+  })
+}
+function priorMin(xs, period) {
+  return xs.map((_, i) => {
+    if (i < period) return NaN
+    let m = Infinity
+    for (let j = i - period; j < i; j++) m = Math.min(m, xs[j])
+    return m
+  })
+}
+
+/** True range per bar (gap-aware); bar 0 uses high − low. */
+function trueRangeSeries(highs, lows, closes) {
+  return closes.map((_, i) => i === 0 ? highs[0] - lows[0]
+    : Math.max(highs[i] - lows[i], Math.abs(highs[i] - closes[i - 1]), Math.abs(lows[i] - closes[i - 1])))
+}
+
+/** Wilder ATR (true range smoothed over `period`), NaN until warm. */
+function atrSeries(highs, lows, closes, period = 14) {
+  const tr = trueRangeSeries(highs, lows, closes), out = new Array(closes.length).fill(NaN)
+  if (closes.length <= period) return out
+  let a = 0
+  for (let i = 1; i <= period; i++) a += tr[i]
+  a /= period; out[period] = a
+  for (let i = period + 1; i < closes.length; i++) { a = (a * (period - 1) + tr[i]) / period; out[i] = a }
+  return out
+}
+
+/** Wilder's ADX with +DI / −DI. Pure; NaN until warm (≈ 2 × period bars). */
+function adxSeries(highs, lows, closes, period = 14) {
+  const n = closes.length, adx = new Array(n).fill(NaN), plusDI = new Array(n).fill(NaN), minusDI = new Array(n).fill(NaN)
+  if (n <= 2 * period) return { adx, plusDI, minusDI }
+  const tr = trueRangeSeries(highs, lows, closes)
+  let sTr = 0, sP = 0, sM = 0, dxSum = 0, a = NaN
+  for (let i = 1; i < n; i++) {
+    const up = highs[i] - highs[i - 1], down = lows[i - 1] - lows[i]
+    const pDM = up > down && up > 0 ? up : 0, mDM = down > up && down > 0 ? down : 0
+    if (i <= period) { sTr += tr[i]; sP += pDM; sM += mDM; if (i < period) continue }
+    else { sTr = sTr - sTr / period + tr[i]; sP = sP - sP / period + pDM; sM = sM - sM / period + mDM }
+    const p = sTr > 0 ? 100 * sP / sTr : 0, m = sTr > 0 ? 100 * sM / sTr : 0
+    plusDI[i] = p; minusDI[i] = m
+    const dx = p + m > 0 ? 100 * Math.abs(p - m) / (p + m) : 0
+    if (i < 2 * period - 1) { dxSum += dx; continue }
+    if (i === 2 * period - 1) { dxSum += dx; a = dxSum / period } else a = (a * (period - 1) + dx) / period
+    adx[i] = a
+  }
+  return { adx, plusDI, minusDI }
+}
+
+/** +1 on entering a state, −1 on leaving it (a long-only rule held while `inState` is true). */
+function stateSignals(n, inState) {
+  const sig = new Array(n).fill(0)
+  let held = false
+  for (let i = 0; i < n; i++) {
+    const s = inState(i)
+    if (s == null) continue
+    if (s && !held) { sig[i] = 1; held = true } else if (!s && held) { sig[i] = -1; held = false }
+  }
+  return sig
+}
+
 // ── Signal generation ─────────────────────────────────────────────────────────
 
-function generateSignals(closes, strategy, params) {
+/**
+ * Signals for a catalog strategy. `ohlc` = { highs, lows } aligned with closes, optional:
+ * the breakout and ADX strategies use them when given and closes otherwise.
+ */
+function generateSignals(closes, strategy, params = {}, ohlc = {}) {
   const n   = closes.length
   const sig = new Array(n).fill(0) // +1 = buy, -1 = sell
+  const aligned = a => Array.isArray(a) && a.length === n && a.every(Number.isFinite)
+  const highs = aligned(ohlc?.highs) ? ohlc.highs : closes
+  const lows  = aligned(ohlc?.lows) ? ohlc.lows : closes
 
   if (strategy === 'sma_crossover') {
     const { fastPeriod = 20, slowPeriod = 50 } = params
@@ -135,13 +218,37 @@ function generateSignals(closes, strategy, params) {
     }
   }
 
+  if (strategy === 'donchian_breakout' || strategy === 'range_breakout_atr') {
+    const entryPeriod = params.entryPeriod ?? params.period ?? 20, { exitPeriod = 10 } = params
+    const hi = priorMax(highs, entryPeriod), lo = priorMin(lows, exitPeriod)
+    const atr = strategy === 'range_breakout_atr' ? atrSeries(highs, lows, closes, params.atrPeriod ?? 14) : null
+    const tr  = atr ? trueRangeSeries(highs, lows, closes) : null
+    const k   = params.expansion ?? 1.5
+    let held = false
+    for (let i = 1; i < n; i++) {
+      if (!held && Number.isFinite(hi[i]) && closes[i] > hi[i]) {
+        // volatility expansion: today's range is k × the ATR known before today
+        if (atr && !(Number.isFinite(atr[i - 1]) && tr[i] >= k * atr[i - 1])) continue
+        sig[i] = 1; held = true
+      } else if (held && Number.isFinite(lo[i]) && closes[i] < lo[i]) { sig[i] = -1; held = false }
+    }
+  }
+
+  if (strategy === 'adx_trend') {
+    const { period = 14, threshold = 25, maPeriod = 50 } = params
+    const { adx, plusDI, minusDI } = adxSeries(highs, lows, closes, period)
+    const ma = smaSeries(closes, maPeriod)
+    return stateSignals(n, i => (Number.isFinite(adx[i]) && Number.isFinite(ma[i])
+      ? adx[i] >= threshold && plusDI[i] > minusDI[i] && closes[i] > ma[i] : null))
+  }
+
   return sig
 }
 
 // ── Trade simulation ──────────────────────────────────────────────────────────
 
 function simulate(timestamps, closes, strategy, params, initialCapital = 10000, opts = {}) {
-  return simulateWithSignals(timestamps, closes, generateSignals(closes, strategy, params), initialCapital, opts)
+  return simulateWithSignals(timestamps, closes, generateSignals(closes, strategy, params, { highs: opts.highs, lows: opts.lows }), initialCapital, opts)
 }
 
 // Execution model defaults. The engine used to fill every order at the close
@@ -434,5 +541,6 @@ function costBpsForSymbol(symbol, assetType = null) {
 
 module.exports = {
   simulate, simulateWithSignals, optimizeStrategy, generateSignals, costBpsForSymbol,
-  smaSeries, emaSeries, rsiSeries, macdSeries, bbSeries, DEFAULT_COST_BPS, DEFAULT_FILL,
+  smaSeries, emaSeries, rsiSeries, macdSeries, bbSeries, atrSeries, adxSeries, trueRangeSeries, priorMax, priorMin,
+  DEFAULT_COST_BPS, DEFAULT_FILL,
 }

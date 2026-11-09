@@ -35,7 +35,7 @@ test('a holding with too little history is valued but left out of portfolio risk
 
 test('strategies are judged on both windows with the asset class costs; crypto pays crypto costs', () => {
   const s = hs.strategyCheck('AAA', stock(2, 1))
-  expect(s.rows.map(r => r.strategy).sort()).toEqual(['bb_reversion', 'macd_signal', 'rsi_threshold', 'sma_crossover'])
+  expect(s.rows.map(r => r.strategy).sort()).toEqual(Object.keys(require('../lib/strategy-lab').STRATEGY_CATALOG).sort())
   expect(s.costBps).toBe(10)
   expect(hs.strategyCheck('BTC-USD', stock(2, 1)).costBps).toBe(60)
   for (const r of s.rows) expect(['validated', 'mixed', 'rejected', 'insufficient_trades', 'fragile']).toContain(r.verdict)
