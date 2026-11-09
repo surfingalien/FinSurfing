@@ -181,6 +181,15 @@ async function ownNoteFor(userId, sym) {
   }
 }
 
+/** Fama–French five factors + momentum on the symbol's own bars (lib/factor-regression.js). Best-effort. */
+async function factorExposureFor(sym, bars, assetType) {
+  if (assetType !== 'stock' && assetType !== 'etf') return null
+  try {
+    const FR = require('../lib/factor-regression')
+    return FR.describe(FR.regress(bars, await FR.fetchFactors(), { years: 2 }), sym)
+  } catch { return null }
+}
+
 async function gatherEvidence(sym, req) {
   const headers   = fwdKeys(req)
   const assetType = assetTypeOf(sym)
@@ -234,6 +243,7 @@ async function gatherEvidence(sym, req) {
     ownNote:    await ownNoteFor(effectiveUserId(req), sym),
     quant:      quantSnapshot.evidenceItems(quantSnap),
     earningsQuality: quality ? EQ.describe(quality, sym) : null,
+    factorExposure: await factorExposureFor(sym, bars, assetType),
     catalysts:  catalystText,
   })
   const bracketProb = require('../lib/bracket-prob')
@@ -502,7 +512,7 @@ router.post('/:symbol/thesis', requireAuth, thesisLimit, async (req, res) => {
     try {
       learningStore.recordDecision({
         surface: 'research', symbol: sym, action: 'buy', price: ev.facts.last,
-        meta: { assetType: ev.assetType, targetReturn: judgement.zones.targetReturn, stopLoss: judgement.zones.stopLoss, horizonDays: judgement.horizonDays, thesisId: entry.id, method, quant: ev.quant ?? null,
+        meta: { assetType: ev.assetType, variant: judgement.variant?.status === 'stated' ? judgement.variant.differsOn : judgement.variant?.status ?? null, targetReturn: judgement.zones.targetReturn, stopLoss: judgement.zones.stopLoss, horizonDays: judgement.horizonDays, thesisId: entry.id, method, quant: ev.quant ?? null,
           modelOdds: judgement.planOdds?.odds ? { pTarget: judgement.planOdds.odds.pTarget, pStop: judgement.planOdds.odds.pStop, sessions: judgement.planOdds.odds.sessions } : null,
           stopNoise: judgement.planOdds?.stop?.level ?? null },
       })

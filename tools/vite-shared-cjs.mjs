@@ -19,7 +19,7 @@ import { createRequire } from 'node:module'
 import path from 'node:path'
 
 // Repo-relative paths of the CommonJS files src/ may import.
-export const SHARED_CJS = ['lib/portfolio-pnl.js', 'lib/horizon-setups.js']
+export const SHARED_CJS = ['lib/portfolio-pnl.js', 'lib/horizon-setups.js', 'lib/research-report.js']
 
 const IDENTIFIER = /^[A-Za-z_$][\w$]*$/
 const posix = p => p.split(path.sep).join('/')

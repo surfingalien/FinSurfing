@@ -73,6 +73,8 @@ export default function ThesisResult({ data, onCite }) {
         </div>
       )}
 
+      {j.variant && <VariantView v={j.variant} onCite={onCite} />}
+
       {j.tradePlan && (
         <div className="glass rounded-2xl p-4">
           <h4 className="text-xs font-semibold mb-1 flex items-center gap-1.5"><Scale className="w-3.5 h-3.5" />
@@ -108,6 +110,23 @@ export default function ThesisResult({ data, onCite }) {
           </ul>
         </div>
       )}
+    </div>
+  )
+}
+
+const VARIANT_TONE = { stated: 'text-mint-400', agrees: 'text-slate-400', unsupported: 'text-amber-300' }
+const VARIANT_TEXT = { stated: 'differs from consensus — stated and checkable', agrees: 'agrees with consensus', unsupported: 'claimed to differ, but the consensus line or the falsifier did not hold up' }
+
+/** Where this view differs from consensus, and the dated fact that would prove it wrong (lib/research-desk.js:judgeVariant). */
+function VariantView({ v, onCite }) {
+  return (
+    <div className="glass rounded-2xl p-4 text-[12px] space-y-1.5">
+      <h4 className="text-xs font-semibold">Variant view <span className={`font-normal ${VARIANT_TONE[v.status] || ''}`}>— {VARIANT_TEXT[v.status] || v.status}</span></h4>
+      {v.consensus
+        ? <p><span className="text-slate-500">Consensus: </span>{v.consensus.claim}{' '}{v.consensus.cites.map(id => <button key={id} type="button" onClick={() => onCite?.(id)} className="text-mint-400 hover:underline mr-1">[{id}]</button>)}</p>
+        : <p className="text-amber-300">Consensus line removed: {v.consensusRemoved}</p>}
+      {v.differsOn !== 'none' && <p><span className="text-slate-500">Differs on {v.differsOn}: </span>{v.view || <span className="text-amber-300">removed ({v.viewRemoved})</span>}</p>}
+      {v.wrongIf && <p><span className="text-slate-500">Wrong if, by {v.checkBy}: </span>{v.wrongIf}</p>}
     </div>
   )
 }

@@ -10,7 +10,7 @@
  */
 import { useState, useCallback, useEffect, useRef } from 'react'
 import {
-  Microscope, Loader2, FileSearch, PenLine, ListChecks, LineChart, AlertTriangle, Stethoscope,
+  Microscope, Loader2, FileSearch, PenLine, ListChecks, LineChart, AlertTriangle, Stethoscope, Download
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { getApiKeyHeaders } from '../../services/api'
@@ -20,6 +20,7 @@ import ThesesList from './parts/ThesesList'
 import TrackRecord from './parts/TrackRecord'
 import SystemStatus from './parts/SystemStatus'
 import { TradePlan } from '../AIBrain/scan/StockCardParts'
+import * as researchReport from '../../../lib/research-report.js'
 
 const TABS = [
   { id: 'research', label: 'Research',     icon: FileSearch },
@@ -29,6 +30,16 @@ const TABS = [
 ]
 
 const STEPS = ['Gather measured evidence', 'Write a thesis that cites it', 'Code checks every claim, level and the expected value', 'Track the outcome against the market']
+
+/** Save the dossier (+ thesis) as one HTML file, built from what the page already holds (lib/research-report.js). */
+function downloadReport(dossier, thesis) {
+  const html = researchReport.buildReport({ dossier, thesis })
+  const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }))
+  const a = document.createElement('a')
+  a.href = url; a.download = researchReport.reportFileName(dossier.symbol)
+  document.body.appendChild(a); a.click(); a.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
 
 export default function ResearchDeskView({ defaultSymbol = null, onSymbol }) {
   const { authFetch, isAuthenticated } = useAuth()
@@ -147,10 +158,14 @@ export default function ResearchDeskView({ defaultSymbol = null, onSymbol }) {
           {dossier && (
             <div className="grid lg:grid-cols-5 gap-4 items-start">
               <div className="lg:col-span-2 space-y-2">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-2">
                   <h3 className="text-sm font-semibold">{dossier.symbol}{dossier.company ? ` · ${dossier.company}` : ''}</h3>
                   <span className="text-[11px] text-slate-500">${Number(dossier.lastPrice).toFixed(2)} · {dossier.asOf}</span>
                 </div>
+                <button type="button" onClick={() => downloadReport(dossier, thesis)} className="text-[11px] px-2.5 py-1 rounded-lg border border-slate-500/30 text-slate-300 hover:text-mint-400 inline-flex items-center gap-1.5"
+                  title="A self-contained HTML page of this evidence (and the thesis, once written) — save, print or send it">
+                  <Download className="w-3.5 h-3.5" /> Download report{thesis ? ' (with thesis)' : ''}
+                </button>
                 <EvidenceList evidence={dossier.evidence} gaps={dossier.gaps} highlight={highlight} />
               </div>
               <div className="lg:col-span-3 space-y-3">

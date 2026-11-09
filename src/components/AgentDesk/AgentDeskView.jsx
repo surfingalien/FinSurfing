@@ -277,7 +277,7 @@ function PaperBook({ paper }) {
         <Stat label="Return" value={perf.totalReturnPct == null ? '—' : `${perf.totalReturnPct}%`} />
         <Stat label="Today" value={daily.length ? usd(daily.at(-1).pnl) : '—'} sub={paper.dayMark ? `vs day open ${usd(paper.dayMark.equity)}` : 'no day mark yet'} />
         <Stat label="Win rate" value={perf.winRate == null ? '—' : `${Math.round(perf.winRate * 100)}%`} sub={`${perf.closedTrades} closed`} />
-        <Stat label="Slippage paid" value={usd(perf.slippagePaid)} sub={`${perf.rejectedOrders} refused orders`} />
+        <Stat label="Slippage paid" value={usd(perf.slippagePaid)} sub={perf.shortfall ? `shortfall median ${perf.shortfall.medianBps}bps · ${perf.rejectedOrders} refused` : `${perf.rejectedOrders} refused orders`} />
       </div>
       {paper.protections?.global && <Note tone="warn">Buys paused ({paper.protections.global.kind}): {paper.protections.global.reason}, until {String(paper.protections.global.until).slice(0, 16)}Z. Exits still run.</Note>}
       {paper.equityHistory.length < 2 ? <p className="text-xs text-slate-500 mt-2">The equity curve starts once the hourly manager has recorded two days.</p> : (

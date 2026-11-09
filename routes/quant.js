@@ -6,7 +6,7 @@
  *   pure maths, public   POST /options/*, /calc/:name, /risk/stress|impact|montecarlo|bayes
  *                        — no market data, no AI, no cost: inputs in, numbers out (size-capped)
  *   market-data, sign-in POST /optimize, /volatility, /timeseries, /pairs, /pairs/screen, /statarb, /reversal,
- *                        /risk/capm, /risk/copula, /risk/pca, /risk/dcc, /ml/compare, /ml/cluster, /ml/rl,
+ *                        /risk/capm, /risk/factors, /risk/copula, /risk/pca, /risk/dcc, /ml/compare, /ml/cluster, /ml/rl,
  *                        /holdings-scan (every tool above across the user's holdings at once)
  *                        — fetch daily bars over loopback, so they need a user and a tighter rate limit;
  *                        the slow ones are heartbeated (clients must check `data.error` as well as `res.ok`)
@@ -268,6 +268,14 @@ router.post('/risk/capm', heavy, route('quant/risk/capm', async req => {
   const s = sym(req.body?.symbol), bm = sym(req.body?.benchmark || 'SPY', 'benchmark'), { map, failed } = await barsMap([s, bm], rangeOf(req.body?.range, '2y'), req, 2)
   if (!map[s] || !map[bm]) bad(`could not load both series — ${failed.join('; ')}`); const hrp = require('../lib/hrp'), al = hrp.alignReturns({ [s]: map[s], [bm]: map[bm] })
   return { symbol: s, benchmark: bm, ...risk.capm(al.returns.map(r => r[al.symbols.indexOf(s)]), al.returns.map(r => r[al.symbols.indexOf(bm)]), { rf: num(req.body?.rf, 'rf', { min: 0, max: 0.3, def: 0.04 }) }), bootstrapSharpe: risk.bootstrapSharpe(al.returns.map(r => r[al.symbols.indexOf(s)]), { B: 400 }) }
+}))
+// Fama–French five factors + momentum (Ken French's daily files), Newey–West errors (lib/factor-regression.js).
+router.post('/risk/factors', heavy, route('quant/risk/factors', async req => {
+  const s = sym(req.body?.symbol), years = Math.round(num(req.body?.years, 'years', { min: 1, max: 5, def: 3 }))
+  const FR = require('../lib/factor-regression')
+  const [b, factors] = await Promise.all([bars(s, '5y', req), FR.fetchFactors()])
+  const res = FR.regress(b, factors, { years })
+  return { symbol: s, years, ...res, summary: FR.describe(res, s) }
 }))
 router.post('/risk/copula', heavy, route('quant/risk/copula', async req => { const a = sym(req.body?.a, 'a'), b = sym(req.body?.b, 'b'); const { map } = await barsMap([a, b], '5y', req, 2); const hrp = require('../lib/hrp'), al = hrp.alignReturns(map); return { a, b, ...risk.gaussianCopula(al.returns.map(r => r[0]), al.returns.map(r => r[1])) } }))
 router.post('/risk/pca', heavy, route('quant/risk/pca', async req => { const list = syms(req.body?.symbols, { min: 3, max: 20 }), { map } = await barsMap(list, '2y', req, 3), al = require('../lib/hrp').alignReturns(map), p = risk.pca(al.returns, { components: 3 }); return { symbols: al.symbols, explained: p.explained, cumulative: p.cumulative, loadings: p.loadings.map(v => Object.fromEntries(al.symbols.map((s, i) => [s, +v[i].toFixed(4)]))) } }))

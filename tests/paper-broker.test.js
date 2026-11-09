@@ -263,7 +263,7 @@ describe('brackets — no position without an exit, and exits are mechanical', (
 
   test('stop first, then target, then T1 (half), then time', () => {
     const b = { stop: 95, t1: 105, t2: 110 }
-    expect(bracketExits(held(b), { A: 94 }, { now }).exits).toEqual([{ symbol: 'A', kind: 'stop', fraction: 1, price: 94 }])
+    expect(bracketExits(held(b), { A: 94 }, { now }).exits).toEqual([{ symbol: 'A', kind: 'stop', fraction: 1, price: 94, level: 95 }])
     expect(bracketExits(held(b), { A: 111 }, { now }).exits[0]).toMatchObject({ kind: 'target', fraction: 1 })
     expect(bracketExits(held(b), { A: 106 }, { now }).exits[0]).toMatchObject({ kind: 't1', fraction: 0.5 })
     expect(bracketExits(held(b), { A: 101 }, { now }).exits).toEqual([])
