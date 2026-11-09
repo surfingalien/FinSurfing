@@ -472,6 +472,13 @@ export default function TrackRecord({ data, onAdoptBrackets }) {
               ))}
             </div>
           )}
+          {pp.shortfall && (
+            <p className="text-[11px] text-slate-400 mt-2">
+              Implementation shortfall — fills vs the price each decision was made at (the scan's price for a buy, the bracket level for an exit; positive = cost):
+              {' '}median {pp.shortfall.medianBps}bps over {pp.shortfall.n} fill(s), {pp.shortfall.costUsd >= 0 ? '' : '−'}${Math.abs(pp.shortfall.costUsd).toFixed(2)} in all.
+              {' '}{Object.entries(pp.shortfall.byKind).map(([k, v]) => `${EXIT_LABEL[k] || (k === 'entry' ? 'Entries' : k)}: ${v.medianBps}bps (n=${v.n}${v.delay != null ? `, ${v.delay}bps of it before the order` : ''})`).join(' · ')}.
+            </p>
+          )}
           {pp.unmanaged?.length > 0 && (
             <div className="mt-2 p-3 rounded-xl border border-amber-500/30 bg-amber-500/10 text-[12px] text-amber-300 space-y-2">
               <div>{pp.unmanaged.length} position(s) were opened before exits existed and can never sell: {pp.unmanaged.join(', ')}.</div>

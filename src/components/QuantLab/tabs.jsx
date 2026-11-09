@@ -257,7 +257,7 @@ export function StrategiesTab() {
 /* ── Risk ──────────────────────────────────────────────────────────────────── */
 export function RiskTab() {
   const [which, setWhich] = useState('stress')
-  const tabs = [['stress', 'Stress test'], ['varbt', 'VaR backtest'], ['capm', 'CAPM & ratios'], ['premium', 'Risk premium'], ['mc', 'Monte Carlo VaR'], ['copula', 'Copula'], ['pca', 'PCA'], ['dcc', 'DCC correlations'], ['impact', 'Market impact'], ['bayes', 'Bayesian win rate']]
+  const tabs = [['stress', 'Stress test'], ['varbt', 'VaR backtest'], ['capm', 'CAPM & ratios'], ['factors', 'Fama–French factors'], ['premium', 'Risk premium'], ['mc', 'Monte Carlo VaR'], ['copula', 'Copula'], ['pca', 'PCA'], ['dcc', 'DCC correlations'], ['impact', 'Market impact'], ['bayes', 'Bayesian win rate']]
   return (
     <div className="space-y-4">
       <div className="flex gap-2 flex-wrap">{tabs.map(([k, l]) => <button key={k} onClick={() => setWhich(k)} className={`px-3 py-1.5 rounded-lg text-xs ${which === k ? 'bg-mint-400/15 text-mint-400 border border-mint-400/30' : 'text-slate-400 border border-slate-500/20'}`}>{l}</button>)}</div>
@@ -271,6 +271,13 @@ export function RiskTab() {
       {which === 'capm' && <RunPanel key="b" title="CAPM, Jensen's alpha, Treynor, information ratio" endpoint="/api/quant/risk/capm" needsAuth
         fields={[{ name: 'symbol', label: 'Symbol', type: 'symbol', default: 'NVDA' }, { name: 'benchmark', label: 'Benchmark', type: 'symbol', default: 'SPY' }, num('rf', 'Risk-free', 0.04)]}
         render={d => <><Card title={`${d.symbol} vs ${d.benchmark}`}><ResultView data={{ beta: d.beta, jensenAlpha: d.jensenAlpha, alphaTStat: d.alphaTStat, r2: d.r2, treynor: d.treynor, informationRatio: d.informationRatio, trackingError: d.trackingError, upCapture: d.upCapture, downCapture: d.downCapture, sharpe: d.sharpe }} /></Card><Card title="Sharpe ratio, bootstrap 95% interval"><ResultView data={d.bootstrapSharpe} hide={['draws']} /></Card></>} />}
+      {which === 'factors' && <RunPanel key="ff" title="Fama–French five factors + momentum" endpoint="/api/quant/risk/factors" needsAuth
+        blurb="Regresses the stock's daily excess returns on Ken French's official factors — market, size, value, profitability, investment, momentum — with Newey–West standard errors (daily returns' errors overlap, so plain OLS overstates certainty). Alpha is what is left after the factors; |t| below 2 means it cannot be told from zero. The factor files are published monthly, so the window ends about a month back."
+        fields={[{ name: 'symbol', label: 'Symbol', type: 'symbol', default: 'NVDA' }, num('years', 'Years (1–5)', 3)]}
+        render={d => <><Card title={`${d.symbol}: ${d.from} → ${d.to} (${d.n} days, Newey–West lag ${d.lag})`}>
+          <div className="grid sm:grid-cols-4 gap-3 mb-3"><Stat label="Alpha a year" value={`${d.alphaAnnualPct}%`} sub={`NW t ${d.alphaT ?? '—'} (plain OLS t ${d.alphaOlsT ?? '—'})`} /><Stat label="R²" value={pct(d.r2, 0)} /><Stat label="Stock-specific vol" value={`${d.residualVolAnnualPct}%`} sub="a year" /><Stat label="Factor data to" value={d.factorDataThrough} /></div>
+          <ResultView data={d.betas.map(b => ({ factor: b.label, beta: b.beta, tNeweyWest: b.t, significant: b.t != null && Math.abs(b.t) >= 2 ? 'yes' : 'no' }))} />
+        </Card><Note>{d.summary}</Note></>} />}
       {which === 'mc' && <RunPanel key="c" title="Monte Carlo VaR (correlated draws)" endpoint="/api/quant/risk/montecarlo"
         blurb="Daily mean, volatility and correlations → Cholesky-correlated normal draws → VaR and expected shortfall. Normal tails understate real crashes."
         fields={[txt('weights', 'Weights', '0.5, 0.3, 0.2', 'comma separated'), txt('mu', 'Daily mean returns', '0.0004, 0.0002, 0.0001'), txt('vols', 'Daily volatilities', '0.02, 0.012, 0.008'), { name: 'corr', label: 'Correlation matrix (JSON)', type: 'textarea', rows: 3, default: '[[1,0.5,0.1],[0.5,1,0.2],[0.1,0.2,1]]' }, num('horizon', 'Horizon (days)', 10), num('value', 'Portfolio value', 100000)]}

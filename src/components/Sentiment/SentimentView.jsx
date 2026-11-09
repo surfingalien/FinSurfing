@@ -4,10 +4,11 @@ import { getApiKeyHeaders } from '../../services/api'
 import { useWatchlist } from '../../hooks/useWatchlist'
 
 const SOURCES = [
-  { id: 'reddit',     label: 'Reddit' },
-  { id: 'x',         label: 'X (Twitter)' },
-  { id: 'news',      label: 'News' },
-  { id: 'polymarket',label: 'Polymarket' },
+  { id: 'free',       label: 'Free: StockTwits · Reddit · News' },
+  { id: 'reddit',     label: 'Reddit (Adanos key)' },
+  { id: 'x',         label: 'X (Adanos key)' },
+  { id: 'news',      label: 'News (Adanos key)' },
+  { id: 'polymarket',label: 'Polymarket (Adanos key)' },
 ]
 
 const DAYS_OPTIONS = [1, 3, 7, 14, 30]
@@ -56,10 +57,52 @@ function Skeleton() {
   )
 }
 
+const LEAN_STYLE = { bullish: 'text-emerald-400', bearish: 'text-red-400', mixed: 'text-amber-300', neutral: 'text-slate-400', quiet: 'text-slate-500' }
+
+/** Free sources, each on its own (lib/free-sentiment.js) — no blended score. */
+function FreeResults({ data }) {
+  const rows = data.results || []
+  if (!rows.length) return null
+  return (
+    <div className="glass rounded-2xl p-4 border border-white/[0.06] space-y-3">
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead><tr className="text-slate-500 text-left">{['Symbol', 'StockTwits (self-tagged)', 'Reddit mentions (24h)', 'News (distinct stories)', 'Lean'].map(h => <th key={h} className="font-medium pr-4 pb-2">{h}</th>)}</tr></thead>
+          <tbody>{rows.map(r => {
+            const t = r.stocktwits, d = r.reddit, n = r.news
+            return (
+              <tr key={r.symbol} className="border-t border-white/[0.06] align-top">
+                <td className="pr-4 py-2 font-bold text-white">{r.symbol}</td>
+                <td className="pr-4 py-2 text-slate-300">{t ? (<>
+                  {t.bullShare != null ? <span className={t.bullShare >= 0.6 ? 'text-emerald-400' : t.bullShare <= 0.4 ? 'text-red-400' : 'text-slate-300'}>{Math.round(t.bullShare * 100)}% bullish</span> : <span className="text-slate-500">too few tags</span>}
+                  <div className="text-[10px] text-slate-500">{t.tagged} of {t.messages} tagged ({t.bullish}↑ {t.bearish}↓){t.perHour != null ? ` · ${t.perHour}/hr` : ''}</div>
+                </>) : <span className="text-slate-600">—</span>}</td>
+                <td className="pr-4 py-2 text-slate-300">{d ? (d.notRanked ? <span className="text-slate-500">not in the top ranks</span> : (<>
+                  {d.mentions} <span className="text-slate-500">· rank {d.rank}</span>
+                  {d.rankChange ? <div className={`text-[10px] ${d.rankChange > 0 ? 'text-emerald-400' : 'text-slate-500'}`}>{d.rankChange > 0 ? 'up' : 'down'} {Math.abs(d.rankChange)} places since yesterday</div> : null}
+                </>)) : <span className="text-slate-600">—</span>}</td>
+                <td className="pr-4 py-2 text-slate-300">{n ? (<>
+                  {n.bullish}↑ {n.bearish}↓ <span className="text-slate-500">of {n.stories}</span>
+                  {n.headlines?.[0] && <div className="text-[10px] text-slate-500 max-w-[260px] truncate" title={n.headlines[0].title}>{n.headlines[0].title}</div>}
+                </>) : <span className="text-slate-600">—</span>}</td>
+                <td className={`py-2 font-medium ${LEAN_STYLE[r.lean] || 'text-slate-400'}`}>{r.lean}</td>
+              </tr>
+            )
+          })}</tbody>
+        </table>
+      </div>
+      <p className="text-[11px] text-slate-500">
+        StockTwits: share of the last 30 messages their authors tagged bullish vs bearish. Reddit: mention counts across investing subreddits via ApeWisdom (attention, not direction).
+        News: Google News stories with syndicated copies collapsed, classified by keywords. "Lean" only counts which way StockTwits and news point — none of this has been shown to predict returns. Not financial advice.
+      </p>
+    </div>
+  )
+}
+
 export default function SentimentView() {
   const { symbols: watchlist } = useWatchlist()
   const [customSymbols, setCustomSymbols] = useState('')
-  const [source, setSource] = useState('reddit')
+  const [source, setSource] = useState('free')
   const [days, setDays] = useState(7)
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -76,6 +119,13 @@ export default function SentimentView() {
       if (!symbols.length) {
         setError('Add symbols to your watchlist or enter custom symbols above.')
         setLoading(false)
+        return
+      }
+      if (source === 'free') {
+        const res = await fetch(`/api/sentiment/free?symbols=${encodeURIComponent(symbols.slice(0, 15).join(','))}`)
+        const body = await res.json().catch(() => ({}))
+        if (!res.ok || body.error) throw new Error(body.error || `Request failed (${res.status})`)
+        setData({ free: true, ...body })
         return
       }
       const params = new URLSearchParams({ symbols: symbols.join(','), source, days: String(days) })
@@ -105,7 +155,7 @@ export default function SentimentView() {
         </div>
         <div>
           <h1 className="text-xl font-bold text-white">Sentiment Scanner</h1>
-          <p className="text-xs text-slate-500">Social & news sentiment scores via Adanos — powered by Reddit, X, news, and Polymarket</p>
+          <p className="text-xs text-slate-500">Free by default: StockTwits, Reddit mentions (ApeWisdom) and Google News — each shown on its own. Adanos sources need an ADANOS_API_KEY.</p>
         </div>
       </div>
 
@@ -169,7 +219,9 @@ export default function SentimentView() {
 
       {loading && <Skeleton />}
 
-      {data?.enabled !== false && stocks.length > 0 && !loading && (
+      {data?.free && !loading && <FreeResults data={data} />}
+
+      {!data?.free && data?.enabled !== false && stocks.length > 0 && !loading && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <p className="text-xs text-slate-500">
@@ -239,7 +291,7 @@ export default function SentimentView() {
         </div>
       )}
 
-      {data?.enabled !== false && stocks.length === 0 && !loading && data && (
+      {!data?.free && data?.enabled !== false && stocks.length === 0 && !loading && data && (
         <div className="glass rounded-2xl p-8 border border-white/[0.06] text-center text-sm text-slate-500">
           No sentiment data returned for the selected symbols and source.
         </div>

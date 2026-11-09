@@ -64,7 +64,7 @@ test('volatility, timeseries, capm, pairs and statarb answer for known symbols a
   expect((await post('/pairs', { y: 'AAA', x: 'AAA' })).status).toBe(400)
 }, 120000)
 test('ml compare reports the baseline and a verdict; clustering returns embeddings', async () => {
-  const m = await post('/ml/compare', { symbol: 'AAA' }); expect(m.status).toBe(200); expect(m.body.baseline.accuracy).toBeGreaterThan(0.3); expect(m.body.verdict).toBeTruthy(); expect(m.body.results.length).toBe(13)
+  const m = await post('/ml/compare', { symbol: 'AAA' }); expect(m.status).toBe(200); expect(m.body.baseline.accuracy).toBeGreaterThan(0.3); expect(m.body.verdict).toBeTruthy(); expect(m.body.results.length).toBe(14)
   const k = await post('/ml/cluster', { symbols: ['AAA', 'BBB', 'CCC', 'DDD', 'SPY'] }); expect(k.status).toBe(200); expect(k.body.symbols).toHaveLength(5)
 }, 120000)
 
