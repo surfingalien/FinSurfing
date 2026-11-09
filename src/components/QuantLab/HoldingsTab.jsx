@@ -42,7 +42,7 @@ export default function HoldingsTab({ positions = [] }) {
       <Card title={`Scan my holdings (${scannable.length} in the active portfolio)`}>
         <p className="text-xs text-slate-400 mb-3">
           Runs the Quant Lab across every holding at once: portfolio risk (how much each holding contributes to it, VaR, stress tests, what moves together), each holding's volatility and character,
-          and whether the four catalog strategies held up on that holding in both an older and a recent window, net of costs. Shares come from your active portfolio; prices are the last daily close.
+          the next dated events for each holding, whether its reported earnings are backed by cash, and whether the catalog strategies held up on that holding in both an older and a recent window, net of costs. Shares come from your active portfolio; prices are the last daily close.
         </p>
         <div className="flex flex-wrap items-center gap-3">
           <button type="button" onClick={run} disabled={state.loading} className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-mint-400/15 border border-mint-400/30 text-mint-400 disabled:opacity-50">
@@ -57,6 +57,8 @@ export default function HoldingsTab({ positions = [] }) {
       </Card>
 
       {d && <PortfolioRisk p={d.portfolio} />}
+      {d && <Calendar c={d.calendar} />}
+      {d && <Quality q={d.quality} holdings={d.holdings} />}
       {d && <HoldingsTable holdings={d.holdings} showMl={!!d.ml} />}
       {d && <Summary d={d} />}
       {d?.skipped?.length > 0 && <Note tone="warn">Not scanned (no price history): {d.skipped.join('; ')}</Note>}
@@ -159,6 +161,60 @@ function HoldingsTable({ holdings, showMl }) {
   )
 }
 
+const KIND_LABEL = { earnings: 'Earnings', 'ex-dividend': 'Ex-dividend', lockup: 'Lock-up', 'options-expiry': 'Options expiry', 'index-rebalance': 'Index rebalance' }
+
+/** Every holding's dated events in the next few weeks (lib/catalysts.js). */
+function Calendar({ c }) {
+  if (!c) return null
+  return (
+    <Card title={`Next ${c.days} days`}>
+      {!c.events.length ? <p className="text-xs text-slate-500">No dated events found for {c.checked} holding(s) in the next {c.days} days.</p> : (
+        <div className="overflow-x-auto">
+          <table className="text-[11px] w-full">
+            <thead><tr className="text-slate-500 text-left">{['Date', 'In', 'Holding', 'Event', ''].map(h => <th key={h} className="font-medium pr-3 pb-1">{h}</th>)}</tr></thead>
+            <tbody>{c.events.map((e, i) => (
+              <tr key={`${e.date}-${e.kind}-${e.symbol || 'mkt'}-${i}`} className="border-t border-slate-500/10">
+                <td className="pr-3 py-1 tabular-nums text-slate-300 whitespace-nowrap">{e.date}</td>
+                <td className="pr-3 tabular-nums text-slate-400">{e.daysAway}d</td>
+                <td className="pr-3">{e.symbol ? <a className="font-mono text-mint-400 hover:underline" href={deskLink(e.symbol)}>{e.symbol}</a> : <span className="text-slate-500">market</span>}</td>
+                <td className="pr-3 text-slate-300">{e.label}</td>
+                <td className="text-slate-500">{e.scheduled ? '' : 'estimate'}</td>
+              </tr>
+            ))}</tbody>
+          </table>
+        </div>
+      )}
+      <p className="text-[11px] text-slate-500 mt-2">Earnings dates come from the earnings calendar, else are estimated from the last SEC filing; ex-dividend dates from FMP (or estimated from the payment cycle); lock-ups are IPO + 180 days. Options expiry and the S&P rebalance follow the exchange's calendar rules, without holiday adjustment.</p>
+    </Card>
+  )
+}
+
+/** Holdings whose reported earnings are not well backed by cash (lib/earnings-quality.js). */
+function Quality({ q, holdings }) {
+  if (!q) return null
+  const rows = holdings.filter(h => h.quality?.checked)
+  return (
+    <Card title="Earnings quality (SEC filings)">
+      <p className="text-[11px] text-slate-500 mb-2">Is reported profit backed by cash? Operating cash flow ÷ net income (cash conversion), accruals as a share of assets, and whether receivables or inventory are growing faster than sales. Flags are things to read, not verdicts — the weekly factor mining tests whether they predict returns.</p>
+      <div className="overflow-x-auto">
+        <table className="text-[11px] w-full">
+          <thead><tr className="text-slate-500 text-left">{['Holding', 'Quarters to', 'Cash conversion', 'Accruals', 'Receivables vs sales', 'Flags'].map(h => <th key={h} className="font-medium pr-3 pb-1 whitespace-nowrap">{h}</th>)}</tr></thead>
+          <tbody>{rows.map(h => (
+            <tr key={h.symbol} className="border-t border-slate-500/10 align-top">
+              <td className="pr-3 py-1"><a className="font-mono text-mint-400 hover:underline" href={deskLink(h.symbol)}>{h.symbol}</a></td>
+              <td className="pr-3 tabular-nums text-slate-400">{h.quality.periodEnd}</td>
+              <td className="pr-3 tabular-nums text-slate-300">{h.quality.cashConversion != null ? `${h.quality.cashConversion}×` : '—'}</td>
+              <td className="pr-3 tabular-nums text-slate-300">{h.quality.accruals != null ? `${h.quality.accruals}%` : '—'}</td>
+              <td className="pr-3 tabular-nums text-slate-300">{h.quality.receivablesGap != null ? `${h.quality.receivablesGap > 0 ? '+' : ''}${h.quality.receivablesGap} pts` : '—'}</td>
+              <td className={h.quality.flags.length ? 'text-amber-300' : 'text-slate-500'}>{h.quality.flags.length ? h.quality.flags.map(f => f.text).join('; ') : 'none'}</td>
+            </tr>
+          ))}</tbody>
+        </table>
+      </div>
+    </Card>
+  )
+}
+
 function Summary({ d }) {
   return (
     <Card title="What the scan found">
@@ -166,6 +222,8 @@ function Summary({ d }) {
         <li>Strategies: {d.strategies.withValidatedRule.length ? d.strategies.withValidatedRule.map(x => `${x.symbol} (${x.rules.join(', ')})`).join('; ') : 'no catalog rule held up in both windows on any holding'} — {d.strategies.tested} holding(s) tested.</li>
         {d.ml && <li>ML: {d.ml.passed.length} holding(s) where a model beat the baseline in all {d.ml.folds} folds{d.ml.passed.length ? ` (${d.ml.passed.map(x => x.symbol).join(', ')})` : ''}; about {d.ml.expectedByLuck} would pass by luck alone with {d.ml.holdingsTested} holdings × {d.ml.modelsPerHolding} models.</li>}
         {d.ml && <li>ML as a trading rule (the best model per holding, next-day fills, costs, both windows): {d.ml.asStrategyValidated?.length ? d.ml.asStrategyValidated.map(x => `${x.symbol} (${x.model})`).join(', ') : 'none held up'}. The Strategy Brain tests these properly across many symbols every night.</li>}
+        {d.quality && <li>Earnings quality: {d.quality.flagged.length ? `${d.quality.flagged.map(x => x.symbol).join(', ')} raised flags` : 'no flags'} across {d.quality.checked} holding(s) with SEC filings.</li>}
+        {d.calendar?.events?.some(e => e.kind === 'earnings') && <li>Earnings in the next {d.calendar.days} days: {d.calendar.events.filter(e => e.kind === 'earnings').map(e => `${e.symbol} ${e.date}`).join(', ')}.</li>}
         {d.portfolio?.effectiveBets != null && <li>Diversification: about {d.portfolio.effectiveBets} independent bet(s) across {d.portfolio.weights.length} holdings.</li>}
       </ul>
     </Card>

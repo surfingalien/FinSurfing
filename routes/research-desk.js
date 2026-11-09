@@ -208,6 +208,16 @@ async function gatherEvidence(sym, req) {
   let records = [], stats = null
   try { records = readPredictions(); stats = computeStats(records) } catch { /* calibration optional */ }
   const horizon = stats?.segmentHorizon ?? 7
+  const today = new Date().toISOString().slice(0, 10)
+  const EQ = require('../lib/earnings-quality'), CAT = require('../lib/catalysts')
+  const quality = secFacts ? EQ.qualityAt(secFacts, today) : null
+  let catalystText = null
+  if (assetType === 'stock') {
+    try {
+      const inputs = await CAT.gatherInputs(sym, { headers, lastFiled: quality?.lastFiled ?? null })
+      catalystText = CAT.describe(CAT.buildCatalysts({ today, ...inputs }), sym, CAT.earningsRecord(stats))
+    } catch { catalystText = null }
+  }
 
   const { items, gaps, facts } = desk.buildEvidence({
     symbol: sym, bars, taLine, fundamentals, macro,
@@ -223,6 +233,8 @@ async function gatherEvidence(sym, req) {
     track:      desk.trackFor(records, { symbol: sym, assetType, horizon }),
     ownNote:    await ownNoteFor(effectiveUserId(req), sym),
     quant:      quantSnapshot.evidenceItems(quantSnap),
+    earningsQuality: quality ? EQ.describe(quality, sym) : null,
+    catalysts:  catalystText,
   })
   const bracketProb = require('../lib/bracket-prob')
   const winProb = bracketProb.winProbFor(bracketProb.loadStore(), { assetType }) || kelly.winProbFromStats(stats, { assetType })
