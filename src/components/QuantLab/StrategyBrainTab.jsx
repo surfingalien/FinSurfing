@@ -5,13 +5,31 @@
  * forward record of what it admitted, lessons), the strategies it found, and
  * its recent runs. Admins can start a run, pause or resume.
  */
-import { useCallback, useEffect, useState } from 'react'
+import { Fragment, useCallback, useEffect, useState } from 'react'
 import { Play, Pause, RotateCcw, Loader2, Brain, Lock } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { Card, Note, Stat } from './shared'
 
 const when = t => (t ? new Date(t).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—')
 const pct = v => (v == null ? '—' : `${Math.round(v * 100)}%`)
+const STATUS_STYLE = { pass: 'text-mint-400', review: 'text-amber-300', fail: 'text-red-400', na: 'text-slate-500' }
+const STATUS_TEXT = { pass: 'pass', review: 'review', fail: 'fail', na: 'n/a' }
+
+/** The validation report card stored with an admitted strategy (lib/strategy-evidence.js). */
+function ReportCard({ card }) {
+  if (!card) return <p className="text-[11px] text-slate-500">No report card — admitted before cards were recorded.</p>
+  return (
+    <table className="text-[11px] w-full">
+      <tbody>{card.rows.map(r => (
+        <tr key={r.key} className="border-t border-slate-500/10 align-top">
+          <td className="pr-3 py-1 text-slate-300 whitespace-nowrap">{r.label}</td>
+          <td className={`pr-3 font-medium ${STATUS_STYLE[r.status] || 'text-slate-400'}`}>{STATUS_TEXT[r.status] || r.status}</td>
+          <td className="text-slate-400">{r.value || '—'}</td>
+        </tr>
+      ))}</tbody>
+    </table>
+  )
+}
 
 export default function StrategyBrainTab() {
   const { authFetch, isAuthenticated, user } = useAuth()
@@ -19,6 +37,7 @@ export default function StrategyBrainTab() {
   const [state, setState] = useState({ loading: true, error: null, data: null })
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState(null)
+  const [open, setOpen] = useState(null)
 
   const load = useCallback(async () => {
     if (!isAuthenticated) { setState({ loading: false, error: null, data: null }); return }
@@ -67,7 +86,7 @@ export default function StrategyBrainTab() {
             <p className="text-xs text-slate-400 mt-1">
               An autonomous researcher. Every night it builds new strategies — machine-learning models as trading rules (including an ensemble it composes), random catalog parameters,
               and rules a language model proposes — tests each in the Quant Lab engine (next-day fills, costs, both the older and the recent window, the deflated Sharpe for every variant tried,
-              the overfitting check) and adds the survivors to the strategy library on its own. It then learns which kinds of research are worth its time: each method's share of the next tries
+              the overfitting checks, at least 20 trades with a measurable edge per trade, and no common market state where it loses) and adds the survivors to the strategy library on its own. It then learns which kinds of research are worth its time: each method's share of the next tries
               follows what its strategies did — and strategies that die when re-tested forward count against the method twice. It never trades and cannot change its limits.
             </p>
             {d.stopReason && <p className="text-xs text-amber-300 mt-1">Not running: {d.stopReason}.</p>}
@@ -114,9 +133,10 @@ export default function StrategyBrainTab() {
         {!d.strategies.length ? <p className="text-xs text-slate-500">None yet — most tries find nothing, which is the honest result. Survivors appear here and in the strategy library.</p> : (
           <div className="overflow-x-auto">
             <table className="text-[11px] w-full">
-              <thead><tr className="text-slate-500 text-left">{['Found', 'Symbol', 'Strategy', 'Method', 'Status', 'Fitness', 'Forward'].map(h => <th key={h} className="font-medium pr-3 pb-1 whitespace-nowrap">{h}</th>)}</tr></thead>
+              <thead><tr className="text-slate-500 text-left">{['Found', 'Symbol', 'Strategy', 'Method', 'Status', 'Fitness', 'Forward', 'Checks'].map(h => <th key={h} className="font-medium pr-3 pb-1 whitespace-nowrap">{h}</th>)}</tr></thead>
               <tbody>{d.strategies.map(s => (
-                <tr key={s.id} className="border-t border-slate-500/10">
+                <Fragment key={s.id}>
+                <tr className="border-t border-slate-500/10">
                   <td className="pr-3 py-1 text-slate-400 whitespace-nowrap">{when(s.discoveredAt)}</td>
                   <td className="pr-3"><a className="font-mono text-mint-400 hover:underline" href={`#/research-desk/${encodeURIComponent(s.symbol)}`}>{s.symbol}</a></td>
                   <td className="pr-3 text-slate-300">{s.name}</td>
@@ -124,7 +144,10 @@ export default function StrategyBrainTab() {
                   <td className={`pr-3 ${s.status === 'retired' ? 'text-slate-500' : 'text-mint-400'}`}>{s.status}</td>
                   <td className="pr-3 tabular-nums text-slate-300">{s.fitness ?? '—'}</td>
                   <td className="pr-3 tabular-nums text-slate-300">{s.forwardPasses} / {s.forwardTests} passed</td>
+                  <td className="pr-3"><button type="button" onClick={() => setOpen(open === s.id ? null : s.id)} className={`underline-offset-2 hover:underline ${STATUS_STYLE[s.card?.overall] || 'text-slate-400'}`}>{s.card ? `${s.card.overall}${open === s.id ? ' ▴' : ' ▾'}` : '—'}</button></td>
                 </tr>
+                {open === s.id && <tr><td colSpan={8} className="pb-3 pt-1"><ReportCard card={s.card} /></td></tr>}
+                </Fragment>
               ))}</tbody>
             </table>
           </div>

@@ -108,7 +108,7 @@ test('the bracket arm trades catalog draws under a stored bracket + slippage, an
     ...deps(), library: lib,
     toSeries: () => ({ timestamps: [1], closes: [1], opens: [1], highs: [1], lows: [1], volumes: [1] }),
     strategyLab: {
-      selectionProblem: require('../lib/strategy-lab').selectionProblem,
+      admissionProblem: require('../lib/strategy-lab').admissionProblem,
       evaluateProposals: (cfgs, _t, _c, _cap, exec) => {
         seen.push(exec)
         return cfgs.map((p, i) => ({ ...p, verdict: 'validated', metrics: { alpha: 2 }, deflated: { pass: true }, pbo: { overfit: false }, cpcv: { generalises: i === 0, medianSharpe: i === 0 ? 0.8 : -0.2 } }))
