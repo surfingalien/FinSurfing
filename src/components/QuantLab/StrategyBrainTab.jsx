@@ -16,9 +16,11 @@ const STATUS_STYLE = { pass: 'text-mint-400', review: 'text-amber-300', fail: 't
 const STATUS_TEXT = { pass: 'pass', review: 'review', fail: 'fail', na: 'n/a' }
 
 /** The validation report card stored with an admitted strategy (lib/strategy-evidence.js). */
-function ReportCard({ card }) {
+function ReportCard({ card, hypothesis }) {
   if (!card) return <p className="text-[11px] text-slate-500">No report card — admitted before cards were recorded.</p>
   return (
+    <>
+    {hypothesis?.statement && <p className="text-[11px] text-slate-400 mb-1">Hypothesis{hypothesis.source === 'default' ? ' (type default)' : ''}: {hypothesis.statement}</p>}
     <table className="text-[11px] w-full">
       <tbody>{card.rows.map(r => (
         <tr key={r.key} className="border-t border-slate-500/10 align-top">
@@ -28,6 +30,32 @@ function ReportCard({ card }) {
         </tr>
       ))}</tbody>
     </table>
+    </>
+  )
+}
+
+const HYP_LABEL = { uptrend: 'Up-trends', downtrend: 'Down-trends', range: 'Ranges', calm: 'Calm markets', stressed: 'Stressed markets', 'none stated': 'None stated' }
+
+/** Admitted strategies grouped by the market they claimed to work in. */
+function HypothesisTally({ tally }) {
+  const rows = Object.entries(tally || {})
+  if (!rows.length) return null
+  return (
+    <Card title="Which ideas survive">
+      <p className="text-[11px] text-slate-500 mb-2">Each strategy states the market it should work in before it is tested; its own trades in those markets then judge the claim (supported / unclear / too few trades), and a contradicted claim is never admitted. Forward = re-tests on bars after admission.</p>
+      <table className="text-[11px] w-full">
+        <thead><tr className="text-slate-500 text-left">{['Claimed market', 'Admitted', 'Active', 'Claim judged by its trades', 'Forward'].map(h => <th key={h} className="font-medium pr-3 pb-1">{h}</th>)}</tr></thead>
+        <tbody>{rows.map(([k, t]) => (
+          <tr key={k} className="border-t border-slate-500/10">
+            <td className="pr-3 py-1 text-slate-300">{HYP_LABEL[k] || k}</td>
+            <td className="pr-3 tabular-nums text-slate-300">{t.admitted}</td>
+            <td className="pr-3 tabular-nums text-slate-300">{t.active}</td>
+            <td className="pr-3 text-slate-400">{Object.entries(t.verdicts).map(([v, c]) => `${v} ${c}`).join(' · ')}</td>
+            <td className="pr-3 tabular-nums text-slate-300">{t.forwardTests ? `${t.forwardPasses} / ${t.forwardTests} passed` : 'not yet'}</td>
+          </tr>
+        ))}</tbody>
+      </table>
+    </Card>
   )
 }
 
@@ -146,13 +174,15 @@ export default function StrategyBrainTab() {
                   <td className="pr-3 tabular-nums text-slate-300">{s.forwardPasses} / {s.forwardTests} passed</td>
                   <td className="pr-3"><button type="button" onClick={() => setOpen(open === s.id ? null : s.id)} className={`underline-offset-2 hover:underline ${STATUS_STYLE[s.card?.overall] || 'text-slate-400'}`}>{s.card ? `${s.card.overall}${open === s.id ? ' ▴' : ' ▾'}` : '—'}</button></td>
                 </tr>
-                {open === s.id && <tr><td colSpan={8} className="pb-3 pt-1"><ReportCard card={s.card} /></td></tr>}
+                {open === s.id && <tr><td colSpan={8} className="pb-3 pt-1"><ReportCard card={s.card} hypothesis={s.hypothesis} /></td></tr>}
                 </Fragment>
               ))}</tbody>
             </table>
           </div>
         )}
       </Card>
+
+      <HypothesisTally tally={d.hypotheses} />
 
       <Card title="Recent runs">
         {!d.runs.length ? <p className="text-xs text-slate-500">No run yet. It runs nightly at 3:40 AM ET when switched on{isAdmin ? ', or press Run now' : ''}.</p> : (

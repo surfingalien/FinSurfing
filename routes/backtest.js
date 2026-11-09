@@ -17,7 +17,7 @@ const { runPortfolioBacktest } = require('../utils/portfolio-backtest')
 
 const router = express.Router()
 
-const VALID_STRATEGIES = ['sma_crossover', 'rsi_threshold', 'macd_signal', 'bb_reversion']
+const VALID_STRATEGIES = ['sma_crossover', 'rsi_threshold', 'macd_signal', 'bb_reversion', 'donchian_breakout', 'range_breakout_atr', 'adx_trend']
 const VALID_RANGES     = ['1y', '2y', '5y']
 
 // Execution model for a request: next-bar fills and the asset class's
@@ -51,9 +51,12 @@ function executionFor(body, sym, bars) {
     costBps: Number.isFinite(c) ? Math.max(0, Math.min(200, c)) : costBpsForSymbol(sym),
     fill:    body?.fill === 'close' ? 'close' : 'next',
     opens:   bars.opens,
+    // highs/lows feed the breakout/ADX signals; on their own they change nothing in the simulation
+    highs:   bars.highs,
+    lows:    bars.lows,
   }
   const slippage = slippageFrom(body?.slippage), exits = exitsFrom(body?.exits)
-  if (slippage || exits) Object.assign(out, { highs: bars.highs, lows: bars.lows, volumes: bars.volumes }, slippage ? { slippage } : {}, exits ? { exits } : {})
+  if (slippage || exits) Object.assign(out, { volumes: bars.volumes }, slippage ? { slippage } : {}, exits ? { exits } : {})
   return out
 }
 

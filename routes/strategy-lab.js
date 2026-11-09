@@ -94,6 +94,8 @@ router.post('/propose', requireAuth, async (req, res) => {
   const evaluated = evaluateProposals(proposals, timestamps, closes, capital, {
     costBps: costBpsForSymbol(sym),
     opens:   bars.map(b => b.o),
+    highs:   bars.map(b => b.h),
+    lows:    bars.map(b => b.l),
   })
 
   return res.json({

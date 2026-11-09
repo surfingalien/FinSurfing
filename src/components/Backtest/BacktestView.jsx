@@ -59,6 +59,36 @@ const STRATEGIES = [
       { key: 'mult',   label: 'Std Dev Multiplier', type: 'number', default: 2, min: 1, max: 4, step: 0.5 },
     ],
   },
+  {
+    id: 'donchian_breakout',
+    label: 'Donchian Breakout',
+    description: 'Buy a close above the prior N-day high, sell a close below the prior M-day low',
+    params: [
+      { key: 'entryPeriod', label: 'Breakout Lookback', type: 'number', default: 20, min: 10, max: 100 },
+      { key: 'exitPeriod',  label: 'Exit Lookback',     type: 'number', default: 10, min: 5,  max: 50 },
+    ],
+  },
+  {
+    id: 'range_breakout_atr',
+    label: 'Range Breakout + ATR Expansion',
+    description: 'The same breakout, only on a day whose range is ≥ k × the prior ATR',
+    params: [
+      { key: 'entryPeriod', label: 'Breakout Lookback', type: 'number', default: 20, min: 10, max: 100 },
+      { key: 'exitPeriod',  label: 'Exit Lookback',     type: 'number', default: 10, min: 5,  max: 50 },
+      { key: 'atrPeriod',   label: 'ATR Period',        type: 'number', default: 14, min: 5,  max: 50 },
+      { key: 'expansion',   label: 'Range ÷ ATR at least', type: 'number', default: 1.5, min: 1, max: 3, step: 0.25 },
+    ],
+  },
+  {
+    id: 'adx_trend',
+    label: 'ADX Trend Filter',
+    description: 'Long while ADX ≥ threshold, +DI above −DI and price above its average',
+    params: [
+      { key: 'period',    label: 'ADX Period',   type: 'number', default: 14, min: 5,  max: 50 },
+      { key: 'threshold', label: 'ADX at least', type: 'number', default: 25, min: 15, max: 40 },
+      { key: 'maPeriod',  label: 'Trend Average', type: 'number', default: 50, min: 10, max: 200 },
+    ],
+  },
 ]
 
 const RANGES = [
