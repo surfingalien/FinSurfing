@@ -14,7 +14,7 @@ export default function MacroView() {
         </div>
         <div>
           <h1 className="text-xl font-bold text-white">Macro Dashboard</h1>
-          <p className="text-xs text-slate-500">Key FRED macroeconomic indicators with AI regime assessment</p>
+          <p className="text-xs text-slate-500">Key FRED macroeconomic indicators with a rule-based regime assessment</p>
         </div>
       </div>
       <MacroPanel />

@@ -5,11 +5,20 @@
  * GET /api/macro/indicators  — key FRED macroeconomic indicators
  * GET /api/macro/summary     — AI-formatted macro context string (for prompt injection)
  *
- * Data sources (in order of preference):
- *   1. FRED API  — requires FRED_API_KEY env var (free at https://fred.stlouisfed.org/docs/api/api_key.html)
- *   2. World Bank API — no key required, used as fallback for a subset of series
+ * Data sources, per series:
+ *   1. FRED API  — when FRED_API_KEY is set (free at https://fred.stlouisfed.org/docs/api/api_key.html)
+ *   2. FRED's keyless CSV download (fredgraph.csv) — when there is no key, or the
+ *      API call for that series failed. Same data, same series ids.
  *
- * Results are cached in-process for 1 hour (macro data changes daily at most).
+ * Cached in-process for 1 hour; a result with a failed series only for 5 minutes,
+ * so one bad fetch is not shown as "—" for an hour. `?refresh=1` bypasses the
+ * cache (at most once a minute) — the page's refresh button sends it.
+ *
+ * Year-over-year changes are found BY DATE (the observation a year before the
+ * latest), not by position: the old obs[12] assumed monthly data, so on the
+ * quarterly GDP series it compared with 12 QUARTERS back — a three-year change
+ * of NOMINAL GDP (~+15%) shown as "GDP Growth (QoQ ann.)". GDP growth is now
+ * FRED's own real GDP growth series (A191RL1Q225SBEA, QoQ annualised).
  */
 
 const express = require('express')
@@ -17,7 +26,10 @@ const router  = express.Router()
 const { buildRegimePlaybook } = require('../lib/macro-playbook')
 
 const FRED_BASE  = 'https://api.stlouisfed.org/fred/series/observations'
+const FRED_CSV   = 'https://fred.stlouisfed.org/graph/fredgraph.csv'
 const CACHE_TTL  = 60 * 60 * 1000   // 1 hour
+const PARTIAL_TTL = 5 * 60 * 1000   // when any series failed
+const MIN_REFRESH_MS = 60 * 1000    // ?refresh=1 at most this often
 
 // In-process cache: { data, fetchedAt }
 let _cache = null
@@ -31,7 +43,7 @@ const FRED_SERIES = [
   { id: 'PCEPI',     label: 'PCE Inflation',         unit: '%',  category: 'inflation', description: 'Fed preferred inflation gauge (% change YoY derived)', yoyDerived: true },
   { id: 'UNRATE',    label: 'Unemployment Rate',     unit: '%',  category: 'labor',     description: 'US Civilian Unemployment Rate' },
   { id: 'PAYEMS',    label: 'Nonfarm Payrolls',      unit: 'K',  category: 'labor',     description: 'Monthly change in nonfarm payrolls', momDerived: true },
-  { id: 'GDP',       label: 'GDP Growth (QoQ ann.)', unit: '%',  category: 'growth',    description: 'Real GDP Growth Rate (quarterly annualized)', yoyDerived: true },
+  { id: 'A191RL1Q225SBEA', label: 'Real GDP Growth (QoQ ann.)', unit: '%', category: 'growth', description: 'Real GDP, % change from the previous quarter at an annual rate (BEA)' },
   { id: 'INDPRO',    label: 'Industrial Production', unit: '%',  category: 'growth',    description: 'Industrial Production Index (YoY change derived)', yoyDerived: true },
   { id: 'UMCSENT',   label: 'Consumer Sentiment',    unit: 'pts',category: 'sentiment', description: 'University of Michigan Consumer Sentiment' },
   { id: 'DTWEXBGS',  label: 'USD Index',             unit: 'idx',category: 'currency',  description: 'Broad US Dollar Index (trade-weighted)' },
@@ -40,23 +52,57 @@ const FRED_SERIES = [
   { id: 'BAMLH0A0HYM2', label: 'HY Credit Spread',  unit: '%',  category: 'credit',    description: 'High-Yield OAS spread — rising = tightening credit' },
 ]
 
-// ── Fetch a single FRED series (last 13 obs for YoY/MoM derivation) ──────────
-async function fetchFredSeries(seriesId, apiKey, limit = 2) {
-  const url = `${FRED_BASE}?series_id=${seriesId}&api_key=${apiKey}&file_type=json&sort_order=desc&limit=${limit}`
-  const res = await fetch(url, { signal: AbortSignal.timeout(8000) })
-  if (!res.ok) throw new Error(`FRED ${seriesId}: HTTP ${res.status}`)
+// ── Fetch a single FRED series: [{date, value}] newest first ─────────────────
+// Derived series need a year of history (the year-over-year base is found by date).
+const startFor = s => new Date(Date.now() - ((s.yoyDerived || s.momDerived) ? 430 : 30) * 86400e3).toISOString().slice(0, 10)
+
+async function fetchFredApi(s, apiKey, fetchImpl = fetch) {
+  const url = `${FRED_BASE}?series_id=${s.id}&api_key=${apiKey}&file_type=json&sort_order=desc&observation_start=${startFor(s)}`
+  const res = await fetchImpl(url, { signal: AbortSignal.timeout(8000) })
+  if (!res.ok) throw new Error(`FRED API ${s.id}: HTTP ${res.status}`)
   const json = await res.json()
-  const obs  = (json.observations ?? []).filter(o => o.value !== '.')
-  return obs
+  return (json.observations ?? []).filter(o => o.value !== '.' && o.value !== '')
 }
 
-// Derive YoY % change from last 13 monthly observations
+/** FRED's keyless CSV ("observation_date,SERIES" rows, oldest first) → newest-first observations. Pure. */
+function parseFredCsv(text) {
+  return String(text).trim().split(/\r?\n/).slice(1)
+    .map(l => l.split(','))
+    .filter(([d, v]) => /^\d{4}-\d{2}-\d{2}$/.test(d) && v != null && v !== '' && v !== '.')
+    .map(([date, value]) => ({ date, value }))
+    .reverse()
+}
+
+async function fetchFredCsv(s, fetchImpl = fetch) {
+  const res = await fetchImpl(`${FRED_CSV}?id=${encodeURIComponent(s.id)}&cosd=${startFor(s)}`, { signal: AbortSignal.timeout(10000) })
+  if (!res.ok) throw new Error(`FRED CSV ${s.id}: HTTP ${res.status}`)
+  return parseFredCsv(await res.text())
+}
+
+/** API when keyed, the keyless CSV when not (or when the API call failed). */
+async function fetchFredSeries(s, apiKey, fetchImpl = fetch) {
+  if (apiKey) {
+    try { return { obs: await fetchFredApi(s, apiKey, fetchImpl), source: 'api' } }
+    catch (e) {
+      try { return { obs: await fetchFredCsv(s, fetchImpl), source: 'csv', apiError: e.message } }
+      catch { throw e }
+    }
+  }
+  return { obs: await fetchFredCsv(s, fetchImpl), source: 'csv' }
+}
+
+/** % change from the observation one year before the latest, found by DATE (monthly or quarterly). Pure. */
 function yoyChange(obs) {
-  if (obs.length < 13) return null
-  const latest = parseFloat(obs[0].value)
-  const year   = parseFloat(obs[12].value)
-  if (isNaN(latest) || isNaN(year) || year === 0) return null
-  return +((latest - year) / Math.abs(year) * 100).toFixed(2)
+  if (!obs?.length) return null
+  const latest = obs[0], target = new Date(latest.date + 'T00:00:00Z')
+  target.setUTCFullYear(target.getUTCFullYear() - 1)
+  const t = target.toISOString().slice(0, 10)
+  // the latest observation on or before the same date a year earlier, within 45 days of it
+  const base = obs.find(o => o.date <= t)
+  if (!base || (Date.parse(t) - Date.parse(base.date)) / 86400e3 > 45) return null
+  const a = parseFloat(latest.value), b = parseFloat(base.value)
+  if (isNaN(a) || isNaN(b) || b === 0) return null
+  return +((a - b) / Math.abs(b) * 100).toFixed(2)
 }
 
 // Derive MoM change (absolute)
@@ -69,20 +115,17 @@ function momChange(obs) {
 }
 
 // ── Fetch all FRED series ─────────────────────────────────────────────────────
-async function fetchAllFred(apiKey) {
+async function fetchAllFred(apiKey, fetchImpl = fetch) {
   const results = await Promise.allSettled(
-    FRED_SERIES.map(s => {
-      const limit = (s.yoyDerived || s.momDerived) ? 14 : 2
-      return fetchFredSeries(s.id, apiKey, limit).then(obs => ({ s, obs }))
-    })
+    FRED_SERIES.map(s => fetchFredSeries(s, apiKey, fetchImpl).then(r => ({ s, ...r })))
   )
 
   return results.map((r, i) => {
     const { s } = r.status === 'fulfilled' ? r.value : { s: FRED_SERIES[i] }
     if (r.status !== 'fulfilled') return { ...s, value: null, date: null, error: r.reason?.message }
 
-    const { obs } = r.value
-    if (!obs.length) return { ...s, value: null, date: null }
+    const { obs, source } = r.value
+    if (!obs.length) return { ...s, value: null, date: null, error: 'no observations returned', source }
 
     const rawValue = parseFloat(obs[0].value)
     let value = isNaN(rawValue) ? null : rawValue
@@ -107,6 +150,9 @@ async function fetchAllFred(apiKey) {
       delta,
       changeLabel,
       date: obs[0]?.date ?? null,
+      source,
+      // a derived value that could not be computed is missing, not the raw level
+      ...((s.yoyDerived || s.momDerived) && changeLabel == null ? { value: null, error: 'not enough history to compute the change' } : {}),
     }
   })
 }
@@ -199,15 +245,19 @@ Use this macro context to inform your recommendations — factor in rate environ
 }
 
 // ── Main fetch function ───────────────────────────────────────────────────────
-async function getIndicators() {
-  if (_cache && Date.now() - _cache.fetchedAt < CACHE_TTL) return _cache.data
+async function getIndicators({ refresh = false, fetchImpl = fetch } = {}) {
+  const age = _cache ? Date.now() - _cache.fetchedAt : Infinity
+  if (_cache && age < _cache.ttl && !(refresh && age >= MIN_REFRESH_MS)) return _cache.data
 
-  const apiKey = process.env.FRED_API_KEY
-  if (!apiKey) {
-    return { error: 'FRED_API_KEY not set', indicators: [], regime: null, macroSummary: '' }
+  // No key is fine: every series falls back to FRED's keyless CSV.
+  const apiKey = process.env.FRED_API_KEY || null
+  const indicators = await fetchAllFred(apiKey, fetchImpl)
+  const failed = indicators.filter(i => i.value == null)
+  if (failed.length === indicators.length) {
+    // Nothing loaded: report it, keep any previous good copy, cache nothing.
+    if (_cache) return { ..._cache.data, stale: true, warning: `FRED did not answer just now (${failed[0]?.error || 'unknown error'}); showing the copy from ${_cache.data.fetchedAt}` }
+    return { error: `FRED did not answer for any series (${failed[0]?.error || 'unknown error'})`, indicators: [], regime: null, macroSummary: '' }
   }
-
-  const indicators = await fetchAllFred(apiKey)
   const regime     = assessRegime(indicators)
   const playbook   = buildRegimePlaybook(indicators)
   const macroSummary = buildMacroSummary(indicators, regime, playbook)
@@ -219,8 +269,10 @@ async function getIndicators() {
     macroSummary,
     fetchedAt: new Date().toISOString(),
     source: 'FRED (Federal Reserve Bank of St. Louis)',
+    via: apiKey ? 'FRED API (keyless CSV for any series the API refused)' : 'FRED keyless CSV (no FRED_API_KEY set)',
+    failed: failed.map(i => ({ id: i.id, label: i.label, error: i.error || 'no value' })),
   }
-  _cache = { data, fetchedAt: Date.now() }
+  _cache = { data, fetchedAt: Date.now(), ttl: failed.length ? PARTIAL_TTL : CACHE_TTL }
   return data
 }
 
@@ -228,7 +280,7 @@ async function getIndicators() {
 
 router.get('/indicators', async (req, res) => {
   try {
-    const data = await getIndicators()
+    const data = await getIndicators({ refresh: req.query.refresh === '1' })
     if (data.error) return res.status(503).json(data)
     return res.json(data)
   } catch (err) {
@@ -251,3 +303,4 @@ router.get('/summary', async (req, res) => {
 
 module.exports = router
 module.exports.getIndicators = getIndicators   // exported for use in recommendations route
+module.exports._test = { FRED_SERIES, parseFredCsv, yoyChange, momChange, fetchAllFred, assessRegime, reset: () => { _cache = null } }
