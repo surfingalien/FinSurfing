@@ -70,4 +70,32 @@ describe('getIndicators', () => {
     expect(d.failed).toEqual([])
     expect(d.indicators[0].source).toBe('csv')
   })
+
+  test('with a key, slow series (quarterly GDP, monthly sentiment) still load and monthly series keep their change', async () => {
+    // Production failure: the API was asked for the last 30 days only, so GDP (latest ~4 months old) and
+    // Consumer Sentiment (~2 months old) came back empty and Fed Funds had no previous value for its arrow.
+    process.env.FRED_API_KEY = 'k'
+    const day = n => new Date(Date.now() - n * 864e5).toISOString().slice(0, 10)
+    const history = id => /A191RL1Q225SBEA/.test(id)
+      ? [[day(400), '1.5'], [day(310), '2.0'], [day(220), '2.5'], [day(130), '3.4']]
+      : Array.from({ length: 14 }, (_, i) => [day(60 + 30 * (13 - i)), String(100 + i)])
+    const api = async url => {
+      const u = new URL(url), id = u.searchParams.get('series_id'), start = u.searchParams.get('observation_start')
+      const observations = history(id).filter(([d]) => d >= start).reverse().map(([date, value]) => ({ date, value }))
+      return { ok: true, status: 200, json: async () => ({ observations }) }
+    }
+    const d = await macro.getIndicators({ fetchImpl: api })
+    expect(d.failed).toEqual([])
+    const gdp = d.indicators.find(i => i.id === 'A191RL1Q225SBEA')
+    expect(gdp).toMatchObject({ value: 3.4, source: 'api' })
+    expect(d.indicators.find(i => i.id === 'FEDFUNDS').delta).toBe(1)
+  })
+
+  test('an empty answer from the API falls back to the CSV instead of showing nothing', async () => {
+    process.env.FRED_API_KEY = 'k'
+    const f = async url => (/api\.stlouisfed/.test(url) ? { ok: true, status: 200, json: async () => ({ observations: [] }) } : okCsv()(url))
+    const d = await macro.getIndicators({ fetchImpl: f })
+    expect(d.failed).toEqual([])
+    expect(d.indicators.every(i => i.source === 'csv')).toBe(true)
+  })
 })

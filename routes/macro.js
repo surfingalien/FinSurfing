@@ -12,7 +12,7 @@
  *
  * Cached in-process for 1 hour; a result with a failed series only for 5 minutes,
  * so one bad fetch is not shown as "—" for an hour. `?refresh=1` bypasses the
- * cache (at most once a minute) — the page's refresh button sends it.
+ * cache (at most every 15 seconds) — the page's refresh button sends it.
  *
  * Year-over-year changes are found BY DATE (the observation a year before the
  * latest), not by position: the old obs[12] assumed monthly data, so on the
@@ -29,7 +29,7 @@ const FRED_BASE  = 'https://api.stlouisfed.org/fred/series/observations'
 const FRED_CSV   = 'https://fred.stlouisfed.org/graph/fredgraph.csv'
 const CACHE_TTL  = 60 * 60 * 1000   // 1 hour
 const PARTIAL_TTL = 5 * 60 * 1000   // when any series failed
-const MIN_REFRESH_MS = 60 * 1000    // ?refresh=1 at most this often
+const MIN_REFRESH_MS = 15 * 1000    // ?refresh=1 at most this often
 
 // In-process cache: { data, fetchedAt }
 let _cache = null
@@ -53,15 +53,22 @@ const FRED_SERIES = [
 ]
 
 // ── Fetch a single FRED series: [{date, value}] newest first ─────────────────
-// Derived series need a year of history (the year-over-year base is found by date).
-const startFor = s => new Date(Date.now() - ((s.yoyDerived || s.momDerived) ? 430 : 30) * 86400e3).toISOString().slice(0, 10)
+// 550 days for every series: derived ones need the year-ago base, and the rest need
+// their previous observation for the change arrow. A 30-day window (an earlier
+// version) returned NOTHING for quarterly GDP and for Consumer Sentiment, whose
+// latest values are older than a month, and no previous value for monthly series.
+const LOOKBACK_DAYS = 550   // a monthly value is dated the 1st and published weeks later: its year-ago base can be ~440 days back
+const startFor = () => new Date(Date.now() - LOOKBACK_DAYS * 86400e3).toISOString().slice(0, 10)
 
 async function fetchFredApi(s, apiKey, fetchImpl = fetch) {
   const url = `${FRED_BASE}?series_id=${s.id}&api_key=${apiKey}&file_type=json&sort_order=desc&observation_start=${startFor(s)}`
   const res = await fetchImpl(url, { signal: AbortSignal.timeout(8000) })
   if (!res.ok) throw new Error(`FRED API ${s.id}: HTTP ${res.status}`)
   const json = await res.json()
-  return (json.observations ?? []).filter(o => o.value !== '.' && o.value !== '')
+  const obs = (json.observations ?? []).filter(o => o.value !== '.' && o.value !== '')
+  // An empty answer is a failure, not "no data": let the keyless CSV try.
+  if (!obs.length) throw new Error(`FRED API ${s.id}: no observations returned`)
+  return obs
 }
 
 /** FRED's keyless CSV ("observation_date,SERIES" rows, oldest first) → newest-first observations. Pure. */

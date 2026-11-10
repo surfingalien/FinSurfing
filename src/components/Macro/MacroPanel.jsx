@@ -133,7 +133,7 @@ function IndicatorCard({ ind, tag = null }) {
 export default function MacroPanel() {
   // The refresh button asks the server to skip its cache too (?refresh=1); otherwise it re-read the same hour-old copy.
   const force = useRef(false)
-  const { data, error: queryError, loading, refetch } = useQuery(
+  const { data, error: queryError, loading, fetching, refetch } = useQuery(
     'macro-indicators',
     () => { const url = `/api/macro/indicators${force.current ? '?refresh=1' : ''}`; force.current = false; return fetchJson(url) },
     { staleMs: 10 * 60_000 },
@@ -179,8 +179,9 @@ export default function MacroPanel() {
               <Globe className={`w-4 h-4 ${regStyle.text}`} />
               <span className={`font-bold text-sm ${regStyle.text}`}>{regime?.regime ?? 'No regime'}</span>
             </div>
-            <button onClick={load} title="Fetch fresh data from FRED" className="text-slate-500 hover:text-slate-300 transition-colors">
-              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+            <button onClick={load} disabled={fetching} title="Fetch fresh data from FRED"
+              className="flex items-center gap-1 text-[11px] text-slate-500 hover:text-slate-300 transition-colors disabled:opacity-60">
+              <RefreshCw className={`w-3.5 h-3.5 ${fetching ? 'animate-spin' : ''}`} />{fetching ? 'Refreshing…' : 'Refresh'}
             </button>
           </div>
           <div className="mt-2 space-y-1">
@@ -237,6 +238,7 @@ export default function MacroPanel() {
             {(warning || failed.length > 0) && (
               <div className="text-amber-300">{warning || `Did not load: ${failed.map(f => `${f.label} (${f.error})`).join('; ')}. Press refresh to try again.`}</div>
             )}
+            {error && <div className="text-red-400">Refresh failed: {error}. Showing the previous data.</div>}
           </div>
         </SideCard>
       </aside>
