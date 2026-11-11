@@ -283,7 +283,7 @@ function MainApp({ onSignIn }) {
     'goals':          () => <GoalsView portfolio={portfolio} />,
     'agent-hub':      () => <AgentHubView />,
     'trade-timeline': () => <TradeTimelineView portfolio={portfolio} />,
-    'agentic-os':     () => <AgenticOSView />,
+    'agentic-os':     () => <AgenticOSView section={route.param} onSection={s => navigate('agentic-os', s)} onNavigate={navigateTo} />,
     'dcf-valuation':  () => <DCFView onAnalyze={navigateToAnalyze} />,
     'pattern-finder': () => <PatternFinderView onAnalyze={navigateToAnalyze} />,
     'dividend-screen': () => <DividendView onAnalyze={navigateToAnalyze} />,

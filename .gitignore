@@ -54,3 +54,7 @@ data/strategy-brain.json
 
 # Karpathy loop run folder (results.tsv, STOP, description.txt)
 .karpathy-loop/
+
+# Python bytecode (skills run python; compiling a script must never reach a commit)
+__pycache__/
+*.pyc
