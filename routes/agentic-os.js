@@ -4,12 +4,16 @@
  *
  * Graphify-style knowledge graph of the FinSurfing codebase, served as JSON.
  *
- * GET /api/agentic-os/graph     — full node+edge graph (auto-scanned from require() calls)
- * GET /api/agentic-os/stats     — live system stats + scheduler jobs
- * GET /api/agentic-os/node/:id  — single node detail with neighbours
- * GET /api/agentic-os/skills    — FinSurfing AI capabilities
- * GET /api/agentic-os/mcps      — MCP-style provider list with live env-var status
- * GET /api/agentic-os/refresh   — bust graph cache
+ * GET /api/agentic-os/overview   — the page: verdict, what needs attention, the agents,
+ *                                   spend, connections, activity (lib/agentic-overview.js)
+ * GET /api/agentic-os/data-flow  — how data moves from provider to screen
+ * GET /api/agentic-os/graph      — code graph (auto-scanned from require() calls)
+ * GET /api/agentic-os/stats      — code-graph + scheduler counts
+ * GET /api/agentic-os/node/:id   — single node detail with neighbours
+ * GET /api/agentic-os/refresh    — bust graph cache
+ *
+ * (/skills and /mcps were removed: hand-written lists that claimed sources were
+ * "connected" regardless of whether they were, and named a retired Groq model.)
  */
 
 const express = require('express')
@@ -230,41 +234,59 @@ router.get('/node/:id', (req, res) => {
   }
 })
 
-router.get('/skills', (_req, res) => {
-  res.json({
-    skills: [
-      { id: 'market-scan',      name: 'Market Scanner',      description: 'AI Brain 5-agent scan across 30+ universes',      endpoint: '/api/ai-brain/analyze',          status: 'active', triggerCount: null, tags: ['ai','scan','multi-agent'] },
-      { id: 'symbol-analysis',  name: 'Symbol Analyzer',     description: 'Deep technical + AI signal for any ticker',       endpoint: '/api/trading-analysis/analyze',  status: 'active', triggerCount: null, tags: ['ai','technical','signals'] },
-      { id: 'recommendations',  name: 'Advisory Engine',     description: '10 investor personas × buy signals',              endpoint: '/api/recommendations',           status: 'active', triggerCount: null, tags: ['ai','personas','advisory'] },
-      { id: 'social-sentiment', name: 'Social Sentiment',    description: 'Real-time Reddit/WSB sentiment (free API)',       endpoint: '/api/market-intel',              status: 'active', triggerCount: null, tags: ['alt-data','reddit','wsb'] },
-      { id: 'macro-pulse',      name: 'Macro Pulse',         description: '14 FRED series + regime assessment + AI summary', endpoint: '/api/macro/summary',             status: 'active', triggerCount: null, tags: ['macro','fred','rates'] },
-      { id: 'alt-data',         name: 'Alt Data',            description: 'SEC Form 4 insider + FINRA short interest',       endpoint: '/api/market-intel',              status: 'active', triggerCount: null, tags: ['sec','finra','insider'] },
-      { id: 'copilot',          name: 'MarketPulse Copilot', description: 'Agentic SSE chat (Claude + Groq + Codex)',        endpoint: '/api/copilot/chat',              status: 'active', triggerCount: null, tags: ['ai','sse','agentic'] },
-      { id: 'agent-research',   name: 'Agent Research',      description: '5-agent parallel research orchestrator',          endpoint: '/api/agents/research',           status: 'active', triggerCount: null, tags: ['ai','agents','parallel'] },
-      { id: 'backtest',         name: 'Backtest Engine',     description: '4 strategies × 3 ranges, sequential queue',      endpoint: '/api/backtest',                  status: 'active', triggerCount: null, tags: ['backtest','queue','jsonl'] },
-      { id: 'alert-trigger',    name: 'Alert → AI Trigger',  description: 'Price alert fires → analyze_symbol auto-runs',   endpoint: '/api/alerts/trigger',            status: 'active', triggerCount: null, tags: ['alerts','sse','trigger'] },
-      { id: 'timeline',         name: 'Trade Timeline',      description: 'JSONL prediction log + signal change detection',  endpoint: '/api/timeline',                  status: 'active', triggerCount: null, tags: ['timeline','jsonl','signals'] },
-      { id: 'scheduler',        name: 'Job Scheduler',       description: '7 cron jobs: scans, digest, alt-data refresh',   endpoint: '/api/scheduler/jobs',            status: 'active', triggerCount: null, tags: ['scheduler','cron','jobs'] },
-    ]
-  })
-})
+// ── Overview ──────────────────────────────────────────────────────────────────
+// The same for every signed-in user (nothing here is per-user), so one short
+// shared cache keeps a few open tabs from recomputing the Agent Desk ledger.
+let _overview = null
+let _overviewAt = 0
+const OVERVIEW_TTL_MS = 5_000
+const OVERVIEW_FRESH_MS = 1_000   // ?fresh=1 (after an action, or the Refresh button) — still rate-limited to 1/s
 
-router.get('/mcps', (_req, res) => {
+/** One failing source must never take the page down: it is reported as unavailable. */
+function tryOr(fn, fallback = null) { try { return fn() } catch (e) { console.warn('[agentic-os] source failed:', e.message); return fallback } }
+
+function gatherOverview() {
   const E = process.env
-  res.json({
-    servers: [
-      { id: 'anthropic-claude', name: 'Claude claude-sonnet-4-6',  status: E.ANTHROPIC_API_KEY ? 'connected' : 'disconnected', transport: 'HTTP/SSE', tool: 'claude-sonnet-4-6',  purpose: 'Primary AI reasoning + tool use',         toolCount: 8 },
-      { id: 'groq-llama',       name: 'Groq LLaMA 3.3 70B', status: E.GROQ_API_KEY     ? 'connected' : 'idle',         transport: 'HTTP',     tool: 'llama-3.3-70b',       purpose: 'Fallback fast inference',                 toolCount: 3 },
-      { id: 'finnhub',          name: 'Finnhub Market Data', status: E.FINNHUB_API_KEY  ? 'connected' : 'idle',         transport: 'HTTP',     tool: 'quote/chart/search',  purpose: 'Real-time US equity data',                toolCount: 5 },
-      { id: 'fmp',              name: 'FMP Financial Data',  status: E.FMP_API_KEY      ? 'connected' : 'idle',         transport: 'HTTP',     tool: 'analyst/earnings',    purpose: 'Fundamentals + analyst ratings',          toolCount: 4 },
-      { id: 'fred',             name: 'FRED Macro Data',     status: E.FRED_API_KEY     ? 'connected' : 'idle',         transport: 'HTTP',     tool: '14 macro series',     purpose: 'Rates, inflation, VIX, GDP',              toolCount: 14 },
-      { id: 'sec-edgar',        name: 'SEC EDGAR',           status: 'connected',                                        transport: 'HTTP',     tool: 'Form 4/EFTS',         purpose: 'Insider transactions (free)',              toolCount: 2 },
-      { id: 'finra',            name: 'FINRA Short Interest',status: 'connected',                                        transport: 'HTTP',     tool: 'weeklySummary',       purpose: 'Short interest ratio (free)',              toolCount: 1 },
-      { id: 'reddit',           name: 'Reddit Social',       status: 'connected',                                        transport: 'HTTP',     tool: 'r/wsb r/stocks',      purpose: 'Social sentiment (free JSON)',             toolCount: 2 },
-      { id: 'binance',          name: 'Binance WebSocket',   status: 'connected',                                        transport: 'WSS',      tool: 'crypto ticks',        purpose: 'Real-time crypto prices',                 toolCount: 1 },
-      { id: 'postgres',         name: 'PostgreSQL',          status: E.DATABASE_URL     ? 'connected' : 'idle',         transport: 'TCP',      tool: 'portfolio/auth DB',   purpose: 'Portfolio + auth persistence',             toolCount: 6 },
-    ]
+  const scheduler = tryOr(() => require('../lib/scheduler').getStatus(), [])
+  const desk = tryOr(() => {
+    const d = require('../lib/agent-desk')
+    const pb = require('../lib/paper-broker')
+    const opsAlerts = require('../lib/ops-alerts')
+    const st = d.status()
+    const live = tryOr(() => opsAlerts.collectAlerts({ paper: pb.snapshot(), trades: pb.loadTrades(), desk: st }), [])
+    const feed = tryOr(() => opsAlerts.currentAlerts().filter(a => a.key === 'data-feed'), [])
+    return { ...st, alerts: [...feed, ...live] }
   })
+  const deskLog = tryOr(() => require('../lib/agent-desk').readLog().slice(-80), [])
+  const brain = tryOr(() => require('../lib/strategy-brain').status())
+  const audit = tryOr(() => require('../lib/ai-audit').getStats())
+  const breakers = tryOr(() => require('../lib/circuit-breaker').getAllStatuses(), [])
+  const persistence = tryOr(() => {
+    const s = require('../lib/durable-files').status()
+    return { enabled: !!s.enabled, reason: s.reason, production: E.NODE_ENV === 'production' }
+  })
+  const { claudePaused } = require('../lib/ai-pause')
+  return require('../lib/agentic-overview').buildOverview({
+    jobs: scheduler, desk, deskLog, brain, audit, breakers, persistence,
+    killSwitches: { aiBrain: E.AI_BRAIN_DISABLED === 'true', recommendations: E.AI_RECOMMENDATIONS_DISABLED === 'true' },
+    ai: { claude: !!E.ANTHROPIC_API_KEY, groq: !!E.GROQ_API_KEY, paused: tryOr(() => claudePaused(), false), pausedUntil: E.CLAUDE_PAUSE_UNTIL || null },
+    // Booleans only — a key never leaves the process.
+    env: {
+      anthropic: !!E.ANTHROPIC_API_KEY, groq: !!E.GROQ_API_KEY, finnhub: !!(E.FINNHUB_API_KEY || E.FINNHUB_API_KEYS), fmp: !!E.FMP_API_KEY,
+      alphavantage: !!E.ALPHA_VANTAGE_API_KEY || !!E.AV_API_KEY, twelvedata: !!(E.TWELVE_DATA_API_KEY || E.TD_API_KEY), tiingo: !!E.TIINGO_API_KEY, polygon: !!(E.POLYGON_API_KEY || E.MASSIVE_API_KEY),
+      fred: !!E.FRED_API_KEY, database: !!E.DATABASE_URL, resend: !!(E.RESEND_API_KEY || E.SMTP_HOST), firecrawl: !!E.FIRECRAWL_API_KEY,
+    },
+  })
+}
+
+router.get('/overview', (req, res) => {
+  try {
+    const ttl = req.query.fresh === '1' ? OVERVIEW_FRESH_MS : OVERVIEW_TTL_MS
+    if (!_overview || Date.now() - _overviewAt > ttl) { _overview = gatherOverview(); _overviewAt = Date.now() }
+    res.json(_overview)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
 })
 
 // ── Data-flow graph: how market data moves from source to display ─────────────
@@ -273,30 +295,35 @@ router.get('/mcps', (_req, res) => {
 router.get('/data-flow', (req, res) => {
   const E = process.env
 
-  const connected  = id => ({ status: id === 'binance' || id === 'reddit' || id === 'sec' || id === 'finra' || id === 'stooq' ? 'connected' :
-    id === 'anthropic' ? (E.ANTHROPIC_API_KEY ? 'connected' : 'disconnected') :
-    id === 'groq'      ? (E.GROQ_API_KEY      ? 'connected' : 'idle') :
-    id === 'finnhub'   ? (E.FINNHUB_API_KEY   ? 'connected' : 'idle') :
-    id === 'fmp'       ? (E.FMP_API_KEY        ? 'connected' : 'idle') :
-    id === 'fred'      ? (E.FRED_API_KEY       ? 'connected' : 'idle') :
-    id === 'postgres'  ? (E.DATABASE_URL       ? 'connected' : 'idle') : 'idle' })
+  // What is CONFIGURED, not what is proven to work: 'set' (key present), 'missing' (no key),
+  // 'keyless' (needs none). A hard-wired "connected" here used to claim Reddit worked while
+  // its API answers cloud servers with 403.
+  const has = (...names) => ({ status: names.some(n => E[n]) ? 'set' : 'missing' })
+  const keyless = { status: 'keyless' }
+  const connected = id => ({
+    finnhub: has('FINNHUB_API_KEY', 'FINNHUB_API_KEYS'), fmp: has('FMP_API_KEY'), aisa: has('AISA_API_KEY'),
+    av: has('ALPHA_VANTAGE_API_KEY', 'AV_API_KEY'), twelvedata: has('TWELVE_DATA_API_KEY', 'TD_API_KEY'),
+    tiingo: has('TIINGO_API_KEY'), polygon: has('POLYGON_API_KEY', 'MASSIVE_API_KEY'),
+    anthropic: has('ANTHROPIC_API_KEY'), groq: has('GROQ_API_KEY'), postgres: has('DATABASE_URL'),
+    fred: E.FRED_API_KEY ? { status: 'set' } : keyless,
+  }[id] || keyless)
 
   const nodes = [
     // Tier 0 — external data providers
     { id: 'finnhub',   label: 'Finnhub',       tier: 0, category: 'market',    transport: 'HTTP', ...connected('finnhub'),  dataTypes: ['price','chart','search'], priority: 1 },
     { id: 'fmp',       label: 'FMP',           tier: 0, category: 'market',    transport: 'HTTP', ...connected('fmp'),      dataTypes: ['fundamentals','earnings','analyst'], priority: 2 },
-    { id: 'aisa',      label: 'AISA',          tier: 0, category: 'market',    transport: 'HTTP', status: 'idle',           dataTypes: ['price'], priority: 3 },
-    { id: 'av',        label: 'AlphaVantage',  tier: 0, category: 'market',    transport: 'HTTP', status: 'idle',           dataTypes: ['price','chart'], priority: 4 },
-    { id: 'twelvedata',label: 'TwelveData',    tier: 0, category: 'market',    transport: 'HTTP', status: 'idle',           dataTypes: ['price','chart'], priority: 5 },
-    { id: 'tiingo',    label: 'Tiingo',        tier: 0, category: 'market',    transport: 'HTTP', status: 'idle',           dataTypes: ['price','chart'], priority: 6 },
-    { id: 'polygon',   label: 'Polygon',       tier: 0, category: 'market',    transport: 'HTTP', status: 'idle',           dataTypes: ['price'], priority: 7 },
+    { id: 'aisa',      label: 'AISA',          tier: 0, category: 'market',    transport: 'HTTP', ...connected('aisa'),     dataTypes: ['price'], priority: 3 },
+    { id: 'av',        label: 'AlphaVantage',  tier: 0, category: 'market',    transport: 'HTTP', ...connected('av'),       dataTypes: ['price','chart'], priority: 4 },
+    { id: 'twelvedata',label: 'TwelveData',    tier: 0, category: 'market',    transport: 'HTTP', ...connected('twelvedata'),           dataTypes: ['price','chart'], priority: 5 },
+    { id: 'tiingo',    label: 'Tiingo',        tier: 0, category: 'market',    transport: 'HTTP', ...connected('tiingo'),           dataTypes: ['price','chart'], priority: 6 },
+    { id: 'polygon',   label: 'Polygon',       tier: 0, category: 'market',    transport: 'HTTP', ...connected('polygon'),           dataTypes: ['price'], priority: 7 },
     { id: 'stooq',     label: 'Stooq',         tier: 0, category: 'market',    transport: 'HTTP', ...connected('stooq'),    dataTypes: ['price (delayed)'], priority: 8 },
     { id: 'binance',   label: 'Binance',       tier: 0, category: 'crypto',    transport: 'WSS',  ...connected('binance'),  dataTypes: ['crypto tick'], priority: 1 },
-    { id: 'coingecko', label: 'CoinGecko',     tier: 0, category: 'crypto',    transport: 'HTTP', status: 'connected',      dataTypes: ['crypto price','market cap'], priority: 2 },
+    { id: 'coingecko', label: 'CoinGecko',     tier: 0, category: 'crypto',    transport: 'HTTP', ...keyless,      dataTypes: ['crypto price','market cap'], priority: 2 },
     { id: 'anthropic', label: 'Anthropic',     tier: 0, category: 'ai',        transport: 'HTTP', ...connected('anthropic'),dataTypes: ['AI analysis','streaming chat'], priority: 1 },
     { id: 'groq',      label: 'Groq',          tier: 0, category: 'ai',        transport: 'HTTP', ...connected('groq'),     dataTypes: ['AI fallback','ensemble scan'], priority: 2 },
     { id: 'fred',      label: 'FRED',          tier: 0, category: 'macro',     transport: 'HTTP', ...connected('fred'),     dataTypes: ['14 macro series'], priority: 1 },
-    { id: 'reddit',    label: 'Reddit',        tier: 0, category: 'alt',       transport: 'HTTP', ...connected('reddit'),   dataTypes: ['WSB sentiment','upvote counts'], priority: 1 },
+    { id: 'freesent',  label: 'Free sentiment', tier: 0, category: 'alt',      transport: 'HTTP', ...keyless, dataTypes: ['StockTwits bull/bear','ApeWisdom mentions','news stories'], priority: 1 },
     { id: 'sec',       label: 'SEC EDGAR',     tier: 0, category: 'alt',       transport: 'HTTP', ...connected('sec'),      dataTypes: ['Form 4 insider'], priority: 2 },
     { id: 'finra',     label: 'FINRA',         tier: 0, category: 'alt',       transport: 'HTTP', ...connected('finra'),    dataTypes: ['short interest'], priority: 3 },
     { id: 'postgres',  label: 'PostgreSQL',    tier: 0, category: 'db',        transport: 'TCP',  ...connected('postgres'), dataTypes: ['portfolio','auth','watchlist'], priority: 1 },
@@ -310,7 +337,7 @@ router.get('/data-flow', (req, res) => {
     { id: 'rt:portfolio',label: '/api/portfolios',       tier: 1, category: 'route', description: 'CRUD holdings → Postgres / in-memory fallback' },
     { id: 'rt:copilot',  label: '/api/copilot',          tier: 1, category: 'route', description: 'Agentic streaming chat with 10 registered tools' },
     { id: 'rt:alt',      label: '/lib/alt-data',         tier: 1, category: 'route', description: 'SEC Form 4 + FINRA short interest aggregator' },
-    { id: 'rt:sentiment',label: '/lib/social-sentiment', tier: 1, category: 'route', description: 'Reddit/WSB sentiment — top posts by upvotes' },
+    { id: 'rt:sentiment',label: '/lib/social-sentiment', tier: 1, category: 'route', description: 'Free sentiment lanes — StockTwits, ApeWisdom, Google News (counts only reach the model)' },
     { id: 'rt:ta',       label: '/lib/technical-ind.',   tier: 1, category: 'route', description: 'RSI/MACD/BB/OBV/RS rank — pure TA math' },
 
     // Tier 2 — cache / persistence layers
@@ -368,7 +395,7 @@ router.get('/data-flow', (req, res) => {
     { source: 'finra',      target: 'rt:alt',      dataType: 'short interest' },
     { source: 'rt:alt',     target: 'rt:ai-brain', dataType: 'insider+short signal' },
     // Sentiment
-    { source: 'reddit',     target: 'rt:sentiment',dataType: 'WSB posts' },
+    { source: 'freesent',   target: 'rt:sentiment',dataType: 'sentiment lanes' },
     { source: 'rt:sentiment',target: 'rt:ai-brain',dataType: 'social sentiment' },
     // Options
     { source: 'finnhub',    target: 'cache:options',dataType: 'P/C ratio' },

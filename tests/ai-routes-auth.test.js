@@ -30,6 +30,8 @@ const refused = [
   ['get',  '/api/timeline', null],
   ['get',  '/api/agentic-os/stats', null],
   ['get',  '/api/agentic-os/graph', null],
+  ['get',  '/api/agentic-os/overview', null],
+  ['get',  '/api/agentic-os/data-flow', null],
   ['get',  '/api/market-focus', null],
   ['get',  '/api/scheduler/jobs', null],
   ['get',  '/api/scheduler/cache/scan', null],

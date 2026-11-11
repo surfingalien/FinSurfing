@@ -1,153 +1,161 @@
-import { useState, useEffect, useCallback } from 'react'
-import { motion, AnimatePresence } from 'motion/react'
-import {
-  LayoutDashboard, Network, Plug, Zap, Puzzle, Cpu,
-  BrainCircuit, RefreshCw, Search, GitBranch, Loader2,
-} from 'lucide-react'
-import { useApiFetch } from './tabs/shared'
-import DashboardTab  from './tabs/DashboardTab'
-import GraphifyTab   from './tabs/GraphifyTab'
-import MCPTab        from './tabs/MCPTab'
-import SkillsTab     from './tabs/SkillsTab'
-import PluginsTab    from './tabs/PluginsTab'
-import BrainTab      from './tabs/BrainTab'
+/**
+ * Agentic OS — mission control for the autonomous parts of FinSurfing.
+ *
+ * One request (GET /api/agentic-os/overview, built by lib/agentic-overview.js)
+ * feeds Overview, Agents, Schedule and Connections; Data flow loads its own map.
+ * The page answers, in order: is everything OK, what needs me, what are the
+ * agents doing and costing — and never invents a status it cannot see (a source
+ * that failed to load is listed as unavailable, not shown as healthy).
+ *
+ *   #/agentic-os              Overview
+ *   #/agentic-os/agents       Agents (details + admin controls)
+ *   #/agentic-os/schedule     every scheduled job
+ *   #/agentic-os/connections  configured providers + AI circuit breakers
+ *   #/agentic-os/flow         data flow, provider → screen
+ */
+import { useCallback, useRef, useState } from 'react'
+import { LayoutGrid, Bot, CalendarClock, Plug, Workflow, RefreshCw, Loader2, CheckCircle2, OctagonAlert } from 'lucide-react'
+import { useAuth } from '../../contexts/AuthContext'
+import { useQuery, fetchJson } from '../../hooks/useQuery'
+import { Note, btn, TONE } from './parts/ui'
+import OverviewTab from './parts/OverviewTab'
+import AgentsTab from './parts/AgentsTab'
+import ScheduleTab from './parts/ScheduleTab'
+import ConnectionsTab from './parts/ConnectionsTab'
+import DataFlowTab from './parts/DataFlowTab'
 
 const TABS = [
-  { id: 'dashboard', label: 'Dashboard',    icon: LayoutDashboard },
-  { id: 'graphify',  label: 'Graphify',     icon: Network,   badge: 'LIVE' },
-  { id: 'mcp',       label: 'MCP Servers',  icon: Plug },
-  { id: 'skills',    label: 'Skills',       icon: Zap },
-  { id: 'plugins',   label: 'Plugins',      icon: Puzzle },
-  { id: 'brain',     label: 'Agentic Brain',icon: Cpu },
+  { id: 'overview',    label: 'Overview',    icon: LayoutGrid },
+  { id: 'agents',      label: 'Agents',      icon: Bot },
+  { id: 'schedule',    label: 'Schedule',    icon: CalendarClock },
+  { id: 'connections', label: 'Connections', icon: Plug },
+  { id: 'flow',        label: 'Data flow',   icon: Workflow },
 ]
+const DONE = { run: 'Started. It runs in the background and this page updates as it goes.', job: 'Started. It runs in the background and this page updates as it goes.', toggle: 'Saved.', pause: 'Paused — it stops at its next step.', resume: 'Resumed.', breaker: 'Circuit breaker reset.' }
 
-export default function AgenticOSView() {
-  const apiFetch = useApiFetch()
-  const [tab,    setTab]    = useState('dashboard')
-  const [stats,  setStats]  = useState(null)
-  const [graph,  setGraph]  = useState(null)
-  const [skills, setSkills] = useState([])
-  const [mcps,   setMcps]   = useState([])
-  const [jobs,   setJobs]   = useState([])
-  const [search, setSearch] = useState('')
-  const [loading,setLoading]= useState(false)
-  const [selectedNode, setSelectedNode] = useState(null)
+function Skeleton() {
+  return (
+    <div className="space-y-4 animate-pulse" aria-busy="true" aria-label="Loading Agentic OS">
+      <div className="h-36 rounded-2xl bg-slate-500/10" />
+      <div className="grid gap-4 lg:grid-cols-5"><div className="h-52 rounded-2xl bg-slate-500/10 lg:col-span-3" /><div className="h-52 rounded-2xl bg-slate-500/10 lg:col-span-2" /></div>
+      <div className="h-64 rounded-2xl bg-slate-500/10" />
+    </div>
+  )
+}
 
-  const load = useCallback(async () => {
-    setLoading(true)
+export default function AgenticOSView({ section, onSection, onNavigate }) {
+  const { authFetch, isAuthenticated, user } = useAuth()
+  const isAdmin = user?.role === 'admin'
+  const tab = TABS.some(t => t.id === section) ? section : 'overview'
+  const fresh = useRef(false)
+  const [busy, setBusy] = useState(null)
+  const [notice, setNotice] = useState(null)
+
+  // Poll quickly only while something is running; otherwise every 30s.
+  const [fast, setFast] = useState(false)
+  const key = `agentic-os:overview:${user?.id || 'me'}`
+  const q = useQuery(key, async () => {
+    const url = fresh.current ? '/api/agentic-os/overview?fresh=1' : '/api/agentic-os/overview'
+    fresh.current = false
+    const d = await fetchJson(url, undefined, authFetch)
+    setFast(d.agents?.some(a => a.state === 'running') || d.kpis?.jobsRunning > 0)
+    return d
+  }, { staleMs: 15_000, refetchMs: fast ? 5_000 : 30_000, enabled: isAuthenticated })
+
+  const { refetch } = q
+  const refresh = useCallback(() => { fresh.current = true; return refetch() }, [refetch])
+
+  /** Every write on this page goes through here: one busy flag, one notice, then a fresh read. */
+  const act = useCallback(async (actKey, url, body, method = 'POST') => {
+    setBusy(actKey); setNotice(null)
     try {
-      const [s, g, sk, m, j] = await Promise.allSettled([
-        apiFetch('/api/agentic-os/stats'),
-        apiFetch('/api/agentic-os/graph'),
-        apiFetch('/api/agentic-os/skills'),
-        apiFetch('/api/agentic-os/mcps'),
-        apiFetch('/api/scheduler/jobs'),
-      ])
-      if (s.status === 'fulfilled') setStats(s.value)
-      if (g.status === 'fulfilled') setGraph(g.value)
-      if (sk.status === 'fulfilled') setSkills(sk.value.skills || [])
-      if (m.status === 'fulfilled') setMcps(m.value.servers || [])
-      if (j.status === 'fulfilled') setJobs(j.value || [])
-    } finally { setLoading(false) }
-  }, [])
+      const r = await authFetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body ?? {}) })
+      const d = await r.json().catch(() => ({}))
+      if (!r.ok || d.error) throw new Error(d.error || `HTTP ${r.status}`)
+      setNotice({ tone: 'ok', text: DONE[actKey.split(':')[0]] || 'Done.' })
+    } catch (e) {
+      setNotice({ tone: 'bad', text: e.message })
+    } finally {
+      setBusy(null)
+      refresh()
+    }
+  }, [authFetch, refresh])
 
-  useEffect(() => { load() }, [load])
+  /** A string is a tab on this page; an object { tab, param } is another page of the app. */
+  const go = useCallback((target) => {
+    if (typeof target === 'string') { onSection?.(target === 'overview' ? undefined : target); return }
+    if (target?.tab) onNavigate?.(target.tab, target.param)
+  }, [onSection, onNavigate])
 
-  const connectedMcps = mcps.filter(m => m.status === 'connected').length
-  const activeJobs    = jobs.filter(j => j.result?.status === 'running').length
+  const onTabKey = (e) => {
+    const i = TABS.findIndex(t => t.id === tab)
+    const next = e.key === 'ArrowRight' ? TABS[(i + 1) % TABS.length] : e.key === 'ArrowLeft' ? TABS[(i - 1 + TABS.length) % TABS.length] : e.key === 'Home' ? TABS[0] : e.key === 'End' ? TABS.at(-1) : null
+    if (!next) return
+    e.preventDefault()
+    go(next.id)
+    requestAnimationFrame(() => document.getElementById(`ao-tab-${next.id}`)?.focus())
+  }
+
+  if (!isAuthenticated) return <div className="p-4 max-w-6xl"><Note>Sign in to see Agentic OS.</Note></div>
+
+  const d = q.data
+  const counts = d ? { agents: d.agents.length, schedule: d.jobs.length } : {}
+  const badge = (id) => (id === 'schedule' && d?.kpis.jobsFailing ? { n: d.kpis.jobsFailing, bad: true } : counts[id] != null ? { n: counts[id] } : null)
 
   return (
-    <div className="flex h-full overflow-hidden bg-[#0a0a0f] text-slate-200">
-      <div className="fixed inset-0 pointer-events-none opacity-30"
-        style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, rgba(99,102,241,0.15) 1px, transparent 0)', backgroundSize: '40px 40px' }} />
-
-      {/* Sidebar */}
-      <aside className="w-56 flex-shrink-0 flex flex-col border-r border-white/[0.06] bg-[#12121a]/90 backdrop-blur-xl z-10">
-        <div className="p-4 border-b border-white/[0.06]">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
-              <BrainCircuit size={17} className="text-white" />
-            </div>
-            <div>
-              <div className="font-bold text-sm tracking-tight text-white">Agentic OS</div>
-              <div className="text-[10px] text-slate-500 font-mono">FinSurfing v1.0</div>
-            </div>
-          </div>
+    <div className="p-4 max-w-6xl w-full min-w-0 space-y-4">
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-xl font-bold text-white">Agentic OS</h1>
+          <p className="text-sm text-slate-400 mt-0.5">The autonomous agents that run FinSurfing — what they’re doing, what they cost, and what needs you.</p>
         </div>
-
-        <nav className="flex-1 p-2 space-y-0.5">
-          <div className="text-[10px] font-semibold text-slate-600 uppercase tracking-wider px-3 py-2">Command Center</div>
-          {TABS.map(t => {
-            const Icon = t.icon
-            const active = tab === t.id
-            return (
-              <button key={t.id} onClick={() => setTab(t.id)}
-                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
-                  active
-                    ? 'bg-indigo-500/15 border border-indigo-500/25 text-indigo-300'
-                    : 'text-slate-400 hover:bg-white/[0.04] hover:text-white'
-                }`}>
-                <Icon size={15} />
-                {t.label}
-                {t.badge && <span className="ml-auto text-[9px] bg-indigo-500/20 text-indigo-400 px-1.5 py-0.5 rounded-full">{t.badge}</span>}
-                {t.id === 'mcp'    && <span className="ml-auto text-[10px] bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded-full">{connectedMcps}</span>}
-                {t.id === 'skills' && <span className="ml-auto text-[10px] bg-purple-500/20 text-purple-400 px-1.5 py-0.5 rounded-full">{skills.length}</span>}
-                {t.id === 'brain'  && activeJobs > 0 && <span className="ml-auto w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />}
-              </button>
-            )
-          })}
-        </nav>
-
-        <div className="p-3 border-t border-white/[0.06] space-y-2">
-          <div className="flex justify-between text-[10px]">
-            <span className="text-slate-500">Graph Nodes</span>
-            <span className="text-indigo-400 font-mono">{stats?.nodes ?? '—'}</span>
-          </div>
-          <div className="flex justify-between text-[10px]">
-            <span className="text-slate-500">Scheduled Jobs</span>
-            <span className="text-emerald-400 font-mono">{jobs.length} active</span>
-          </div>
-          <button onClick={load} className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[10px] text-slate-500 hover:text-slate-300 hover:bg-white/[0.04] transition-all">
-            <RefreshCw size={10} className={loading ? 'animate-spin' : ''} />
-            Refresh
+        <div className="flex items-center gap-3 text-[11px] text-slate-500">
+          {d && <span aria-live="off">Updated {new Date(d.generatedAt).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', second: '2-digit' })}</span>}
+          <button type="button" className={btn} onClick={refresh} disabled={q.fetching} aria-label="Refresh now">
+            {q.fetching ? <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" /> : <RefreshCw className="w-3.5 h-3.5" aria-hidden="true" />}Refresh
           </button>
         </div>
-      </aside>
+      </header>
 
-      {/* Main content */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <header className="h-12 flex-shrink-0 flex items-center justify-between px-5 border-b border-white/[0.06] bg-[#12121a]/70 backdrop-blur-xl">
-          <div className="flex items-center gap-3">
-            <div className="relative">
-              <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
-              <input value={search} onChange={e => setSearch(e.target.value)}
-                placeholder="Search graph nodes, skills, MCPs…"
-                className="w-72 bg-white/[0.04] border border-white/[0.06] rounded-lg pl-8 pr-3 py-1.5 text-xs text-white placeholder-slate-600 outline-none focus:border-indigo-500/40 transition-colors" />
-            </div>
-            <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
-              <GitBranch size={11} />
-              <span className="font-mono">main</span>
-              <span className="text-emerald-400">●</span>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            {loading && <Loader2 size={13} className="text-indigo-400 animate-spin" />}
-            <div className="text-[10px] text-slate-500 font-mono">{stats?.generatedAt ? new Date(stats.generatedAt).toLocaleTimeString() : ''}</div>
-          </div>
-        </header>
+      <div role="tablist" aria-label="Agentic OS sections" onKeyDown={onTabKey} className="flex gap-1 overflow-x-auto border-b border-slate-500/15 -mb-px">
+        {TABS.map(t => {
+          const on = t.id === tab
+          const b = badge(t.id)
+          const Icon = t.icon
+          return (
+            <button key={t.id} id={`ao-tab-${t.id}`} role="tab" type="button" aria-selected={on} aria-controls="ao-panel" tabIndex={on ? 0 : -1} onClick={() => go(t.id)}
+              className={`shrink-0 inline-flex items-center gap-2 px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-mint-500/40 rounded-t-md ${on ? 'text-white border-mint-500' : 'text-slate-400 border-transparent hover:text-white'}`}>
+              <Icon className="w-4 h-4" aria-hidden="true" />{t.label}
+              {b && <span className={`text-[10px] tabular-nums px-1.5 py-px rounded-full border ${b.bad ? TONE.bad : 'text-slate-400 border-slate-500/20'}`}>{b.n}{b.bad ? ' failing' : ''}</span>}
+            </button>
+          )
+        })}
+      </div>
 
-        <div className="flex-1 overflow-y-auto p-5">
-          <AnimatePresence mode="wait">
-            <motion.div key={tab} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
-              {tab === 'dashboard' && <DashboardTab stats={stats} graph={graph} jobs={jobs} mcps={mcps} skills={skills} onTabSwitch={setTab} />}
-              {tab === 'graphify'  && <GraphifyTab graph={graph} search={search} selectedNode={selectedNode} onSelectNode={setSelectedNode} />}
-              {tab === 'mcp'       && <MCPTab mcps={mcps} />}
-              {tab === 'skills'    && <SkillsTab skills={skills} />}
-              {tab === 'plugins'   && <PluginsTab />}
-              {tab === 'brain'     && <BrainTab jobs={jobs} stats={stats} mcps={mcps} onRefresh={load} />}
-            </motion.div>
-          </AnimatePresence>
+      {notice && (
+        <div role="status" className={`flex items-start gap-2 text-xs rounded-xl px-3 py-2 border ${notice.tone === 'ok' ? TONE.ok : TONE.bad}`}>
+          {notice.tone === 'ok' ? <CheckCircle2 className="w-4 h-4 shrink-0" aria-hidden="true" /> : <OctagonAlert className="w-4 h-4 shrink-0" aria-hidden="true" />}
+          <span className="flex-1">{notice.text}</span>
+          <button type="button" className="underline opacity-80 hover:opacity-100" onClick={() => setNotice(null)}>Dismiss</button>
         </div>
+      )}
+
+      <div id="ao-panel" className="min-w-0" role="tabpanel" aria-labelledby={`ao-tab-${tab}`}>
+        {q.loading ? <Skeleton /> : q.error && !d ? (
+          <div className="space-y-3">
+            <Note>Could not load Agentic OS: {q.error.message}.</Note>
+            <button type="button" className={btn} onClick={refresh}><RefreshCw className="w-3.5 h-3.5" aria-hidden="true" />Try again</button>
+          </div>
+        ) : d && (
+          <>
+            {q.error && <div className="mb-3"><Note>Showing the last good data — the latest refresh failed: {q.error.message}.</Note></div>}
+            {tab === 'overview'    && <OverviewTab data={d} go={go} />}
+            {tab === 'agents'      && <AgentsTab data={d} isAdmin={isAdmin} act={act} busy={busy} go={go} />}
+            {tab === 'schedule'    && <ScheduleTab data={d} isAdmin={isAdmin} act={act} busy={busy} />}
+            {tab === 'connections' && <ConnectionsTab data={d} isAdmin={isAdmin} act={act} busy={busy} go={go} />}
+            {tab === 'flow'        && <DataFlowTab />}
+          </>
+        )}
       </div>
     </div>
   )
