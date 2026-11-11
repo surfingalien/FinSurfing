@@ -71,7 +71,7 @@ describe('normalizeConfig', () => {
     expect(c.stateDir).toBe('.karpathy-loop')
   })
   test('rejects missing pieces and whole-repo scope', () => {
-    expect(() => L.normalizeConfig({ ...ok, agent: '' })).toThrow(/agent/)
+    expect(() => L.normalizeConfig({ ...ok, program: '' })).toThrow(/program/)
     expect(() => L.normalizeConfig({ ...ok, metric: {} })).toThrow(/metric.command/)
     expect(() => L.normalizeConfig({ ...ok, editable: [] })).toThrow(/editable/)
     expect(() => L.normalizeConfig({ ...ok, editable: ['.'] })).toThrow(/never "\."/)
@@ -110,7 +110,8 @@ function makeRepo({ branch = 'loop/test', guardFailsOn = null } = {}) {
   fs.writeFileSync(agentPath, `
     const fs = require('fs')
     const plan = JSON.parse(fs.readFileSync(${JSON.stringify(planPath)}, 'utf8'))
-    const step = plan[Number(process.env.KARPATHY_ITERATION) - 1] || {}
+    const base = plan[Number(process.env.KARPATHY_ITERATION) - 1] || {}
+    const step = Number(process.env.KARPATHY_ATTEMPT || 0) > 0 ? (base.fix || {}) : base
     for (const [f, v] of Object.entries(step.write || {})) { fs.mkdirSync(require('path').dirname(f), { recursive: true }); fs.writeFileSync(f, v) }
     if (step.crash) process.exit(1)
     if (step.desc) { fs.mkdirSync('.karpathy-loop', { recursive: true }); fs.writeFileSync('.karpathy-loop/description.txt', step.desc) }
@@ -126,7 +127,31 @@ function makeRepo({ branch = 'loop/test', guardFailsOn = null } = {}) {
 }
 
 const quiet = { log: () => {} }
+const secondaryRuler = "const v=require('fs').readFileSync('value.txt','utf8');console.log('metric: '+Number(v.split(' ')[0]));console.log('metric.cost: '+Number(v.split(' ')[1]||10))\n"
 const rows = (repo) => fs.readFileSync(path.join(repo, '.karpathy-loop/results.tsv'), 'utf8').trim().split('\n').map(l => l.split('\t'))
+
+describe('parseMetrics / secondaryProblem', () => {
+  test('secondary lines never become the primary score', () => {
+    expect(L.parseMetrics('metric.mem: 44\nmetric: 0.99\nmetric.t: 3.5')).toEqual({ primary: 0.99, secondary: { mem: 44, t: 3.5 } })
+    expect(L.parseMetric('metric.mem: 44')).toBeNull()
+  })
+  test('limit is against the ORIGINAL baseline; unlimited metrics are log-only; a vanished limited metric fails', () => {
+    const specs = { mem: { direction: 'min', maxWorsePct: 10 }, free: { direction: 'min', maxWorsePct: null } }
+    expect(L.secondaryProblem(specs, { mem: 100, free: 1 }, { mem: 110, free: 999 })).toBeNull()
+    expect(L.secondaryProblem(specs, { mem: 100, free: 1 }, { mem: 111, free: 1 })).toMatch(/mem 111 vs baseline 100 exceeds the 10%/)
+    expect(L.secondaryProblem(specs, { mem: 100 }, { free: 1 })).toMatch(/mem not reported/)
+    expect(L.secondaryProblem({ q: { direction: 'max', maxWorsePct: 20 } }, { q: 10 }, { q: 7.9 })).toMatch(/q 7.9/)
+    expect(L.secondaryProblem({ q: { direction: 'max', maxWorsePct: 20 } }, { q: 10 }, { q: 8 })).toBeNull()
+  })
+  test('config validation for secondary and crashRetries', () => {
+    const ok = { program: 'p.md', editable: ['a.js'], metric: { command: 'm' } }
+    expect(L.normalizeConfig({ ...ok, secondary: { mem: { maxWorsePct: 5 } } }).secondary.mem).toEqual({ direction: 'min', maxWorsePct: 5 })
+    expect(() => L.normalizeConfig({ ...ok, secondary: { 'bad name': {} } })).toThrow(/must be a word/)
+    expect(() => L.normalizeConfig({ ...ok, secondary: { m: { maxWorsePct: -1 } } })).toThrow(/maxWorsePct/)
+    expect(L.normalizeConfig(ok).crashRetries).toBe(2)
+    expect(L.normalizeConfig({ ...ok, crashRetries: 0 }).crashRetries).toBe(0)
+  })
+})
 
 describe('loop (temp git repo, scripted agent)', () => {
   test('keeps improvements, discards regressions, ignores edits to the ruler', () => {
@@ -234,5 +259,144 @@ describe('bundle-size example ruler', () => {
     const r = spawnSync('node', [path.join(__dirname, '../tools/karpathy-loop/examples/bundle-size/measure.js'), '--no-build'], { env: { ...process.env, DIST_DIR: dir }, encoding: 'utf8' })
     expect(L.parseMetric(r.stdout)).toBe(gzippedKb(dir))
     expect(() => gzippedKb(path.join(dir, 'nope'))).toThrow(/no .*assets/)
+  })
+})
+
+
+describe('crash retries (runner mode)', () => {
+  test('a typo is fixed in the SAME commit and the experiment is kept', () => {
+    const { repo, setPlan, config } = makeRepo()
+    setPlan([{ write: { 'value.txt': 'oops\n' }, desc: 'lower it', fix: { write: { 'value.txt': '80\n' } } }])
+    const out = L.run(config({ maxIterations: 1 }), quiet)
+    const t = rows(repo).slice(1)
+    expect(t.map(r => r[4])).toEqual(['baseline', 'keep'])
+    expect(t[1][7]).toBe('lower it (after 1 fix)')
+    expect(out.best).toBe(80)
+    // one experiment, one commit (the fix was amended in)
+    expect(git(repo, ['log', '--format=%s', 'main..HEAD']).split('\n')).toEqual(['experiment 1: lower it'])
+  })
+
+  test('a failing guard is also given a chance; an idea that stays broken is a crash and fully reset', () => {
+    const { repo, setPlan, config } = makeRepo({ guardFailsOn: 50 })
+    setPlan([{ write: { 'value.txt': '50\n' }, desc: 'trips guard', fix: { write: { 'value.txt': '50\n\n' } } }])
+    const out = L.run(config({ maxIterations: 1, crashRetries: 2 }), quiet)
+    expect(rows(repo).slice(1).map(r => r[4])).toEqual(['baseline', 'guard-fail'])
+    expect(out.kept).toBe(0)
+    expect(fs.readFileSync(path.join(repo, 'value.txt'), 'utf8').trim()).toBe('100')
+    expect(git(repo, ['status', '--porcelain'])).toBe('')
+    expect(git(repo, ['log', '--format=%s', 'main..HEAD'])).toBe('')
+  })
+
+  test('a fix that changes nothing ends the experiment at once; crashRetries 0 never retries', () => {
+    const a = makeRepo()
+    a.setPlan([{ write: { 'value.txt': 'oops\n' }, desc: 'broken', fix: {} }])
+    L.run(a.config({ maxIterations: 1 }), quiet)
+    expect(rows(a.repo)[2][4]).toBe('crash')
+    expect(rows(a.repo)[2][7]).toMatch(/fix changed nothing/)
+
+    const b = makeRepo()
+    b.setPlan([{ write: { 'value.txt': 'oops\n' }, desc: 'broken', fix: { write: { 'value.txt': '1\n' } } }])
+    L.run(b.config({ maxIterations: 1, crashRetries: 0 }), quiet)
+    expect(rows(b.repo)[2][4]).toBe('crash')
+  })
+
+  test('a fix cannot step outside scope', () => {
+    const { repo, setPlan, config } = makeRepo()
+    setPlan([{ write: { 'value.txt': 'oops\n' }, desc: 'x', fix: { write: { 'value.txt': '1\n', 'ruler.js': "console.log('metric: 0')\n" } } }])
+    L.run(config({ maxIterations: 1 }), quiet)
+    expect(rows(repo)[2][4]).toBe('scope-violation')
+    expect(fs.readFileSync(path.join(repo, 'ruler.js'), 'utf8')).toContain('readFileSync')
+  })
+})
+
+describe('secondary metric constraint (runner mode)', () => {
+  test('a better primary that blows the secondary limit is constraint-fail, logged with the secondary', () => {
+    const { repo, setPlan, config } = makeRepo()
+    fs.writeFileSync(path.join(repo, 'ruler.js'), secondaryRuler)
+    fs.writeFileSync(path.join(repo, 'value.txt'), '100 10\n')
+    git(repo, ['add', '-A']); git(repo, ['commit', '-q', '-m', 'two metrics'])
+    setPlan([
+      { write: { 'value.txt': '90 30\n' }, desc: 'faster but costs 3x' },   // constraint-fail
+      { write: { 'value.txt': '90 11\n' }, desc: 'faster, cost +10%' },      // keep
+    ])
+    const out = L.run(config({ maxIterations: 2, secondary: { cost: { direction: 'min', maxWorsePct: 20 } } }), quiet)
+    const t = rows(repo)
+    expect(t[0]).toEqual(L.TSV_HEADER)
+    expect(t.slice(1).map(r => r[4])).toEqual(['baseline', 'constraint-fail', 'keep'])
+    expect(t[1][6]).toBe('cost=10')
+    expect(t[2][6]).toBe('cost=30')
+    expect(t[2][7]).toMatch(/exceeds the 20% limit/)
+    expect(out.best).toBe(90)
+  })
+
+  test('a limit on a metric the baseline does not print is refused up front', () => {
+    const { config, repo } = makeRepo()
+    expect(() => L.run(config({ secondary: { cost: { maxWorsePct: 10 } } }), quiet)).toThrow(/did not print "metric.cost/)
+    expect(fs.existsSync(repo)).toBe(true)
+  })
+})
+
+describe('agent-driven mode (init / step / status; state persisted between calls)', () => {
+  const edit = (repo, v) => fs.writeFileSync(path.join(repo, 'value.txt'), v)
+
+  test('init, keep, discard, retry-then-fix, abandon, and the stop signal', () => {
+    const { repo, config } = makeRepo()
+    const raw = { ...config({ maxIterations: 4, crashRetries: 1 }), agent: undefined }
+    const cmd = (sub, ...args) => L.agentCommand(sub, raw, args)
+
+    expect(cmd('init')).toMatchObject({ ok: true, baseline: 100, direction: 'min' })
+
+    edit(repo, '90\n')
+    expect(cmd('step', 'lower to 90')).toMatchObject({ ok: true, status: 'keep', best: 90, iter: 1 })
+
+    edit(repo, '95\n')
+    expect(cmd('step', 'worse')).toMatchObject({ status: 'discard', iter: 2 })
+    expect(fs.readFileSync(path.join(repo, 'value.txt'), 'utf8').trim()).toBe('90')
+
+    edit(repo, 'oops\n')
+    const r = cmd('step', 'typo')
+    expect(r).toMatchObject({ status: 'retry', failure: 'crash', fixesLeft: 1, iter: 3 })
+    expect(cmd('status').pending).toMatchObject({ iter: 3, fixesUsed: 1 })
+    edit(repo, '80\n')                                   // the fix; description is remembered
+    expect(cmd('step')).toMatchObject({ status: 'keep', best: 80, iter: 3 })
+    expect(rows(repo).pop()[7]).toBe('typo (after 1 fix)')
+
+    edit(repo, 'oops again\n')
+    expect(cmd('step', 'second typo').status).toBe('retry')
+    expect(cmd('step', '--abandon')).toMatchObject({ status: 'crash', abandoned: true, iter: 4 })
+    expect(fs.readFileSync(path.join(repo, 'value.txt'), 'utf8').trim()).toBe('80')
+
+    // 4 of 4 iterations used → the next step is refused and status says why
+    expect(cmd('status').stop).toMatch(/maxIterations/)
+    edit(repo, '70\n')
+    expect(cmd('step', 'one more')).toMatchObject({ ok: false, stop: expect.stringMatching(/maxIterations/) })
+  })
+
+  test('step needs init, and refuses if the branch changed', () => {
+    const { repo, config } = makeRepo()
+    const raw = { ...config(), agent: undefined }
+    expect(() => L.agentCommand('step', raw, ['x'])).toThrow(/run `init` first/)
+    L.agentCommand('init', raw, [])
+    git(repo, ['switch', '-q', '-c', 'elsewhere'])
+    expect(() => L.agentCommand('step', raw, ['x'])).toThrow(/branch changed/)
+  })
+
+  test('the CLI works end to end as separate processes', () => {
+    const { repo, config } = makeRepo()
+    const cfgPath = path.join(repo, '..', 'cfg.json')
+    fs.writeFileSync(cfgPath, JSON.stringify({ ...config(), agent: undefined }))
+    const bin = path.join(__dirname, '../tools/karpathy-loop/loop.js')
+    const call = (...a) => spawnSync('node', [bin, ...a], { cwd: repo, encoding: 'utf8' })
+    expect(JSON.parse(call('init', cfgPath).stdout).baseline).toBe(100)
+    edit(repo, '60\n')
+    const s = call('step', cfgPath, 'cli step')
+    expect(JSON.parse(s.stdout)).toMatchObject({ status: 'keep', best: 60 })
+    expect(JSON.parse(call('status', cfgPath).stdout)).toMatchObject({ iter: 1, kept: 1, best: 60 })
+    expect(call('step', path.join(repo, 'missing.json'), 'x').status).not.toBe(0)
+  })
+
+  test('runner mode requires an agent', () => {
+    const { config } = makeRepo()
+    expect(() => L.run({ ...config(), agent: undefined }, quiet)).toThrow(/"agent" is required in runner mode/)
   })
 })

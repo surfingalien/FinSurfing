@@ -21,7 +21,32 @@ Stop it with `Ctrl-C` (finishes the current experiment) or `touch .karpathy-loop
 Afterwards the branch holds only the kept experiments; review it like any other branch.
 The log is `.karpathy-loop/results.tsv` (git-excluded automatically):
 `iter commit metric delta status seconds description`, with `status` one of
-`baseline keep discard crash noop scope-violation guard-fail recheck`.
+`baseline keep discard constraint-fail crash noop scope-violation guard-fail recheck`
+(`secondary` holds `name=value` pairs; a crashed or retried experiment is one row, `(after N fixes)` in its description).
+An older `results.tsv` with different columns is renamed aside, never appended to.
+
+## Two ways to drive it
+
+**Runner mode** (above): the runner calls `agent` once per experiment, a fresh process each time. It sees
+the program, the loop state and the last 12 results, nothing else — cheap, bounded, easy to run unattended.
+
+**Agent-driven mode**: one long-lived Claude session does the experiments and calls the tool for the
+mechanical part, the way Karpathy's original `program.md` works. The agent keeps its own context, so it can
+combine near-misses and change tack — at the price of a growing context. The agent never touches git:
+
+```bash
+node tools/karpathy-loop/loop.js init   <config.json>                 # preflight + baseline (once)
+node tools/karpathy-loop/loop.js step   <config.json> "what and why"  # one experiment on the edits it just made
+node tools/karpathy-loop/loop.js step   <config.json> --abandon       # give up on a crashed experiment
+node tools/karpathy-loop/loop.js status <config.json>                 # state, pending fix, recent results
+```
+
+Each call prints JSON: `status` (`keep`, `discard`, `constraint-fail`, `crash`, `noop`, `scope-violation`,
+`guard-fail` or `retry`), `metric`, `best`, and `stop` — non-null when a budget is spent, which is the
+agent's cue to finish (the budgets are enforced here, not trusted to the model). State lives in
+`.karpathy-loop/state.json`. Start the session from `program.agent-driven.template.md` and point it at that
+file ("read the program and let's set up"). Both modes use the same `attempt()`, so every rule below applies
+to both.
 
 ## The three files
 
@@ -39,6 +64,8 @@ The log is `.karpathy-loop/results.tsv` (git-excluded automatically):
 | `agent` | Shell command that reads the prompt on stdin and edits files, e.g. `claude -p --permission-mode acceptEdits --allowedTools "Read,Edit,Write,Grep,Glob"`. It should not commit — the runner does. It may write a one-line description to `.karpathy-loop/description.txt`. `KARPATHY_ITERATION` is set. |
 | `editable` | Repo-relative files, or directories ending in `/`. Never `.`. |
 | `metric` | `{command, direction: "min"\|"max", timeoutSec, tolerance, minImprovement}`. The command prints `metric: <number>`; any other output is ignored. |
+| `secondary` | Optional `{ "<name>": {direction, maxWorsePct} }` for lines `metric.<name>: <number>` the command also prints (build time, memory…). Always logged in the `secondary` column. With `maxWorsePct` it is a soft constraint: a step that makes it more than that % worse than the **original baseline** is `constraint-fail` even if the main metric improved. (Against the baseline, not the last step — a creeping +5% per kept step would never trip a step-to-step check.) The baseline must print a limited metric, and a limited metric that stops being printed fails the step. |
+| `crashRetries` | Default 2. A crash or failing guard is not discarded at once: the agent gets the error and may fix it in place, amended into the same commit (one experiment, one commit), up to this many times; `0` = discard immediately. A fix that changes nothing, or touches anything out of scope, ends the experiment. |
 | `guard` | Optional command that must exit 0 (e.g. the tests); a failure discards the experiment. |
 | `maxIterations` `maxMinutes` `maxConsecutiveFailures` | Hard stops (defaults 20 / 120 / 5). |
 | `recheckEvery` | Every N kept steps HEAD is re-measured and the best is reset to that, so a noisy metric cannot ratchet on luck (default 5, 0 = off). |
@@ -49,7 +76,9 @@ The log is `.karpathy-loop/results.tsv` (git-excluded automatically):
 - **The agent cannot change the ruler.** Edits outside `editable` (the metric script, guard, program.md,
   this config) are reverted — otherwise the cheapest way to "improve" a number is to edit what measures it.
 - **The runner owns git.** A dedicated branch + clean tree make `reset --hard` safe; the agent never commits.
-- **Crashes, timeouts, no output, failing guard and no-ops are each a logged status**, never a keep.
+- **Crashes, timeouts, no output, failing guard and no-ops are each a logged status**, never a keep — but a
+  small mistake gets up to `crashRetries` fixes first, as in the original (typo: fix it; broken idea: skip it).
+- **Secondary metrics** (the original logged memory beside val_bpb as a soft constraint) are logged and can be limited.
 - **Ties go to the simpler diff** (more lines deleted than added) — the simplicity criterion.
 - **A `metric:` line, not "the last line"**, so a stray log line cannot become the score.
 
