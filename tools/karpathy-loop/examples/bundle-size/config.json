@@ -1,0 +1,12 @@
+{
+  "program": "tools/karpathy-loop/examples/bundle-size/program.md",
+  "agent": "claude -p --permission-mode acceptEdits --allowedTools \"Read,Edit,Write,Grep,Glob\"",
+  "editable": ["vite.config.mjs"],
+  "metric": { "command": "node tools/karpathy-loop/examples/bundle-size/measure.js", "direction": "min", "timeoutSec": 300, "tolerance": 0.05 },
+  "secondary": { "build_seconds": { "direction": "min", "maxWorsePct": 100 } },
+  "crashRetries": 2,
+  "guard": { "command": "npx jest --testPathPatterns=tests/shared-cjs --forceExit", "timeoutSec": 300 },
+  "maxIterations": 15,
+  "maxMinutes": 90,
+  "recheckEvery": 5
+}
