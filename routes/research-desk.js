@@ -281,8 +281,64 @@ router.get('/theses', requireAuth, async (req, res) => {
       verdict: t.judgement?.verdict, stance: t.judgement?.stance, summary: t.judgement?.summary,
       horizonDays: t.judgement?.horizonDays, zones: t.judgement?.zones, reasons: t.judgement?.reasons,
       status: desk.thesisStatus(t, barsBy[t.symbol] || []),
+      // The date this thesis said it could be checked, and the fact that would prove it wrong.
+      review: desk.reviewOf(t),
     })),
   })
+})
+
+// ── Compare: up to six symbols side by side on measured facts (lib/research-compare.js) ──
+// No model. Bars and SEC facts are fetched together; a symbol that fails is
+// reported in `failed`, never silently dropped. Cached 10 minutes per symbol set.
+const compare = require('../lib/research-compare')
+const _compareCache = new Map()
+const COMPARE_TTL_MS = 10 * 60_000
+
+router.get('/compare', requireAuth, evidenceLimit, async (req, res) => {
+  const { symbols, dropped, invalid } = compare.parseSymbols(req.query.symbols)
+  if (symbols.length < 2) return res.status(400).json({ error: 'Give at least two symbols to compare, e.g. AAPL, MSFT, NVDA' })
+  const key = [...symbols].sort().join(',')
+  const hit = _compareCache.get(key)
+  if (hit && Date.now() - hit.at < COMPARE_TTL_MS) return res.json({ ...hit.data, order: symbols, cached: true })
+  try {
+    const headers = fwdKeys(req)
+    const today = new Date().toISOString().slice(0, 10)
+    const secFacts = require('../lib/sec-facts')
+    const spyBars = await fetchDailyBars('SPY', { range: '2y', headers, timeoutMs: 15_000 }).catch(() => [])
+    const barsBy = {}
+    const rows = await Promise.all(symbols.map(async sym => {
+      const bars = sym === 'SPY' ? spyBars : await fetchDailyBars(sym, { range: '2y', headers, timeoutMs: 20_000 }).catch(() => [])
+      barsBy[sym] = bars
+      let sec = null
+      if (assetTypeOf(sym) === 'stock' && bars.length) {
+        const facts = await secFacts.getCompanyFacts(sym).catch(() => null)
+        sec = facts ? secFacts.snapshotAt(facts, today, { price: bars.at(-1)?.c }) : null
+      }
+      let name = null
+      try { name = require('../lib/symbol-db').classify(sym)?.name ?? null } catch { /* index not loaded */ }
+      return compare.rowFor({ symbol: sym, bars, benchBars: sym === 'SPY' ? null : spyBars, sec, name })
+    }))
+    const okSyms = rows.filter(r => r.ok).map(r => r.symbol)
+    if (okSyms.length < 2) return res.status(422).json({ error: `Could not price enough of these to compare: ${rows.filter(r => !r.ok).map(r => `${r.symbol} (${r.reason})`).join('; ')}` })
+    const data = compare.buildComparison(rows, { correlation: compare.correlations(Object.fromEntries(okSyms.map(s => [s, barsBy[s]]))) })
+    data.dropped = dropped; data.invalid = invalid
+    _compareCache.set(key, { at: Date.now(), data })
+    if (_compareCache.size > 200) _compareCache.delete(_compareCache.keys().next().value)
+    res.json({ ...data, order: symbols, cached: false })
+  } catch (e) {
+    console.error('[research-desk/compare]', e.message)
+    res.status(500).json({ error: 'Comparison failed' })
+  }
+})
+
+// Peers by industry classification (lib/symbol-db via edgar-search.findPeers): no model, no network.
+router.get('/peers/:symbol', requireAuth, (req, res) => {
+  const sym = cleanSymbol(req.params.symbol)
+  if (!sym) return res.status(400).json({ error: 'Invalid symbol' })
+  try {
+    const r = require('../lib/edgar-search').findPeers(sym, { limit: 5, minCap: 'Large Cap' })
+    res.json({ symbol: sym, basis: r.basis, of: r.self ?? null, peers: r.peers.map(p => ({ symbol: p.symbol, name: p.company })) })
+  } catch (e) { res.json({ symbol: sym, basis: null, of: null, peers: [], note: 'The symbol index is not loaded yet.' }) }
 })
 
 router.get('/track-record', requireAuth, (req, res) => {
