@@ -245,6 +245,8 @@ function MainApp({ onSignIn }) {
   }, [navigate])
 
   const navigateToAnalyze = useCallback((symbol) => navigate('analyze', symbol), [navigate])
+  // Hand a list of picks to the Research Desk's Compare tab (first six).
+  const compareSymbols = useCallback((symbols) => navigate('research-desk', `vs:${[...new Set(symbols)].slice(0, 6).join(',')}`), [navigate])
 
   // ── View registry — one lazy chunk per tab ──
   const views = {
@@ -272,8 +274,8 @@ function MainApp({ onSignIn }) {
     'risk-rules':     () => <RiskRulesView portfolio={portfolio} />,
     'trade-setups':   () => <TradeSetupView portfolio={portfolio} />,
     'backtest':       () => <BacktestView />,
-    'buy-signals':    () => <BuySignalsView portfolio={portfolio} onAnalyze={navigateToAnalyze} />,
-    'ai-brain':       () => <AIBrainView portfolio={portfolio} onAnalyze={navigateToAnalyze} />,
+    'buy-signals':    () => <BuySignalsView portfolio={portfolio} onAnalyze={navigateToAnalyze} onCompare={compareSymbols} />,
+    'ai-brain':       () => <AIBrainView portfolio={portfolio} onAnalyze={navigateToAnalyze} onCompare={compareSymbols} />,
     'brain-activity': () => <BrainActivityView onAnalyze={navigateToAnalyze} />,
     'market-focus':   () => <MarketFocusView portfolio={portfolio} watchlist={watchlist.symbols} />,
     'ai-watchlist':   () => <AIWatchlistView onAnalyze={navigateToAnalyze} />,
@@ -388,7 +390,7 @@ function MainApp({ onSignIn }) {
           <footer className="border-t border-white/[0.04] py-4 px-6">
             <div className="max-w-screen-2xl mx-auto flex items-center justify-between text-xs text-slate-600">
               <span>FinSurfing v2.0 · Real-time US Equity Platform</span>
-              <span>Data via Yahoo Finance · Not financial advice</span>
+              <span>Market data from multiple providers · Not financial advice</span>
             </div>
           </footer>
         </main>
@@ -415,7 +417,8 @@ function MainApp({ onSignIn }) {
       />
     ),
     macro: () => <V3MarketsView onNavigate={navigateTo} />,
-    'research-desk': () => <V3ResearchView symbol={route.tab === 'research-desk' ? route.param : null} onSymbol={s => navigate('research-desk', s)} onSignIn={onSignIn} />,
+    // A comparison link (vs:AAPL,MSFT) is handled by the v1 Research Desk's Compare tab.
+    'research-desk': () => /^vs:/i.test(route.param || '') ? views['research-desk']() : <V3ResearchView symbol={route.tab === 'research-desk' ? route.param : null} onSymbol={s => navigate('research-desk', s)} onSignIn={onSignIn} />,
     screener: () => <V3DiscoverView onNavigate={navigateTo} onAnalyze={navigateToAnalyze} />,
     'brain-activity': () => <V3BrainView onNavigate={navigateTo} onAnalyze={navigateToAnalyze} onSignIn={onSignIn} />,
     'quant-lab': () => <V3QuantView section={route.param} positions={portfolio.positions} onNavigate={navigateTo} onSignIn={onSignIn} />,

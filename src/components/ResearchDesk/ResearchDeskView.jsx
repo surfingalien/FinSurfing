@@ -4,19 +4,22 @@
  *   evidence (measured, in code) → thesis (model, must cite evidence)
  *   → judgement (code: citations, levels, expected value) → tracked outcome
  *
- * Three tabs: Research (the flow), My theses (every thesis scored against the
- * market), Track record (the system's measured record, with intervals).
+ * Tabs: Research (the flow), Compare (up to six symbols side by side on measured
+ * facts — deep link #/research-desk/vs:AAPL,MSFT), My theses (every thesis scored
+ * against the market, with the ones due for review first), Track record, and
+ * Is it working?.
  * Backend: routes/research-desk.js; pure logic: lib/research-desk.js.
  */
 import { useState, useCallback, useEffect, useRef } from 'react'
 import {
-  Microscope, Loader2, FileSearch, PenLine, ListChecks, LineChart, AlertTriangle, Stethoscope, Download
+  Microscope, Loader2, FileSearch, PenLine, ListChecks, LineChart, AlertTriangle, Stethoscope, Download, Columns3
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { getApiKeyHeaders } from '../../services/api'
 import EvidenceList from './parts/EvidenceList'
 import ThesisResult from './parts/ThesisResult'
 import ThesesList from './parts/ThesesList'
+import CompareTab from './parts/CompareTab'
 import TrackRecord from './parts/TrackRecord'
 import SystemStatus from './parts/SystemStatus'
 import { TradePlan } from '../AIBrain/scan/StockCardParts'
@@ -24,6 +27,7 @@ import * as researchReport from '../../../lib/research-report.js'
 
 const TABS = [
   { id: 'research', label: 'Research',     icon: FileSearch },
+  { id: 'compare',  label: 'Compare',      icon: Columns3 },
   { id: 'theses',   label: 'My theses',    icon: ListChecks },
   { id: 'record',   label: 'Track record', icon: LineChart },
   { id: 'status',   label: 'Is it working?', icon: Stethoscope },
@@ -43,8 +47,10 @@ function downloadReport(dossier, thesis) {
 
 export default function ResearchDeskView({ defaultSymbol = null, onSymbol }) {
   const { authFetch, isAuthenticated } = useAuth()
-  const [tab, setTab]           = useState('research')
-  const [input, setInput]       = useState(defaultSymbol || '')
+  // "vs:AAPL,MSFT" in the URL is a comparison, not a symbol.
+  const vs = /^vs:/i.test(defaultSymbol || '') ? defaultSymbol.slice(3).toUpperCase() : null
+  const [tab, setTab]           = useState(vs ? 'compare' : 'research')
+  const [input, setInput]       = useState(vs ? '' : defaultSymbol || '')
   const [dossier, setDossier]   = useState(null)
   const [thesis, setThesis]     = useState(null)
   const [debate, setDebate]     = useState(false)
@@ -86,6 +92,7 @@ export default function ResearchDeskView({ defaultSymbol = null, onSymbol }) {
   }, [call, dossier, debate])
 
   useEffect(() => {
+    if (vs) { setTab('compare'); return }
     const s = defaultSymbol?.toUpperCase()
     if (s && isAuthenticated && s !== requested.current) { setInput(s); gather(s) }
   }, [defaultSymbol, isAuthenticated]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -196,6 +203,11 @@ export default function ResearchDeskView({ defaultSymbol = null, onSymbol }) {
             </div>
           )}
         </div>
+      )}
+
+      {isAuthenticated && tab === 'compare' && (
+        <CompareTab call={call} initial={vs || ''} onSymbols={list => onSymbol?.(`vs:${list}`)}
+          onOpen={s => { setTab('research'); setInput(s); gather(s) }} />
       )}
 
       {isAuthenticated && tab === 'theses' && (

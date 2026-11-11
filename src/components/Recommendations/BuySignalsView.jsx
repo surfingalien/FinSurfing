@@ -81,7 +81,7 @@ function getApiKeyHeaders() {
 }
 
 /* ── Main view ───────────────────────────────────── */
-export default function BuySignalsView({ portfolio, onAnalyze }) {
+export default function BuySignalsView({ portfolio, onAnalyze, onCompare }) {
   const [recs,          setRecs]          = useState(null)
   const [loading,       setLoading]       = useState(false)
   const [error,         setError]         = useState(null)
@@ -424,11 +424,22 @@ export default function BuySignalsView({ portfolio, onAnalyze }) {
                 : 'No recommendations match the selected filters.'}
             </div>
           ) : (
+            <>
+            {onCompare && displayed.map(r => r.symbol).length >= 2 && (
+              <div className="flex justify-end">
+                <button type="button" onClick={() => onCompare(displayed.map(r => r.symbol))}
+                  title="Put these side by side on measured facts — returns, risk, valuation, fundamentals. No AI call."
+                  className="text-xs px-3 py-1.5 rounded-lg border border-slate-500/25 text-slate-300 hover:text-mint-400">
+                  Compare {Math.min(6, displayed.map(r => r.symbol).length) === displayed.map(r => r.symbol).length ? 'these' : 'the top 6'} side by side →
+                </button>
+              </div>
+            )}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
               {displayed.map((rec, i) => (
                 <RecCard key={`${rec.symbol}-${i}`} rec={rec} onAnalyze={onAnalyze} liveQuote={liveQuotes[rec.symbol]} />
               ))}
             </div>
+            </>
           )}
 
           {/* Disclaimer */}

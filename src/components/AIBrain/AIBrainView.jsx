@@ -31,7 +31,7 @@ import SymbolSearchInput from './scan/SymbolSearchInput'
 import { useAuth } from '../../contexts/AuthContext'
 
 /* ── Main view ────────────────────────────────────────────── */
-export default function AIBrainView({ portfolio, onAnalyze }) {
+export default function AIBrainView({ portfolio, onAnalyze, onCompare }) {
   const { authFetch } = useAuth()
   const [analysis,      setAnalysis]      = useState(null)
   const [loading,       setLoading]       = useState(false)
@@ -496,6 +496,15 @@ export default function AIBrainView({ portfolio, onAnalyze }) {
                     🎯 auto-filtered · score ≥ {analysis.thresholdApplied}
                   </span>
                 )}
+              </div>
+            )}
+            {onCompare && visibleStocks.filter(s => s.actionable !== false).map(s => s.symbol).length >= 2 && (
+              <div className="flex justify-end">
+                <button type="button" onClick={() => onCompare(visibleStocks.filter(s => s.actionable !== false).map(s => s.symbol))}
+                  title="Put these side by side on measured facts — returns, risk, valuation, fundamentals. No AI call."
+                  className="text-xs px-3 py-1.5 rounded-lg border border-slate-500/25 text-slate-300 hover:text-mint-400">
+                  Compare {Math.min(6, visibleStocks.filter(s => s.actionable !== false).map(s => s.symbol).length) === visibleStocks.filter(s => s.actionable !== false).map(s => s.symbol).length ? 'these' : 'the top 6'} side by side →
+                </button>
               </div>
             )}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
