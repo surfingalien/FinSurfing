@@ -4,7 +4,8 @@
  *   evidence (measured, in code) → thesis (model, must cite evidence)
  *   → judgement (code: citations, levels, expected value) → tracked outcome
  *
- * Tabs: Research (the flow), Compare (up to six symbols side by side on measured
+ * Tabs: Research (the flow), Queue (the watchlist and holdings as a worklist —
+ * #/research-desk/queue), Compare (up to six symbols side by side on measured
  * facts — deep link #/research-desk/vs:AAPL,MSFT), My theses (every thesis scored
  * against the market, with the ones due for review first), Track record, and
  * Is it working?.
@@ -12,7 +13,7 @@
  */
 import { useState, useCallback, useEffect, useRef } from 'react'
 import {
-  Microscope, Loader2, FileSearch, PenLine, ListChecks, LineChart, AlertTriangle, Stethoscope, Download, Columns3
+  Microscope, Loader2, FileSearch, PenLine, ListChecks, LineChart, AlertTriangle, Stethoscope, Download, Columns3, ListTodo
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { getApiKeyHeaders } from '../../services/api'
@@ -20,6 +21,7 @@ import EvidenceList from './parts/EvidenceList'
 import ThesisResult from './parts/ThesisResult'
 import ThesesList from './parts/ThesesList'
 import CompareTab from './parts/CompareTab'
+import QueueTab from './parts/QueueTab'
 import TrackRecord from './parts/TrackRecord'
 import SystemStatus from './parts/SystemStatus'
 import { TradePlan } from '../AIBrain/scan/StockCardParts'
@@ -27,6 +29,7 @@ import * as researchReport from '../../../lib/research-report.js'
 
 const TABS = [
   { id: 'research', label: 'Research',     icon: FileSearch },
+  { id: 'queue',    label: 'Queue',        icon: ListTodo },
   { id: 'compare',  label: 'Compare',      icon: Columns3 },
   { id: 'theses',   label: 'My theses',    icon: ListChecks },
   { id: 'record',   label: 'Track record', icon: LineChart },
@@ -45,12 +48,14 @@ function downloadReport(dossier, thesis) {
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
-export default function ResearchDeskView({ defaultSymbol = null, onSymbol }) {
+export default function ResearchDeskView({ defaultSymbol = null, onSymbol, queueSymbols = [] }) {
   const { authFetch, isAuthenticated } = useAuth()
   // "vs:AAPL,MSFT" in the URL is a comparison, not a symbol.
   const vs = /^vs:/i.test(defaultSymbol || '') ? defaultSymbol.slice(3).toUpperCase() : null
-  const [tab, setTab]           = useState(vs ? 'compare' : 'research')
-  const [input, setInput]       = useState(vs ? '' : defaultSymbol || '')
+  // "queue" in the URL is the worklist tab (#/research-desk/queue).
+  const isQueue = /^queue$/i.test(defaultSymbol || '')
+  const [tab, setTab]           = useState(vs ? 'compare' : isQueue ? 'queue' : 'research')
+  const [input, setInput]       = useState(vs || isQueue ? '' : defaultSymbol || '')
   const [dossier, setDossier]   = useState(null)
   const [thesis, setThesis]     = useState(null)
   const [debate, setDebate]     = useState(false)
@@ -93,6 +98,7 @@ export default function ResearchDeskView({ defaultSymbol = null, onSymbol }) {
 
   useEffect(() => {
     if (vs) { setTab('compare'); return }
+    if (isQueue) { setTab('queue'); return }
     const s = defaultSymbol?.toUpperCase()
     if (s && isAuthenticated && s !== requested.current) { setInput(s); gather(s) }
   }, [defaultSymbol, isAuthenticated]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -203,6 +209,12 @@ export default function ResearchDeskView({ defaultSymbol = null, onSymbol }) {
             </div>
           )}
         </div>
+      )}
+
+      {isAuthenticated && tab === 'queue' && (
+        <QueueTab call={call} symbols={queueSymbols}
+          onOpen={s => { setTab('research'); setInput(s); gather(s) }}
+          onCompare={list => onSymbol?.(`vs:${list.join(',')}`)} />
       )}
 
       {isAuthenticated && tab === 'compare' && (

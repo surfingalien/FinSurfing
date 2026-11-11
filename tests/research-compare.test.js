@@ -137,3 +137,39 @@ describe('reviewOf — when a thesis said it could be checked', () => {
     expect(desk.reviewOf(thesis(v('not-a-date')), { now: NOW })).toBeNull()
   })
 })
+
+describe('research queue', () => {
+  const row = (symbol, ret1m, extra = {}) => ({ symbol, ok: true, values: { ret1m }, flags: [], thesis: null, ...extra })
+  test('flags are fixed-threshold facts, each with its wording', () => {
+    expect(C.queueFlags({ fromHigh: -1.5, ret1m: 3, vol21: 20 }).map(f => f.id)).toEqual(['nearHigh'])
+    expect(C.queueFlags({ fromHigh: -25, ret1m: -15, vol21: 60 }).map(f => f.id)).toEqual(['drawdown', 'bigMove', 'highVol'])
+    expect(C.queueFlags({ fromHigh: -10, ret1m: 14.9, vol21: 59.9 })).toEqual([])
+    expect(C.queueFlags({ fromHigh: null, ret1m: null, vol21: null })).toEqual([])   // unknown is not a flag
+    expect(C.queueFlags({ fromHigh: -2 })[0].label).toBe('Within 2% of its 52-week high')
+  })
+  test('day change needs two closes', () => {
+    expect(C.dayChange([{ c: 100 }, { c: 103 }])).toBe(3)
+    expect(C.dayChange([{ c: 100 }])).toBeNull()
+  })
+  test('order: review due, resolved thesis, review soon, flagged, quiet, unpriced — then the larger monthly move', () => {
+    const rows = [
+      row('QUIET', 1),
+      row('FLAG', 2, { flags: [{ id: 'bigMove' }] }),
+      row('SOON', 0, { thesis: { state: 'open', review: { state: 'soon' } } }),
+      row('HIT', 0, { thesis: { state: 'target-hit', review: null } }),
+      row('DUE', 0, { thesis: { state: 'open', review: { state: 'due' } } }),
+      { symbol: 'BAD', ok: false, reason: 'no price history' },
+      row('QUIET2', -9),
+    ]
+    expect(C.orderQueue(rows).map(r => r.symbol)).toEqual(['DUE', 'HIT', 'SOON', 'FLAG', 'QUIET2', 'QUIET', 'BAD'])
+    expect(rows[0].symbol).toBe('QUIET')                       // input not mutated
+  })
+  test('queueRow carries the day change, flags and the thesis; an unpriced symbol keeps its thesis and says why', () => {
+    const bars = series(300, { seed: 4 })
+    const r = C.queueRow({ symbol: 'AAA', bars, name: 'Triple A', thesis: { verdict: 'actionable' } })
+    expect(r).toMatchObject({ ok: true, name: 'Triple A', thesis: { verdict: 'actionable' } })
+    expect(r.values.ret1d).toBe(+((bars.at(-1).c / bars.at(-2).c - 1) * 100).toFixed(2))
+    expect(Array.isArray(r.flags)).toBe(true)
+    expect(C.queueRow({ symbol: 'ZZZ', bars: [], thesis: { verdict: 'no-trade' } })).toMatchObject({ ok: false, reason: 'no price history', thesis: { verdict: 'no-trade' } })
+  })
+})

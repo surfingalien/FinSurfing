@@ -245,6 +245,10 @@ function MainApp({ onSignIn }) {
   }, [navigate])
 
   const navigateToAnalyze = useCallback((symbol) => navigate('analyze', symbol), [navigate])
+  // The Research Desk's Queue: watchlist first, then holdings, plain tickers only (no cash or option rows).
+  const researchQueue = useMemo(() => [...new Set([...(watchlist.symbols || []), ...(portfolio.positions || []).map(p => p.symbol)]
+    .map(x => String(x || '').toUpperCase()).filter(x => /^[A-Z0-9][A-Z0-9.\-]{0,11}$/.test(x)))],
+  [watchlist.symbols, portfolio.positions])
   // Hand a list of picks to the Research Desk's Compare tab (first six).
   const compareSymbols = useCallback((symbols) => navigate('research-desk', `vs:${[...new Set(symbols)].slice(0, 6).join(',')}`), [navigate])
 
@@ -304,6 +308,7 @@ function MainApp({ onSignIn }) {
       <ResearchDeskView
         defaultSymbol={route.tab === 'research-desk' ? route.param : null}
         onSymbol={s => navigate('research-desk', s)}
+        queueSymbols={researchQueue}
       />
     ),
     'admin':          () => <AdminDashboard />,
@@ -418,7 +423,7 @@ function MainApp({ onSignIn }) {
     ),
     macro: () => <V3MarketsView onNavigate={navigateTo} />,
     // A comparison link (vs:AAPL,MSFT) is handled by the v1 Research Desk's Compare tab.
-    'research-desk': () => /^vs:/i.test(route.param || '') ? views['research-desk']() : <V3ResearchView symbol={route.tab === 'research-desk' ? route.param : null} onSymbol={s => navigate('research-desk', s)} onSignIn={onSignIn} />,
+    'research-desk': () => /^(vs:|queue$)/i.test(route.param || '') ? views['research-desk']() : <V3ResearchView symbol={route.tab === 'research-desk' ? route.param : null} onSymbol={s => navigate('research-desk', s)} onSignIn={onSignIn} />,
     screener: () => <V3DiscoverView onNavigate={navigateTo} onAnalyze={navigateToAnalyze} />,
     'brain-activity': () => <V3BrainView onNavigate={navigateTo} onAnalyze={navigateToAnalyze} onSignIn={onSignIn} />,
     'quant-lab': () => <V3QuantView section={route.param} positions={portfolio.positions} onNavigate={navigateTo} onSignIn={onSignIn} />,

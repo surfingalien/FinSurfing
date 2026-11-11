@@ -331,6 +331,49 @@ router.get('/compare', requireAuth, evidenceLimit, async (req, res) => {
   }
 })
 
+// ── Research queue: the watchlist and holdings as one worklist ───────────────
+// POST because the list comes from the browser (the watchlist lives in localStorage).
+// Bars only — no SEC call, no model — so forty symbols stay quick. Each symbol's
+// row is cached 10 minutes; the user's own thesis state is read fresh every time.
+const _queueCache = new Map()
+router.post('/queue', requireAuth, evidenceLimit, express.json({ limit: '20kb' }), async (req, res) => {
+  const list = Array.isArray(req.body?.symbols) ? req.body.symbols.join(',') : ''
+  const { symbols, dropped, invalid } = compare.parseSymbols(list, { max: compare.QUEUE_MAX })
+  if (!symbols.length) return res.json({ rows: [], dropped, invalid, flagRules: flagRules() })
+  try {
+    const headers = fwdKeys(req)
+    const userId = effectiveUserId(req)
+    const latest = new Map()                                  // newest thesis per symbol for this user
+    for (const t of readTheses()) if (t.userId === userId) latest.set(t.symbol, t)
+    const rows = []
+    for (let i = 0; i < symbols.length; i += 6) {             // six at a time: polite to the data providers
+      rows.push(...await Promise.all(symbols.slice(i, i + 6).map(async sym => {
+        let hit = _queueCache.get(sym)
+        if (!hit || Date.now() - hit.at > COMPARE_TTL_MS) {
+          const bars = await fetchDailyBars(sym, { range: '1y', headers, timeoutMs: 20_000 }).catch(() => [])
+          let name = null
+          try { name = require('../lib/symbol-db').classify(sym)?.name ?? null } catch { /* index not loaded */ }
+          hit = { at: Date.now(), bars, name }
+          if (bars.length) _queueCache.set(sym, hit)
+        }
+        const t = latest.get(sym)
+        const thesis = t ? {
+          at: t.at, verdict: t.judgement?.verdict ?? null,
+          state: desk.thesisStatus(t, hit.bars)?.state ?? null,
+          review: desk.reviewOf(t),
+        } : null
+        return compare.queueRow({ symbol: sym, bars: hit.bars, name: hit.name, thesis })
+      })))
+    }
+    if (_queueCache.size > 400) for (const k of [..._queueCache.keys()].slice(0, 100)) _queueCache.delete(k)
+    res.json({ rows: compare.orderQueue(rows), dropped, invalid, flagRules: flagRules() })
+  } catch (e) {
+    console.error('[research-desk/queue]', e.message)
+    res.status(500).json({ error: 'Could not build the research queue' })
+  }
+})
+const flagRules = () => Object.entries(compare.FLAG_RULES).map(([id, r]) => ({ id, label: r.label }))
+
 // Peers by industry classification (lib/symbol-db via edgar-search.findPeers): no model, no network.
 router.get('/peers/:symbol', requireAuth, (req, res) => {
   const sym = cleanSymbol(req.params.symbol)
