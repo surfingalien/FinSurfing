@@ -306,3 +306,16 @@ describe('thesisStatus — first touch, same rule as the Brain', () => {
     expect(thesisStatus({ judgement: { verdict: 'no-trade' } }, [])).toEqual({ state: 'no-trade' })
   })
 })
+
+describe('earnings-reaction evidence', () => {
+  const desk = require('../lib/research-desk')
+  const bars = Array.from({ length: 80 }, (_, i) => ({ t: Date.UTC(2026, 0, 1) + i * 86400000, o: 100, h: 101, l: 99, c: 100, v: 1e6 }))
+  test('is a citable item when supplied and absent when not', () => {
+    const text = 'On its last 8 earnings releases NVDA moved a median 5.2% against SPY.'
+    const withIt = desk.buildEvidence({ symbol: 'NVDA', bars, earningsReaction: text })
+    const item = withIt.items.find(i => i.kind === 'earnings-reaction')
+    expect(item.text).toBe(text)
+    expect(item.citable).not.toBe(false)
+    expect(desk.buildEvidence({ symbol: 'NVDA', bars }).items.some(i => i.kind === 'earnings-reaction')).toBe(false)
+  })
+})

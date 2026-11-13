@@ -7,7 +7,7 @@
  *                        — no market data, no AI, no cost: inputs in, numbers out (size-capped)
  *   market-data, sign-in POST /optimize, /volatility, /timeseries, /pairs, /pairs/screen, /statarb, /reversal,
  *                        /risk/capm, /risk/factors, /risk/copula, /risk/pca, /risk/dcc, /ml/compare, /ml/cluster, /ml/rl,
- *                        /holdings-scan (every tool above across the user's holdings at once)
+ *                        /holdings-scan (every tool above across the user's holdings at once), /event-study
  *                        — fetch daily bars over loopback, so they need a user and a tighter rate limit;
  *                        the slow ones are heartbeated (clients must check `data.error` as well as `res.ok`)
  * Nothing here calls a language model. Tests: tests/quant-route.test.js
@@ -35,6 +35,9 @@ const hedge = require('../lib/quant/hedging')
 const exo   = require('../lib/quant/exotics')
 const vrpQ  = require('../lib/quant/vrp')
 const varB  = require('../lib/quant/var-backtest')
+const evs   = require('../lib/event-study')
+const { isCryptoSymbol } = require('../lib/crypto-classify')
+const { costBpsForSymbol } = require('../utils/backtest')
 
 const router = express.Router()
 const light = rateLimit({ windowMs: 60_000, max: 60, message: { error: 'Too many requests — wait a minute' } })
@@ -315,6 +318,37 @@ router.post('/risk/premium', heavy, route('quant/risk/premium', async req => {
 router.post('/ml/walk-forward', heavy, route('quant/ml/walk-forward', async (req, res) => {
   startJsonHeartbeat(res); const s = sym(req.body?.symbol), b = await bars(s, '5y', req)
   return { symbol: s, ...mlc.walkForwardModels(b, { horizon: Math.round(num(req.body?.horizon, 'horizon', { min: 1, max: 20, def: 5 })), folds: Math.round(num(req.body?.folds, 'folds', { min: 3, max: 8, def: 5 })) }) }
+}))
+
+// Event study: what this stock did after its own past earnings releases, periodic filings or entered dates.
+// Dates from the SEC filing index (keyless); returns vs SPY (BTC for a crypto pair), after costs. lib/event-study.js
+router.post('/event-study', heavy, route('quant/event-study', async req => {
+  const s = sym(req.body?.symbol), kind = evs.KINDS.includes(req.body?.kind) ? req.body.kind : 'earnings'
+  const notes = []
+  let events, name = null
+  if (kind === 'custom') {
+    const p = evs.parseCustomDates(req.body?.dates)
+    if (!p.events.length) bad('enter at least one date as YYYY-MM-DD')
+    events = p.events
+    if (p.invalid.length) notes.push(`Not dates, ignored: ${p.invalid.join(', ')}.`)
+    if (p.dropped) notes.push(`Only the newest ${evs.MAX_DATES} dates are used; ${p.dropped} older ones were left out.`)
+  } else {
+    let index
+    try { index = await evs.fetchFilingIndex(s) } catch (e) { bad(`could not read the SEC filing index for ${s}: ${e.message}`) }
+    if (!index) bad(`${s} has no SEC filings under that ticker (an ETF, a fund, a crypto pair or a foreign listing) — use "My own dates" instead`)
+    name = index.name
+    events = evs.eventDates(index.recent, kind)
+    if (!events.length) bad(kind === 'earnings' ? `${s} has no 8-K earnings releases (Item 2.02) in its recent filings — foreign issuers report on a 6-K; try "Periodic filings" or your own dates` : `${s} has no periodic reports in its recent filings`)
+  }
+  const benchmark = isCryptoSymbol(s) ? 'BTC-USD' : 'SPY'
+  if (s === benchmark) bad(`${s} is the benchmark itself — the return against it is zero by construction`)
+  const [b, bb] = await Promise.all([bars(s, '5y', req), bars(benchmark, '5y', req)])
+  const costBps = costBpsForSymbol(s)
+  const result = evs.study({ bars: b, benchBars: bb, events, costBps })
+  if (result.skipped.beforeHistory) notes.push(`${result.skipped.beforeHistory} older ${result.skipped.beforeHistory === 1 ? 'event is' : 'events are'} before the five years of price history and ${result.skipped.beforeHistory === 1 ? 'was' : 'were'} not used.`)
+  if (result.skipped.tooRecent) notes.push(`${result.skipped.tooRecent} ${result.skipped.tooRecent === 1 ? 'event has' : 'events have'} no trading session after ${result.skipped.tooRecent === 1 ? 'it' : 'them'} yet.`)
+  return { symbol: s, name, kind, benchmark, ...result, summary: evs.describe(result, { symbol: s, kind, benchmark }), notes,
+    method: `Entry at the open of the first session after the event date, exit at the close h sessions later, net of a ${costBps} bps round trip, minus ${benchmark} over the same sessions. Windows of one horizon never overlap. The t-statistic is across calendar months; the bar is two-sided 5% shared across the three horizons.` }
 }))
 
 module.exports = router

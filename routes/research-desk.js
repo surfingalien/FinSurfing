@@ -190,6 +190,23 @@ async function factorExposureFor(sym, bars, assetType) {
   } catch { return null }
 }
 
+/**
+ * How much the stock has moved on its own earnings releases (lib/event-study.js; 8-K Item 2.02 dates from the
+ * SEC index). Only the descriptive reaction: two years hold too few releases for a drift verdict, and the
+ * five-year test lives in Quant Lab → Event study. Best-effort — an unreachable index adds nothing.
+ */
+async function earningsReactionFor(sym, bars, spyBars, assetType) {
+  if (assetType !== 'stock' || !(spyBars?.length >= 60)) return null
+  try {
+    const ES = require('../lib/event-study')
+    const index = await ES.fetchFilingIndex(sym)
+    if (!index) return null
+    const r = ES.study({ bars, benchBars: spyBars, events: ES.eventDates(index.recent, 'earnings'), costBps: 0 }).reaction
+    if (!r || r.n < 4) return null
+    return `On its last ${r.n} earnings releases ${sym} moved a median ${r.medianAbs}% against SPY (either direction, last close before the release to first close after); it rose on ${Math.round(r.up * r.n)} of ${r.n}. Largest: ${r.best.move > 0 ? '+' : ''}${r.best.move}% (${r.best.date}) and ${r.worst.move}% (${r.worst.date}). A description of past reactions, not a forecast of the next one.`
+  } catch { return null }
+}
+
 async function gatherEvidence(sym, req) {
   const headers   = fwdKeys(req)
   const assetType = assetTypeOf(sym)
@@ -244,6 +261,7 @@ async function gatherEvidence(sym, req) {
     quant:      quantSnapshot.evidenceItems(quantSnap),
     earningsQuality: quality ? EQ.describe(quality, sym) : null,
     factorExposure: await factorExposureFor(sym, bars, assetType),
+    earningsReaction: await earningsReactionFor(sym, bars, spyBars, assetType),
     catalysts:  catalystText,
   })
   const bracketProb = require('../lib/bracket-prob')
