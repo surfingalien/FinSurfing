@@ -28,6 +28,7 @@ import StockCard from './scan/StockCard'
 import AgentOrb from './scan/AgentOrb'
 import AgentNotesPanel from './scan/AgentNotesPanel'
 import SymbolSearchInput from './scan/SymbolSearchInput'
+import ScanChanges from './scan/ScanChanges'
 import { useAuth } from '../../contexts/AuthContext'
 
 /* ── Main view ────────────────────────────────────────────── */
@@ -402,6 +403,7 @@ export default function AIBrainView({ portfolio, onAnalyze, onCompare }) {
       {!loading && analysis && (
         <>
           <ScanAgeBanner processedAt={analysis.processedAt} />
+          <ScanChanges processedAt={analysis.processedAt} onOpen={onAnalyze} />
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="glass rounded-xl p-4 border border-white/[0.06]">
               <div className="flex items-center gap-2 mb-1">

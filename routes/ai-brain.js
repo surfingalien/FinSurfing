@@ -52,6 +52,8 @@ const { factorScores, factorLine } = require('../lib/factor-model')
 const { startJsonHeartbeat } = require('../lib/http-heartbeat')
 const { guardAsync } = require('../lib/async-route')
 const { mountJobRoutes }    = require('../lib/ai-job-routes')
+const jobQueue               = require('../lib/ai-job-queue')
+const { diffScans, findComparable } = require('../lib/scan-diff')
 
 const router   = express.Router()
 const aiRouter = getRouter('ai-brain')
@@ -1410,6 +1412,18 @@ Apply the instructions, JSON schema and rules from the system prompt. Respond ON
 // GET  /scan/:id    → status, and the result once it's done
 // GET  /scans       → this user's recent scans (newest first)
 // GET  /scan/latest → the most recent completed scan, for a cold page load
+
+// GET /scan/changes[?at=<processedAt>] — what changed against the previous scan
+// that asked the same question (same mode or symbol list, same horizon). Reads
+// the stored results only: no model call, no market data. Declared BEFORE the
+// job routes, where '/scan/:id' would read "changes" as a job id.
+router.get('/scan/changes', requireAuth, (req, res) => {
+  const jobs = jobQueue.getUserJobs(req.user?.userId, 50, 'scan')
+  const { current, previous } = findComparable(jobs, req.query.at ? String(req.query.at) : null)
+  if (!current) return res.json({ available: false, reason: 'no-scan' })
+  if (!previous) return res.json({ available: false, reason: 'no-earlier-scan', label: current.label ?? null })
+  res.json({ available: true, label: current.label ?? null, horizon: current.result.horizon ?? null, ...diffScans(previous.result, current.result) })
+})
 
 mountJobRoutes(router, {
   kind: 'scan',

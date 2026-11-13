@@ -14,6 +14,7 @@ import { MacroBanner } from '../Macro/MacroPanel'
 import { TYPE_CONFIG } from './signals/config'
 import { PersonaPicker } from './signals/PersonaPicker'
 import { RecCard } from './signals/RecCard'
+import RunHistory from './signals/RunHistory'
 
 /* ── Helpers ─────────────────────────────────── */
 /**
@@ -331,6 +332,8 @@ export default function BuySignalsView({ portfolio, onAnalyze, onCompare }) {
         </div>
       )}
 
+      {!loading && !recs && <RunHistory personas={personas} onOpen={onAnalyze} />}
+
       {/* ── Results ── */}
       {!loading && recs && (
         <>
@@ -354,6 +357,9 @@ export default function BuySignalsView({ portfolio, onAnalyze, onCompare }) {
           {recs.edgeGate?.rejected?.length > 0 && (
             <EdgeGateBanner gate={recs.edgeGate} abstained={recs.abstained} />
           )}
+
+          {/* What changed since the previous run, and the earlier runs */}
+          <RunHistory journalId={recs.journalId} generatedAt={recs.generatedAt} personas={personas} onOpen={onAnalyze} />
 
           {/* Market outlook banner */}
           <div className="glass rounded-xl p-4 border border-white/[0.06]">

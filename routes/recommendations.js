@@ -680,16 +680,19 @@ Respond ONLY with a JSON object — no markdown, no explanation, just the JSON:
 
     // Journal this run as a versioned, diffable "commit" (rationale = market
     // outlook). Best-effort; appendEntry never throws to the caller.
-    recJournal.appendEntry(recJournal.buildEntry({
+    const journalEntry = recJournal.buildEntry({
       recommendations: data.recommendations,
       rationale: data.marketOutlook || '',
       persona:   persona.id,
       params:    { includeMacro, includeFilings, includeFunds, focus: focusStr || null },
       userId,
-    }))
+    })
+    const journalled = recJournal.appendEntry(journalEntry)
 
     return res.json({
       ...data,
+      // Lets the page find this run in GET /journal and show what changed.
+      journalId: journalled ? journalEntry.id : null,
       generatedAt: new Date().toISOString(),
       llmUsed,
       truncated,

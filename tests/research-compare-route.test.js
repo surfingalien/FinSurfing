@@ -42,3 +42,27 @@ test('/compare is not swallowed by the /:symbol routes, and peers answers with a
   expect(r.body).toEqual(expect.objectContaining({ symbol: 'AAPL', peers: expect.any(Array) }))
   expect((await get('/api/research-desk/peers/%3Cscript%3E')).status).toBe(400)
 })
+
+describe('POST /queue', () => {
+  const post = (body) => request(app).post('/api/research-desk/queue').set('Authorization', `Bearer ${token}`).send(body)
+  test('needs a sign-in', async () => {
+    expect((await request(app).post('/api/research-desk/queue').send({ symbols: ['AAPL'] })).status).toBe(401)
+  })
+  test('an empty or malformed list is an empty queue, not an error; the flag rules are always sent', async () => {
+    for (const body of [{}, { symbols: [] }, { symbols: 'AAPL' }]) {
+      const r = await post(body)
+      expect(r.status).toBe(200)
+      expect(r.body.rows).toEqual([])
+      expect(r.body.flagRules.map(f => f.id)).toEqual(['nearHigh', 'drawdown', 'bigMove', 'highVol'])
+    }
+  })
+  test('unpriced symbols come back as rows with a reason; bad tokens are reported; at most 40', async () => {
+    const r = await post({ symbols: ['AAAQ', '<x>', 'BBBQ'] })
+    expect(r.status).toBe(200)
+    expect(r.body.rows.map(x => [x.symbol, x.ok, x.reason])).toEqual([['AAAQ', false, 'no price history'], ['BBBQ', false, 'no price history']])
+    expect(r.body.invalid).toEqual(['<X>'])
+    const many = await post({ symbols: Array.from({ length: 45 }, (_, i) => `S${i}`) })
+    expect(many.body.rows).toHaveLength(40)
+    expect(many.body.dropped).toHaveLength(5)
+  })
+})

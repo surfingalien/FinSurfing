@@ -109,6 +109,41 @@ describe('append / read round-trip', () => {
     expect(withDiffs[1].diff).toBeNull()                // oldest has no predecessor
   })
 
+  test('a run is diffed against the previous run of the SAME persona and focus', () => {
+    j.appendEntry(j.buildEntry({ recommendations: recs, rationale: 'default 1', userId: 1, at: '2026-06-30T00:00:00Z' }), file)
+    j.appendEntry(j.buildEntry({ recommendations: [recs[1]], rationale: 'buffett 1', persona: 'buffett', userId: 1, at: '2026-06-30T00:01:00Z' }), file)
+    j.appendEntry(j.buildEntry({ recommendations: [recs[0]], rationale: 'focus', params: { focus: 'NVDA' }, userId: 1, at: '2026-06-30T00:02:00Z' }), file)
+    j.appendEntry(j.buildEntry({ recommendations: [recs[0]], rationale: 'default 2', userId: 1, at: '2026-06-30T00:03:00Z' }), file)
+    const [latest, focus, buffett, first] = j.readJournalWithDiffs({ userId: 1, file })
+    expect(latest.prevAt).toBe('2026-06-30T00:00:00Z')      // skips the Buffett and the focus run
+    expect(latest.changes.removed).toEqual(['AAPL'])
+    expect(focus.diff).toBeNull()                            // first run with that focus
+    expect(buffett.diff).toBeNull()                          // first Buffett run
+    expect(first.diff).toBeNull()
+  })
+
+  test('the limit never hides a predecessor', () => {
+    j.appendEntry(j.buildEntry({ recommendations: recs, rationale: 'v1', userId: 1, at: '2026-06-30T00:00:00Z' }), file)
+    j.appendEntry(j.buildEntry({ recommendations: [recs[0]], rationale: 'v2', userId: 1, at: '2026-06-30T00:02:00Z' }), file)
+    const page = j.readJournalWithDiffs({ userId: 1, limit: 1, file })
+    expect(page).toHaveLength(1)
+    expect(page[0].diff.removed).toEqual(['AAPL'])
+  })
+
+  test('materialChanges: a reworded thesis or a moved entry price is not a change; target and stop are', () => {
+    const a = [{ symbol: 'NVDA', entryPrice: 100, targetReturn: 20, stopLoss: 8, thesis: 'one wording of the thesis here' },
+               { symbol: 'AAPL', entryPrice: 200, targetReturn: 10, stopLoss: 5, thesis: 'x' }]
+    const b = [{ symbol: 'NVDA', entryPrice: 104, targetReturn: 20, stopLoss: 8, thesis: 'another wording of the same idea' },
+               { symbol: 'AAPL', entryPrice: 200, targetReturn: 15, stopLoss: 5, thesis: 'x' },
+               { symbol: 'MSFT', entryPrice: 400, targetReturn: 12, stopLoss: 6, thesis: 'y' }]
+    const m = j.materialChanges(j.diffEntries(a, b), a, b)
+    expect(m.added).toEqual(['MSFT'])
+    expect(m.moved).toEqual([{ symbol: 'AAPL', targetReturn: { from: 10, to: 15 } }])
+    expect(m.kept).toBe(2)
+    expect(m.unchanged).toBe(1)
+    expect(j.materialChanges(null)).toBeNull()
+  })
+
   test('missing file → empty', () => {
     expect(j.readJournal({ file: path.join(os.tmpdir(), 'does-not-exist-xyz.jsonl') })).toEqual([])
   })

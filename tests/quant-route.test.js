@@ -7,6 +7,8 @@ const L       = require('../lib/quant/linalg')
 
 const mockBars = jest.fn()
 jest.mock('../lib/internal-api', () => ({ fetchDailyBars: (...a) => mockBars(...a) }))
+const mockIndex = jest.fn()
+jest.mock('../lib/event-study', () => ({ ...jest.requireActual('../lib/event-study'), fetchFilingIndex: (...a) => mockIndex(...a) }))
 
 process.env.NODE_ENV = 'test'
 process.env.JWT_SECRET = 'test-secret-for-jest-only-32chars!!'
@@ -112,4 +114,21 @@ describe('round 2 endpoints', () => {
   test('ML walk-forward CV answers', async () => {
     const m = await post('/ml/walk-forward', { symbol: 'AAA', folds: 3 }); expect(m.status).toBe(200); expect(m.body.results.length).toBeGreaterThan(5); expect(m.body.importance.features).toHaveLength(12)
   }, 120000)
+})
+
+test('event study: SEC-dated events, own dates, and the cases with nothing to study', async () => {
+  const day = i => new Date(DATA.AAA[i].t).toISOString().slice(0, 10)
+  const idx = Array.from({ length: 14 }, (_, k) => 40 + k * 60)
+  mockIndex.mockImplementation(async s => (s === 'AAA' ? { name: 'Triple A Inc', recent: { form: idx.map(() => '8-K').concat('10-K'), filingDate: idx.map(day).concat(day(100)), items: idx.map(() => '2.02,9.01').concat('') } } : null))
+  expect((await post('/event-study', { symbol: 'AAA' }, false)).status).toBe(401)
+  const r = await post('/event-study', { symbol: 'AAA' }); expect(r.status).toBe(200)
+  expect(r.body.kind).toBe('earnings'); expect(r.body.benchmark).toBe('SPY'); expect(r.body.events).toBe(14); expect(r.body.name).toBe('Triple A Inc')
+  expect(r.body.horizons.map(h => h.horizon)).toEqual([1, 5, 20]); expect(r.body.horizons[2].n).toBe(14); expect(r.body.reaction.n).toBe(14); expect(r.body.path).toHaveLength(20); expect(r.body.summary.length).toBeGreaterThan(1)
+  const f = await post('/event-study', { symbol: 'AAA', kind: 'filings' }); expect(f.body.events).toBe(1); expect(f.body.horizons[0].verdict).toBe('insufficient')
+  const c = await post('/event-study', { symbol: 'BBB', kind: 'custom', dates: `${day(50)}, ${day(200)} nonsense 2019-01-01` }); expect(c.status).toBe(200); expect(c.body.events).toBe(2); expect(c.body.notes.join(' ')).toMatch(/nonsense/); expect(c.body.skipped.beforeHistory).toBe(1)
+  const none = await post('/event-study', { symbol: 'BBB' }); expect(none.status).toBe(400); expect(none.body.error).toMatch(/no SEC filings/)
+  expect((await post('/event-study', { symbol: 'BBB', kind: 'custom', dates: 'soon' })).status).toBe(400)
+  expect((await post('/event-study', { symbol: 'SPY', kind: 'custom', dates: day(50) })).body.error).toMatch(/benchmark itself/)
+  mockIndex.mockImplementation(async () => { throw new Error('timeout') })
+  const down = await post('/event-study', { symbol: 'AAA' }); expect(down.status).toBe(400); expect(down.body.error).toMatch(/could not read the SEC filing index/)
 })
