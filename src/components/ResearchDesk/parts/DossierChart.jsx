@@ -49,6 +49,9 @@ export default function DossierChart({ symbol, plan, planBasis, call }) {
     return c
   }, [events.list, days])
 
+  // An event dated after the last bar (an alert from today, before today's bar exists) has no bar to sit on yet.
+  const ahead = days.length ? events.list.filter(e => !hidden[e.kind] && e.date > days[days.length - 1]).length : 0
+
   return (
     <div className="glass rounded-2xl p-4">
       <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
@@ -85,6 +88,7 @@ export default function DossierChart({ symbol, plan, planBasis, call }) {
       <p className="text-[11px] text-slate-500 mt-2">
         {levels.length > 0 && (planBasis === 'thesis' ? 'Levels are the thesis plan’s own numbers. ' : 'Levels come from price action alone — reference levels, not a buy signal. ')}
         Markers are dated facts, not signals; an event on a day the market was closed sits on the next session.
+        {ahead > 0 && ` ${ahead} ${ahead === 1 ? 'event is' : 'events are'} newer than the last session shown and will appear once that day has a bar.`}
         {events.notes.length > 0 && ` ${events.notes.join(' ')}`}
       </p>
     </div>

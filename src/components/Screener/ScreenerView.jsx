@@ -12,6 +12,7 @@
  */
 
 import { useState, useCallback } from 'react'
+import MarketScan from './MarketScan'
 import { motion } from 'framer-motion'
 import {
   Search, TrendingUp, ShieldAlert, Loader2, Info, CheckCircle2, SlidersHorizontal,
@@ -122,7 +123,7 @@ function StockCard({ row, rank, onAnalyze }) {
   )
 }
 
-export default function ScreenerView({ onAnalyze }) {
+export default function ScreenerView({ onAnalyze, onResearch, onCompare }) {
   const { authFetch } = useAuth()
   const [sector, setSector]     = useState('')
   const [minYield, setMinYield] = useState('')
@@ -171,6 +172,8 @@ export default function ScreenerView({ onAnalyze }) {
           dividends most likely to be cut at the top.
         </p>
       </div>
+
+      <MarketScan onResearch={onResearch} onCompare={onCompare} />
 
       <div className="glass rounded-2xl p-4 space-y-4">
         <div className="grid sm:grid-cols-2 gap-3">

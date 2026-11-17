@@ -231,6 +231,23 @@ router.get('/sectors', (_req, res) => {
   catch { res.json({ sectors: [] }) }
 })
 
+// Market scan: fixed whole-market screens from TradingView's scanner (lib/tv-scanner.js). Optional and OFF unless the
+// operator sets TV_SCANNER_ENABLED=true — it is an undocumented endpoint, so the page says so and works without it.
+router.get('/market-scan', requireAuth, screenerLimit, async (req, res) => {
+  const tv = require('../lib/tv-scanner')
+  const presets = tv.presetList(), sectors = Object.keys(tv.SECTORS)
+  if (!tv.enabled()) return res.json({ enabled: false, presets, sectors })
+  const preset = typeof req.query.preset === 'string' && tv.PRESETS[req.query.preset] ? req.query.preset : 'unusual-volume'
+  const sector = typeof req.query.sector === 'string' && tv.SECTORS[req.query.sector] ? req.query.sector : null
+  try {
+    const r = await tv.scan(preset, { sector, limit: 40 })
+    res.json({ enabled: true, presets, sectors, preset, sector, fact: tv.PRESETS[preset].fact, rows: r.rows, matched: r.total, at: r.at, cached: r.cached })
+  } catch (e) {
+    // Said plainly, with the page still usable: the rest of the Screener does not depend on this.
+    res.json({ enabled: true, presets, sectors, preset, sector, rows: [], unavailable: e.message })
+  }
+})
+
 router.post('/run', requireAuth, screenerLimit, async (req, res) => {
   const body         = req.body || {}
   const sector       = typeof body.sector === 'string' && body.sector.trim() ? body.sector.trim() : null

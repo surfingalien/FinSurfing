@@ -286,3 +286,34 @@ describe('GET /api/screener/sectors', () => {
     expect(res.body.sectors[0]).toMatchObject({ sector: 'Technology' })
   })
 })
+
+describe('GET /api/screener/market-scan — the optional TradingView scan', () => {
+  // Required inside each test: the app is rebuilt with a fresh module registry, and the spy must be on ITS copy.
+  const get = q => request(app).get(`/api/screener/market-scan${q}`).set('Authorization', `Bearer ${token}`)
+  afterEach(() => { delete process.env.TV_SCANNER_ENABLED; jest.restoreAllMocks() })
+
+  test('needs a sign-in', async () => { await request(app).get('/api/screener/market-scan').expect(401) })
+
+  test('switched off by default: says so, lists the screens, calls nothing', async () => {
+    const tv = require('../lib/tv-scanner')
+    const spy = jest.spyOn(tv, 'scan')
+    const res = await get('').expect(200)
+    expect(res.body.enabled).toBe(false)
+    expect(res.body.presets.length).toBeGreaterThan(3)
+    expect(res.body.rows).toBeUndefined()
+    expect(spy).not.toHaveBeenCalled()
+  })
+
+  test('switched on: an unknown preset or sector falls back to a known one; a failure is reported, not an empty success', async () => {
+    process.env.TV_SCANNER_ENABLED = 'true'
+    const tv = require('../lib/tv-scanner')
+    const spy = jest.spyOn(tv, 'scan').mockResolvedValue({ rows: [{ symbol: 'NVDA', close: 1 }], total: 9, at: '2026-11-17T00:00:00Z', cached: false })
+    const res = await get('?preset=%3Cscript%3E&sector=Nope').expect(200)
+    expect(res.body).toEqual(expect.objectContaining({ enabled: true, preset: 'unusual-volume', sector: null, matched: 9 }))
+    expect(spy).toHaveBeenCalledWith('unusual-volume', { sector: null, limit: 40 })
+    spy.mockRejectedValue(new tv.TvScannerError('the scanner refused the request (HTTP 403)'))
+    const bad = await get('?preset=gainers').expect(200)
+    expect(bad.body.rows).toEqual([])
+    expect(bad.body.unavailable).toMatch(/HTTP 403/)
+  })
+})

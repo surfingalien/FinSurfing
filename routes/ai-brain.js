@@ -625,6 +625,12 @@ async function resolveUniverse({ symbols, scanMode, universeMode, fmpKey }) {
   const sector   = MODE_SECTORS[scanMode] || null
   // Pool: the live sector screen first, the local index as a fallback.
   let pool = await getLivePool(fmpKey, sector ? FMP_SECTORS[sector] : null).catch(() => [])
+  // Optional second source (lib/tv-scanner.js, off unless TV_SCANNER_ENABLED=true): the most-traded names of the
+  // sector when the FMP screen gave nothing. It only FINDS names; the live-price gate still prices each one.
+  const tv = require('../lib/tv-scanner')
+  const tvSector = sector && tv.SECTORS[sector] ? sector : null
+  const tvUsable = tv.enabled() && (!sector || tvSector)
+  if (!pool.length && tvUsable) pool = await tv.symbolsFor('most-active', { sector: tvSector, minCap: sector ? 5e9 : 2e10, limit: 100 })
   if (!pool.length) {
     try {
       pool = sector
@@ -639,7 +645,19 @@ async function resolveUniverse({ symbols, scanMode, universeMode, fmpKey }) {
     try { const s = symbolDb.classify(sym)?.sector; if (s) return s } catch { /* index optional */ }
     return poolSet.has(sym) ? sector : null
   }
-  const movers = filterMovers(await getMovers(fmpKey).catch(() => []), { sector, sectorOf })
+  let moverRows = await getMovers(fmpKey).catch(() => [])
+  const tvSectors = new Map()
+  if (!moverRows.length && tvUsable) {
+    for (const preset of ['most-active', 'gainers']) {
+      try {
+        for (const r of (await tv.scan(preset, { sector: tvSector, minCap: 2e9, limit: 40 })).rows) {
+          moverRows.push({ symbol: r.symbol, price: r.close, changePct: r.changePct })
+          if (r.sector) tvSectors.set(r.symbol, r.sector)
+        }
+      } catch { /* optional source — the scan runs without it */ }
+    }
+  }
+  const movers = filterMovers(moverRows, { sector, sectorOf: sym => sectorOf(sym) || tvSectors.get(sym) || null })
   // After-close discovery lists (lib/discovery-sources.js): peer dislocations and
   // stretched cointegrated pairs. Stale or missing lists add nothing.
   const discovered = (() => { try { const d = require('../lib/discovery-sources'); return d.candidatesFor(d.loadStore(), sector) } catch { return [] } })()
