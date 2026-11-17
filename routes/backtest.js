@@ -17,7 +17,7 @@ const { runPortfolioBacktest } = require('../utils/portfolio-backtest')
 
 const router = express.Router()
 
-const VALID_STRATEGIES = ['sma_crossover', 'rsi_threshold', 'macd_signal', 'bb_reversion', 'donchian_breakout', 'range_breakout_atr', 'adx_trend']
+const VALID_STRATEGIES = ['sma_crossover', 'rsi_threshold', 'macd_signal', 'bb_reversion', 'donchian_breakout', 'range_breakout_atr', 'adx_trend', 'supertrend']
 const VALID_RANGES     = ['1y', '2y', '5y']
 
 // Execution model for a request: next-bar fills and the asset class's

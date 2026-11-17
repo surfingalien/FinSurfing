@@ -173,3 +173,11 @@ describe('research queue', () => {
     expect(C.queueRow({ symbol: 'ZZZ', bars: [], thesis: { verdict: 'no-trade' } })).toMatchObject({ ok: false, reason: 'no price history', thesis: { verdict: 'no-trade' } })
   })
 })
+
+test('queue: a recent inbound alert ranks with a review due soon, above plain flags', () => {
+  const C = require('../lib/research-compare')
+  expect(C.queuePriority({ ok: true, alert: { count: 1 } })).toBe(2)
+  expect(C.queuePriority({ ok: true, alert: { count: 1 }, thesis: { review: { state: 'due' } } })).toBe(0)
+  expect(C.queuePriority({ ok: true, flags: [{ id: 'bigMove' }] })).toBe(3)
+  expect(C.queuePriority({ ok: false, alert: { count: 1 } })).toBe(5)
+})

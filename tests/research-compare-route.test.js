@@ -66,3 +66,29 @@ describe('POST /queue', () => {
     expect(many.body.dropped).toHaveLength(5)
   })
 })
+
+describe('GET /:symbol/chart-events', () => {
+  const ES = require('../lib/event-study')
+  afterEach(() => jest.restoreAllMocks())
+
+  test('needs a sign-in and a valid symbol', async () => {
+    expect((await request(app).get('/api/research-desk/AAPL/chart-events')).status).toBe(401)
+    expect((await get('/api/research-desk/%3Cscript%3E/chart-events')).status).toBe(400)
+  })
+
+  test('marks earnings releases and periodic filings from the SEC index', async () => {
+    const day = n => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10)
+    jest.spyOn(ES, 'fetchFilingIndex').mockResolvedValue({ name: 'X', recent: { form: ['8-K', '10-Q', '8-K'], filingDate: [day(10), day(40), day(4000)], items: ['2.02', '', '2.02'] } })
+    const r = await get('/api/research-desk/AAPL/chart-events')
+    expect(r.status).toBe(200)
+    expect(r.body.events.map(e => e.kind)).toEqual(['filing', 'earnings'])   // the 11-year-old one is outside five years
+    expect(r.body.notes).toEqual([])
+  })
+
+  test('an unreadable index is said, never shown as "no events"; a non-filer is explained', async () => {
+    jest.spyOn(ES, 'fetchFilingIndex').mockRejectedValue(new Error('timeout'))
+    expect((await get('/api/research-desk/AAPL/chart-events')).body.notes[0]).toMatch(/could not be read/)
+    jest.spyOn(ES, 'fetchFilingIndex').mockResolvedValue(null)
+    expect((await get('/api/research-desk/AAPL/chart-events')).body.notes[0]).toMatch(/no SEC filings/)
+  })
+})

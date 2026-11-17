@@ -305,6 +305,28 @@ router.get('/theses', requireAuth, async (req, res) => {
   })
 })
 
+// ── Chart events: dated facts to mark on the symbol's chart (lib/chart-events.js) ──
+// Earnings releases and periodic filings from the SEC index, and this user's own
+// theses. No model, no prices. An index that cannot be read is said in `notes`,
+// never shown as "no events".
+router.get('/:symbol/chart-events', requireAuth, evidenceLimit, async (req, res) => {
+  const sym = cleanSymbol(req.params.symbol)
+  if (!sym) return res.status(400).json({ error: 'A valid symbol is required' })
+  const notes = []
+  let recent = null
+  if (assetTypeOf(sym) === 'stock') {
+    try {
+      const index = await require('../lib/event-study').fetchFilingIndex(sym)
+      if (index) recent = index.recent
+      else notes.push(`${sym} has no SEC filings under that ticker, so there are no filing dates to mark.`)
+    } catch { notes.push('The SEC filing index could not be read just now, so filing and earnings dates are missing.') }
+  }
+  const theses = readTheses().filter(t => t.userId === req.user.userId && t.symbol === sym)
+  const alerts = require('../lib/inbound-alerts').list(req.user.userId, { symbol: sym, limit: 200 })
+  const from = new Date(Date.now() - 5 * 366 * 86400000).toISOString().slice(0, 10)
+  res.json({ symbol: sym, events: require('../lib/chart-events').chartEvents({ recent, theses, alerts, from }), notes })
+})
+
 // ── Compare: up to six symbols side by side on measured facts (lib/research-compare.js) ──
 // No model. Bars and SEC facts are fetched together; a symbol that fails is
 // reported in `failed`, never silently dropped. Cached 10 minutes per symbol set.
@@ -356,11 +378,19 @@ router.get('/compare', requireAuth, evidenceLimit, async (req, res) => {
 const _queueCache = new Map()
 router.post('/queue', requireAuth, evidenceLimit, express.json({ limit: '20kb' }), async (req, res) => {
   const list = Array.isArray(req.body?.symbols) ? req.body.symbols.join(',') : ''
-  const { symbols, dropped, invalid } = compare.parseSymbols(list, { max: compare.QUEUE_MAX })
+  const parsed = compare.parseSymbols(list, { max: compare.QUEUE_MAX })
+  const { dropped, invalid } = parsed
+  const userId = effectiveUserId(req)
+  // Symbols the user's own TradingView alerted on in the last days join the queue even when they are
+  // on neither list — an alert is a request to look. They never push a listed symbol out.
+  const IA = require('../lib/inbound-alerts')
+  const alerts = IA.recentBySymbol(IA.list(userId, { limit: IA.MAX_PER_USER }))
+  const fromAlerts = Object.keys(alerts).filter(s => !parsed.symbols.includes(s) && cleanSymbol(s))
+    .sort((a, b) => alerts[b].lastAt.localeCompare(alerts[a].lastAt)).slice(0, Math.max(0, compare.QUEUE_MAX - parsed.symbols.length))
+  const symbols = [...parsed.symbols, ...fromAlerts]
   if (!symbols.length) return res.json({ rows: [], dropped, invalid, flagRules: flagRules() })
   try {
     const headers = fwdKeys(req)
-    const userId = effectiveUserId(req)
     const latest = new Map()                                  // newest thesis per symbol for this user
     for (const t of readTheses()) if (t.userId === userId) latest.set(t.symbol, t)
     const rows = []
@@ -380,7 +410,8 @@ router.post('/queue', requireAuth, evidenceLimit, express.json({ limit: '20kb' }
           state: desk.thesisStatus(t, hit.bars)?.state ?? null,
           review: desk.reviewOf(t),
         } : null
-        return compare.queueRow({ symbol: sym, bars: hit.bars, name: hit.name, thesis })
+        const alert = alerts[sym] ? { ...alerts[sym], listed: parsed.symbols.includes(sym) } : null
+        return compare.queueRow({ symbol: sym, bars: hit.bars, name: hit.name, thesis, alert })
       })))
     }
     if (_queueCache.size > 400) for (const k of [..._queueCache.keys()].slice(0, 100)) _queueCache.delete(k)

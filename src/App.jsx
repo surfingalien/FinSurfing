@@ -264,6 +264,7 @@ function MainApp({ onSignIn }) {
     'strategies':      () => <StrategiesView onAnalyze={navigateToAnalyze} />,
     'alerts':          () => (
       <AlertsView
+        onResearch={s => navigate('research-desk', s)}
         alerts={alertsHook}
         quotesMap={quotesMap}
         portfolioSymbols={portfolio.positions.map(p => p.symbol)}
@@ -293,7 +294,7 @@ function MainApp({ onSignIn }) {
     'dcf-valuation':  () => <DCFView onAnalyze={navigateToAnalyze} />,
     'pattern-finder': () => <PatternFinderView onAnalyze={navigateToAnalyze} />,
     'dividend-screen': () => <DividendView onAnalyze={navigateToAnalyze} />,
-    'screener': () => <ScreenerView onAnalyze={navigateToAnalyze} />,
+    'screener': () => <ScreenerView onAnalyze={navigateToAnalyze} onResearch={s => navigate('research-desk', s)} onCompare={compareSymbols} />,
     'quant-lab': () => <QuantLabView section={route.param} positions={portfolio.positions} />,
     'agent-desk':      () => <AgentDeskView />,
     'heatmap':         () => <HeatmapView />,

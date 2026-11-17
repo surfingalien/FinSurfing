@@ -3,7 +3,7 @@ import { motion } from 'motion/react'
 import { GitFork, Lock, LineChart } from 'lucide-react'
 import PlanOdds from '../../shared/PlanOdds'
 
-// recharts only loads when someone opens a chart, not with every scan card.
+// The chart library only loads when someone opens a chart, not with every scan card.
 const TradePlanChart = lazy(() => import('./TradePlanChart'))
 
 /* ── ScoreBar ──────────────────────────────────────────────── */
@@ -189,8 +189,8 @@ export function TradePlan({ plan, stock, symbol = stock?.symbol }) {
             <LineChart className="w-3 h-3" /> {chart ? 'Hide chart' : 'Show on chart'}
           </button>
           {chart && (
-            <Suspense fallback={<div className="h-[180px] flex items-center justify-center text-[10px] text-slate-500">Loading chart…</div>}>
-              <TradePlanChart symbol={symbol} plan={plan} price={stock?.currentPrice} />
+            <Suspense fallback={<div className="h-[220px] flex items-center justify-center text-[10px] text-slate-500">Loading chart…</div>}>
+              <TradePlanChart symbol={symbol} plan={plan} price={stock?.currentPrice} asOf={stock?.priceAsOf} />
             </Suspense>
           )}
         </>

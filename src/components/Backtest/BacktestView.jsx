@@ -5,7 +5,9 @@
  * trade log, and full performance metrics vs buy-and-hold.
  */
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, lazy, Suspense } from 'react'
+
+const MarkedChart = lazy(() => import('../shared/MarkedChart'))
 import {
   FlaskConical, Play, TrendingUp, TrendingDown, BarChart3,
   AlertTriangle, CheckCircle2, Clock, DollarSign, Percent, Info,
@@ -87,6 +89,15 @@ const STRATEGIES = [
       { key: 'period',    label: 'ADX Period',   type: 'number', default: 14, min: 5,  max: 50 },
       { key: 'threshold', label: 'ADX at least', type: 'number', default: 25, min: 15, max: 40 },
       { key: 'maPeriod',  label: 'Trend Average', type: 'number', default: 50, min: 10, max: 200 },
+    ],
+  },
+  {
+    id: 'supertrend',
+    label: 'Supertrend',
+    description: 'Long while price closes above an ATR trailing band; out when it closes below',
+    params: [
+      { key: 'period', label: 'ATR Period',     type: 'number', default: 10, min: 5, max: 50 },
+      { key: 'mult',   label: 'ATR Multiplier', type: 'number', default: 3,  min: 1, max: 6, step: 0.5 },
     ],
   },
 ]
@@ -484,6 +495,18 @@ export default function BacktestView() {
 
           {/* Equity chart */}
           <EquityChart equity={result.equity} />
+
+          {/* The trades on the price chart */}
+          {result.trades?.length > 0 && (
+            <div className="glass rounded-2xl p-4">
+              <h3 className="text-sm font-semibold text-white mb-2">Trades on the chart</h3>
+              <Suspense fallback={<p className="text-xs text-slate-500">Loading chart…</p>}>
+                <MarkedChart symbol={result.symbol} range={result.range}
+                  events={result.trades.map(t => ({ date: String(t.date).slice(0, 10), kind: t.type === 'buy' ? 'buy' : 'sell', text: `${t.type} at ${t.price}` }))}
+                  note="A marker is the day the order filled, not the day of the signal." />
+              </Suspense>
+            </div>
+          )}
 
           {/* Trade log */}
           <TradeLog trades={result.trades} />

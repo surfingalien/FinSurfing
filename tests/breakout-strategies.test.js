@@ -11,7 +11,7 @@ function bars(n = 600, seed = 1, drift = 0.0005) {
   }
   return { closes, highs, lows }
 }
-const NEW = { donchian_breakout: { entryPeriod: 20, exitPeriod: 10 }, range_breakout_atr: { entryPeriod: 20, exitPeriod: 10, atrPeriod: 14, expansion: 1.2 }, adx_trend: { period: 14, threshold: 20, maPeriod: 50 } }
+const NEW = { donchian_breakout: { entryPeriod: 20, exitPeriod: 10 }, range_breakout_atr: { entryPeriod: 20, exitPeriod: 10, atrPeriod: 14, expansion: 1.2 }, adx_trend: { period: 14, threshold: 20, maPeriod: 50 }, supertrend: { period: 10, mult: 3 } }
 
 describe('breakout and ADX strategies', () => {
   test('each is in the catalog, the backtest route list and has a default hypothesis', () => {
@@ -82,5 +82,25 @@ describe('breakout and ADX strategies', () => {
     const a = BT.simulateWithSignals(ts, b.closes, sig, 10000, { costBps: 10 }).metrics
     const c = BT.simulateWithSignals(ts, b.closes, sig, 10000, { costBps: 10, highs: b.highs, lows: b.lows }).metrics
     expect(c).toEqual(a)
+  })
+})
+
+describe('supertrend', () => {
+  const line = (n, f) => { const closes = Array.from({ length: n }, (_, i) => f(i)); return { closes, highs: closes.map(c => c * 1.005), lows: closes.map(c => c * 0.995) } }
+  test('gets in during a steady rise after a fall, and out when the rise breaks', () => {
+    // down 60 bars, up 120, then a sharp fall
+    const b = line(240, i => (i < 60 ? 100 - i * 0.5 : i < 180 ? 70 + (i - 60) * 0.6 : 142 - (i - 180) * 1.5))
+    const sig = BT.generateSignals(b.closes, 'supertrend', { period: 10, mult: 3 }, { highs: b.highs, lows: b.lows })
+    const buys = sig.map((s, i) => (s === 1 ? i : -1)).filter(i => i >= 0), sells = sig.map((s, i) => (s === -1 ? i : -1)).filter(i => i >= 0)
+    expect(buys).toHaveLength(1)
+    expect(buys[0]).toBeGreaterThan(60); expect(buys[0]).toBeLessThan(100)
+    expect(sells).toHaveLength(1)
+    expect(sells[0]).toBeGreaterThan(180); expect(sells[0]).toBeLessThan(200)
+  })
+  test('a wider multiplier trades less often; too little history trades never', () => {
+    const b = bars(900, 9)
+    const count = mult => BT.generateSignals(b.closes, 'supertrend', { period: 10, mult }, { highs: b.highs, lows: b.lows }).filter(s => s === 1).length
+    expect(count(1.5)).toBeGreaterThan(count(4))
+    expect(BT.generateSignals([1, 2, 3], 'supertrend', {}).every(s => s === 0)).toBe(true)
   })
 })

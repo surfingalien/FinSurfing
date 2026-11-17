@@ -7,7 +7,9 @@
  * overall score: a weighted total would be an opinion. A missing value shows as
  * "—" and is never ranked.
  */
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, lazy, Suspense } from 'react'
+
+const CompareChart = lazy(() => import('./CompareChart'))
 import { Loader2, Columns3, Users, Info, ArrowUpRight } from 'lucide-react'
 
 const fmt = {
@@ -165,6 +167,10 @@ export default function CompareTab({ call, initial = '', onOpen, onSymbols }) {
               {data.dropped?.length > 0 && <li className="text-[12px] text-amber-300">Only six at a time — left out: {data.dropped.join(', ')}.</li>}
             </ul>
           )}
+
+          <Suspense fallback={<div className="glass rounded-2xl p-4 h-[340px] text-xs text-slate-500">Loading chart…</div>}>
+            <CompareChart symbols={data.symbols.map(s => s.symbol)} />
+          </Suspense>
 
           {data.correlation?.pairs?.length > 0 && (
             <div className="glass rounded-2xl p-4">
