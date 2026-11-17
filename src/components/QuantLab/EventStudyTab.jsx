@@ -6,7 +6,11 @@
  * from the first open after it (tradable, after costs, against the benchmark). Under 12 usable events there is no
  * verdict.
  */
+import { lazy, Suspense } from 'react'
 import { RunPanel, Card, Note, Stat, MiniLine } from './shared'
+
+const MarkedChart = lazy(() => import('../shared/MarkedChart'))
+const MARK_KIND = { earnings: 'earnings', filings: 'filing', custom: 'alert' }
 
 const signed = v => (v == null ? '—' : `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v).toFixed(2)}%`)
 const tone = v => (v == null ? 'text-slate-600' : v > 0 ? 'text-emerald-400' : v < 0 ? 'text-red-400' : 'text-slate-300')
@@ -86,6 +90,15 @@ export default function EventStudyTab() {
             <Card title={`Average path after the event, vs ${d.benchmark} (before costs)`}>
               <MiniLine data={d.path} xKey="day" refY={0} yFmt={v => `${v}%`} lines={[{ key: 'mean', name: 'mean' }, { key: 'median', name: 'median', color: '#64748b' }]} />
               <div className="mt-2"><Note>Day 1 is the close of the first session after the event, measured from that session's open. A line that keeps rising after day 1 is drift; one that jumps and goes flat is a reaction that was already over.</Note></div>
+            </Card>
+          )}
+
+          {d.table?.length > 0 && (
+            <Card title={`${d.symbol} with the events marked`}>
+              <Suspense fallback={<p className="text-xs text-slate-500">Loading chart…</p>}>
+                <MarkedChart symbol={d.symbol} range="5y" events={d.table.map(r => ({ date: r.date, kind: MARK_KIND[d.kind] || 'filing', text: r.form || 'Event' }))}
+                  note={d.events > d.table.length ? `Only the latest ${d.table.length} events are marked.` : null} />
+              </Suspense>
             </Card>
           )}
 

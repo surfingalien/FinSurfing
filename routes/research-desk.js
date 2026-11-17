@@ -305,6 +305,27 @@ router.get('/theses', requireAuth, async (req, res) => {
   })
 })
 
+// ── Chart events: dated facts to mark on the symbol's chart (lib/chart-events.js) ──
+// Earnings releases and periodic filings from the SEC index, and this user's own
+// theses. No model, no prices. An index that cannot be read is said in `notes`,
+// never shown as "no events".
+router.get('/:symbol/chart-events', requireAuth, evidenceLimit, async (req, res) => {
+  const sym = cleanSymbol(req.params.symbol)
+  if (!sym) return res.status(400).json({ error: 'A valid symbol is required' })
+  const notes = []
+  let recent = null
+  if (assetTypeOf(sym) === 'stock') {
+    try {
+      const index = await require('../lib/event-study').fetchFilingIndex(sym)
+      if (index) recent = index.recent
+      else notes.push(`${sym} has no SEC filings under that ticker, so there are no filing dates to mark.`)
+    } catch { notes.push('The SEC filing index could not be read just now, so filing and earnings dates are missing.') }
+  }
+  const theses = readTheses().filter(t => t.userId === req.user.userId && t.symbol === sym)
+  const from = new Date(Date.now() - 5 * 366 * 86400000).toISOString().slice(0, 10)
+  res.json({ symbol: sym, events: require('../lib/chart-events').chartEvents({ recent, theses, from }), notes })
+})
+
 // ── Compare: up to six symbols side by side on measured facts (lib/research-compare.js) ──
 // No model. Bars and SEC facts are fetched together; a symbol that fails is
 // reported in `failed`, never silently dropped. Cached 10 minutes per symbol set.

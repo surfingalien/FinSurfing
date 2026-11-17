@@ -11,7 +11,7 @@
  * Is it working?.
  * Backend: routes/research-desk.js; pure logic: lib/research-desk.js.
  */
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect, useRef, lazy, Suspense } from 'react'
 import {
   Microscope, Loader2, FileSearch, PenLine, ListChecks, LineChart, AlertTriangle, Stethoscope, Download, Columns3, ListTodo
 } from 'lucide-react'
@@ -26,6 +26,9 @@ import TrackRecord from './parts/TrackRecord'
 import SystemStatus from './parts/SystemStatus'
 import { TradePlan } from '../AIBrain/scan/StockCardParts'
 import * as researchReport from '../../../lib/research-report.js'
+
+// The chart library is loaded only when a dossier is on screen.
+const DossierChart = lazy(() => import('./parts/DossierChart'))
 
 const TABS = [
   { id: 'research', label: 'Research',     icon: FileSearch },
@@ -167,6 +170,14 @@ export default function ResearchDeskView({ defaultSymbol = null, onSymbol, queue
               {busy === 'evidence' ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileSearch className="w-4 h-4" />} Gather evidence
             </button>
           </form>
+
+          {dossier && (
+            <Suspense fallback={<div className="glass rounded-2xl p-4 h-[380px] text-xs text-slate-500">Loading chart…</div>}>
+              <DossierChart symbol={dossier.symbol} call={call}
+                plan={thesis?.judgement?.tradePlan || dossier.referenceLevels}
+                planBasis={thesis?.judgement?.tradePlan?.basis === 'thesis' ? 'thesis' : 'reference'} />
+            </Suspense>
+          )}
 
           {dossier && (
             <div className="grid lg:grid-cols-5 gap-4 items-start">
