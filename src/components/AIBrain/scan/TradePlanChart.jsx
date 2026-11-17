@@ -1,77 +1,83 @@
 /**
- * TradePlanChart — the trade plan's levels drawn on the symbol's own daily
- * closes: entry range (blue), stop range (red), the profit-booking levels
- * (green) and the current price. Same levels as the TradePlan grid, nothing
- * recomputed here — it only shows where they sit against recent price action.
- * Loaded on demand (React.lazy in StockCardParts) so recharts never weighs
- * down a scan with dozens of cards.
+ * TradePlanChart — the trade plan's levels on the symbol's own daily candles
+ * (shared/PriceChart.jsx), with dated facts marked: earnings releases, annual
+ * and quarterly reports, your theses and your TradingView alerts. The levels
+ * are the same numbers as the TradePlan grid — nothing is recomputed here.
+ *
+ * Loaded on demand (React.lazy in StockCardParts) so the chart library never
+ * weighs down a scan with dozens of cards. The dated facts are best-effort:
+ * when they cannot be loaded the chart still shows price and levels.
  */
-import { useEffect, useState } from 'react'
-import { ComposedChart, Line, XAxis, YAxis, ReferenceArea, ReferenceLine, ResponsiveContainer, Tooltip } from 'recharts'
+import { useEffect, useMemo, useState } from 'react'
+import { FileCode2 } from 'lucide-react'
+import PriceChart, { MARKER_STYLE, LEVEL_COLORS } from '../../shared/PriceChart'
 import { fetchChart } from '../../../services/api'
+import { useAuth } from '../../../contexts/AuthContext'
+import { KINDS, planLevels, snapMarkers } from '../../../../lib/chart-events.js'
+import { planToPine } from '../../../../lib/pine-export.js'
 
-const COLORS = { entry: '#3b82f6', stop: '#ef4444', book: '#10b981', price: '#94a3b8' }
-const money = v => (v == null ? '—' : `$${Number(v) >= 1 ? Number(v).toFixed(2) : Number(v).toPrecision(4)}`)
-const day = t => new Date(t).toISOString().slice(5, 10)
-
-/** Bands to draw and a y-domain that keeps every level and the price path in view. */
-function bandsOf(plan) {
-  const bands = [
-    { key: 'entry', label: 'Entry', lo: plan.entry?.low, hi: plan.entry?.high, color: COLORS.entry },
-    { key: 'stop', label: 'Stop', lo: plan.stop?.low, hi: plan.stop?.high, color: COLORS.stop },
-    // Booking labels read "T1 — book partial profit"; the margin fits only the T1/T2 part.
-    ...(plan.booking || []).map(b => ({ key: b.label, label: String(b.label).split(/\s+[—-]\s+/)[0], lo: b.low, hi: b.high, color: COLORS.book })),
-  ]
-  return bands.filter(b => Number.isFinite(b.lo) && Number.isFinite(b.hi))
-}
-
-function domainOf(closes, bands, price) {
-  const vals = [...closes, ...bands.flatMap(b => [b.lo, b.hi]), price].filter(Number.isFinite)
-  if (!vals.length) return ['auto', 'auto']
-  const lo = Math.min(...vals), hi = Math.max(...vals), pad = (hi - lo) * 0.06 || hi * 0.02
-  return [+(lo - pad).toPrecision(6), +(hi + pad).toPrecision(6)]
-}
-
-export default function TradePlanChart({ symbol, plan, price }) {
-  const [state, setState] = useState({ loading: true, rows: [], error: null })
+export default function TradePlanChart({ symbol, plan, price, asOf = null }) {
+  const { authFetch, isAuthenticated } = useAuth()
+  const [state, setState] = useState({ loading: true, candles: [], error: null })
+  const [events, setEvents] = useState([])
 
   useEffect(() => {
     let live = true
-    fetchChart(symbol, '1d', '6mo')
-      .then(d => live && setState({ loading: false, rows: d.candles.map(c => ({ t: c.time, close: c.close })), error: null }))
-      .catch(e => live && setState({ loading: false, rows: [], error: e.message }))
+    fetchChart(symbol, '1d', '1y')
+      .then(d => live && setState({ loading: false, candles: d.candles, error: null }))
+      .catch(e => live && setState({ loading: false, candles: [], error: e.message }))
     return () => { live = false }
   }, [symbol])
 
-  if (state.loading) return <div className="h-[180px] flex items-center justify-center text-[10px] text-slate-500">Loading {symbol} chart…</div>
-  if (state.error || state.rows.length < 5) return <p className="text-[10px] text-slate-500 py-2">No price history to draw the levels on{state.error ? ` (${state.error})` : ''}.</p>
+  useEffect(() => {
+    if (!isAuthenticated) return undefined
+    let live = true
+    authFetch(`/api/research-desk/${encodeURIComponent(symbol)}/chart-events`)
+      .then(r => (r.ok ? r.json() : { events: [] }))
+      .then(d => live && setEvents(d.events || []))
+      .catch(() => {})
+    return () => { live = false }
+  }, [symbol, authFetch, isAuthenticated])
 
-  const bands = bandsOf(plan)
-  const last = Number.isFinite(price) ? price : state.rows.at(-1).close
-  const domain = domainOf(state.rows.map(r => r.close), bands, last)
+  const levels = useMemo(() => {
+    const l = planLevels(plan)
+    return Number.isFinite(price) ? [...l, { price, label: 'Now', role: 'price' }] : l
+  }, [plan, price])
+  const days = useMemo(() => state.candles.map(c => new Date(c.time).toISOString().slice(0, 10)), [state.candles])
+  const snapped = useMemo(() => snapMarkers(events, days), [events, days])
+  const kinds = useMemo(() => [...new Set(snapped.markers.map(m => m.kind))], [snapped])
+
+  const downloadPine = () => {
+    const script = planToPine({ symbol, levels: planLevels(plan), basis: plan.basis === 'technical' ? 'reference' : 'thesis', asOf })
+    if (!script) return
+    const url = URL.createObjectURL(new Blob([script], { type: 'text/plain' }))
+    const a = document.createElement('a')
+    a.href = url; a.download = `${symbol}-levels.pine`; a.click()
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
+  }
+
+  if (state.loading) return <div className="h-[220px] flex items-center justify-center text-[10px] text-slate-500">Loading {symbol} chart…</div>
+  if (state.error || state.candles.length < 5) return <p className="text-[10px] text-slate-500 py-2">No price history to draw the levels on{state.error ? ` (${state.error})` : ''}.</p>
 
   return (
-    <div className="mt-2" aria-label={`${symbol} price with the trade plan's levels`}>
-      <div className="h-[180px]">
-        <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={state.rows} margin={{ top: 6, right: 52, bottom: 0, left: 0 }}>
-            <XAxis dataKey="t" tickFormatter={day} tick={{ fontSize: 9, fill: '#64748b' }} minTickGap={40} axisLine={false} tickLine={false} />
-            <YAxis domain={domain} tick={{ fontSize: 9, fill: '#64748b' }} width={46} axisLine={false} tickLine={false} tickFormatter={v => (v >= 100 ? v.toFixed(0) : v.toPrecision(3))} />
-            <Tooltip
-              labelFormatter={t => new Date(t).toISOString().slice(0, 10)}
-              formatter={v => [money(v), 'Close']}
-              contentStyle={{ fontSize: 10, padding: '4px 8px' }}
-            />
-            {bands.map(b => (
-              <ReferenceArea key={b.key} y1={b.lo} y2={b.hi} fill={b.color} fillOpacity={b.color === COLORS.book ? 0.12 : 0.18} stroke={b.color} strokeOpacity={0.5} ifOverflow="extendDomain"
-                label={{ value: b.label, position: 'right', fontSize: 9, fill: b.color }} />
-            ))}
-            <ReferenceLine y={last} stroke={COLORS.price} strokeDasharray="3 3" label={{ value: `now ${money(last)}`, position: 'insideBottomLeft', fontSize: 9, fill: COLORS.price }} />
-            <Line type="monotone" dataKey="close" stroke="#6366f1" strokeWidth={1.5} dot={false} isAnimationActive={false} />
-          </ComposedChart>
-        </ResponsiveContainer>
+    <div className="mt-2">
+      <PriceChart candles={state.candles} levels={levels} markers={snapped.markers} height={220} levelTitles={false} label={`${symbol} daily candles with the trade plan's levels`} />
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-[9px] text-slate-500">
+        <span>Daily candles, last year. Lines are the plan above:</span>
+        {[['entry', 'entry'], ['stop', 'stop'], ['target', 'targets'], ['price', 'now']].map(([role, name]) => (
+          <span key={role} className="inline-flex items-center gap-1"><span className="inline-block w-3 border-t border-dashed" style={{ borderColor: LEVEL_COLORS[role] }} aria-hidden="true" />{name}</span>
+        ))}
+        {kinds.map(k => (
+          <span key={k} className="inline-flex items-center gap-1">
+            <span className="inline-block w-1.5 h-1.5 rounded-full" style={{ background: MARKER_STYLE[k]?.color }} aria-hidden="true" />
+            <b className="font-semibold text-slate-400">{MARKER_STYLE[k]?.text}</b> {KINDS[k]?.label || k}
+          </span>
+        ))}
+        <button type="button" onClick={downloadPine} title="Download these levels as a Pine Script. Paste it into TradingView's Pine Editor to see the same lines on your own chart. It draws lines only — no orders, no alerts."
+          className="ml-auto inline-flex items-center gap-1 text-slate-400 hover:text-white underline underline-offset-2">
+          <FileCode2 className="w-3 h-3" aria-hidden="true" /> Levels for TradingView
+        </button>
       </div>
-      <p className="text-[9px] text-slate-500 mt-1">Daily closes, last 6 months. Bands are the plan above; the dashed line is the current price.</p>
     </div>
   )
 }

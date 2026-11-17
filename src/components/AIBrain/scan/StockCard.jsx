@@ -22,7 +22,7 @@ function compositeScoreBand(score) {
 const BAND_LABEL = { elite: 'Elite', high: 'High', mid: 'Mid', low: 'Low' }
 const BAND_COLOR = { elite: 'text-emerald-400', high: 'text-mint-400', mid: 'text-amber-400', low: 'text-red-400' }
 
-export default function StockCard({ stock, onAnalyze, horizon, byCompositeScore }) {
+export default function StockCard({ stock, onAnalyze, horizon, byCompositeScore, alerted = false }) {
   const [expanded, setExpanded] = useState(false)
   const { addStock, removeStock, hasSymbol } = useAIWatchlist()
   const verdict    = VERDICT_CONFIG[stock.agentVerdict]   || VERDICT_CONFIG['Buy']
@@ -155,6 +155,9 @@ export default function StockCard({ stock, onAnalyze, horizon, byCompositeScore 
                 }`}>
                   {stock.daysToEarnings <= 7 ? '⚠️' : '📅'} Earnings {stock.daysToEarnings}d
                 </span>
+              )}
+              {alerted && (
+                <span title="Your own TradingView alerted on this symbol in the last few days. A fact about your alerts — it did not change this card's score." className="text-[10px] text-pink-500 bg-pink-500/10 border border-pink-500/30 px-1.5 py-0.5 rounded">Your alert</span>
               )}
               {stock.sector && (
                 <span className="text-[10px] text-slate-500 bg-white/[0.04] px-1.5 py-0.5 rounded">{stock.sector}</span>

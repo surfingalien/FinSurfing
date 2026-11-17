@@ -175,7 +175,7 @@ export default function QueueTab({ call, symbols = [], onOpen, onCompare }) {
                       <td className="py-2 px-2">
                         <div className="flex flex-wrap gap-1">
                           {due && <span className="text-[10px] px-2 py-0.5 rounded-full border text-amber-300 border-amber-500/30 bg-amber-500/10">Review due</span>}
-                          {r.alert && <span title="Sent by your own TradingView alert" className="text-[10px] px-2 py-0.5 rounded-full border text-pink-300 border-pink-500/30 bg-pink-500/10">TradingView alert{r.alert.count > 1 ? ` ×${r.alert.count}` : ''}</span>}
+                          {r.alert && <span title="Sent by your own TradingView alert" className="text-[10px] px-2 py-0.5 rounded-full border text-pink-500 border-pink-500/30 bg-pink-500/10">TradingView alert{r.alert.count > 1 ? ` ×${r.alert.count}` : ''}</span>}
                           {th && <span className={`text-[10px] px-2 py-0.5 rounded-full border ${th.cls}`}>{th.label}</span>}
                           {r.flags.map(f => <span key={f.id} title={f.label} className="text-[10px] px-2 py-0.5 rounded-full border text-slate-300 border-slate-500/25 bg-slate-500/10">{f.label}</span>)}
                         </div>

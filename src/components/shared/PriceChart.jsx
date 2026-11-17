@@ -14,7 +14,8 @@
  *   lines    [{name, points:[{time:'YYYY-MM-DD', value}]}]  line mode (percent)
  *   levels   [{price, label, role:'entry'|'stop'|'target'|'price'}]
  *   markers  [{time:'YYYY-MM-DD', kind, text}]              already snapped to bars
- *   height, percent (format the scale as %), label (accessible name)
+ *   height, percent (format the scale as %), label (accessible name),
+ *   levelTitles=false for a narrow chart: the level names would cover the candles, so only the prices are tagged
  */
 import { useEffect, useRef } from 'react'
 import { createChart, CandlestickSeries, HistogramSeries, LineSeries, createSeriesMarkers, LineStyle, CrosshairMode } from 'lightweight-charts'
@@ -44,7 +45,7 @@ function theme() {
   }
 }
 
-export default function PriceChart({ candles = null, lines = null, levels = [], markers = [], height = 320, percent = false, label = 'Price chart' }) {
+export default function PriceChart({ candles = null, lines = null, levels = [], markers = [], height = 320, percent = false, label = 'Price chart', levelTitles = true }) {
   const box = useRef(null)
 
   useEffect(() => {
@@ -75,7 +76,7 @@ export default function PriceChart({ candles = null, lines = null, levels = [], 
     if (main) {
       for (const lv of levels) {
         if (!Number.isFinite(lv.price)) continue
-        main.createPriceLine({ price: lv.price, color: ROLE[lv.role] || ROLE.price, lineWidth: 1, lineStyle: lv.role === 'price' ? LineStyle.Dotted : LineStyle.Dashed, axisLabelVisible: true, title: lv.label })
+        main.createPriceLine({ price: lv.price, color: ROLE[lv.role] || ROLE.price, lineWidth: 1, lineStyle: lv.role === 'price' ? LineStyle.Dotted : LineStyle.Dashed, axisLabelVisible: true, title: levelTitles ? lv.label : '' })
       }
       if (markers.length) {
         createSeriesMarkers(main, markers.map(m => {
@@ -86,7 +87,7 @@ export default function PriceChart({ candles = null, lines = null, levels = [], 
     }
     chart.timeScale().fitContent()
     return () => chart.remove()
-  }, [candles, lines, levels, markers, height, percent])
+  }, [candles, lines, levels, markers, height, percent, levelTitles])
 
   return <div ref={box} style={{ height }} className="w-full" role="img" aria-label={label} />
 }

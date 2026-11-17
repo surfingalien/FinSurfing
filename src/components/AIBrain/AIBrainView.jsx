@@ -29,6 +29,7 @@ import AgentOrb from './scan/AgentOrb'
 import AgentNotesPanel from './scan/AgentNotesPanel'
 import SymbolSearchInput from './scan/SymbolSearchInput'
 import ScanChanges from './scan/ScanChanges'
+import ScanSources from './scan/ScanSources'
 import { useAuth } from '../../contexts/AuthContext'
 
 /* ── Main view ────────────────────────────────────────────── */
@@ -42,6 +43,7 @@ export default function AIBrainView({ portfolio, onAnalyze, onCompare }) {
   const [activeAgent,   setActiveAgent]   = useState(-1)
   const [customSymbols,    setCustomSymbols]    = useState('')
   const [showConvictionOnly, setShowConvictionOnly] = useState(false)
+  const [alertedSymbols, setAlertedSymbols] = useState([])   // tickers the user's own TradingView alerted on lately
 
   const holdings = portfolio?.positions?.map(p => p.symbol) ?? []
 
@@ -258,6 +260,9 @@ export default function AIBrainView({ portfolio, onAnalyze, onCompare }) {
       )}
 
       {/* ── Symbol search ── */}
+      {/* ── Lists from the user's alerts and today's market screens ── */}
+      <ScanSources onFill={setCustomSymbols} onAlerted={setAlertedSymbols} disabled={loading} />
+
       <SymbolSearchInput value={customSymbols} onChange={setCustomSymbols} onSubmit={runAnalysis} disabled={loading} />
 
       {/* ── Error ── */}
@@ -511,7 +516,7 @@ export default function AIBrainView({ portfolio, onAnalyze, onCompare }) {
             )}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {visibleStocks.map((stock, i) => (
-                <StockCard key={`${stock.symbol}-${i}`} stock={stock} onAnalyze={onAnalyze} horizon={horizon} byCompositeScore={byCompositeScore} />
+                <StockCard key={`${stock.symbol}-${i}`} stock={stock} onAnalyze={onAnalyze} horizon={horizon} byCompositeScore={byCompositeScore} alerted={alertedSymbols.includes(stock.symbol)} />
               ))}
             </div>
           </div>
