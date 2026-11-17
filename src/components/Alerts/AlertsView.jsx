@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import TradingViewInbox from './TradingViewInbox'
 import { Bell, BellOff, Plus, X, Target, TrendingUp, TrendingDown, AlertTriangle, CheckCircle } from 'lucide-react'
 import { WATCHLIST_ALERTS } from '../../data/portfolio'
 import { fmt, fmtPct } from '../../services/api'
@@ -203,7 +204,7 @@ function AddAlertForm({ symbols, onAdd, onClose }) {
 }
 
 /* ── Main AlertsView ────────────────────────────── */
-export default function AlertsView({ alerts: alertsHook, quotesMap, portfolioSymbols, watchlistSymbols }) {
+export default function AlertsView({ alerts: alertsHook, quotesMap, portfolioSymbols, watchlistSymbols, onResearch }) {
   const { alerts, triggered, addAlert, removeAlert, toggleAlert, dismissTriggered, clearAllTriggered } = alertsHook
   const [showForm, setShowForm] = useState(false)
   const allSymbols = [...new Set([...portfolioSymbols, ...watchlistSymbols, ...WATCHLIST_ALERTS.map(c => c.symbol)])]
@@ -339,6 +340,9 @@ export default function AlertsView({ alerts: alertsHook, quotesMap, portfolioSym
           </div>
         )}
       </div>
+
+      {/* Alerts sent in by the user's own TradingView */}
+      <TradingViewInbox onOpen={onResearch} />
 
       {/* CFP Buy-Zone Analysis */}
       <div>

@@ -264,6 +264,7 @@ function MainApp({ onSignIn }) {
     'strategies':      () => <StrategiesView onAnalyze={navigateToAnalyze} />,
     'alerts':          () => (
       <AlertsView
+        onResearch={s => navigate('research-desk', s)}
         alerts={alertsHook}
         quotesMap={quotesMap}
         portfolioSymbols={portfolio.positions.map(p => p.symbol)}

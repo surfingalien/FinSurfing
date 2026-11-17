@@ -58,3 +58,4 @@ data/strategy-brain.json
 # Python bytecode (skills run python; compiling a script must never reach a commit)
 __pycache__/
 *.pyc
+data/inbound-alerts.json
