@@ -91,6 +91,15 @@ const STRATEGIES = [
       { key: 'maPeriod',  label: 'Trend Average', type: 'number', default: 50, min: 10, max: 200 },
     ],
   },
+  {
+    id: 'supertrend',
+    label: 'Supertrend',
+    description: 'Long while price closes above an ATR trailing band; out when it closes below',
+    params: [
+      { key: 'period', label: 'ATR Period',     type: 'number', default: 10, min: 5, max: 50 },
+      { key: 'mult',   label: 'ATR Multiplier', type: 'number', default: 3,  min: 1, max: 6, step: 0.5 },
+    ],
+  },
 ]
 
 const RANGES = [

@@ -8,14 +8,15 @@
  * recomputed: the levels are the plan's own numbers.
  */
 import { useEffect, useMemo, useState } from 'react'
-import { Loader2 } from 'lucide-react'
+import { Loader2, FileCode2 } from 'lucide-react'
 import PriceChart, { MARKER_STYLE, LEVEL_COLORS } from '../../shared/PriceChart'
 import { fetchChart } from '../../../services/api'
 import { KINDS, planLevels, snapMarkers } from '../../../../lib/chart-events.js'
+import { planToPine } from '../../../../lib/pine-export.js'
 
 const RANGES = [['6mo', '6 months'], ['1y', '1 year'], ['2y', '2 years'], ['5y', '5 years']]
 
-export default function DossierChart({ symbol, plan, planBasis, call }) {
+export default function DossierChart({ symbol, plan, planBasis, asOf, call }) {
   const [range, setRange] = useState('1y')
   const [state, setState] = useState({ loading: true, candles: [], error: null })
   const [events, setEvents] = useState({ list: [], notes: [] })
@@ -49,6 +50,16 @@ export default function DossierChart({ symbol, plan, planBasis, call }) {
     return c
   }, [events.list, days])
 
+  // The plan's levels as a small Pine Script, for the user's own TradingView chart (lib/pine-export.js). Lines only.
+  const downloadPine = () => {
+    const script = planToPine({ symbol, levels, basis: planBasis, asOf })
+    if (!script) return
+    const url = URL.createObjectURL(new Blob([script], { type: 'text/plain' }))
+    const a = document.createElement('a')
+    a.href = url; a.download = `${symbol}-levels.pine`; a.click()
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
+  }
+
   // An event dated after the last bar (an alert from today, before today's bar exists) has no bar to sit on yet.
   const ahead = days.length ? events.list.filter(e => !hidden[e.kind] && e.date > days[days.length - 1]).length : 0
 
@@ -56,11 +67,19 @@ export default function DossierChart({ symbol, plan, planBasis, call }) {
     <div className="glass rounded-2xl p-4">
       <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
         <h4 className="text-xs font-semibold">{symbol} — price, levels and dated events</h4>
-        <div className="flex gap-1" role="group" aria-label="Chart range">
+        <div className="flex flex-wrap items-center gap-1">
+          {levels.length > 0 && (
+            <button type="button" onClick={downloadPine} title="Download these levels as a Pine Script. Paste it into TradingView's Pine Editor to see the same lines on your own chart. It draws lines only — no orders, no alerts."
+              className="px-2 py-1 rounded-lg text-[11px] border text-slate-400 border-slate-500/20 hover:text-white inline-flex items-center gap-1 mr-2">
+              <FileCode2 className="w-3.5 h-3.5" aria-hidden="true" /> Levels for TradingView
+            </button>
+          )}
+          <span className="flex gap-1" role="group" aria-label="Chart range">
           {RANGES.map(([id, name]) => (
             <button key={id} type="button" onClick={() => setRange(id)} aria-pressed={range === id}
               className={`px-2 py-1 rounded-lg text-[11px] border ${range === id ? 'bg-mint-400/15 text-mint-400 border-mint-400/30' : 'text-slate-400 border-slate-500/20 hover:text-white'}`}>{name}</button>
           ))}
+          </span>
         </div>
       </div>
 

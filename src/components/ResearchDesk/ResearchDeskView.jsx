@@ -173,7 +173,7 @@ export default function ResearchDeskView({ defaultSymbol = null, onSymbol, queue
 
           {dossier && (
             <Suspense fallback={<div className="glass rounded-2xl p-4 h-[380px] text-xs text-slate-500">Loading chart…</div>}>
-              <DossierChart symbol={dossier.symbol} call={call}
+              <DossierChart symbol={dossier.symbol} call={call} asOf={dossier.asOf}
                 plan={thesis?.judgement?.tradePlan || dossier.referenceLevels}
                 planBasis={thesis?.judgement?.tradePlan?.basis === 'thesis' ? 'thesis' : 'reference'} />
             </Suspense>

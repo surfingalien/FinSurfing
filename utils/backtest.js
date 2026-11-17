@@ -14,8 +14,10 @@
  *   range_breakout_atr — the same breakout, only on a bar whose true range is ≥ k × the prior ATR
  *                        (volatility expansion); exit below the prior M-bar low
  *   adx_trend          — long while ADX ≥ threshold, +DI > −DI and close > its SMA; out when any fails
+ *   supertrend         — long while the close is above the ATR trailing band (Supertrend, one of the most used
+ *                        TradingView indicators); out when it closes below. Period × multiplier.
  *
- * The last three read highs/lows when given (`ohlc` argument) and fall back to
+ * The last four read highs/lows when given (`ohlc` argument) and fall back to
  * closes otherwise. Every level at bar i reads bars ≤ i (the channel uses bars
  * BEFORE i), and the order fills on the next bar.
  */
@@ -240,6 +242,24 @@ function generateSignals(closes, strategy, params = {}, ohlc = {}) {
     const ma = smaSeries(closes, maPeriod)
     return stateSignals(n, i => (Number.isFinite(adx[i]) && Number.isFinite(ma[i])
       ? adx[i] >= threshold && plusDI[i] > minusDI[i] && closes[i] > ma[i] : null))
+  }
+
+  if (strategy === 'supertrend') {
+    // Olivier Seban's Supertrend: bands at (high+low)/2 ± mult × ATR that only ever tighten toward price while
+    // the trend holds. Bar i reads bars ≤ i (the bands carry forward from i−1), so there is no lookahead.
+    const { period = 10, mult = 3 } = params
+    const atr = atrSeries(highs, lows, closes, period)
+    const state = new Array(n).fill(null)
+    let fu = NaN, fl = NaN, up = null
+    for (let i = 1; i < n; i++) {
+      if (!Number.isFinite(atr[i])) continue
+      const mid = (highs[i] + lows[i]) / 2, bu = mid + mult * atr[i], bl = mid - mult * atr[i]
+      fu = !Number.isFinite(fu) || bu < fu || closes[i - 1] > fu ? bu : fu
+      fl = !Number.isFinite(fl) || bl > fl || closes[i - 1] < fl ? bl : fl
+      up = up === true ? !(closes[i] < fl) : closes[i] > fu
+      state[i] = up
+    }
+    return stateSignals(n, i => state[i])
   }
 
   return sig
