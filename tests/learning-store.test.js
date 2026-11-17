@@ -11,8 +11,11 @@ const {
   MIN_SAMPLE,
 } = require('../lib/learning-store')
 
+// Each fixture decision a week apart: one surface naming one stock again inside
+// its outcome window shares that outcome, and calibrationReport counts it once.
+let seq = 0
 const mk = (over = {}) => ({
-  ...buildDecision({ surface: 'ai-brain', symbol: 'NVDA', action: 'buy', price: 100, confidence: 'High' }),
+  ...buildDecision({ surface: 'ai-brain', symbol: 'NVDA', action: 'buy', price: 100, confidence: 'High', at: new Date(Date.UTC(2024, 0, 1) + (seq++) * 8 * 86400000).toISOString() }),
   ...over,
 })
 const resolved = (retPct, benchRetPct = null, over = {}) =>

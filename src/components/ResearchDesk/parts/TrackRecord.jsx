@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Activity, AlertTriangle, CalendarClock, Database, Layers, Loader2, Shuffle, Wallet } from 'lucide-react'
 
 const pc = v => (v == null ? '—' : `${Math.round(v * 100)}%`)
+const skillText = s => (s?.skill == null ? '—' : `${s.skill > 0 ? '+' : ''}${s.skill.toFixed(3)} [${s.lo?.toFixed(3)}, ${s.hi?.toFixed(3)}]`)
 const ci = (lo, hi) => (lo == null || hi == null ? '' : ` [${pc(lo)}–${pc(hi)}]`)
 
 function Rate({ label, rate, lo, hi, n, k }) {
@@ -84,6 +85,50 @@ function PriceRegime({ regime, title }) {
   )
 }
 
+const RANK_VERDICT = {
+  ranks:    ['text-emerald-400', 'Higher-scored picks did better'],
+  flat:     ['text-slate-300', 'No measured link between score and outcome'],
+  inverted: ['text-red-400', 'Higher-scored picks did worse'],
+}
+
+/** Does a higher score do better? Rank correlation + outcome by score band, over independent picks. */
+function RankingCheck({ ranking: r }) {
+  if (!r) return null
+  const unit = r.metric === 'alpha' ? 'vs the benchmark' : 'return'
+  const sp = s => (s?.rho == null ? '—' : `${s.rho} [${s.lo}, ${s.hi}]`)
+  return (
+    <section>
+      <h3 className="text-sm font-semibold mb-2">Does a higher score do better?</h3>
+      {!r.ready ? (
+        <p className="text-[12px] text-slate-500">Waiting — {r.n} of {r.minN} independent scored picks at {r.horizon} days.</p>
+      ) : (
+        <p className={`text-[12px] ${RANK_VERDICT[r.verdict]?.[0] || 'text-slate-400'}`}>
+          {RANK_VERDICT[r.verdict]?.[1] || r.verdict} — rank correlation of composite score with the {r.horizon}-day outcome {unit}: {sp(r.score)} (95% interval, n={r.n}).
+          {r.confidence?.rho != null ? ` Stated confidence: ${sp(r.confidence)}.` : ''}
+        </p>
+      )}
+      {r.byScore?.length > 0 && (
+        <div className="overflow-x-auto mt-2">
+          <table className="text-[11px] w-full max-w-lg">
+            <thead><tr className="text-slate-500 text-left"><th className="pr-3 font-normal">Score</th><th className="pr-3 font-normal">Picks</th><th className="pr-3 font-normal">Mean outcome {unit}</th><th className="font-normal">Positive</th></tr></thead>
+            <tbody>
+              {r.byScore.map(x => (
+                <tr key={x.band} className="text-slate-300">
+                  <td className="pr-3">{x.band}</td>
+                  <td className="pr-3 font-mono">{x.n}</td>
+                  <td className={`pr-3 font-mono ${x.meanOutcome > 0 ? 'text-emerald-400' : x.meanOutcome < 0 ? 'text-red-400' : ''}`}>{x.meanOutcome > 0 ? '+' : ''}{x.meanOutcome}%</td>
+                  <td className="font-mono">{pc(x.winRate)}{ci(x.lo, x.hi)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <p className="text-[11px] text-slate-500 mt-1">If outcomes do not rise with the score, the score is not ranking picks — and a score cutoff or score-weighted sizing adds nothing, however good a lucky month looks.</p>
+    </section>
+  )
+}
+
 const EXIT_LABEL = { stop: 'Stopped out', 'breakeven-stop': 'Exited at breakeven', t1: 'Half booked at T1', target: 'Target hit', time: 'Time limit', manual: 'Other' }
 
 export default function TrackRecord({ data, onAdoptBrackets }) {
@@ -127,7 +172,14 @@ export default function TrackRecord({ data, onAdoptBrackets }) {
             </div>
           </div>
         ) : <p className="text-[12px] text-slate-500">No resolved picks yet. Outcomes resolve 7 and 30 days after each scan.</p>}
+        {b?.independence?.raw > 0 && (
+          <p className="text-[11px] text-slate-500 mt-2">
+            Counted once per stock per {b.independence.horizon} days: {b.independence.independent} independent outcomes from {b.independence.raw} resolved picks. A stock picked again before its last outcome window ended shares that outcome, so counting it twice would make every interval look tighter than it is.
+          </p>
+        )}
       </section>
+
+      <RankingCheck ranking={b?.ranking} />
 
       <section>
         <h3 className="text-sm font-semibold mb-2">Do picks beat the odds their own levels imply?</h3>
@@ -193,6 +245,15 @@ export default function TrackRecord({ data, onAdoptBrackets }) {
                 <Rate label="AI picks" rate={vr.metric === 'alphaWinRate' ? vr.ai.alphaWinRate : vr.ai.winRate} n={vr.ai.n} />
                 <Rate label="Random picks, same list" rate={vr.metric === 'alphaWinRate' ? vr.shadow.alphaWinRate : vr.shadow.winRate} n={vr.shadow.n} />
               </div>
+            )}
+            {vr.drift && (
+              <p className={`text-[12px] ${vr.drift.alarm ? 'text-amber-300' : 'text-slate-400'}`}>
+                {!vr.drift.ready
+                  ? `Trend check waiting — ${vr.drift.points} of ${vr.drift.minPoints} weekly points.`
+                  : vr.drift.alarm
+                    ? `The lead over random picks has been falling since about ${String(vr.drift.alarmAt).slice(0, 10)}: average ${Math.round(vr.drift.meanLead * 100)} points, last eight scans ${Math.round(vr.drift.recentLead * 100)} points.`
+                    : `No sustained fall in the lead over random picks (${vr.drift.points} weekly points; average ${Math.round(vr.drift.meanLead * 100)} points, last eight ${Math.round(vr.drift.recentLead * 100)}).`}
+              </p>
             )}
             <p className="text-[11px] text-slate-500">Beating SPY can come from the list a scan is given (today's movers in a momentum market). Beating random names from that same list is the model's own contribution.</p>
           </div>
@@ -350,6 +411,11 @@ export default function TrackRecord({ data, onAdoptBrackets }) {
                 Error on the newest {data.bracketProb.validation.holdout} picks (Brier, lower is better): current {data.bracketProb.validation.brier.current}, bracket rate {data.bracketProb.validation.brier.rate}, per-pick model {data.bracketProb.validation.brier.model}. {pc(data.bracketProb.validation.bracketWinRate)} of those picks reached their target first or ended up.
               </p>
             )}
+            {data.bracketProb.validation?.skill && (
+              <p className="text-[11px] text-slate-500">
+                Skill against the base rate (above 0 is better, 90% interval): current {skillText(data.bracketProb.validation.skill.current?.vsBaseRate)}, bracket rate {skillText(data.bracketProb.validation.skill.rate?.vsBaseRate)}, per-pick model {skillText(data.bracketProb.validation.skill.model?.vsBaseRate)}. Against the no-skill odds of each pick's levels{data.bracketProb.validation.oddsLogged < data.bracketProb.validation.holdout ? ` (logged for ${data.bracketProb.validation.oddsLogged} of them; base rate for the rest)` : ''}: per-pick model {skillText(data.bracketProb.validation.skill.model?.vsOdds)}.
+              </p>
+            )}
             <p className="text-[11px] text-slate-500">Position sizes and the expected-value gate pay the target on a win and the stop on a loss, so the probability should be of THAT: target before stop. It replaces the 30-day rate only after predicting newer picks better.</p>
           </div>
         ) : <p className="text-[12px] text-slate-500">Not trained yet — the nightly cycle fits it once 150 picks have a target/stop outcome.</p>}
@@ -367,13 +433,15 @@ export default function TrackRecord({ data, onAdoptBrackets }) {
                 {t.models?.length > 0 && (
                   <div className="overflow-x-auto">
                     <table className="text-[11px] w-full max-w-xl">
-                      <thead><tr className="text-slate-500 text-left"><th className="pr-3 font-normal">Model</th><th className="pr-3 font-normal">Brier</th><th className="font-normal">t vs current</th></tr></thead>
+                      <thead><tr className="text-slate-500 text-left"><th className="pr-3 font-normal">Model</th><th className="pr-3 font-normal">Brier</th><th className="pr-3 font-normal">t vs current</th><th className="pr-3 font-normal" title="1 − Brier ÷ Brier of the base rate; above 0 is better. 90% interval.">Skill vs base rate</th><th className="font-normal" title="1 − Brier ÷ Brier of the no-skill odds the levels implied. 90% interval.">Skill vs no-skill odds</th></tr></thead>
                       <tbody>
                         {t.models.map(m => (
                           <tr key={m.name} className={m.name === t.winner ? 'text-emerald-400' : m.name === t.champion ? 'text-white' : 'text-slate-400'}>
                             <td className="pr-3">{m.name}{m.name === t.champion ? ' (current)' : ''}</td>
                             <td className="pr-3 font-mono">{m.brier}</td>
-                            <td className="font-mono">{m.tVsChampion ?? '—'}</td>
+                            <td className="pr-3 font-mono">{m.tVsChampion ?? '—'}</td>
+                            <td className="pr-3 font-mono">{skillText(m.skillVsBaseRate)}</td>
+                            <td className="font-mono">{skillText(m.skillVsOdds)}</td>
                           </tr>
                         ))}
                         <tr className="text-slate-500"><td className="pr-3">base rate</td><td className="pr-3 font-mono">{t.reference?.baseRate}</td><td /></tr>

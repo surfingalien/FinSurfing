@@ -97,8 +97,9 @@ describe('train', () => {
 })
 
 describe('computeStats baseline section', () => {
+  let seq = 0   // each fixture pick its own stock: repeat picks of one stock share an outcome and count once
   const rec = (over) => ({
-    symbol: 'TEST', generatedAt: '2026-05-01T00:00:00Z', verdict: 'STRONG_BUY',
+    symbol: `TEST${++seq}`, generatedAt: '2026-05-01T00:00:00Z', verdict: 'STRONG_BUY',
     priceAtPrediction: 100, entered: true,
     price7d: 110, price30d: null, benchRet7d: 1.0,
     baselineProb: 0.7, baselineDir: 'UP', baselineFeatures: new Array(7).fill(0.1),

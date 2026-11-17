@@ -445,6 +445,7 @@ router.get('/track-record', requireAuth, (req, res) => {
     persistence: { enabled: persistence.enabled, reason: persistence.reason },
     brain: stats && {
       totalResolved: stats.totalResolved, segmentHorizon: stats.segmentHorizon,
+      independence: stats.independence, ranking: stats.ranking,
       h7: stats.h7, h30: stats.h30, barriers: stats.barriers,
       byAssetType: stats.byAssetType, calibration: stats.calibration,
       autoTune: stats.autoTune, baseline: stats.baseline,

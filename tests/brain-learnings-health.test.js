@@ -61,7 +61,8 @@ test('when picks made with the learnings did measurably worse, the block is with
 
 test('computeStats splits picks by whether learnings were injected; unstamped records are excluded', () => {
   const t = new Date(Date.now() - 40 * 86_400_000).toISOString()
-  const r = (v, win) => ({ symbol: 'X', generatedAt: t, basePrice: 100, price7d: win ? 110 : 90, benchRet7d: 0, learningsVersion: v })
+  let seq = 0
+  const r = (v, win) => ({ symbol: `X${++seq}`, generatedAt: t, basePrice: 100, price7d: win ? 110 : 90, benchRet7d: 0, learningsVersion: v })
   const s = bl.computeStats([r('abcd1234', true), r('abcd1234', false), r('none', true), { ...r(undefined, true), learningsVersion: undefined }])
   expect(s.byLearnings.on.n).toBe(2)
   expect(s.byLearnings.off.n).toBe(1)
