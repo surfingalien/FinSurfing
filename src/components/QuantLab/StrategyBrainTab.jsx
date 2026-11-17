@@ -9,6 +9,7 @@ import { Fragment, useCallback, useEffect, useState } from 'react'
 import { Play, Pause, RotateCcw, Loader2, Brain, Lock } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { Card, Note, Stat } from './shared'
+import { Funnel, PaperDesk } from './StrategyPipeline'
 
 const when = t => (t ? new Date(t).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—')
 const pct = v => (v == null ? '—' : `${Math.round(v * 100)}%`)
@@ -136,6 +137,10 @@ export default function StrategyBrainTab() {
           <Stat label="Shared AI budget" value={d.budget ? `$${d.budget.spentUsd} / $${d.budget.capUsd}` : '—'} sub={d.budget?.exhausted ? 'model-using methods paused' : 'with the Agent Desk'} />
         </div>
       </Card>
+
+      <Funnel funnel={d.funnel} />
+
+      <PaperDesk />
 
       <Card title="What it has learned — research methods">
         <p className="text-[11px] text-slate-500 mb-2">Score = the posterior chance a try with this method finds a strategy that holds up (admissions count once, forward re-tests twice). "Next tries" = how often it would pick this method right now.</p>
