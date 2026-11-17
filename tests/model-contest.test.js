@@ -44,6 +44,11 @@ test('a signal a straight line cannot draw (target first only in a middle volati
   expect(['decisionTree', 'randomForest', 'gradientBoosting', 'knn']).toContain(out.winner)
   const champ = out.models.find(m => m.name === C.CHAMPION)
   expect(out.models[0].brier).toBeLessThan(champ.brier)
+  // Skill against the base rate, with an interval: the winner clears zero.
+  const w = out.models.find(m => m.name === out.winner)
+  expect(w.skillVsBaseRate.skill).toBeGreaterThan(0)
+  expect(w.skillVsBaseRate.lo).toBeGreaterThan(0)
+  expect(w.skillVsOdds).toHaveProperty('skill')
 })
 
 test('purged: a block is never predicted by picks whose outcome was still unknown', () => {

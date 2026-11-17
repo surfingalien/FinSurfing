@@ -76,8 +76,9 @@ describe('benchmarkFor', () => {
 describe('computeStats', () => {
   // These fixtures all carry 30d outcomes; pin segments to that horizon.
   const AT30 = { segmentMin30d: 1 }
+  let seq = 0   // each fixture pick its own stock: repeat picks of one stock in a window count once
   const mkRecord = (over = {}) => ({
-    symbol: 'NVDA',
+    symbol: `NVDA${++seq}`,
     generatedAt: '2026-05-01T00:00:00.000Z',
     confidence: 'High',
     basePrice: 100,
@@ -526,8 +527,9 @@ describe('tripleBarrier', () => {
 
 describe('computeStats — regime, generator and barrier segments', () => {
   const AT30 = { segmentMin30d: 1 }   // fixtures carry 30d outcomes
+  let seq2 = 0
   const mk = (over = {}) => ({
-    symbol: 'NVDA', generatedAt: '2026-05-01T00:00:00.000Z', confidence: 'High',
+    symbol: `NVDA${++seq2}`, generatedAt: '2026-05-01T00:00:00.000Z', confidence: 'High',
     basePrice: 100, entryZoneMid: 100, targetZoneMid: 115, entered: true,
     price7d: 105, benchRet7d: 1, price30d: 112, benchRet30d: 3,
     ...over,

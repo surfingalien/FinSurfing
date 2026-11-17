@@ -12,7 +12,7 @@ function records(n, edge, seed = 5) {
   return Array.from({ length: n }, (_, i) => {
     const rec = {
       generatedAt: new Date(Date.UTC(2025, 0, 1) + i * 86400000).toISOString(),
-      symbol: 'S' + (i % 30), compositeScore: Math.round(40 + r() * 50), confidence: ['High', 'Medium', 'Low'][Math.floor(r() * 3)],
+      symbol: 'S' + i, compositeScore: Math.round(40 + r() * 50), confidence: ['High', 'Medium', 'Low'][Math.floor(r() * 3)],
       ensembleConfirmed: r() < 0.4, rsRankAtScan: Math.round(r() * 100), priceRegimeAtScan: 'up-calm',
       assetType: r() < 0.5 ? 'crypto' : 'stock', targetReturn: 10, stopLoss: 6, entered: true, priceAtPrediction: 100,
       horizon: '3m', horizonDays: 91,
@@ -29,6 +29,9 @@ test('per-asset bracket rates replace a rate that cannot tell stocks from crypto
   expect(s.adopted).not.toBeNull()
   expect(s.rateAdopted).toBe(true)
   expect(s.validation.brier.rate).toBeLessThan(s.validation.brier.current)
+  // The per-asset rate beats one pooled base rate, and has more skill than a flat 50%.
+  expect(s.validation.skill.rate.vsBaseRate.skill).toBeGreaterThan(0)
+  expect(s.validation.skill.rate.vsBaseRate.skill).toBeGreaterThan(s.validation.skill.current.vsBaseRate.skill)
   const c = bp.winProbFor(s, { assetType: 'crypto' }), st = bp.winProbFor(s, { assetType: 'Equity' })
   expect(c.p).toBeLessThan(0.35)
   expect(st.p).toBeGreaterThan(0.6)
