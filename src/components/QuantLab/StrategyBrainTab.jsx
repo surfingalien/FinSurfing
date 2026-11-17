@@ -9,6 +9,7 @@ import { Fragment, useCallback, useEffect, useState } from 'react'
 import { Play, Pause, RotateCcw, Loader2, Brain, Lock } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { Card, Note, Stat } from './shared'
+import { Funnel, PaperDesk } from './StrategyPipeline'
 
 const when = t => (t ? new Date(t).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—')
 const pct = v => (v == null ? '—' : `${Math.round(v * 100)}%`)
@@ -130,12 +131,17 @@ export default function StrategyBrainTab() {
           )}
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-3">
-          <Stat label="Experiments per run" value={d.experimentsPerRun} sub="STRATEGY_BRAIN_EXPERIMENTS" />
+          <Stat label="Experiments per run" value={d.experimentsPerRun}
+            sub={d.sweepsPerRun ? `+ ${d.sweepsPerRun} sweeps × ${d.sweepSize} settings` : 'STRATEGY_BRAIN_EXPERIMENTS'} />
           <Stat label="Strategies found" value={d.strategies.length} sub={`${d.strategies.filter(s => s.status !== 'retired').length} still active`} />
           <Stat label="Held up forward" value={d.strategies.reduce((a, s) => a + s.forwardPasses, 0)} sub={`of ${d.strategies.reduce((a, s) => a + s.forwardTests, 0)} forward re-tests`} />
           <Stat label="Shared AI budget" value={d.budget ? `$${d.budget.spentUsd} / $${d.budget.capUsd}` : '—'} sub={d.budget?.exhausted ? 'model-using methods paused' : 'with the Agent Desk'} />
         </div>
       </Card>
+
+      <Funnel funnel={d.funnel} />
+
+      <PaperDesk />
 
       <Card title="What it has learned — research methods">
         <p className="text-[11px] text-slate-500 mb-2">Score = the posterior chance a try with this method finds a strategy that holds up (admissions count once, forward re-tests twice). "Next tries" = how often it would pick this method right now.</p>

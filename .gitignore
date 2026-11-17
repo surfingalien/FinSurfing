@@ -59,3 +59,4 @@ data/strategy-brain.json
 __pycache__/
 *.pyc
 data/inbound-alerts.json
+data/strategy-paper.json

@@ -81,7 +81,7 @@ describe('report card and the admission gate', () => {
 
   test('a strategy that clears everything gets a passing card; walk-forward is "review" until judged forward', () => {
     const card = SE.reportCard(item)
-    expect(card.rows.map(r => r.key)).toEqual(['oos', 'walkforward', 'stability', 'costs', 'trades', 'regimes', 'hypothesis', 'deflated', 'pbo', 'cpcv'])
+    expect(card.rows.map(r => r.key)).toEqual(['oos', 'walkforward', 'stability', 'costs', 'trades', 'regimes', 'drawdown', 'hypothesis', 'deflated', 'pbo', 'cpcv'])
     expect(card.rows.filter(r => r.status === 'fail')).toEqual([])
     expect(card.rows.find(r => r.key === 'walkforward').status).toBe('review')
     expect(SE.reportCard({ ...item, params: { blocks: 6 } }).rows.find(r => r.key === 'walkforward').status).toBe('pass')
