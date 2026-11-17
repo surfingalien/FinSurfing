@@ -23,6 +23,9 @@ const deps = (over = {}) => ({
   budget: () => ({ exhausted: false }),
   aiAvailable: () => true,
   yieldFn: async () => {},
+  // Sweeps: a stand-in for the worker thread; no dedicated sweeps unless a test asks for them.
+  sweep: async ({ type, symbol, configs }) => ({ type, symbol, tried: configs.length, rows: configs.map(params => ({ params, admit: false, reason: 'not validated (rejected)' })) }),
+  sweeps: 0,
   ...over,
 })
 
@@ -124,4 +127,43 @@ test('the bracket arm trades catalog draws under a stored bracket + slippage, an
   expect(r.admitted).toBe(1)                                          // only the draw whose selection generalises
   expect(lib.rows[0].params.exec.exits).toEqual(seen[0].exits)        // forward re-tests use the same bracket
   expect(Object.keys(r.reasons).some(k => /CPCV/.test(k))).toBe(true)
+})
+
+test('dedicated sweeps add volume: each is a whole grid, counted in the funnel, and a pause stops them too', async () => {
+  process.env.STRATEGY_BRAIN_EXPERIMENTS = '1'
+  const seen = []
+  const d = deps({
+    sweeps: 3,
+    sweep: async ({ type, symbol, configs }) => {
+      seen.push([type, symbol, configs.length])
+      // Three settings clear every check; the sweep keeps two and reports the third as a near-copy.
+      return { type, symbol, tried: configs.length, rows: configs.map((params, i) => (i < 2
+        ? { params, admit: true, reason: null, verdict: 'validated', metrics: { alpha: 1 }, hypothesis: null, card: null }
+        : { params, admit: false, reason: i === 2 ? 'a near-copy of a setting already kept from this sweep' : 'not validated (rejected)' })) }
+    },
+  })
+  const out = await brain.run({ deps: d })
+  const sweeps = out.experiments.filter(e => e.sweep)
+  expect(sweeps.length).toBeGreaterThanOrEqual(3)
+  expect(new Set(seen.slice(-3).map(x => x[0])).size).toBe(3)                 // three different strategy types
+  expect(seen.every(x => x[2] >= 20)).toBe(true)                              // each a whole grid
+  const arm = brain.readState().arms['catalog-sweep']
+  expect(arm.admitted).toBe(sweeps.length * 2)
+  const f = brain.funnel(brain.readState().arms, d.library.rows, null)
+  expect(f.duplicates).toBe(sweeps.length)
+  expect(f.stages[f.stages.length - 1].survivors).toBe(f.admitted + f.duplicates)
+  expect(f.tested).toBeGreaterThan(300)
+  expect(d.library.rows.filter(e => e.origin.arm === 'catalog-sweep').every(e => /sweep/.test(e.rationale))).toBe(true)
+
+  let n = 0
+  const paused = await brain.run({ deps: deps({ sweeps: 5, now: () => new Date(Date.UTC(2027, 5, 1)), sweep: async ({ type, symbol, configs }) => { if (++n === 2) brain.pause({ by: 'admin@test' }); return { type, symbol, tried: configs.length, rows: [] } } }) })
+  expect(paused.stopped).toMatch(/paused/)
+  expect(paused.experiments.filter(e => e.sweep).length).toBeLessThan(5)
+})
+
+test('sweeps per run: default 4, the env may set 0 to 20, nonsense falls back', () => {
+  const was = process.env.STRATEGY_BRAIN_SWEEPS
+  delete process.env.STRATEGY_BRAIN_SWEEPS; expect(brain.sweepsPerRun()).toBe(4)
+  for (const [v, want] of [['0', 0], ['7', 7], ['999', 20], ['-3', 4], ['abc', 4]]) { process.env.STRATEGY_BRAIN_SWEEPS = v; expect(brain.sweepsPerRun()).toBe(want) }
+  if (was == null) delete process.env.STRATEGY_BRAIN_SWEEPS; else process.env.STRATEGY_BRAIN_SWEEPS = was
 })

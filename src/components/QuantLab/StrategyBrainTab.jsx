@@ -131,7 +131,8 @@ export default function StrategyBrainTab() {
           )}
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-3">
-          <Stat label="Experiments per run" value={d.experimentsPerRun} sub="STRATEGY_BRAIN_EXPERIMENTS" />
+          <Stat label="Experiments per run" value={d.experimentsPerRun}
+            sub={d.sweepsPerRun ? `+ ${d.sweepsPerRun} sweeps × ${d.sweepSize} settings` : 'STRATEGY_BRAIN_EXPERIMENTS'} />
           <Stat label="Strategies found" value={d.strategies.length} sub={`${d.strategies.filter(s => s.status !== 'retired').length} still active`} />
           <Stat label="Held up forward" value={d.strategies.reduce((a, s) => a + s.forwardPasses, 0)} sub={`of ${d.strategies.reduce((a, s) => a + s.forwardTests, 0)} forward re-tests`} />
           <Stat label="Shared AI budget" value={d.budget ? `$${d.budget.spentUsd} / $${d.budget.capUsd}` : '—'} sub={d.budget?.exhausted ? 'model-using methods paused' : 'with the Agent Desk'} />

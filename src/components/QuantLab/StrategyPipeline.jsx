@@ -62,7 +62,8 @@ export function Funnel({ funnel }) {
           </div>
           <div className="mt-3 space-y-1.5">
             <Note>Each idea is counted once, at the first check it failed, in the order the checks run. These are this app's real counts, not an illustration.</Note>
-            {funnel.notTestable > 0 && <Note>{funnel.notTestable.toLocaleString()} more could not be tested at all — no price history, a rule the allow-list refused, or an error — and are left out of the funnel.</Note>}
+            {funnel.duplicates > 0 && <Note>{funnel.duplicates.toLocaleString()} passed every check but were not admitted: a parameter sweep keeps at most two settings of one rule on one symbol, since neighbouring settings are near-copies of the same idea. Every setting a sweep tries counts as a trial, so a bigger sweep raises the luck bar each one must clear.</Note>}
+            {funnel.notTestable > 0 &&<Note>{funnel.notTestable.toLocaleString()} more could not be tested at all — no price history, a rule the allow-list refused, or an error — and are left out of the funnel.</Note>}
           </div>
         </>
       )}
