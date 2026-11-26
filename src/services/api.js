@@ -88,6 +88,9 @@ export async function fetchChart(symbol, interval = '1d', range = '1y') {
         adj:    +(adjClose[i] || q.close[i]).toFixed(4),
       })
     }
+    // An answer with no usable bars is an error, not data: thrown here it is
+    // never cached, so trying again asks the server again.
+    if (!candles.length) throw new Error(`No price data for ${symbol} over ${range}`)
     const meta = result.meta || {}
     return { symbol: meta.symbol || symbol, candles, meta }
   })
