@@ -52,7 +52,7 @@ const PERSONAS = [
     border: 'border-blue-500/20',
     text: 'text-blue-400',
     desc: 'Capital preservation — low volatility, steady dividends',
-    style: 'Beta < 1.0, consistent dividends, strong balance sheet, consumer staples / utilities.',
+    style: 'Low beta, a strong balance sheet (ROE, debt/equity), consistent dividends. Judged on risk-adjusted return and lower volatility — not on beating a rising market.',
     weights: PERSONA_WEIGHTS.defensive,
   },
   {
@@ -90,7 +90,15 @@ function scoreForPersona(persona, summary, chartData) {
   if (!summary) return scoreFor(persona.weights, null, closes)
   const f = isEtfLike(summary)
     ? { etf: true, beta: summary.beta, dividendYield: summary.dividendYield, low52: summary.low52, high52: summary.high52 }
-    : { revenueGrowthPct: (summary.revenueGrowth || 0) * 100, earningsGrowthPct: (summary.earningsGrowth || 0) * 100, pe: summary.pe, beta: summary.beta, dividendYield: summary.dividendYield }
+    : {
+        revenueGrowthPct: summary.revenueGrowth != null ? summary.revenueGrowth * 100 : null,
+        earningsGrowthPct: summary.earningsGrowth != null ? summary.earningsGrowth * 100 : null,
+        pe: summary.pe, lossMaking: summary.eps != null && summary.eps < 0,
+        beta: summary.beta, dividendYield: summary.dividendYield,
+        roePct: summary.returnOnEquity != null ? summary.returnOnEquity * 100 : null,
+        // Providers differ: a ratio (0.8) or a percent (80). Anything over 10 is read as a percent.
+        debtToEquity: summary.debtToEquity == null ? null : summary.debtToEquity > 10 ? summary.debtToEquity / 100 : summary.debtToEquity,
+      }
   return scoreFor(persona.weights, f, closes)
 }
 
@@ -111,6 +119,7 @@ function missingInputs(persona, summary, chartData) {
     if (summary.earningsGrowth == null && w.earningsGrowth > 0) out.push('earnings growth')
     if (summary.pe == null && w.valuation > 0) out.push('P/E')
     if (summary.beta == null && w.stability > 0) out.push('beta')
+    if (w.quality > 0 && summary.returnOnEquity == null && summary.debtToEquity == null) out.push('ROE and debt/equity')
   }
   if ((chartData?.length ?? 0) <= 20 && w.momentum > 0) out.push('price momentum (too little history)')
   return out
@@ -150,7 +159,19 @@ const STUDY_TXT = {
 }
 function PersonaStudyLine({ r }) {
   if (!r) return null
-  const [cls, txt] = STUDY_TXT[r.verdict] || ['text-slate-400', r.verdict]
+  const [cls, txt0] = STUDY_TXT[r.verdict] || ['text-slate-400', r.verdict]
+  if (r.objective === 'risk-adjusted') {
+    const txt = r.verdict === 'outperforms' ? 'beat the list after allowing for its lower risk'
+      : r.verdict === 'underperforms' ? 'did worse than its lower risk explains'
+        : r.verdict === 'insufficient' ? txt0 : 'no measurable edge once its lower risk is allowed for'
+    return (
+      <span>
+        <span className={cls}>{txt}</span>
+        {r.alphaPct != null && <> — {r.alphaPct > 0 ? '+' : ''}{r.alphaPct}% a month beyond its beta of {r.betaToList} to the list (t {r.alphaT}); {Math.round((1 - r.volRatio) * 100)}% {r.volRatio < 1 ? 'less' : 'more'} volatile; worst fall {r.maxDrawdownPct}% vs the list's {r.listMaxDrawdownPct}%. Raw excess {r.meanExcessPct}% a month.</>}
+      </span>
+    )
+  }
+  const txt = txt0
   return (
     <span>
       <span className={cls}>{txt}</span>
@@ -165,6 +186,9 @@ function PersonaStudy({ study, personaId, signedIn }) {
   return (
     <div className="text-[11px] text-slate-400 space-y-1">
       <div><PersonaStudyLine r={study.personas?.[personaId]} /></div>
+      {study.v1?.[personaId] && (
+        <div className="text-[10px] text-slate-500">Old score (before it was bounded): {STUDY_TXT[study.v1[personaId].verdict]?.[1] || study.v1[personaId].verdict}, {study.v1[personaId].meanExcessPct}% a month vs the list; top-fifth cut tied in {study.v1[personaId].tiedCutMonths} of {study.v1[personaId].periods} months (now {study.personas?.[personaId]?.tiedCutMonths ?? '—'}).</div>
+      )}
       <p className="text-[10px] text-slate-500">Every month of the last five years, {study.universe} large caps were scored with this persona's own rule from SEC figures as first filed and prices up to that day; its top fifth was held a month against all of them, after costs. Run {String(study.ranAt).slice(0, 10)}. {study.caveats?.[0]} {study.caveats?.[1]}</p>
     </div>
   )
