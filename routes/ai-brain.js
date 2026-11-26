@@ -674,7 +674,7 @@ async function resolveUniverse({ symbols, scanMode, universeMode, fmpKey }) {
 // Write a prediction record for future win-rate tracking
 function logPrediction(symbol, agents, zones, generatedAt, {
   baseline = null, optionsPcRatio = null, taPatterns = null, rsRankAtScan = null,
-  regimeAtScan = null, priceRegimeAtScan = null, modelVersion = null, learningsVersion = null, metaProb = null,
+  regimeAtScan = null, priceRegimeAtScan = null, turbulenceAtScan = null, modelVersion = null, learningsVersion = null, metaProb = null,
   horizon = null, quantAtScan = null, modelOdds = null, stopNoise = null,
 } = {}) {
   try {
@@ -739,6 +739,8 @@ function logPrediction(symbol, agents, zones, generatedAt, {
       // BTC for crypto) at scan time, from bars up to today only
       // (lib/price-regime.js) — the tape, where the FRED regime is the cycle.
       priceRegimeAtScan: priceRegimeAtScan ?? null,
+      // Cross-market turbulence at scan time (lib/turbulence.js) — stocks, bonds, gold and sectors moving unlike their usual relationships.
+      turbulenceAtScan:  turbulenceAtScan ?? null,
       // The second-opinion model's probability that this pick reaches its
       // target first (lib/meta-label.js) — logged whether or not the model is
       // adopted, so the next refit can judge it on picks it never saw.
@@ -821,6 +823,10 @@ router.post('/analyze', requireAuth, brainLimit, guardAsync('ai-brain/analyze', 
 
   // Benchmark trend/volatility regimes (1h cache), fetched alongside the rest.
   const priceRegimesP = priceRegime.getCurrentRegimes({
+    fetchBars: sym => fetchDailyBars(sym, { range: '5y', headers: fwdKeys(req), timeoutMs: 15_000 }),
+  }).catch(() => null)
+  // Cross-market turbulence (lib/turbulence.js, 1h cache): recorded on each pick, not in the prompt.
+  const turbulenceP = require('../lib/turbulence').getCurrentTurbulence({
     fetchBars: sym => fetchDailyBars(sym, { range: '5y', headers: fwdKeys(req), timeoutMs: 15_000 }),
   }).catch(() => null)
 
@@ -1233,6 +1239,7 @@ Apply the instructions, JSON schema and rules from the system prompt. Respond ON
     const regimeAtScan = (macroResult.status === 'fulfilled' && macroResult.value?.regime?.regime) || null
     const modelVersion = llmUsed === 'claude' ? 'claude-sonnet-4-6' : GROQ_MODEL
     const priceRegimes = await priceRegimesP
+    const turbulenceAtScan = (await turbulenceP)?.state ?? null
     const priceRegimeOf = stock => priceRegime.labelFor(/-USD$/.test(stock.symbol) || String(stock.type || '').toLowerCase() === 'crypto' ? 'crypto' : 'stock', priceRegimes)
 
     // Measured quant evidence on every card (shown, recorded; decides nothing yet)
@@ -1321,6 +1328,7 @@ Apply the instructions, JSON schema and rules from the system prompt. Respond ON
         rsRankAtScan:   taRsRankMap.get(stock.symbol) ?? null,
         regimeAtScan,
         priceRegimeAtScan: priceRegimeOf(stock),
+        turbulenceAtScan,
         modelVersion,
         learningsVersion,
         metaProb: stock.metaLabel?.prob ?? null,

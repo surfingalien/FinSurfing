@@ -210,6 +210,7 @@ async function earningsReactionFor(sym, bars, spyBars, assetType) {
 async function gatherEvidence(sym, req) {
   const headers   = fwdKeys(req)
   const assetType = assetTypeOf(sym)
+  const turbulenceP = require('../lib/turbulence').getCurrentTurbulence({ fetchBars: s => fetchDailyBars(s, { range: '5y', headers, timeoutMs: 15_000 }) }).catch(() => null)
   const [bars, fundamentals, macro, regimes, secFacts, spyBars] = await Promise.all([
     fetchDailyBars(sym, { range: '2y', headers, timeoutMs: 25_000 }),
     assetType === 'stock' ? fetchFundamentals(sym, headers) : Promise.resolve({ error: `not applicable to ${assetType}` }),
@@ -248,6 +249,7 @@ async function gatherEvidence(sym, req) {
   const { items, gaps, facts } = desk.buildEvidence({
     symbol: sym, bars, taLine, fundamentals, macro,
     priceRegime: assetType === 'crypto' ? regimes?.crypto : regimes?.equity,
+    turbulence: await turbulenceP,
     minedFactors: assetType === 'stock' ? minedFactorsFor(bars, secFacts, sym) : null,
     filingChange: assetType === 'stock' ? (() => { try { return require('../lib/filing-change').describeFor(sym) } catch { return null } })() : null,
     insiders: assetType === 'stock' ? (() => { try { const ib = require('../lib/insider-buys'); return ib.describeRecent(ib.recentFor(sym)) } catch { return null } })() : null,
@@ -444,7 +446,7 @@ router.get('/track-record', requireAuth, (req, res) => {
   res.json({
     persistence: { enabled: persistence.enabled, reason: persistence.reason },
     brain: stats && {
-      totalResolved: stats.totalResolved, segmentHorizon: stats.segmentHorizon,
+      totalResolved: stats.totalResolved, segmentHorizon: stats.segmentHorizon, byTurbulence: stats.byTurbulence,
       independence: stats.independence, ranking: stats.ranking,
       h7: stats.h7, h30: stats.h30, barriers: stats.barriers,
       byAssetType: stats.byAssetType, calibration: stats.calibration,
@@ -459,6 +461,7 @@ router.get('/track-record', requireAuth, (req, res) => {
     // The benchmarks' current trend/volatility state and what followed each
     // state historically (last fetched by a scan or a dossier — no network here).
     priceRegime: (() => { try { return require('../lib/price-regime').cachedRegimes() } catch { return null } })(),
+    turbulence: (() => { try { const t = require('../lib/turbulence').cachedTurbulence(); return t && { ...t, recent: undefined } } catch { return null } })(),
     // Post-earnings drift: do beats keep beating SPY here, net of costs (lib/pead.js)?
     pead: (() => { try { const p = require('../lib/pead').readStudy(); return p && {
       ranAt: p.ranAt, universe: p.universe, events: p.events, params: p.params, groups: p.groups,

@@ -279,6 +279,37 @@ export default function TrackRecord({ data, onAdoptBrackets }) {
       </section>
 
       <section>
+        <h3 className="text-sm font-semibold mb-2 flex items-center gap-1.5"><Activity className="w-3.5 h-3.5" /> Cross-market turbulence</h3>
+        {data.turbulence?.state ? (
+          <div className="space-y-2">
+            <p className={`text-[12px] ${data.turbulence.state === 'turbulent' ? 'text-amber-300' : 'text-slate-300'}`}>
+              <b className="capitalize">{data.turbulence.state}</b> on {data.turbulence.asOf}: today's moves across {data.turbulence.assets?.length} stock, bond, gold and sector markets are {data.turbulence.value}× as unusual as an ordinary day — the {Math.round((data.turbulence.pct ?? 0) * 100)}th percentile of the past year.
+            </p>
+            {data.turbulence.profile && (
+              <div className="overflow-x-auto">
+                <table className="text-[11px] w-full max-w-lg">
+                  <thead><tr className="text-slate-500 text-left"><th className="pr-3 font-normal">State</th><th className="pr-3 font-normal">Windows</th><th className="pr-3 font-normal">SPY next 20 days</th><th className="pr-3 font-normal">Up</th><th className="font-normal">Worst</th></tr></thead>
+                  <tbody>
+                    {['calm', 'elevated', 'turbulent'].filter(k => data.turbulence.profile[k]).map(k => { const x = data.turbulence.profile[k]; return (
+                      <tr key={k} className="text-slate-300"><td className="pr-3 capitalize">{k}</td><td className="pr-3 font-mono">{x.windows}</td><td className="pr-3 font-mono">{x.meanReturnPct > 0 ? '+' : ''}{x.meanReturnPct}%</td><td className="pr-3 font-mono">{Math.round(x.upShare * 100)}%</td><td className="font-mono">{x.worstPct}%</td></tr>
+                    ) })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        ) : <p className="text-[12px] text-slate-500">Not read yet — the next scan or Research Desk dossier reads it from twelve ETFs (SPY, QQQ, IWM, TLT, GLD and seven sectors).</p>}
+        {b?.byTurbulence && (
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mt-2">
+            {Object.entries(b.byTurbulence).map(([label, c]) => (
+              <Rate key={label} label={`AI picks made when ${label}`} rate={c.alphaWinRate} lo={c.alphaWinRateLo} hi={c.alphaWinRateHi} n={c.nBench} k={c.alphaWins} />
+            ))}
+          </div>
+        )}
+        <p className="text-[11px] text-slate-500 mt-1">The Mahalanobis distance of each day's returns from the past year's mean and covariance, smoothed over five days and ranked against its own past year (turbulent ≥ 90th percentile, elevated ≥ 75th). Recorded on every pick; nothing is gated on it until a walk-forward test shows it helps.</p>
+      </section>
+
+      <section>
         <h3 className="text-sm font-semibold mb-2 flex items-center gap-1.5"><Activity className="w-3.5 h-3.5" /> AI picks by measured quant context</h3>
         {[['byCharacter', 'Price character'], ['byVolBucket', 'Volatility outlook'], ['byResidual', 'Against the rest of the scan']].some(([k]) => b?.[k] && Object.keys(b[k]).length) ? (
           <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
