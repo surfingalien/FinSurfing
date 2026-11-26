@@ -374,6 +374,13 @@ export default function BacktestView() {
               {m.exitsByKind && Object.keys(m.exitsByKind).length > 0 && <> · exits: {Object.entries(m.exitsByKind).map(([k, v]) => `${k} ×${v}`).join(', ')}</>}
             </span>
           </div>
+          <p className="text-[11px] text-slate-500 -mt-1">
+            {m.returnBasis?.dividends || m.returnBasis?.cashInterest
+              ? <>Total return: {m.returnBasis.dividends ? <>dividends received ${(m.dividendsReceived ?? 0).toLocaleString()}{result.income?.dividends ? ` (${result.income.dividends})` : ''}</> : 'no dividend data'}
+                  {m.returnBasis.cashInterest ? <> · Treasury-bill interest on idle cash ${(m.interestEarned ?? 0).toLocaleString()}</> : ''}
+                  . Buy &amp; hold gets the same dividends, so the comparison is like with like.</>
+              : <>Price return only{result.income?.off ? '' : ' — dividend and cash-rate data could not be read'}; buy &amp; hold is price-only too.</>}
+          </p>
 
           {/* Metrics grid */}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">

@@ -188,8 +188,17 @@ app.use(express.json({ limit: '256kb' }))
 app.use(express.static(path.join(__dirname, 'dist')))
 
 // ── Rate limiting (OWASP auth defence) ───────────
+// The server's own jobs fetch charts and quotes over loopback (lib/internal-api.js,
+// scheduled jobs). They all share 127.0.0.1, so without this every job shared one
+// 30-a-minute chart bucket: factor mining (≈77 names) and the discovery lists
+// (≈220) were refused after the first 30 and kept their stored copies. A verified
+// internal call (loopback AND the per-boot secret) is not counted; users are
+// still limited at their own routes.
+const { isInternalRequest: _isInternal } = require('./lib/internal-secret')
+const skipInternal = req => _isInternal(req)
+
 const baseLimit = rateLimit({
-  windowMs: 60 * 1000, max: 120, standardHeaders: true, legacyHeaders: false,
+  windowMs: 60 * 1000, max: 120, standardHeaders: true, legacyHeaders: false, skip: skipInternal,
   message: { error: 'Too many requests — slow down' },
 })
 
@@ -215,12 +224,12 @@ const authForgotLimit = rateLimit({
 
 // Tighter limits for market data endpoints that hit paid external APIs
 const marketDataLimit = rateLimit({
-  windowMs: 60 * 1000, max: 60, standardHeaders: true, legacyHeaders: false,
+  windowMs: 60 * 1000, max: 60, standardHeaders: true, legacyHeaders: false, skip: skipInternal,
   message: { error: 'Market data rate limit exceeded — try again shortly' },
 })
 
 const chartLimit = rateLimit({
-  windowMs: 60 * 1000, max: 30, standardHeaders: true, legacyHeaders: false,
+  windowMs: 60 * 1000, max: 30, standardHeaders: true, legacyHeaders: false, skip: skipInternal,
   message: { error: 'Chart data rate limit exceeded — try again shortly' },
 })
 
@@ -1076,19 +1085,34 @@ async function getAVChart(symbol, interval = '1d', range = '1y', keys = {}) {
 
     if (entries.length < 5) return null
 
-    const timestamps = entries.map(([date]) => Math.floor(new Date(date).getTime() / 1000))
-    const opens  = entries.map(([,v]) => parseFloat(v['1. open']))
-    const highs  = entries.map(([,v]) => parseFloat(v['2. high']))
-    const lows   = entries.map(([,v]) => parseFloat(v['3. low']))
-    const closes = entries.map(([,v]) => parseFloat(v['4. close']))
-    const vols   = entries.map(([,v]) => parseInt(v['5. volume']) || 0)
-    const adjs   = closes  // no adjusted close on free tier — use close
+    const raw = {
+      timestamps: entries.map(([date]) => Math.floor(new Date(date).getTime() / 1000)),
+      opens:   entries.map(([,v]) => parseFloat(v['1. open'])),
+      highs:   entries.map(([,v]) => parseFloat(v['2. high'])),
+      lows:    entries.map(([,v]) => parseFloat(v['3. low'])),
+      closes:  entries.map(([,v]) => parseFloat(v['4. close'])),
+      volumes: entries.map(([,v]) => parseInt(v['5. volume']) || 0),
+    }
+    // The free series is NOT split-adjusted: a 10:1 split reads as a 90% crash.
+    // Apply the splits Yahoo lists (lib/split-guard.js); when that list cannot be
+    // read, say so in meta so lib/internal-api.js can refuse a series with a
+    // split-sized jump instead of handing a fake crash to a backtest.
+    let splitAdjusted = false
+    let adj = raw
+    try {
+      const ev = await require('./lib/income').yahooDividends(symbol)
+      adj = require('./lib/split-guard').applySplits(raw, ev.splits)
+      splitAdjusted = true
+    } catch { /* splits unknown */ }
+    const { timestamps, opens, highs, lows, closes } = adj
+    const vols   = adj.volumes
+    const adjs   = closes  // no dividend-adjusted close on the free tier
 
     const lastClose = closes.at(-1) ?? null
     console.log(`[AV] chart OK: ${symbol} (${entries.length} bars)`)
     return {
       chart: { result: [{
-        meta: { symbol, regularMarketPrice: lastClose, chartPreviousClose: closes.at(-2) ?? null },
+        meta: { symbol, regularMarketPrice: lastClose, chartPreviousClose: closes.at(-2) ?? null, splitAdjusted, provider: 'alphavantage' },
         timestamp: timestamps,
         indicators: {
           quote:    [{ open: opens, high: highs, low: lows, close: closes, volume: vols }],

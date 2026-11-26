@@ -105,6 +105,19 @@ router.post('/factors/run', requireAuth, requireAdmin, (req, res) => {
   res.json({ ok: true, status: 'running', message: 'Factor mining started. Poll GET /api/evolution/factors.' })
 })
 
+// ── Ranked portfolio (lib/ranked-portfolio.js) ───────────────────────────────
+router.get('/ranked-portfolio', requireAuth, (req, res) => {
+  res.json({ study: require('../lib/ranked-portfolio').read() })
+})
+
+// Admin-only: fetches five years of bars for ~70 names (about a minute).
+router.post('/ranked-portfolio/run', requireAuth, requireAdmin, (req, res) => {
+  require('../lib/ranked-portfolio').run({ fetchBars: s => fetchDailyBars(s, { range: '5y', timeoutMs: 25_000 }) })
+    .then(r => console.log(`[evolution/ranked-portfolio] ${r.universe} names, ${r.model.periods} periods: ${r.model.verdict}`))
+    .catch(e => console.error('[evolution/ranked-portfolio]', e.message))
+  res.json({ ok: true, status: 'running', message: 'Ranked portfolio study started. Poll GET /api/evolution/ranked-portfolio.' })
+})
+
 // ── Discovery lists (lib/discovery-sources.js) ──────────────────────────────
 // The after-close lists scans draw from: names lagging their sector's factors
 // and the cheap legs of stretched cointegrated pairs. Read-only here; the job

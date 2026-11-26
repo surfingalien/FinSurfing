@@ -44,6 +44,19 @@ function exitsFrom(b) {
   for (const k of Object.keys(e)) if (e[k] === undefined) delete e[k]
   return Object.keys(e).length ? e : undefined
 }
+/**
+ * Dividends and T-bill interest for a backtest (lib/income.js), so the result and
+ * buy & hold are total returns. On by default; `income: false` in the body runs on
+ * price only. Best-effort: what could not be read is named in `note`.
+ */
+async function incomeFor(body, sym, pairs) {
+  if (body?.income === false) return { opts: {}, note: { off: true } }
+  const withInc = await require('../lib/income').attachIncome(pairs.map(p => ({ t: p.t * 1000, c: p.c })), sym)
+  const opts = {}
+  if (withInc.some(b => b.div != null)) opts.dividends = withInc.map(b => b.div || 0)
+  if (withInc.some(b => b.rf != null)) opts.cashRates = withInc.map(b => b.rf || 0)
+  return { opts, note: withInc.income || null }
+}
 const barsOf = pairs => ({ opens: pairs.map(p => p.o), highs: pairs.map(p => p.h), lows: pairs.map(p => p.l), volumes: pairs.map(p => p.v) })
 function executionFor(body, sym, bars) {
   const c = Number(body?.costBps)
@@ -105,7 +118,8 @@ router.post('/', async (req, res) => {
     const ts     = pairs.map(p => p.t)
     const closes = pairs.map(p => p.c)
 
-    const backtestResult = simulate(ts, closes, strategy, params, capital, executionFor(req.body, sym, barsOf(pairs)))
+    const inc = await incomeFor(req.body, sym, pairs)
+    const backtestResult = simulate(ts, closes, strategy, params, capital, { ...executionFor(req.body, sym, barsOf(pairs)), ...inc.opts })
 
     return res.json({
       symbol:    sym,
@@ -113,6 +127,7 @@ router.post('/', async (req, res) => {
       range,
       initialCapital: capital,
       dataPoints: pairs.length,
+      income: inc.note,
       ...backtestResult,
     })
   } catch (err) {
@@ -172,8 +187,11 @@ router.post('/optimize', async (req, res) => {
     // NOTE: the optimizer ranks many configs on one history — its top result
     // is in-sample by construction. Strategy Lab's two-window verdict is the
     // honest check for a config picked here.
-    const results = optimizeStrategy(ts, closes, strategy, paramRanges, capital, sortBy, 50, executionFor(req.body, sym, barsOf(pairs)))
-    return res.json({ symbol: sym, strategy, range, combinations: combos, results })
+    const inc = await incomeFor(req.body, sym, pairs)
+    const all = optimizeStrategy(ts, closes, strategy, paramRanges, capital, sortBy, Infinity, { ...executionFor(req.body, sym, barsOf(pairs)), ...inc.opts })
+    // The whole grid as a Sharpe surface over the two varied parameters: a plateau or a lone spike (lib/param-surface.js).
+    const surface = require('../lib/param-surface').paramSurface(all)
+    return res.json({ symbol: sym, strategy, range, combinations: combos, income: inc.note, results: all.slice(0, 50), surface })
   } catch (err) {
     if (err.name === 'AbortError' || err.name === 'TimeoutError')
       return res.status(504).json({ error: 'Market data request timed out' })

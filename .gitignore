@@ -29,6 +29,7 @@ data/.*.tmp
 data/last-quotes.json
 data/ai-brain-shadow.jsonl
 data/factor-library.json
+data/ranked-portfolio.json
 data/pead-study.json
 data/vol-forecast-study.json
 data/meta-label.json

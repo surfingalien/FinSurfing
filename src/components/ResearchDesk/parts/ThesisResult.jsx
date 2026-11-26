@@ -5,11 +5,20 @@ import PlanOdds from '../../shared/PlanOdds'
 const pct = (v, dp = 1) => (v == null ? '—' : `${(v * 100).toFixed(dp)}%`)
 const px  = v => (v == null ? '—' : `$${Number(v) >= 1 ? Number(v).toFixed(2) : Number(v).toPrecision(4)}`)
 
+// How strongly each surviving claim is backed (lib/research-desk.js:GRADES).
+const GRADE = {
+  confirmed: ['confirmed', 'text-emerald-400 border-emerald-500/30', 'A figure this claim states is in the measured evidence it cites.'],
+  'supported-inference': ['inference', 'text-sky-300 border-sky-500/30', "The evidence it cites supports the wording; the conclusion is the model's inference."],
+  'third-party': ['third-party', 'text-amber-300 border-amber-500/30', "It rests on analysts' opinion, not on this app's measurements."],
+}
+
 function Claim({ c, tone, onCite }) {
+  const g = GRADE[c.grade]
   return (
     <li className="flex items-start gap-2 text-[12px]">
       <CheckCircle2 className={`w-3.5 h-3.5 shrink-0 mt-0.5 ${tone}`} />
       <span className="text-slate-300">
+        {g && <span title={g[2]} className={`text-[9px] uppercase tracking-wide px-1 py-px mr-1 rounded border ${g[1]}`}>{g[0]}</span>}
         {c.claim}{' '}
         {c.cites.map(id => (
           <button key={id} onClick={() => onCite?.(id)}
