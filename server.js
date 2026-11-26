@@ -2187,6 +2187,9 @@ app.get('/api/chart', async (req, res) => {
   const cached = cacheGet(cacheKey)
   if (cached) return res.json(cached)
 
+  // Only an answer with enough real closes for this range counts
+  // (lib/chart-coverage.js); a short one is kept in case nothing better comes.
+  const cov = require('./lib/chart-coverage').cascade(range, interval)
   try {
     // Helper: cache chart result + warm the per-symbol price cache for /api/quote
     const saveChart = (data, provider) => {
@@ -2201,61 +2204,70 @@ app.get('/api/chart', async (req, res) => {
 
     // 1st: AISA — cloud-friendly Yahoo Finance proxy
     const aisa = await getAISAChart(symbol, interval, range, keys).catch(() => null)
-    if (aisa) return res.json(saveChart(aisa, 'AISA'))
+    if (cov.accept(aisa, 'AISA')) return res.json(saveChart(aisa, 'AISA'))
 
     // 2nd: Finnhub candles
     const fh = await getFinnhubChart(symbol, interval, range, keys)
-    if (fh) return res.json(saveChart(fh, 'Finnhub'))
+    if (cov.accept(fh, 'Finnhub')) return res.json(saveChart(fh, 'Finnhub'))
 
     // 3rd: FMP historical
     const fmp = await getFMPChart(symbol, interval, range, keys)
-    if (fmp) return res.json(saveChart(fmp, 'FMP'))
+    if (cov.accept(fmp, 'FMP')) return res.json(saveChart(fmp, 'FMP'))
 
     // 3.5: Crypto fast-path — Binance then CoinGecko (free, real-time, no key)
     // Must run BEFORE Twelve Data: TD demo key returns stale crypto prices.
     // CoinGecko is the fallback if Binance is blocked on Railway's IPs.
     if (isCryptoSymbol(symbol)) {
       const binanceFast = await getBinanceChart(symbol, interval, range)
-      if (binanceFast) return res.json(saveChart(binanceFast, 'Binance'))
+      if (cov.accept(binanceFast, 'Binance')) return res.json(saveChart(binanceFast, 'Binance'))
       const cbFast = await getCoinbaseChart(symbol, interval, range)
-      if (cbFast) return res.json(saveChart(cbFast, 'Coinbase'))
+      if (cov.accept(cbFast, 'Coinbase')) return res.json(saveChart(cbFast, 'Coinbase'))
       const cgFast = await getCoinGeckoChart(symbol, interval, range)
-      if (cgFast) return res.json(saveChart(cgFast, 'CoinGecko'))
+      if (cov.accept(cgFast, 'CoinGecko')) return res.json(saveChart(cgFast, 'CoinGecko'))
     }
 
     // 4th: Twelve Data (800 req/day free tier; demo key covers major US symbols)
     const td = await getTwelveDataChart(symbol, interval, range, keys)
-    if (td) return res.json(saveChart(td, 'TwelveData'))
+    if (cov.accept(td, 'TwelveData')) return res.json(saveChart(td, 'TwelveData'))
 
     // 5th: Alpha Vantage (25 req/day free tier)
     const av = await getAVChart(symbol, interval, range, keys)
-    if (av) return res.json(saveChart(av, 'AV'))
+    if (cov.accept(av, 'AV')) return res.json(saveChart(av, 'AV'))
 
     // 6th: Binance fallback for crypto that slipped past the fast-path
     const binance = await getBinanceChart(symbol, interval, range)
-    if (binance) return res.json(saveChart(binance, 'Binance'))
+    if (cov.accept(binance, 'Binance')) return res.json(saveChart(binance, 'Binance'))
 
     // 7th: Nasdaq.com (free, no key — all US stocks + ETFs, daily/weekly only)
     const nasdaq = await getNasdaqChart(symbol, interval, range)
-    if (nasdaq) return res.json(saveChart(nasdaq, 'Nasdaq'))
+    if (cov.accept(nasdaq, 'Nasdaq')) return res.json(saveChart(nasdaq, 'Nasdaq'))
 
     // 8th: Stooq (free, no key — additional US equity coverage)
     const stooq = await getStooqChart(symbol, interval, range)
-    if (stooq) return res.json(saveChart(stooq, 'Stooq'))
+    if (cov.accept(stooq, 'Stooq')) return res.json(saveChart(stooq, 'Stooq'))
 
     // Fallbacks for intraday when all intraday providers failed — try daily data
     if (!['1d', '1wk'].includes(interval)) {
       const nasdaqD = await getNasdaqChart(symbol, '1d', range === '1d' || range === '5d' ? '1mo' : range)
-      if (nasdaqD) return res.json(saveChart(nasdaqD, 'Nasdaq-daily'))
+      if (cov.accept(nasdaqD, 'Nasdaq-daily')) return res.json(saveChart(nasdaqD, 'Nasdaq-daily'))
 
       const binanceD = await getBinanceChart(symbol, '1d', range)
-      if (binanceD) return res.json(saveChart(binanceD, 'Binance-daily'))
+      if (cov.accept(binanceD, 'Binance-daily')) return res.json(saveChart(binanceD, 'Binance-daily'))
 
       const stooqD = await getStooqChart(symbol, '1d', '1y')
-      if (stooqD) return res.json(saveChart(stooqD, 'Stooq-daily'))
+      if (cov.accept(stooqD, 'Stooq-daily')) return res.json(saveChart(stooqD, 'Stooq-daily'))
     }
 
-    // Name the providers that could not even be asked: a missing key is the
+        // No provider had a full answer: use the longest short one rather than nothing.
+    if (cov.best) {
+      console.warn(`[chart] ${symbol} ${range}: no full answer (${cov.rejected.join('; ')}) — using ${cov.best.provider}`)
+      const data = cov.best.data
+      if (data?.chart?.result?.[0]?.meta) data.chart.result[0].meta.partial = true
+      return res.json(saveChart(data, `${cov.best.provider}-partial`))
+    }
+    if (cov.rejected.length) console.warn(`[chart] ${symbol} ${range}: unusable answers — ${cov.rejected.join('; ')}`)
+
+// Name the providers that could not even be asked: a missing key is the
     // one cause the operator can fix, and it is otherwise only in the log.
     const noKey = [
       !(keys.aisa || AISA_KEY()) && 'AISA',

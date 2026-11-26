@@ -62,6 +62,10 @@ export default function AnalysisView({ defaultSymbol, onResearch }) {
   const [summary, setSummary] = useState(null)
   const [aiSignal,     setAiSignal]     = useState(null)
   const [loading, setLoading] = useState(false)
+  // Why the chart is empty, said on the page instead of an empty frame.
+  const [loadError, setLoadError] = useState(null)
+  const [partial, setPartial] = useState(false)
+  const [reloadKey, setReloadKey] = useState(0)
   const [searchResults, setSearchResults] = useState([])
   const [showResults, setShowResults] = useState(false)
 
@@ -79,12 +83,17 @@ export default function AnalysisView({ defaultSymbol, onResearch }) {
     if (!symbol) return
     let cancelled = false
     setLoading(true)
+    setLoadError(null)
     Promise.all([
       fetchChart(symbol, '1d', range),
-      fetchSummary(symbol)
+      // The fundamentals card is optional: a failed or rate-limited summary
+      // used to reject this whole load and blank the chart with it.
+      fetchSummary(symbol).catch(() => null),
     ]).then(([chartRes, sumRes]) => {
       if (cancelled) return
       const candles = chartRes.candles
+      if (!candles.length) throw new Error(`No price data came back for ${symbol} over ${range}`)
+      setPartial(!!chartRes.meta?.partial)
       const closes  = candles.map(c => c.close)
       const highs   = candles.map(c => c.high)
       const lows    = candles.map(c => c.low)
@@ -141,6 +150,13 @@ export default function AnalysisView({ defaultSymbol, onResearch }) {
     }).catch(e => {
       console.warn('Analysis load failed:', e)
       if (cancelled) return
+      const m = String(e?.message || '')
+      setLoadError(/\b429\b/.test(m)
+        ? 'Too many chart requests in the last minute — wait a moment and pick the range again.'
+        : /\b502\b/.test(m)
+          ? `No data provider returned ${symbol} over ${range}.`
+          : m || 'The chart could not be loaded.')
+      setPartial(false)
       // A failed load must not leave the previous symbol's analysis on screen
       setChartData([])
       setAiSignal(null)
@@ -148,7 +164,7 @@ export default function AnalysisView({ defaultSymbol, onResearch }) {
     })
     .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
-  }, [symbol, range])
+  }, [symbol, range, reloadKey])
 
   // Compare leg: fetched independently so toggling it never reloads the base
   useEffect(() => {
@@ -298,6 +314,17 @@ export default function AnalysisView({ defaultSymbol, onResearch }) {
           </button>
         ))}
       </div>
+
+      {!loading && loadError && (
+        <div role="alert" className="rounded-xl px-4 py-3 border border-amber-500/30 bg-amber-500/10 text-sm text-amber-300 flex items-center justify-between gap-3 flex-wrap">
+          <span>{loadError}</span>
+          <button type="button" onClick={() => { setLoadError(null); setReloadKey(k => k + 1) }}
+            className="text-xs px-3 py-1 rounded-lg border border-amber-500/40 hover:bg-amber-500/10">Try again</button>
+        </div>
+      )}
+      {!loading && !loadError && partial && (
+        <p className="text-[11px] text-slate-500">Only part of this range was available from the data providers — the chart shows what there is.</p>
+      )}
 
       {loading ? (
         <div className="glass rounded-xl p-6"><LoadingPulse rows={4} /></div>
