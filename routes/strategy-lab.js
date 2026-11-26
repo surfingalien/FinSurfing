@@ -56,7 +56,7 @@ router.post('/propose', requireAuth, async (req, res) => {
     if (req.headers[h]) fwdHeaders[h] = req.headers[h]
   }
 
-  const bars = await fetchDailyBars(sym, { range, headers: fwdHeaders, timeoutMs: 30_000 })
+  const bars = await fetchDailyBars(sym, { range, headers: fwdHeaders, timeoutMs: 30_000, income: true })
   if (bars.length < 60)
     return res.status(422).json({ error: `Insufficient price history for ${sym} (${bars.length} bars, need 60+)` })
 
@@ -96,6 +96,8 @@ router.post('/propose', requireAuth, async (req, res) => {
     opens:   bars.map(b => b.o),
     highs:   bars.map(b => b.h),
     lows:    bars.map(b => b.l),
+    // Total return on both sides of "beats buy & hold": dividends and cash interest when known (lib/income.js).
+    ...require('../lib/brain-evolution').incomeOpts(require('../lib/brain-evolution').toSeries(bars)),
   })
 
   return res.json({

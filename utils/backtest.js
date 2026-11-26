@@ -308,6 +308,12 @@ function simulateWithSignals(timestamps, closes, signals, initialCapital = 10000
   const bars     = { closes, opens, highs: opts.highs || null, lows: opts.lows || null, volumes: opts.volumes || null }
   const slippage = opts.slippage && opts.slippage.model && opts.slippage.model !== 'none' ? opts.slippage : (opts.slippage?.maxParticipation ? opts.slippage : null)
   const exitsCfg = opts.exits || null
+  // Income (lib/income.js), off unless given: a cash dividend per share on its
+  // ex-date bar, paid to whoever held at the prior close; and the T-bill rate
+  // (percent a year) known on each bar, paid on idle cash overnight.
+  const divs     = Array.isArray(opts.dividends) && opts.dividends.length === n ? opts.dividends : null
+  const rfs      = Array.isArray(opts.cashRates) && opts.cashRates.length === n ? opts.cashRates : null
+  let dividendsReceived = 0, interestEarned = 0
 
   let cash   = initialCapital
   let shares = 0
@@ -378,6 +384,16 @@ function simulateWithSignals(timestamps, closes, signals, initialCapital = 10000
   for (let i = 0; i < n; i++) {
     const price = closes[i]
     const date  = new Date(timestamps[i] * 1000).toISOString().slice(0, 10)
+
+    // Overnight income, before anything fills today: interest on yesterday's idle
+    // cash at yesterday's rate, and today's ex-dividend paid on yesterday's shares
+    // (a buy at today's open is not entitled; a sale at today's open still is).
+    if (i > 0 && rfs && cash > 0 && Number.isFinite(rfs[i - 1]) && rfs[i - 1] > 0) {
+      const days = Math.max(1, Math.round((timestamps[i] - timestamps[i - 1]) / 86_400))
+      const earned = cash * (rfs[i - 1] / 100) * (days / 365)
+      cash += earned; interestEarned += earned
+    }
+    if (divs && shares > 0 && divs[i] > 0) { const paid = shares * divs[i]; cash += paid; dividendsReceived += paid }
 
     // Yesterday's signal fills at today's open (or close when opens are absent).
     if (pending) {
@@ -476,14 +492,24 @@ function simulateWithSignals(timestamps, closes, signals, initialCapital = 10000
     ? Math.round(closed.reduce((s, t) => s + (t.durationDays ?? 0), 0) / closed.length)
     : 0
 
-  // Buy & hold pays the same round trip, so alpha compares like with like.
-  const buyHold    = ((lastClose * (1 - half)) / (firstClose * (1 + half)) - 1) * 100
+  // Buy & hold pays the same round trip, so alpha compares like with like —
+  // and, when dividends are given, receives them too (reinvested at the ex-date close).
+  let holdGrowth = lastClose / firstClose
+  if (divs) {
+    holdGrowth = 1
+    for (let i = 1; i < n; i++) if (closes[i - 1] > 0) holdGrowth *= (closes[i] + (divs[i] || 0)) / closes[i - 1]
+  }
+  const buyHold    = ((holdGrowth * (1 - half)) / (1 + half) - 1) * 100
 
   return {
     equity,
     trades,
     metrics: {
       totalReturn:      +totalReturn.toFixed(2),
+      // What the return includes: price always; dividends and cash interest only when they were supplied.
+      returnBasis:      { dividends: !!divs, cashInterest: !!rfs },
+      dividendsReceived: +dividendsReceived.toFixed(2),
+      interestEarned:   +interestEarned.toFixed(2),
       finalValue:       +finalValue.toFixed(2),
       initialCapital,
       maxDrawdown:      +maxDD.toFixed(2),

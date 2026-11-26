@@ -1076,19 +1076,34 @@ async function getAVChart(symbol, interval = '1d', range = '1y', keys = {}) {
 
     if (entries.length < 5) return null
 
-    const timestamps = entries.map(([date]) => Math.floor(new Date(date).getTime() / 1000))
-    const opens  = entries.map(([,v]) => parseFloat(v['1. open']))
-    const highs  = entries.map(([,v]) => parseFloat(v['2. high']))
-    const lows   = entries.map(([,v]) => parseFloat(v['3. low']))
-    const closes = entries.map(([,v]) => parseFloat(v['4. close']))
-    const vols   = entries.map(([,v]) => parseInt(v['5. volume']) || 0)
-    const adjs   = closes  // no adjusted close on free tier — use close
+    const raw = {
+      timestamps: entries.map(([date]) => Math.floor(new Date(date).getTime() / 1000)),
+      opens:   entries.map(([,v]) => parseFloat(v['1. open'])),
+      highs:   entries.map(([,v]) => parseFloat(v['2. high'])),
+      lows:    entries.map(([,v]) => parseFloat(v['3. low'])),
+      closes:  entries.map(([,v]) => parseFloat(v['4. close'])),
+      volumes: entries.map(([,v]) => parseInt(v['5. volume']) || 0),
+    }
+    // The free series is NOT split-adjusted: a 10:1 split reads as a 90% crash.
+    // Apply the splits Yahoo lists (lib/split-guard.js); when that list cannot be
+    // read, say so in meta so lib/internal-api.js can refuse a series with a
+    // split-sized jump instead of handing a fake crash to a backtest.
+    let splitAdjusted = false
+    let adj = raw
+    try {
+      const ev = await require('./lib/income').yahooDividends(symbol)
+      adj = require('./lib/split-guard').applySplits(raw, ev.splits)
+      splitAdjusted = true
+    } catch { /* splits unknown */ }
+    const { timestamps, opens, highs, lows, closes } = adj
+    const vols   = adj.volumes
+    const adjs   = closes  // no dividend-adjusted close on the free tier
 
     const lastClose = closes.at(-1) ?? null
     console.log(`[AV] chart OK: ${symbol} (${entries.length} bars)`)
     return {
       chart: { result: [{
-        meta: { symbol, regularMarketPrice: lastClose, chartPreviousClose: closes.at(-2) ?? null },
+        meta: { symbol, regularMarketPrice: lastClose, chartPreviousClose: closes.at(-2) ?? null, splitAdjusted, provider: 'alphavantage' },
         timestamp: timestamps,
         indicators: {
           quote:    [{ open: opens, high: highs, low: lows, close: closes, volume: vols }],

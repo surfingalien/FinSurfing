@@ -204,7 +204,7 @@ router.post('/holdings-scan', heavy, route('quant/holdings-scan', async (req, re
   const queue = positions.map(p => p.symbol)
   await Promise.all(Array.from({ length: 5 }, async () => {
     for (let s = queue.shift(); s; s = queue.shift()) {
-      try { map[s] = await bars(s, '5y', req) } catch (e) { failed.push(`${s}: ${e.message}`) }
+      try { map[s] = await require('../lib/income').attachIncome(await bars(s, '5y', req), s) } catch (e) { failed.push(`${s}: ${e.message}`) }
     }
   }))
   if (!Object.keys(map).length) bad(`no holding had price history — ${failed.join('; ')}`)
