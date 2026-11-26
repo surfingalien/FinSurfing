@@ -172,6 +172,16 @@ export default function TrackRecord({ data, onAdoptBrackets }) {
             </div>
           </div>
         ) : <p className="text-[12px] text-slate-500">No resolved picks yet. Outcomes resolve 7 and 30 days after each scan.</p>}
+        {b?.byEdgeVerdict && Object.keys(b.byEdgeVerdict).length > 0 && (
+          <div className="mt-2">
+            <div className="text-[11px] text-slate-500 mb-1">By the edge check at scan time — did the picks it declined do worse than the ones it kept?</div>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+              {Object.entries(b.byEdgeVerdict).map(([v, c]) => (
+                <Rate key={v} label={v === 'act' ? 'Cleared the edge check' : v === 'thin' ? 'Thin edge (declined)' : 'No edge (declined)'} rate={c.alphaWinRate} lo={c.alphaWinRateLo} hi={c.alphaWinRateHi} n={c.nBench} k={c.alphaWins} />
+              ))}
+            </div>
+          </div>
+        )}
         {b?.independence?.raw > 0 && (
           <p className="text-[11px] text-slate-500 mt-2">
             Counted once per stock per {b.independence.horizon} days: {b.independence.independent} independent outcomes from {b.independence.raw} resolved picks. A stock picked again before its last outcome window ended shares that outcome, so counting it twice would make every interval look tighter than it is.
