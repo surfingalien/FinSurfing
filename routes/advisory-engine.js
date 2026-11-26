@@ -18,7 +18,7 @@
  *   GET  /persona-calibration each persona's measured record.
  */
 const express = require('express')
-const { requireAuth } = require('../middleware/auth')
+const { requireAuth, requireAdmin } = require('../middleware/auth')
 const { startJsonHeartbeat } = require('../lib/http-heartbeat')
 const { fetchDailyBars } = require('../lib/internal-api')
 const engine = require('../lib/advisory-engine')
@@ -125,6 +125,20 @@ router.get('/persona-calibration', (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e.message })
   }
+})
+
+// Each persona's rule tested on five years of point-in-time data
+// (lib/persona-rule-study.js); rebuilt weekly by the persona-rule-study job.
+router.get('/persona-study', (req, res) => {
+  const study = require('../lib/persona-rule-study').readStudy()
+  res.json(study || { pending: true, note: 'Not run yet — the weekly job (Saturday) builds it; an admin can run it now.' })
+})
+router.post('/persona-study/run', requireAdmin, (req, res) => {
+  require('../lib/persona-rule-study').run({
+    fetchBars: s => fetchDailyBars(s, { range: '5y', headers: { 'x-internal': '1' }, timeoutMs: 25_000 }),
+    fetchFacts: s => require('../lib/sec-facts').getCompanyFacts(s),
+  }).catch(e => console.warn('[advisory-engine] persona study failed:', e.message))
+  res.status(202).json({ started: true, note: 'Running in the background (a few minutes); reload the page later.' })
 })
 
 router.get('/calibration', (req, res) => {

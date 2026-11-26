@@ -409,6 +409,18 @@ export default function AIBrainView({ portfolio, onAnalyze, onCompare }) {
         <>
           <ScanAgeBanner processedAt={analysis.processedAt} />
           <ScanChanges processedAt={analysis.processedAt} onOpen={onAnalyze} />
+          {analysis.ranking?.method === 'learned' && (
+            <div className="text-[11px] text-slate-400 px-1">
+              Ordered by learned score weights ({Object.entries(analysis.ranking.weights || {}).map(([k, w]) => `${k.replace('Score', '')} ${Math.round(w * 100)}%`).join(' · ')}) — {analysis.ranking.reason}. The ring still shows the stated composite.
+            </div>
+          )}
+          {analysis.edgeGate?.rejected?.length > 0 && (
+            <div className="rounded-xl px-3 py-2.5 border border-amber-500/25 bg-amber-500/[0.07] text-[12px] text-slate-300">
+              <span className="font-semibold text-amber-300">{analysis.edgeGate.kept} of {analysis.edgeGate.evaluated} buy picks clear the edge check.</span>
+              {' '}{analysis.edgeGate.rejected.map(r => r.symbol).join(', ')} {analysis.edgeGate.rejected.length === 1 ? 'is' : 'are'} shown as declines:
+              their target and stop need a higher hit rate, after costs, than this system has measured. The same check removes picks on AI Buy Signals.
+            </div>
+          )}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="glass rounded-xl p-4 border border-white/[0.06]">
               <div className="flex items-center gap-2 mb-1">

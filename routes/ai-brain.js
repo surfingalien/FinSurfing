@@ -675,7 +675,7 @@ async function resolveUniverse({ symbols, scanMode, universeMode, fmpKey }) {
 function logPrediction(symbol, agents, zones, generatedAt, {
   baseline = null, optionsPcRatio = null, taPatterns = null, rsRankAtScan = null,
   regimeAtScan = null, priceRegimeAtScan = null, turbulenceAtScan = null, modelVersion = null, learningsVersion = null, metaProb = null,
-  horizon = null, quantAtScan = null, modelOdds = null, stopNoise = null,
+  horizon = null, quantAtScan = null, modelOdds = null, stopNoise = null, edgeAtScan = null, rankScore = null,
 } = {}) {
   try {
     const dir = path.dirname(PREDICTION_LOG)
@@ -741,6 +741,12 @@ function logPrediction(symbol, agents, zones, generatedAt, {
       priceRegimeAtScan: priceRegimeAtScan ?? null,
       // Cross-market turbulence at scan time (lib/turbulence.js) — stocks, bonds, gold and sectors moving unlike their usual relationships.
       turbulenceAtScan:  turbulenceAtScan ?? null,
+      // The expected-value check at scan time (lib/expected-value.js): its
+      // verdict, net edge and the win rate it used. Gated picks are still
+      // logged, so the record can say whether the gate removed the right ones.
+      edgeAtScan:        edgeAtScan ?? null,
+      // The learned composite (lib/score-weights.js) when adopted, else null.
+      rankScore:         rankScore ?? null,
       // The second-opinion model's probability that this pick reaches its
       // target first (lib/meta-label.js) — logged whether or not the model is
       // adopted, so the next refit can judge it on picks it never saw.
@@ -1281,6 +1287,10 @@ Apply the instructions, JSON schema and rules from the system prompt. Respond ON
       try {
         const winProb = contestP || (bracketStore && require('../lib/bracket-prob').winProbFor(bracketStore, { assetType })) || kelly.winProbFromStats(sizingStats, { assetType })
         const ev = expectedValue.evaluateTrade({ winProb: winProb.p, targetReturn: stock.targetReturn, stopLoss: stock.stopLoss, assetType })
+        if (ev) stock.edgeCheck = {
+          verdict: ev.verdict, actionable: ev.actionable, reason: ev.reason, netEdge: ev.netEdge,
+          breakEvenWinProb: ev.breakEvenWinProb, winProb: +Number(winProb.p).toFixed(3), winProbSource: winProb.source ?? null,
+        }
         const dailyVol = qs?.vol?.forecast21 > 0 ? qs.vol.forecast21 / Math.sqrt(252) : null
         stock.sizing = { ...kelly.sizeIfCalibrated(winProb, { winFrac: ev.netWinFrac, lossFrac: ev.netLossFrac, riskBudget: kelly.RISK_BUDGET, volFrac: dailyVol }), winProbSource: winProb.source ?? null }
       } catch { /* sizing is optional */ }
@@ -1310,6 +1320,14 @@ Apply the instructions, JSON schema and rules from the system prompt. Respond ON
       }
     }
 
+    // Learned score weights (lib/score-weights.js): used only when adopted on
+    // picks the fit never saw; logged so the next refit can be checked.
+    const scoreWeights = (() => { try { return require('../lib/score-weights').load() } catch { return null } })()
+    for (const stock of data.rankedStocks.filter(p => p.actionable !== false)) {
+      const rs = require('../lib/score-weights').rankScoreFor(scoreWeights, stock)
+      if (rs != null) stock.rankScore = rs
+    }
+
     // Log each prediction for win-rate tracking (log ALL picks before threshold filter
     // so calibration data covers the full score distribution, not just filtered picks)
     // Only actionable picks are predictions. An "Avoid" carries no entry,
@@ -1334,6 +1352,8 @@ Apply the instructions, JSON schema and rules from the system prompt. Respond ON
         metaProb: stock.metaLabel?.prob ?? null,
         horizon,
         quantAtScan: quantSnapshot.stampOf(quantMap.get(stock.symbol), relMap.get(stock.symbol)),
+        rankScore: stock.rankScore ?? null,
+        edgeAtScan: stock.edgeCheck ? { verdict: stock.edgeCheck.verdict, netEdge: stock.edgeCheck.netEdge, winProb: stock.edgeCheck.winProb, winProbSource: stock.edgeCheck.winProbSource } : null,
         // The no-drift odds the levels implied at scan time — scored later
         // against the triple-barrier label, so whether a pick beats its own
         // base rate is measured.
@@ -1354,6 +1374,39 @@ Apply the instructions, JSON schema and rules from the system prompt. Respond ON
       generatedAt,
       promptVersion:   SCAN_PROMPT_VERSION,
     })
+
+    // Expected-value gate — the same rule Buy Signals applies. A pick whose
+    // payoff does not cover the MEASURED win rate after round-trip costs is
+    // no longer shown as a trade: it becomes a decline (reference levels only,
+    // no size, never paper-traded, not a learning-store decision). It was
+    // logged above with its edge verdict so the record can test the gate.
+    const edgeGate = { evaluated: 0, kept: 0, rejected: [] }
+    for (const stock of data.rankedStocks) {
+      if (stock.actionable === false || !stock.edgeCheck) continue
+      edgeGate.evaluated++
+      if (stock.edgeCheck.actionable) { edgeGate.kept++; continue }
+      edgeGate.rejected.push({ symbol: stock.symbol, verdict: stock.edgeCheck.verdict, reason: stock.edgeCheck.reason, netEdge: stock.edgeCheck.netEdge, breakEvenWinProb: stock.edgeCheck.breakEvenWinProb, winProb: stock.edgeCheck.winProb })
+      stock.actionable = false
+      stock.declinedBy = 'edge'
+      stock.sizing = null
+      const lp = livePrice.get(String(stock.symbol).toUpperCase())
+      const li = levelMap.get(String(stock.symbol).toUpperCase())
+      if (lp) stock.tradePlan = tradeLevels({ price: lp.price, atr: li?.atr, support: li?.support, resistance: li?.resistance })
+    }
+    if (edgeGate.rejected.length)
+      console.log(`[ai-brain] edge gate declined ${edgeGate.rejected.length}/${edgeGate.evaluated}: ${edgeGate.rejected.map(r => r.symbol).join(', ')}`)
+
+    // Order: when learned weights are adopted, actionable picks are ranked by
+    // them; declines follow. Otherwise the model's own order stands.
+    let ranking = { method: 'stated', weights: null, reason: scoreWeights?.reason ?? 'no learned weights yet' }
+    if (scoreWeights?.adopted) {
+      const act = data.rankedStocks.filter(p => p.actionable !== false)
+      const rest = data.rankedStocks.filter(p => p.actionable === false)
+      act.sort((a, b) => (b.rankScore ?? -1) - (a.rankScore ?? -1))
+      act.forEach((p, i) => { p.rank = i + 1 })
+      data.rankedStocks = [...act, ...rest]
+      ranking = { method: 'learned', weights: scoreWeights.weights, reason: scoreWeights.reason }
+    }
 
     // Also record picks in the SHARED cross-surface learning store, so Brain
     // outcomes calibrate alongside Advisory/paper-broker decisions instead of
@@ -1418,6 +1471,8 @@ Apply the instructions, JSON schema and rules from the system prompt. Respond ON
       modelUsed: llmUsed === 'claude' ? 'claude-sonnet-4-6' : GROQ_MODEL,
       ensemble,
       thresholdApplied,
+      edgeGate,
+      ranking,
       coherenceAudit:   coherence.audit,
       slate: slate && { observations: slate.observations, avgCorrelation: slate.avgCorrelation, effectiveBets: slate.effectiveBets, order: slate.order, excluded: slate.excluded, picks: slate.symbols.length },
       agentsUsed: ['Fundamental Analyst','Technical Analyst','Sentiment Agent','Macro Economist','Risk Manager','Supervisor'],

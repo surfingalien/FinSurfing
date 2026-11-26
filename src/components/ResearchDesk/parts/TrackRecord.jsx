@@ -172,6 +172,16 @@ export default function TrackRecord({ data, onAdoptBrackets }) {
             </div>
           </div>
         ) : <p className="text-[12px] text-slate-500">No resolved picks yet. Outcomes resolve 7 and 30 days after each scan.</p>}
+        {b?.byEdgeVerdict && Object.keys(b.byEdgeVerdict).length > 0 && (
+          <div className="mt-2">
+            <div className="text-[11px] text-slate-500 mb-1">By the edge check at scan time — did the picks it declined do worse than the ones it kept?</div>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+              {Object.entries(b.byEdgeVerdict).map(([v, c]) => (
+                <Rate key={v} label={v === 'act' ? 'Cleared the edge check' : v === 'thin' ? 'Thin edge (declined)' : 'No edge (declined)'} rate={c.alphaWinRate} lo={c.alphaWinRateLo} hi={c.alphaWinRateHi} n={c.nBench} k={c.alphaWins} />
+              ))}
+            </div>
+          </div>
+        )}
         {b?.independence?.raw > 0 && (
           <p className="text-[11px] text-slate-500 mt-2">
             Counted once per stock per {b.independence.horizon} days: {b.independence.independent} independent outcomes from {b.independence.raw} resolved picks. A stock picked again before its last outcome window ended shares that outcome, so counting it twice would make every interval look tighter than it is.
@@ -180,6 +190,20 @@ export default function TrackRecord({ data, onAdoptBrackets }) {
       </section>
 
       <RankingCheck ranking={b?.ranking} />
+      {data.scoreWeights && (
+        <section>
+          <h3 className="text-sm font-semibold mb-1">Score weights — stated or learned</h3>
+          <p className={`text-[12px] ${data.scoreWeights.adopted ? 'text-emerald-400' : 'text-slate-400'}`}>
+            {data.scoreWeights.adopted ? 'Learned weights are in use: ' : 'Stated weights in use: '}{data.scoreWeights.reason}
+          </p>
+          {(data.scoreWeights.weights || data.scoreWeights.validation?.candidate) && (
+            <p className="text-[11px] text-slate-500 mt-1">
+              {data.scoreWeights.adopted ? 'Weights' : 'Best fit on older picks (not used)'}: {Object.entries(data.scoreWeights.weights || data.scoreWeights.validation.candidate).map(([k, w]) => `${k.replace('Score', '')} ${Math.round(w * 100)}%`).join(' · ')}
+              {' '}— stated: fundamental 25% · technical 20% · sentiment 15% · macro 20% · risk 20%.
+            </p>
+          )}
+        </section>
+      )}
 
       <section>
         <h3 className="text-sm font-semibold mb-2">Do picks beat the odds their own levels imply?</h3>

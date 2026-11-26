@@ -187,6 +187,38 @@ describe('POST /api/ai-brain/analyze — the AVAX regression', () => {
     expect(res.body.coherenceAudit.abstainedPicks).toEqual([{ symbol: 'DOGE', verdict: 'Avoid' }])
   })
 
+  test('a buy whose payoff needs more than the measured hit rate after costs is shown as a decline, and still logged', async () => {
+    // target 2% / stop 15%: break-even needs ~89% wins — no measured rate covers it.
+    mockCall.mockResolvedValue(reply(stock(), stock({ rank: 2, symbol: 'DOGE', targetReturn: 2, stopLoss: 15 })))
+    const res = await scan({ symbols: ['AVAX', 'DOGE'] })
+    const [avax, doge] = res.body.rankedStocks
+    expect(avax).toMatchObject({ actionable: true })
+    expect(avax.edgeCheck.actionable).toBe(true)
+    expect(doge).toMatchObject({ actionable: false, declinedBy: 'edge', sizing: null })
+    expect(doge.tradePlan?.basis).not.toBe('thesis')    // reference levels, never the declined trade's own
+    expect(res.body.edgeGate).toMatchObject({ evaluated: 2, kept: 1 })
+    expect(res.body.edgeGate.rejected[0]).toMatchObject({ symbol: 'DOGE', verdict: 'reject' })
+    // Logged with its verdict, so the record can test whether the gate removes the right picks.
+    const rows = fsp.readFileSync(TMP_LOG, 'utf8').trim().split('\n').map(l => JSON.parse(l))
+    expect(rows.filter(r => r.symbol === 'DOGE').pop().edgeAtScan.verdict).toBe('reject')
+  })
+
+  test('adopted learned score weights reorder the actionable picks; otherwise the stated order stands', async () => {
+    const sw = require('../lib/score-weights')
+    const two = () => reply(stock({ technicalScore: 30 }), stock({ rank: 2, symbol: 'DOGE', technicalScore: 90 }))
+    mockCall.mockResolvedValue(two())
+    let res = await scan({ symbols: ['AVAX', 'DOGE'] })
+    expect(res.body.ranking.method).toBe('stated')
+    expect(res.body.rankedStocks.map(p => p.symbol)).toEqual(['AVAX', 'DOGE'])
+    require('../lib/atomic-write').writeJsonAtomic(sw.FILE, { adopted: true, reason: 'test', weights: { fundamentalScore: 0, technicalScore: 1, sentimentScore: 0, macroScore: 0, riskScore: 0 } })
+    try {
+      mockCall.mockResolvedValue(two())
+      res = await scan({ symbols: ['AVAX', 'DOGE'] })
+      expect(res.body.ranking.method).toBe('learned')
+      expect(res.body.rankedStocks.map(p => [p.symbol, p.rank, p.rankScore])).toEqual([['DOGE', 1, 90], ['AVAX', 2, 30]])
+    } finally { require('fs').rmSync(sw.FILE, { force: true }) }
+  })
+
   test('predictions go to the redirected log, not the tracked calibration record', async () => {
     // Not circular: this proves the AI_BRAIN_PREDICTION_LOG override is in
     // effect. If it ever stops being honoured the redirect silently fails and

@@ -108,6 +108,14 @@ export default function StockCard({ stock, onAnalyze, horizon, byCompositeScore,
               </div>
             </div>
 
+            {stock.declinedBy === 'edge' && stock.edgeCheck && (
+              <div className="mb-2 px-2 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/25 text-[10px] text-amber-300 leading-snug">
+                The AI said {stock.agentVerdict}, with target {signedPct(stock.targetReturn)} and stop {drawdownPct(stock.stopLoss)}. That payoff needs a
+                {' '}{Math.round((stock.edgeCheck.breakEvenWinProb ?? 0) * 100)}% hit rate after costs; the measured rate is
+                {' '}{Math.round((stock.edgeCheck.winProb ?? 0) * 100)}%{stock.edgeCheck.winProbSource ? ` (${stock.edgeCheck.winProbSource})` : ''}.
+                {' '}Shown as a decline, not a trade.
+              </div>
+            )}
             {stock.highConviction && (
               <div className="flex items-center gap-1.5 mb-2 px-2 py-1 rounded-lg bg-gradient-to-r from-amber-500/15 to-yellow-500/10 border border-amber-500/30">
                 <span className="text-[10px]">⭐</span>
@@ -118,8 +126,9 @@ export default function StockCard({ stock, onAnalyze, horizon, byCompositeScore,
               {/* An Avoid has no target or stop. Showing "0%" / "-0%" read as a
                   flat trade rather than no trade, so the chips are replaced. */}
               {stock.actionable === false ? (
-                <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-slate-500/20 text-slate-300">
-                  No trade — declined
+                <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-slate-500/20 text-slate-300"
+                  title={stock.declinedBy === 'edge' ? stock.edgeCheck?.reason : undefined}>
+                  {stock.declinedBy === 'edge' ? 'No trade — no measured edge after costs' : 'No trade — declined'}
                 </span>
               ) : (
                 <>

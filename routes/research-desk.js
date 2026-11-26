@@ -446,7 +446,7 @@ router.get('/track-record', requireAuth, (req, res) => {
   res.json({
     persistence: { enabled: persistence.enabled, reason: persistence.reason },
     brain: stats && {
-      totalResolved: stats.totalResolved, segmentHorizon: stats.segmentHorizon, byTurbulence: stats.byTurbulence,
+      totalResolved: stats.totalResolved, segmentHorizon: stats.segmentHorizon, byTurbulence: stats.byTurbulence, byEdgeVerdict: stats.byEdgeVerdict,
       independence: stats.independence, ranking: stats.ranking,
       h7: stats.h7, h30: stats.h30, barriers: stats.barriers,
       byAssetType: stats.byAssetType, calibration: stats.calibration,
@@ -493,6 +493,7 @@ router.get('/track-record', requireAuth, (req, res) => {
     // The picks vs random picks from the SAME priced list (lib/shadow-baseline.js):
     // beating SPY can be the list; beating these is the model.
     vsRandom,
+    scoreWeights: (() => { try { return require('../lib/score-weights').load() } catch { return null } })(),
     personaVsRandom: (() => { try { const ps = require('../lib/persona-shadow'); return ps.compare(ps.readRows()) } catch { return null } })(),
     // Every decider in one table, ranked by the lower bound (lib/leaderboard.js).
     leaderboard: (() => { try { return require('../lib/leaderboard').buildLeaderboard(decisions, vsRandom) } catch { return null } })(),
