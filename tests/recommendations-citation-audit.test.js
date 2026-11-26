@@ -22,6 +22,7 @@ const EVIDENCE = '\nSOCIAL & TECHNICAL SNAPSHOT:\n' +
   '  NVDA: RSI 28.4 oversold, analyst target $243.00 (42×), fwdP/E 31.2\n' +
   '  AMD: management tone confident; risk factors eased versus the prior year\n'
 
+jest.mock('../lib/persona-screen', () => require('./helpers/open-persona-screen'))
 jest.mock('../lib/ai-router',       () => ({ getRouter: () => ({ call: (...a) => mockCall(...a) }) }))
 jest.mock('../lib/brain-learnings', () => ({ computeStats: (...a) => mockStats(...a), readPredictions: () => [] }))
 jest.mock('../lib/social-sentiment', () => ({ getSocialSentiment: async () => EVIDENCE }))

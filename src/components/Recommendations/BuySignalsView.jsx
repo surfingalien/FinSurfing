@@ -20,8 +20,8 @@ import RunHistory from './signals/RunHistory'
 /**
  * EdgeGateBanner — what the expected-value screen removed, and why.
  *
- * The model is asked for a fixed slate of ~20 picks every run, so a full list
- * is not evidence that 20 good ideas existed. The server scores each candidate
+ * The model is asked for up to the persona's slate, so a full list is not
+ * evidence that that many good ideas existed. The server scores each candidate
  * on its own reward/risk against the measured win rate for its asset class,
  * net of round-trip costs, and drops the ones that don't clear the floor.
  * Showing what was screened out is the point — a silently shortened list looks
@@ -63,6 +63,60 @@ function EdgeGateBanner({ gate, abstained }) {
                 </li>
               ))}
             </ul>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * PersonaCheckBanner — the persona's screen and what its rules removed.
+ * The candidate list was screened in code from measured figures; the AI could
+ * only choose from it, and a pick breaking the persona's rules was dropped.
+ */
+function PersonaCheckBanner({ check, personaName }) {
+  const [open, setOpen] = useState(false)
+  if (!check) return null
+  const c = check.candidates || {}
+  const so = check.screenedOut || {}
+  const listed = [c.stocks && `${c.stocks} stocks`, c.etfs && `${c.etfs} ETFs`, c.crypto && `${c.crypto} crypto`, c.funds && `${c.funds} funds`].filter(Boolean).join(', ')
+  const out = [so.failed && `${so.failed} failed a rule`, so.unknown && `${so.unknown} could not be checked (figure missing)`, so.sector && `${so.sector} outside the persona's sectors`].filter(Boolean).join(' · ')
+  const hasDetail = check.dropped?.length || check.notes?.length || check.rules?.length || check.repaired?.length
+  return (
+    <div className="rounded-xl p-3 border bg-white/[0.03] border-white/[0.08]">
+      <div className="flex items-start gap-3">
+        <ShieldCheck className="w-4 h-4 mt-0.5 shrink-0 text-mint-400" />
+        <div className="min-w-0 flex-1">
+          {check.mode === 'focus' ? (
+            <span className="text-xs font-bold text-white">Your symbols, checked against {personaName}'s rules — each card says which it meets</span>
+          ) : (
+            <>
+              <span className="text-xs font-bold text-white">
+                {personaName}'s screen: {listed || 'no candidates'} passed
+                {check.dropped?.length ? ` · ${check.dropped.length} pick${check.dropped.length === 1 ? '' : 's'} removed for breaking the persona's rules` : ''}
+              </span>
+              <div className="text-[10px] text-slate-500 mt-0.5">
+                Measured in code (SEC first-filed figures, daily closes); the AI could choose only from this list.
+                {out ? ` Screened out: ${out}.` : ''}{check.unmeasured ? ` ${check.unmeasured} names could not be priced.` : ''}
+              </div>
+            </>
+          )}
+          {hasDetail ? (
+            <button onClick={() => setOpen(o => !o)} className="text-[10px] text-slate-400 hover:text-slate-200 mt-1 underline underline-offset-2">
+              {open ? 'Hide details' : 'Rules and removals'}
+            </button>
+          ) : null}
+          {open && (
+            <div className="mt-2 space-y-1 text-[11px] text-slate-400">
+              {check.rules?.length > 0 && <div><span className="text-slate-300 font-semibold">Stock rules: </span>{check.rules.join(' · ')}</div>}
+              {check.periods?.length > 0 && <div><span className="text-slate-300 font-semibold">Holding period: </span>{check.periods.join(' / ')}</div>}
+              {check.notes?.map((n, i) => <div key={i}>Note: {n}</div>)}
+              {check.dropped?.map((d, i) => (
+                <div key={`${d.symbol}-${i}`} className="flex gap-2"><span className="font-semibold text-slate-300 shrink-0">{d.symbol}</span><span>{d.reason}</span></div>
+              ))}
+              {check.repaired?.map((r, i) => <div key={`r${i}`}>{r.symbol}: labelled {r.from || 'no type'}, is {r.to}</div>)}
+            </div>
           )}
         </div>
       </div>
@@ -353,6 +407,11 @@ export default function BuySignalsView({ portfolio, onAnalyze, onCompare }) {
             <MacroBanner regime={recs.macroRegime} signals={recs.macroRegime.signals} />
           )}
 
+          {/* Persona screen — the candidate list and what its rules removed */}
+          {recs.personaCheck && (
+            <PersonaCheckBanner check={recs.personaCheck} personaName={recs.persona?.name || 'Persona'} />
+          )}
+
           {/* Edge gate — what the expected-value screen removed, and why */}
           {recs.edgeGate?.rejected?.length > 0 && (
             <EdgeGateBanner gate={recs.edgeGate} abstained={recs.abstained} />
@@ -426,7 +485,9 @@ export default function BuySignalsView({ portfolio, onAnalyze, onCompare }) {
           {displayed.length === 0 ? (
             <div className="glass rounded-xl p-8 text-center text-slate-500 text-sm">
               {recs.abstained
-                ? 'Every candidate was screened out on expected value — see above. No action is the recommendation.'
+                ? (recs.edgeGate?.evaluated
+                    ? 'Every candidate was screened out — see above. No action is the recommendation.'
+                    : 'The AI found nothing on the persona\'s screened list it would back. No action is the recommendation.')
                 : 'No recommendations match the selected filters.'}
             </div>
           ) : (

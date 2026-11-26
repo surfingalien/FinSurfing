@@ -168,6 +168,36 @@ export function RecCard({ rec, onAnalyze, liveQuote }) {
         )}
       </div>
 
+      {/* Persona screen: the measured figures this pick passed on (screened
+          run), or which persona rules a user-chosen symbol meets (focus). */}
+      {rec.screen?.facts && (
+        <div className="mt-2 pt-2 border-t border-white/[0.06] text-[10px] text-slate-400">
+          <span className="text-slate-300 font-semibold">Measured: </span>
+          {[
+            rec.screen.facts.pe != null && `P/E ${rec.screen.facts.pe}`,
+            rec.screen.facts.roe != null && `ROE ${rec.screen.facts.roe}%`,
+            rec.screen.facts.fcfYield != null && `FCF yield ${rec.screen.facts.fcfYield}%`,
+            rec.screen.facts.revenueGrowthYoY != null && `revenue ${rec.screen.facts.revenueGrowthYoY > 0 ? '+' : ''}${rec.screen.facts.revenueGrowthYoY}%`,
+            rec.screen.facts.debtToEquity != null && `D/E ${rec.screen.facts.debtToEquity}`,
+            rec.screen.facts.ret252 != null && `12m ${rec.screen.facts.ret252 > 0 ? '+' : ''}${rec.screen.facts.ret252}%`,
+            rec.screen.facts.vol != null && `vol ${rec.screen.facts.vol}%/yr`,
+          ].filter(Boolean).join(' · ')}
+          {rec.screen.passed?.length > 0 && (
+            <div className="flex items-start gap-1.5 mt-0.5">
+              <CheckCircle2 className="w-3 h-3 text-mint-400 shrink-0 mt-0.5" />
+              <span>Passes: {rec.screen.passed.join(' · ')}</span>
+            </div>
+          )}
+        </div>
+      )}
+      {rec.personaFit && (
+        <div className="mt-2 pt-2 border-t border-white/[0.06] text-[10px] text-slate-400 space-y-0.5">
+          {rec.personaFit.passed.length > 0 && <div><span className="text-emerald-400 font-semibold">Meets: </span>{rec.personaFit.passed.join(' · ')}</div>}
+          {rec.personaFit.failed.length > 0 && <div><span className="text-red-400 font-semibold">Fails: </span>{rec.personaFit.failed.join(' · ')}</div>}
+          {rec.personaFit.unknown.length > 0 && <div><span className="text-amber-400 font-semibold">Not checked (no figure): </span>{rec.personaFit.unknown.join(' · ')}</div>}
+        </div>
+      )}
+
       {/* Verified evidence.
           Every citation here was checked back against the data the model was
           actually shown (lib/claim-support.js): any figure it names occurs in

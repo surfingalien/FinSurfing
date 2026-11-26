@@ -18,6 +18,7 @@ const jwt     = require('jsonwebtoken')
 const mockCall  = jest.fn()
 const mockStats = jest.fn()
 
+jest.mock('../lib/persona-screen', () => require('./helpers/open-persona-screen'))
 jest.mock('../lib/ai-router',       () => ({ getRouter: () => ({ call: (...a) => mockCall(...a) }) }))
 jest.mock('../lib/brain-learnings', () => ({ computeStats: (...a) => mockStats(...a), readPredictions: () => [] }))
 jest.mock('../lib/social-sentiment', () => ({ getSocialSentiment: async () => '' }))

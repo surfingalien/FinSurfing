@@ -6,6 +6,7 @@ const express = require('express')
 const jwt     = require('jsonwebtoken')
 
 const mockCall = jest.fn()
+jest.mock('../lib/persona-screen', () => require('./helpers/open-persona-screen'))
 jest.mock('../lib/ai-router',       () => ({ getRouter: () => ({ call: (...a) => mockCall(...a) }) }))
 jest.mock('../lib/brain-learnings', () => ({ computeStats: () => ({ totalResolved: 0 }), readPredictions: () => [] }))
 jest.mock('../lib/social-sentiment', () => ({ getSocialSentiment: async () => '' }))
