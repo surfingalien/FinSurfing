@@ -1,9 +1,10 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import { Brain, Shield, Target, Flame, Leaf, Search } from 'lucide-react'
-import { fmt, fmtPct, fmtLarge, fetchSummary, fetchChart, calcRSI, calcSMA } from '../../services/api'
+import { fmt, fmtPct, fmtLarge, fetchSummary, fetchChart } from '../../services/api'
 import { SectionCard, LoadingPulse } from '../shared/StockCard'
 import { searchSymbol } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
+import { PERSONA_WEIGHTS, scoreFor } from '../../../lib/persona-rules.js'
 
 const PERSONAS = [
   {
@@ -16,7 +17,7 @@ const PERSONAS = [
     text: 'text-amber-400',
     desc: 'Aggressive growth — high-risk, high-reward momentum plays',
     style: 'Focuses on revenue growth >20%, expanding margins, and strong momentum signals.',
-    weights: { revenueGrowth: 0.35, earningsGrowth: 0.25, momentum: 0.25, valuation: 0.05, stability: 0.10 },
+    weights: PERSONA_WEIGHTS.growth,
   },
   {
     id: 'value',
@@ -28,7 +29,7 @@ const PERSONAS = [
     text: 'text-emerald-400',
     desc: 'Buffett-style deep value — underpriced quality businesses',
     style: 'Low P/E, strong free cash flow, durable moat, dividend track record.',
-    weights: { revenueGrowth: 0.10, earningsGrowth: 0.10, momentum: 0.05, valuation: 0.50, stability: 0.25 },
+    weights: PERSONA_WEIGHTS.value,
   },
   {
     id: 'momentum',
@@ -40,7 +41,7 @@ const PERSONAS = [
     text: 'text-indigo-400',
     desc: 'Technical momentum — ride the trend until it bends',
     style: 'Looks for strong RSI (40–70), price above SMA50, and positive MACD crossover.',
-    weights: { revenueGrowth: 0.10, earningsGrowth: 0.10, momentum: 0.55, valuation: 0.10, stability: 0.15 },
+    weights: PERSONA_WEIGHTS.momentum,
   },
   {
     id: 'defensive',
@@ -52,7 +53,7 @@ const PERSONAS = [
     text: 'text-blue-400',
     desc: 'Capital preservation — low volatility, steady dividends',
     style: 'Beta < 1.0, consistent dividends, strong balance sheet, consumer staples / utilities.',
-    weights: { revenueGrowth: 0.05, earningsGrowth: 0.10, momentum: 0.05, valuation: 0.20, stability: 0.60 },
+    weights: PERSONA_WEIGHTS.defensive,
   },
   {
     id: 'esg',
@@ -64,7 +65,7 @@ const PERSONAS = [
     text: 'text-mint-400',
     desc: 'Sustainable investing — quality companies with responsible practices',
     style: 'Financial quality and stability only — this app has no ESG ratings feed, so check MSCI or Sustainalytics yourself before treating a call here as ESG-screened.',
-    weights: { revenueGrowth: 0.20, earningsGrowth: 0.15, momentum: 0.15, valuation: 0.20, stability: 0.30 },
+    weights: PERSONA_WEIGHTS.esg,
   },
 ]
 
@@ -82,70 +83,15 @@ function isEtfLike(summary) {
   return summary != null && summary.pe == null && summary.revenueGrowth == null && summary.earningsGrowth == null
 }
 
+// The score itself lives in lib/persona-rules.js, shared with the five-year
+// test of each persona (lib/persona-rule-study.js), so both score alike.
 function scoreForPersona(persona, summary, chartData) {
-  const weights = persona.weights
-  let score = 50
-  const etf = isEtfLike(summary)
-
-  if (summary && !etf) {
-    // ── Stock scoring ──────────────────────────────────────────────────────
-    const rg = (summary.revenueGrowth || 0) * 100
-    const eg = (summary.earningsGrowth || 0) * 100
-    score += rg * weights.revenueGrowth * 2
-    score += eg * weights.earningsGrowth * 2
-
-    const pe = summary.pe || 30
-    const valScore = pe < 15 ? 20 : pe < 25 ? 10 : pe < 40 ? 0 : -10
-    score += valScore * weights.valuation * 2
-
-    const beta = summary.beta || 1
-    const stabScore = beta < 0.7 ? 20 : beta < 1.0 ? 10 : beta < 1.5 ? 0 : -10
-    score += stabScore * weights.stability * 2
-
-    if (summary.dividendYield && weights.stability > 0.3) score += 5
-  }
-
-  if (summary && etf) {
-    // ── ETF/fund scoring — use beta, yield, and 52w position ──────────────
-    const beta = summary.beta ?? 1
-    const dy   = (summary.dividendYield ?? 0)
-
-    // Stability: low-beta ETFs score better for defensive/value
-    const stabScore = beta < 0.6 ? 20 : beta < 0.85 ? 12 : beta < 1.1 ? 4 : beta < 1.4 ? -4 : -12
-    score += stabScore * weights.stability * 2
-
-    // Yield: dividend ETFs bonus for value/defensive personas
-    if (dy > 0.03) score += 18 * weights.valuation
-    else if (dy > 0.01) score += 8 * weights.valuation
-
-    // 52-week position: proxy for trend strength (growth/momentum personas)
-    if (summary.low52 != null && summary.high52 != null && chartData.length > 0) {
-      const lastClose = chartData[chartData.length - 1].close
-      const range52 = summary.high52 - summary.low52
-      if (range52 > 0) {
-        const pos = (lastClose - summary.low52) / range52   // 0 = at 52w low, 1 = at 52w high
-        score += (pos * 24 - 8) * weights.momentum          // range: -8 to +16
-      }
-    }
-  }
-
-  // ── Technical momentum: applies to both stocks and ETFs ─────────────────
-  if (chartData.length > 20) {
-    const closes  = chartData.map(c => c.close)
-    const rsiArr  = calcRSI(closes)
-    const lastRSI = rsiArr[rsiArr.length - 1]
-    const sma50   = calcSMA(closes, 50)
-    const lastClose = closes[closes.length - 1]
-    const lastSMA50 = sma50[sma50.length - 1]
-
-    if (lastRSI !== null) {
-      const momentumScore = lastRSI > 60 ? 15 : lastRSI > 45 ? 8 : lastRSI < 30 ? -10 : 0
-      score += momentumScore * weights.momentum * 2
-    }
-    if (lastSMA50 && lastClose > lastSMA50) score += 10 * weights.momentum
-  }
-
-  return Math.min(100, Math.max(0, Math.round(score)))
+  const closes = (chartData || []).map(c => c.close)
+  if (!summary) return scoreFor(persona.weights, null, closes)
+  const f = isEtfLike(summary)
+    ? { etf: true, beta: summary.beta, dividendYield: summary.dividendYield, low52: summary.low52, high52: summary.high52 }
+    : { revenueGrowthPct: (summary.revenueGrowth || 0) * 100, earningsGrowthPct: (summary.earningsGrowth || 0) * 100, pe: summary.pe, beta: summary.beta, dividendYield: summary.dividendYield }
+  return scoreFor(persona.weights, f, closes)
 }
 
 /**
@@ -191,6 +137,35 @@ function PersonaRecord({ cal, minSample, signedIn }) {
     <div className="text-[11px] space-y-0.5">
       {line('long', 'Buy / Overweight calls')}
       {line('short', 'Sell / Underweight calls')}
+    </div>
+  )
+}
+
+/** Five-year point-in-time test of a persona's rule (lib/persona-rule-study.js). */
+const STUDY_TXT = {
+  outperforms:     ['text-emerald-400', 'its top fifth beat the list'],
+  underperforms:   ['text-red-400', 'its top fifth did WORSE than the list'],
+  'no-difference': ['text-slate-300', 'no measurable difference from the list'],
+  insufficient:    ['text-slate-500', 'too few months to judge'],
+}
+function PersonaStudyLine({ r }) {
+  if (!r) return null
+  const [cls, txt] = STUDY_TXT[r.verdict] || ['text-slate-400', r.verdict]
+  return (
+    <span>
+      <span className={cls}>{txt}</span>
+      {r.meanExcessPct != null && <> — {r.meanExcessPct > 0 ? '+' : ''}{r.meanExcessPct}% a month vs all names{r.t != null ? ` (t ${r.t})` : ''}, ahead in {Math.round((r.hitRate ?? 0) * 100)}% of {r.periods} months; older half {r.olderHalfPct}%, newer half {r.newerHalfPct}%</>}
+    </span>
+  )
+}
+function PersonaStudy({ study, personaId, signedIn }) {
+  if (!signedIn) return <p className="text-[11px] text-slate-500">Sign in to see this persona tested on five years of data.</p>
+  if (!study) return <p className="text-[11px] text-slate-500">Loading the five-year test…</p>
+  if (study.pending) return <p className="text-[11px] text-slate-500">{study.note}</p>
+  return (
+    <div className="text-[11px] text-slate-400 space-y-1">
+      <div><PersonaStudyLine r={study.personas?.[personaId]} /></div>
+      <p className="text-[10px] text-slate-500">Every month of the last five years, {study.universe} large caps were scored with this persona's own rule from SEC figures as first filed and prices up to that day; its top fifth was held a month against all of them, after costs. Run {String(study.ranAt).slice(0, 10)}. {study.caveats?.[0]} {study.caveats?.[1]}</p>
     </div>
   )
 }
@@ -309,6 +284,8 @@ export default function AdvisoryView({ portfolio }) {
   // server price and scored a week later; the record per persona comes back here.
   const { authFetch, isAuthenticated } = useAuth()
   const [personaCal, setPersonaCal] = useState(null)
+  const [personaStudy, setPersonaStudy] = useState(null)
+  const personaStudyRef = useRef(null)
 
   const analyze = useCallback(async (sym) => {
     setLoading(true)
@@ -336,6 +313,7 @@ export default function AdvisoryView({ portfolio }) {
           body: { symbol: sym, calls: PERSONAS.map(p => ({ persona: p.id, action: rec[p.id]?.action, score: sc[p.id], missing: miss[p.id] })) },
         }).catch(() => {})
         authFetch('/api/advisory-engine/persona-calibration').then(r => r.json()).then(d => { if (!d.error) setPersonaCal(d) }).catch(() => {})
+        if (!personaStudyRef.current) authFetch('/api/advisory-engine/persona-study').then(r => r.json()).then(d => { if (!d.error) { personaStudyRef.current = d; setPersonaStudy(d) } }).catch(() => {})
       }
     } catch (e) { console.warn(e) }
     setLoading(false)
@@ -467,6 +445,10 @@ export default function AdvisoryView({ portfolio }) {
                     <div className="text-[11px] font-semibold text-slate-300 mb-1">How {activeP.name}'s calls have done</div>
                     <PersonaRecord cal={personaCal?.byPersona?.[activeP.id]} minSample={personaCal?.minSample ?? 8} signedIn={isAuthenticated} />
                     <p className="text-[10px] text-slate-500 mt-1">Every Buy, Overweight, Sell or Underweight call on this page is recorded at the last close and scored a week later. Hold is not scored.</p>
+                  </div>
+                  <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-3 mb-3">
+                    <div className="text-[11px] font-semibold text-slate-300 mb-1">{activeP.name}'s rule over the last five years</div>
+                    <PersonaStudy study={personaStudy} personaId={activeP.id} signedIn={isAuthenticated} />
                   </div>
 
                   <div className="text-xs text-slate-500 italic">Strategy: {activeP.style}</div>

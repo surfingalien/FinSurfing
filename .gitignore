@@ -31,6 +31,8 @@ data/ai-brain-shadow.jsonl
 data/persona-shadow.jsonl
 data/factor-library.json
 data/ranked-portfolio.json
+data/persona-rule-study.json
+data/score-weights.json
 data/pead-study.json
 data/vol-forecast-study.json
 data/meta-label.json

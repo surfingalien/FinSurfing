@@ -190,6 +190,20 @@ export default function TrackRecord({ data, onAdoptBrackets }) {
       </section>
 
       <RankingCheck ranking={b?.ranking} />
+      {data.scoreWeights && (
+        <section>
+          <h3 className="text-sm font-semibold mb-1">Score weights — stated or learned</h3>
+          <p className={`text-[12px] ${data.scoreWeights.adopted ? 'text-emerald-400' : 'text-slate-400'}`}>
+            {data.scoreWeights.adopted ? 'Learned weights are in use: ' : 'Stated weights in use: '}{data.scoreWeights.reason}
+          </p>
+          {(data.scoreWeights.weights || data.scoreWeights.validation?.candidate) && (
+            <p className="text-[11px] text-slate-500 mt-1">
+              {data.scoreWeights.adopted ? 'Weights' : 'Best fit on older picks (not used)'}: {Object.entries(data.scoreWeights.weights || data.scoreWeights.validation.candidate).map(([k, w]) => `${k.replace('Score', '')} ${Math.round(w * 100)}%`).join(' · ')}
+              {' '}— stated: fundamental 25% · technical 20% · sentiment 15% · macro 20% · risk 20%.
+            </p>
+          )}
+        </section>
+      )}
 
       <section>
         <h3 className="text-sm font-semibold mb-2">Do picks beat the odds their own levels imply?</h3>

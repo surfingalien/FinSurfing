@@ -203,6 +203,22 @@ describe('POST /api/ai-brain/analyze — the AVAX regression', () => {
     expect(rows.filter(r => r.symbol === 'DOGE').pop().edgeAtScan.verdict).toBe('reject')
   })
 
+  test('adopted learned score weights reorder the actionable picks; otherwise the stated order stands', async () => {
+    const sw = require('../lib/score-weights')
+    const two = () => reply(stock({ technicalScore: 30 }), stock({ rank: 2, symbol: 'DOGE', technicalScore: 90 }))
+    mockCall.mockResolvedValue(two())
+    let res = await scan({ symbols: ['AVAX', 'DOGE'] })
+    expect(res.body.ranking.method).toBe('stated')
+    expect(res.body.rankedStocks.map(p => p.symbol)).toEqual(['AVAX', 'DOGE'])
+    require('../lib/atomic-write').writeJsonAtomic(sw.FILE, { adopted: true, reason: 'test', weights: { fundamentalScore: 0, technicalScore: 1, sentimentScore: 0, macroScore: 0, riskScore: 0 } })
+    try {
+      mockCall.mockResolvedValue(two())
+      res = await scan({ symbols: ['AVAX', 'DOGE'] })
+      expect(res.body.ranking.method).toBe('learned')
+      expect(res.body.rankedStocks.map(p => [p.symbol, p.rank, p.rankScore])).toEqual([['DOGE', 1, 90], ['AVAX', 2, 30]])
+    } finally { require('fs').rmSync(sw.FILE, { force: true }) }
+  })
+
   test('predictions go to the redirected log, not the tracked calibration record', async () => {
     // Not circular: this proves the AI_BRAIN_PREDICTION_LOG override is in
     // effect. If it ever stops being honoured the redirect silently fails and
