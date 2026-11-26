@@ -129,3 +129,26 @@ describe('split guard', () => {
     expect(sg.suspectJumps(ts, [100, 97, 103, 90, 95, 99])).toEqual([])
   })
 })
+
+describe('internal bar fetches are verified internal calls', () => {
+  it('fetchDailyBars always sends the per-boot secret, so the server rate limits skip it', async () => {
+    const { INTERNAL_SECRET } = require('../lib/internal-secret')
+    const orig = global.fetch
+    let seen = null
+    global.fetch = async (url, opts) => { seen = opts.headers; return { status: 200, json: async () => ({ chart: { result: [{ timestamp: [1, 2], indicators: { quote: [{ close: [1, 2], open: [1, 2], high: [1, 2], low: [1, 2], volume: [1, 1] }] } }] } }) } }
+    try {
+      await require('../lib/internal-api').fetchDailyBars('SPY', { headers: { 'x-fmp-key': 'k' } })
+      expect(seen['x-internal-secret']).toBe(INTERNAL_SECRET)
+      expect(seen['x-fmp-key']).toBe('k')
+    } finally { global.fetch = orig }
+  })
+  it('refuses a series a provider could not split-adjust when it shows a split-sized jump', async () => {
+    const orig = global.fetch
+    global.fetch = async () => ({ status: 200, json: async () => ({ chart: { result: [{ meta: { splitAdjusted: false, provider: 'alphavantage' }, timestamp: [1e9, 1e9 + 86400, 1e9 + 172800], indicators: { quote: [{ close: [1000, 1005, 100.5] }] } }] } }) })
+    try {
+      const b = await require('../lib/internal-api').fetchDailyBars('XYZ')
+      expect(b).toHaveLength(0)
+      expect(b.reason).toMatch(/not adjusted for a stock split/)
+    } finally { global.fetch = orig }
+  })
+})

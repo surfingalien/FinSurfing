@@ -10,6 +10,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { RefreshCw } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { Card, Note, Stat } from './shared'
+import RankedPortfolio from './RankedPortfolio'
 
 const deskLink = sym => `#/research-desk/${encodeURIComponent(sym)}`
 
@@ -117,6 +118,8 @@ export default function DiscoveryTab() {
       ))}
 
       <Note>Candidates, not signals: a name here is only somewhere the scan looks. Click a symbol to open its Research Desk dossier.</Note>
+
+      <RankedPortfolio />
     </div>
   )
 }

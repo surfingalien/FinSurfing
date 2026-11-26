@@ -188,8 +188,17 @@ app.use(express.json({ limit: '256kb' }))
 app.use(express.static(path.join(__dirname, 'dist')))
 
 // ── Rate limiting (OWASP auth defence) ───────────
+// The server's own jobs fetch charts and quotes over loopback (lib/internal-api.js,
+// scheduled jobs). They all share 127.0.0.1, so without this every job shared one
+// 30-a-minute chart bucket: factor mining (≈77 names) and the discovery lists
+// (≈220) were refused after the first 30 and kept their stored copies. A verified
+// internal call (loopback AND the per-boot secret) is not counted; users are
+// still limited at their own routes.
+const { isInternalRequest: _isInternal } = require('./lib/internal-secret')
+const skipInternal = req => _isInternal(req)
+
 const baseLimit = rateLimit({
-  windowMs: 60 * 1000, max: 120, standardHeaders: true, legacyHeaders: false,
+  windowMs: 60 * 1000, max: 120, standardHeaders: true, legacyHeaders: false, skip: skipInternal,
   message: { error: 'Too many requests — slow down' },
 })
 
@@ -215,12 +224,12 @@ const authForgotLimit = rateLimit({
 
 // Tighter limits for market data endpoints that hit paid external APIs
 const marketDataLimit = rateLimit({
-  windowMs: 60 * 1000, max: 60, standardHeaders: true, legacyHeaders: false,
+  windowMs: 60 * 1000, max: 60, standardHeaders: true, legacyHeaders: false, skip: skipInternal,
   message: { error: 'Market data rate limit exceeded — try again shortly' },
 })
 
 const chartLimit = rateLimit({
-  windowMs: 60 * 1000, max: 30, standardHeaders: true, legacyHeaders: false,
+  windowMs: 60 * 1000, max: 30, standardHeaders: true, legacyHeaders: false, skip: skipInternal,
   message: { error: 'Chart data rate limit exceeded — try again shortly' },
 })
 
