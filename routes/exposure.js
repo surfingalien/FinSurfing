@@ -356,7 +356,8 @@ router.post('/build', requireAuth, exposureLimit, async (req, res) => {
 router.get('/:anchor/graph', requireAuth, (req, res) => {
   const anchor = cleanAnchor(req.params.anchor)
   if (!anchor) return res.status(400).json({ error: 'Invalid anchor' })
-  const edges = entityGraph.latestEdges(anchor)
+  // Edges stored before stages existed get theirs from their own quote.
+  const edges = entityGraph.latestEdges(anchor).map(e => (e.stage !== undefined ? e : { ...e, stage: exposureMap.commercialStage(e.evidence?.quote) }))
   res.json({
     anchor, edges,
     universe: exposureMap.toUniverse(edges),

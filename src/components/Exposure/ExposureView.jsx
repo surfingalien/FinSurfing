@@ -25,6 +25,9 @@ import {
 import { useBackgroundJob } from '../../hooks/useBackgroundJob'
 import { useAuth } from '../../contexts/AuthContext'
 
+// Commercial stages, latest first (lib/exposure-map.js:STAGES).
+const STAGE_LABEL = { revenue: 'revenue', volume: 'volume production / shipping', orders: 'orders or contract', qualification: 'qualification', sampling: 'sampling / pilot', development: 'development' }
+
 const RELATION_STYLE = {
   supplier:   { label: 'Supplier',   cls: 'text-mint-400 bg-mint-500/10 border-mint-500/25' },
   customer:   { label: 'Customer',   cls: 'text-sky-400 bg-sky-500/10 border-sky-500/25' },
@@ -80,6 +83,13 @@ function EdgeCard({ edge, onAnalyze }) {
           <TrendingUp className="w-3.5 h-3.5 text-mint-400" />
           <span className="text-mint-400 font-semibold">{edge.materialityPct}%</span>
           <span className="text-slate-500">of revenue disclosed as tied to this relationship</span>
+        </div>
+      )}
+
+      {/* The commercial stage the quote itself states (lib/exposure-map.js:commercialStage). */}
+      {edge.stage?.stage && (
+        <div className="text-[10px] text-slate-400" title="Read from the quote's own words — development, sampling, qualification, orders, volume and revenue are different facts">
+          Stage stated: <span className="font-semibold text-slate-200">{STAGE_LABEL[edge.stage.stage] || edge.stage.stage}</span> <span className="text-slate-500">(“{edge.stage.phrase}”)</span>
         </div>
       )}
 

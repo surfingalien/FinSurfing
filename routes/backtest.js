@@ -188,8 +188,10 @@ router.post('/optimize', async (req, res) => {
     // is in-sample by construction. Strategy Lab's two-window verdict is the
     // honest check for a config picked here.
     const inc = await incomeFor(req.body, sym, pairs)
-    const results = optimizeStrategy(ts, closes, strategy, paramRanges, capital, sortBy, 50, { ...executionFor(req.body, sym, barsOf(pairs)), ...inc.opts })
-    return res.json({ symbol: sym, strategy, range, combinations: combos, income: inc.note, results })
+    const all = optimizeStrategy(ts, closes, strategy, paramRanges, capital, sortBy, Infinity, { ...executionFor(req.body, sym, barsOf(pairs)), ...inc.opts })
+    // The whole grid as a Sharpe surface over the two varied parameters: a plateau or a lone spike (lib/param-surface.js).
+    const surface = require('../lib/param-surface').paramSurface(all)
+    return res.json({ symbol: sym, strategy, range, combinations: combos, income: inc.note, results: all.slice(0, 50), surface })
   } catch (err) {
     if (err.name === 'AbortError' || err.name === 'TimeoutError')
       return res.status(504).json({ error: 'Market data request timed out' })

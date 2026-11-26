@@ -10,6 +10,60 @@ const SORT_OPTIONS = [
   { value: 'profitFactor',   label: 'Prof. Factor' },
 ]
 
+// ── Sharpe surface over the two varied parameters (lib/param-surface.js) ─────
+function cellColor(v, max) {
+  if (v == null) return 'transparent'
+  const a = Math.min(1, Math.abs(v) / (max || 1))
+  return v >= 0 ? `rgba(16, 185, 129, ${0.12 + 0.7 * a})` : `rgba(239, 68, 68, ${0.12 + 0.7 * a})`
+}
+
+function SurfaceHeatmap({ surface }) {
+  if (!surface) return null
+  if (surface.kind !== 'grid') return <p className="text-[11px] text-slate-500">Heatmap: {surface.reason}.</p>
+  const max = Math.max(...surface.cells.flat().filter(v => v != null).map(Math.abs), 0.01)
+  return (
+    <div className="bg-white/[0.02] border border-white/[0.06] rounded-xl p-4 space-y-2">
+      <div className="flex flex-wrap items-baseline gap-2">
+        <span className="text-xs font-semibold text-slate-400">Sharpe over {surface.x.key} × {surface.y.key}</span>
+        {surface.shape && (
+          <span className={`text-[11px] ${surface.shape === 'plateau' ? 'text-emerald-400' : 'text-amber-300'}`}>
+            {surface.shape === 'plateau'
+              ? `Plateau — the settings around the best one also work (neighbour median ${surface.neighbourMedian} vs best ${surface.best.value})`
+              : `Lone spike — the settings around the best one do much worse (neighbour median ${surface.neighbourMedian} vs best ${surface.best.value}); likely luck`}
+          </span>
+        )}
+      </div>
+      <div className="overflow-x-auto">
+        <table className="text-[10px] border-separate" style={{ borderSpacing: 2 }} aria-label={`Sharpe ratio by ${surface.x.key} and ${surface.y.key}`}>
+          <thead>
+            <tr><th className="px-1 text-slate-500 font-normal text-right">{surface.y.key} ↓ / {surface.x.key} →</th>
+              {surface.x.values.map(x => <th key={x} className="px-1 text-slate-500 font-normal font-mono">{x}</th>)}</tr>
+          </thead>
+          <tbody>
+            {surface.y.values.map((y, i) => (
+              <tr key={y}>
+                <th className="px-1 text-slate-500 font-normal font-mono text-right">{y}</th>
+                {surface.x.values.map((x, j) => {
+                  const v = surface.cells[i][j]
+                  const isBest = x === surface.best.x && y === surface.best.y
+                  return (
+                    <td key={x} title={`${surface.x.key} ${x}, ${surface.y.key} ${y}: Sharpe ${v ?? '—'}`}
+                      className={`w-9 h-7 text-center font-mono text-slate-100 rounded ${isBest ? 'ring-2 ring-white/80' : ''}`}
+                      style={{ background: cellColor(v, max) }}>
+                      {v == null ? '' : v.toFixed(1)}
+                    </td>
+                  )
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="text-[10px] text-slate-500">Green is a positive Sharpe, red negative; the outlined cell is the best. Every cell is measured on the same history, so the best is in-sample — a broad green area is more trustworthy than one bright cell. Strategy Lab's two-window test is the honest check for any setting picked here.</p>
+    </div>
+  )
+}
+
 export default function OptimizerPanel({ strategy, symbol, range, initialCapital, getApiKeyHeaders }) {
   const [paramRanges, setParamRanges] = useState(() => {
     const r = {}
@@ -110,6 +164,8 @@ export default function OptimizerPanel({ strategy, symbol, range, initialCapital
           <AlertTriangle className="w-3.5 h-3.5 shrink-0" /> {error}
         </div>
       )}
+
+      {results?.surface && <SurfaceHeatmap surface={results.surface} />}
 
       {/* Results table */}
       {top.length > 0 && (
