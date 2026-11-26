@@ -53,6 +53,7 @@ export default function IndicatorVoteCard({ vote, symbol, onResearch }) {
         <div className="text-right text-[11px] text-slate-400">
           <div><span className="text-emerald-400 font-semibold">{vote.for}</span> for · <span className="text-red-400 font-semibold">{vote.against}</span> against · {vote.noOpinion} no opinion</div>
           <div className="text-[10px] text-slate-500">of {vote.total} independent readings — a rule, not AI</div>
+          <div className="text-[10px] text-slate-500">from the last year of daily prices, whatever range the chart shows</div>
         </div>
       </div>
 
