@@ -143,10 +143,6 @@ export default function AnalysisView({ defaultSymbol, onResearch }) {
       setBaseSnapshot(buildCompareSnapshot(candles, sumRes))
 
 
-      // Advanced multi-indicator signal. Always set (null when history is too
-      // thin) — leaving the previous value meant a symbol switch could keep
-      // showing the OLD ticker's BUY/stop/target card against the new chart.
-      setAiSignal(indicatorVote(candles))
     }).catch(e => {
       console.warn('Analysis load failed:', e)
       if (cancelled) return
@@ -159,12 +155,25 @@ export default function AnalysisView({ defaultSymbol, onResearch }) {
       setPartial(false)
       // A failed load must not leave the previous symbol's analysis on screen
       setChartData([])
-      setAiSignal(null)
       setSummary(null)
     })
     .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
   }, [symbol, range, reloadKey])
+
+  // The indicator vote describes TODAY, so it is always read from the last
+  // year of daily prices, whatever range the chart shows: 1mo/3mo hold too few
+  // sessions for its 52-day Ichimoku span (it needs ~80), so the card used to
+  // vanish on those ranges, and on 2y/5y the verdict shifted with the window.
+  useEffect(() => {
+    if (!symbol) return
+    let cancelled = false
+    setAiSignal(null)   // never show the previous ticker's vote against this chart
+    fetchChart(symbol, '1d', '1y')
+      .then(c => { if (!cancelled) setAiSignal(indicatorVote(c.candles)) })
+      .catch(() => { if (!cancelled) setAiSignal(null) })
+    return () => { cancelled = true }
+  }, [symbol])
 
   // Compare leg: fetched independently so toggling it never reloads the base
   useEffect(() => {
