@@ -30,7 +30,7 @@ export function PersonaPicker({ selected, onChange, personas }) {
         <div className="flex-1 text-left min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-sm font-semibold text-white">{current.name}</span>
-            <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium border ${STYLE_COLORS[current.styleColor] ?? STYLE_COLORS['text-slate-400']} ${current.styleColor}`}>
+            <span className={`persona-tag text-[10px] px-2 py-0.5 rounded-full font-medium border ${STYLE_COLORS[current.styleColor] ?? STYLE_COLORS['text-slate-400']} ${current.styleColor}`}>
               {current.style}
             </span>
           </div>
@@ -59,10 +59,10 @@ export function PersonaPicker({ selected, onChange, personas }) {
                 }`}
               >
                 <span className="text-2xl">{p.emoji}</span>
-                <span className={`text-xs font-semibold leading-tight ${isActive ? p.styleColor : 'text-white'}`}>
+                <span className={`persona-tag text-xs font-semibold leading-tight ${isActive ? p.styleColor : 'text-white'}`}>
                   {p.name}
                 </span>
-                <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${colors} ${p.styleColor} font-medium`}>
+                <span className={`persona-tag text-[9px] px-1.5 py-0.5 rounded-full ${colors} ${p.styleColor} font-medium`}>
                   {p.style}
                 </span>
               </button>

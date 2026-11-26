@@ -81,7 +81,7 @@ function PersonaCheckBanner({ check, personaName }) {
   const c = check.candidates || {}
   const so = check.screenedOut || {}
   const listed = [c.stocks && `${c.stocks} stocks`, c.etfs && `${c.etfs} ETFs`, c.crypto && `${c.crypto} crypto`, c.funds && `${c.funds} funds`].filter(Boolean).join(', ')
-  const out = [so.failed && `${so.failed} failed a rule`, so.unknown && `${so.unknown} could not be checked (figure missing)`, so.sector && `${so.sector} outside the persona's sectors`].filter(Boolean).join(' · ')
+  const out = [so.failed && `${so.failed} failed a rule`, so.unknown && `${so.unknown} could not be checked (figure missing)`, so.sector && `${so.sector} outside the persona's sectors`, so.duplicate && `${so.duplicate} duplicate listings`].filter(Boolean).join(' · ')
   const hasDetail = check.dropped?.length || check.notes?.length || check.rules?.length || check.repaired?.length
   return (
     <div className="rounded-xl p-3 border bg-white/[0.03] border-white/[0.08]">

@@ -56,6 +56,7 @@ it('drops picks that break the persona and reports why', async () => {
   expect(res.body.recommendations.map(r => r.symbol)).toEqual(['KO'])
   expect(res.body.personaCheck.dropped.map(d => d.symbol)).toEqual(['BAD', 'MSFT', 'BTC-USD'])
   expect(res.body.recommendations[0].screen.facts.roe).toBe(25)
+  expect(res.body.personaCheck.shadowsLogged).toBe(2)   // KO + one random name from the same list
 })
 
 it('holdings are removed from the candidate list', async () => {

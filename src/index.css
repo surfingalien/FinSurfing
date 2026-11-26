@@ -304,6 +304,22 @@ html.light-mode .text-amber-300,
 html.light-mode .text-amber-400 { color: #b45309; }
 html.light-mode .text-indigo-300,
 html.light-mode .text-indigo-400 { color: #4f46e5; }
+/* Accent hues used by persona style tags and chips: the 300/400 shades are
+   too pale on white (yellow-400 on a yellow tint read as nearly blank). Each
+   is darkened to its 700 shade — ≥4.5:1 on white and on its own 10% tint. */
+html.light-mode .text-purple-300,
+html.light-mode .text-purple-400 { color: #7e22ce; }
+html.light-mode .text-orange-300,
+html.light-mode .text-orange-400 { color: #c2410c; }
+html.light-mode .text-yellow-300,
+html.light-mode .text-yellow-400 { color: #a16207; }
+html.light-mode .text-teal-300,
+html.light-mode .text-teal-400 { color: #0f766e; }
+/* Persona style tags are 9–10px on a 10% tint: the app-wide emerald/red
+   status shades fall just under 4.5:1 there, so the tags take the 700s. */
+html.light-mode .persona-tag.text-emerald-400 { color: #047857; }
+html.light-mode .persona-tag.text-red-400 { color: #b91c1c; }
+html.light-mode .persona-tag.text-slate-400 { color: #475569; }
 
 /* ── Round 3: full-app sweep (grep-driven) ──────────────────────────────
    Covers the accent/fill/border patterns used outside the Dashboard. */

@@ -734,6 +734,18 @@ Respond ONLY with a JSON object — no markdown, no explanation, just the JSON:
     })
     const journalled = recJournal.appendEntry(journalEntry)
 
+    // D. Random picks from the SAME screened list, priced at the same close,
+    // to measure whether the AI's choice adds anything to the screen
+    // (lib/persona-shadow.js). Screened runs only; never the learning store.
+    let personaShadows = 0
+    if (sc && !focusSymbols.length && data.recommendations.length) {
+      personaShadows = require('../lib/persona-shadow').logRun({
+        runId: journalled ? journalEntry.id : `${persona.id}-${Date.now()}`,
+        persona: persona.id, at: new Date().toISOString(),
+        picks: data.recommendations.map(r => ({ symbol: r.symbol, type: r.type })), screen: sc,
+      })
+    }
+
     return res.json({
       ...data,
       // Lets the page find this run in GET /journal and show what changed.
@@ -746,7 +758,7 @@ Respond ONLY with a JSON object — no markdown, no explanation, just the JSON:
       // picks the math says are not worth the friction.
       abstained: data.recommendations.length === 0,
       edgeGate,
-      personaCheck,
+      personaCheck: { ...personaCheck, shadowsLogged: personaShadows },
       allocation,
       // What the model claimed as evidence vs what the evidence actually said.
       citationAudit: claimSupport.summarizeAudits(

@@ -34,7 +34,7 @@ describe('A. the screen', () => {
   it('Buffett keeps only stocks meeting every rule; an unknown figure is not a pass', () => {
     const sc = ps.screen('buffett', measures)
     expect(sc.stocks.map(s => s.symbol)).toEqual(['GOOD'])
-    expect(sc.screenedOut).toMatchObject({ failed: 2, unknown: 1, unpriced: 1 })
+    expect(sc.screenedOut).toMatchObject({ failed: 2, unknown: 1, unpriced: 1, duplicate: 0 })
     expect(sc.etfs).toEqual([])
     expect(sc.crypto).toEqual([])
     expect(sc.stocks[0].passed).toContain('P/E ≤ 35')
@@ -68,6 +68,12 @@ describe('A. the screen', () => {
     expect(syms).not.toContain('S9')
     expect(syms).not.toContain('S8')
     expect(syms).toContain('S7')
+  })
+  it('one listing per SEC filer: the shortest symbol wins', () => {
+    const m = { GOOG: stock({ cik: 1, pe: 20 }), GOOGL: stock({ cik: 1, pe: 20 }), GOOGM: stock({ cik: 1, pe: 2 }), MSFT: stock({ cik: 2 }) }
+    const sc = ps.screen('default', m)
+    expect(sc.stocks.map(s => s.symbol).sort()).toEqual(['GOOG', 'MSFT'])
+    expect(sc.screenedOut.duplicate).toBe(2)
   })
   it('funds only when asked for', () => {
     const m = { FXAIX: { assetClass: 'Fund', price: 200 } }

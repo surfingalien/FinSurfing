@@ -75,3 +75,16 @@ test('fetches by CIK with the SEC User-Agent, caches, and treats 404 as no data'
   expect(await sf.getCompanyFacts('ACME', { fetchImpl: async () => ({ ok: false, status: 404 }) })).toBeNull()
   filings.resolveCik.mockRestore()
 })
+
+test('a share count over 400 days old is not current; shares then come from net income ÷ diluted EPS', () => {
+  // Mastercard's share tag stopped in 2010: a 16-year-old count made its FCF yield read 25%.
+  const q = v => [row('2025-01-01', '2025-03-31', v, '2025-04-30'), row('2025-04-01', '2025-06-30', v, '2025-07-30'),
+    row('2025-07-01', '2025-09-30', v, '2025-10-30'), row('2025-01-01', '2025-12-31', 4 * v, '2026-02-15', '10-K')]
+  const stale = { facts: {
+    'us-gaap': { Revenues: { units: { USD: q(100) } }, NetIncomeLoss: { units: { USD: q(20) } }, EarningsPerShareDiluted: { units: { 'USD/shares': q(0.5) } } },
+    dei: { EntityCommonStockSharesOutstanding: { units: { shares: [{ end: '2010-02-01', val: 7, filed: '2010-02-15', form: '10-K' }] } } },
+  } }
+  const s = sf.snapshotAt(sf.compactFacts(stale), '2026-03-01', { price: 10 })
+  expect(s.shares).toBe(40)            // 80 net income ÷ 2.00 EPS, not the 2010 count of 7
+  expect(s.sharesDerived).toBe(true)
+})

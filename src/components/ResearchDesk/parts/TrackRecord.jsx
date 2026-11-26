@@ -261,6 +261,32 @@ export default function TrackRecord({ data, onAdoptBrackets }) {
       </section>
 
       <section>
+        <h3 className="text-sm font-semibold mb-2 flex items-center gap-1.5"><Shuffle className="w-3.5 h-3.5" /> Buy Signals personas vs random picks from the persona's own list</h3>
+        {data.personaVsRandom && Object.keys(data.personaVsRandom.byPersona || {}).length ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-[12px]">
+              <thead><tr className="text-left text-slate-500 text-[10px]">
+                <th className="py-1 pr-2">Persona</th><th className="pr-2">Runs (independent)</th><th className="pr-2">AI picks</th><th className="pr-2">Random, same list</th><th className="pr-2">AI ahead in</th><th>Verdict</th>
+              </tr></thead>
+              <tbody>
+                {Object.entries(data.personaVsRandom.byPersona).map(([id, r]) => (
+                  <tr key={id} className="border-t border-white/[0.06]">
+                    <td className="py-1 pr-2 font-medium">{id}</td>
+                    <td className="pr-2">{r.runs} ({r.independentRuns}){r.pending ? ` · ${r.pending} open` : ''}</td>
+                    <td className="pr-2">{r.meanPick != null ? `${r.meanPick > 0 ? '+' : ''}${r.meanPick}%` : '—'}</td>
+                    <td className="pr-2">{r.meanShadow != null ? `${r.meanShadow > 0 ? '+' : ''}${r.meanShadow}%` : '—'}</td>
+                    <td className="pr-2">{r.beatShare != null ? `${Math.round(r.beatShare * 100)}% of runs` : '—'}</td>
+                    <td className={VS_RANDOM[r.verdict]?.[0] || 'text-slate-400'}>{r.verdict === 'insufficient' ? r.reason : `${r.verdict}${r.t != null ? ` (t ${r.t})` : ''}`}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="text-[11px] text-slate-500 mt-1">Mean {data.personaVsRandom.horizonDays}-day return. Each persona's list is screened in code first; if the AI's choice from it does no better than a random draw from it, the persona's value is the screen, not the model. Runs whose windows overlap count once; {data.personaVsRandom.minRuns} independent runs before a verdict.</p>
+          </div>
+        ) : <p className="text-[12px] text-slate-500">No persona runs with a random comparison yet — every screened Buy Signals run from now on logs one; each resolves {data.personaVsRandom?.horizonDays ?? 30} days later.</p>}
+      </section>
+
+      <section>
         <h3 className="text-sm font-semibold mb-2 flex items-center gap-1.5"><Activity className="w-3.5 h-3.5" /> Market regime from prices</h3>
         {data.priceRegime?.equity || data.priceRegime?.crypto ? (
           <div className="grid md:grid-cols-2 gap-2">
