@@ -179,12 +179,32 @@ function PersonaStudyLine({ r }) {
     </span>
   )
 }
-function PersonaStudy({ study, personaId, signedIn }) {
+/** Admin-only: start the five-year test now (about a minute), else it runs Saturdays. */
+function RunStudyNow({ study, onRun, starting, error }) {
+  const running = study?.run?.running
+  return (
+    <div className="flex items-center gap-2 flex-wrap text-[10px]">
+      <button type="button" onClick={onRun} disabled={running || starting}
+        className="px-2 py-1 rounded-lg border border-slate-500/25 text-slate-300 hover:text-mint-400 disabled:opacity-50 disabled:cursor-not-allowed">
+        {running ? 'Running…' : starting ? 'Starting…' : 'Run now'}
+      </button>
+      <span className="text-slate-500">
+        {running ? `Started ${new Date(study.run.startedAt).toLocaleTimeString()} — about a minute; this updates when it finishes.`
+          : 'Admin only. Re-scores five years of data with no AI call.'}
+      </span>
+      {(error || study?.run?.error) && <span className="text-amber-400">Last run failed: {error || study.run.error}</span>}
+    </div>
+  )
+}
+
+function PersonaStudy({ study, personaId, signedIn, isAdmin, onRun, starting, runError }) {
   if (!signedIn) return <p className="text-[11px] text-slate-500">Sign in to see this persona tested on five years of data.</p>
   if (!study) return <p className="text-[11px] text-slate-500">Loading the five-year test…</p>
-  if (study.pending) return <p className="text-[11px] text-slate-500">{study.note}</p>
+  const runner = isAdmin ? <RunStudyNow study={study} onRun={onRun} starting={starting} error={runError} /> : null
+  if (study.pending) return <div className="space-y-1.5"><p className="text-[11px] text-slate-500">{study.run?.running ? 'The first run is in progress…' : study.note}</p>{runner}</div>
   return (
     <div className="text-[11px] text-slate-400 space-y-1">
+      {runner}
       <div><PersonaStudyLine r={study.personas?.[personaId]} /></div>
       {study.v1?.[personaId] && (
         <div className="text-[10px] text-slate-500">Old score (before it was bounded): {STUDY_TXT[study.v1[personaId].verdict]?.[1] || study.v1[personaId].verdict}, {study.v1[personaId].meanExcessPct}% a month vs the list; top-fifth cut tied in {study.v1[personaId].tiedCutMonths} of {study.v1[personaId].periods} months (now {study.personas?.[personaId]?.tiedCutMonths ?? '—'}).</div>
@@ -306,10 +326,29 @@ export default function AdvisoryView({ portfolio }) {
   const [missing, setMissing] = useState({})
   // The measured half (server): each persona's directional call is recorded on a
   // server price and scored a week later; the record per persona comes back here.
-  const { authFetch, isAuthenticated } = useAuth()
-  const [personaCal, setPersonaCal] = useState(null)
+  const { authFetch, isAuthenticated, user } = useAuth()
+  const isAdmin = user?.role === 'admin'
   const [personaStudy, setPersonaStudy] = useState(null)
   const personaStudyRef = useRef(null)
+  const [studyStarting, setStudyStarting] = useState(false)
+  const [studyRunError, setStudyRunError] = useState(null)
+  const loadStudy = useCallback(() => authFetch('/api/advisory-engine/persona-study').then(r => r.json())
+    .then(d => { if (!d.error) { personaStudyRef.current = d; setPersonaStudy(d) } return d }).catch(() => null), [authFetch])
+  const runStudy = useCallback(async () => {
+    setStudyStarting(true); setStudyRunError(null)
+    try {
+      const r = await authFetch('/api/advisory-engine/persona-study/run', { method: 'POST' })
+      const d = await r.json().catch(() => ({}))
+      if (!r.ok && r.status !== 409) throw new Error(d.error || `HTTP ${r.status}`)
+      // Poll until the run finishes, then show the new study.
+      for (let i = 0; i < 60; i++) {
+        const cur = await loadStudy()
+        if (cur && !cur.run?.running) break
+        await new Promise(res => setTimeout(res, 5000))
+      }
+    } catch (e) { setStudyRunError(e.message) } finally { setStudyStarting(false) }
+  }, [authFetch, loadStudy])
+  const [personaCal, setPersonaCal] = useState(null)
 
   const analyze = useCallback(async (sym) => {
     setLoading(true)
@@ -472,7 +511,7 @@ export default function AdvisoryView({ portfolio }) {
                   </div>
                   <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-3 mb-3">
                     <div className="text-[11px] font-semibold text-slate-300 mb-1">{activeP.name}'s rule over the last five years</div>
-                    <PersonaStudy study={personaStudy} personaId={activeP.id} signedIn={isAuthenticated} />
+                    <PersonaStudy study={personaStudy} personaId={activeP.id} signedIn={isAuthenticated} isAdmin={isAdmin} onRun={runStudy} starting={studyStarting} runError={studyRunError} />
                   </div>
 
                   <div className="text-xs text-slate-500 italic">Strategy: {activeP.style}</div>

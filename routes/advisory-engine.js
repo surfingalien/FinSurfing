@@ -129,16 +129,23 @@ router.get('/persona-calibration', (req, res) => {
 
 // Each persona's rule tested on five years of point-in-time data
 // (lib/persona-rule-study.js); rebuilt weekly by the persona-rule-study job.
+// One run at a time; the page polls `run` while it is going. In memory: a
+// restart mid-run just loses the "running" flag, and the stored study stays.
+const studyRun = { running: false, startedAt: null, finishedAt: null, error: null }
 router.get('/persona-study', (req, res) => {
   const study = require('../lib/persona-rule-study').readStudy()
-  res.json(study || { pending: true, note: 'Not run yet — the weekly job (Saturday) builds it; an admin can run it now.' })
+  res.json({ ...(study || { pending: true, note: 'Not run yet — the weekly job (Saturday 6:30 AM ET) builds it; an admin can run it now.' }), run: { ...studyRun } })
 })
 router.post('/persona-study/run', requireAdmin, (req, res) => {
+  if (studyRun.running) return res.status(409).json({ error: 'A run is already going', run: { ...studyRun } })
+  Object.assign(studyRun, { running: true, startedAt: new Date().toISOString(), finishedAt: null, error: null })
   require('../lib/persona-rule-study').run({
     fetchBars: s => fetchDailyBars(s, { range: '5y', headers: { 'x-internal': '1' }, timeoutMs: 25_000 }),
     fetchFacts: s => require('../lib/sec-facts').getCompanyFacts(s),
-  }).catch(e => console.warn('[advisory-engine] persona study failed:', e.message))
-  res.status(202).json({ started: true, note: 'Running in the background (a few minutes); reload the page later.' })
+  })
+    .catch(e => { studyRun.error = e.message; console.warn('[advisory-engine] persona study failed:', e.message) })
+    .finally(() => { studyRun.running = false; studyRun.finishedAt = new Date().toISOString() })
+  res.status(202).json({ started: true, run: { ...studyRun } })
 })
 
 router.get('/calibration', (req, res) => {
