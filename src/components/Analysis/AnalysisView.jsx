@@ -7,79 +7,15 @@ import {
 import {
   fetchChart, fetchSummary, searchSymbol,
   calcSMA, calcEMA, calcRSI, calcMACD, calcBollinger,
-  calcATR, calcSupertrend, calcADX, generateSignal,
+  calcATR, calcSupertrend, calcADX,
   fmt, fmtPct, fmtLarge, fmtVol
 } from '../../services/api'
 import { StatRow, SectionCard, LoadingPulse } from '../shared/StockCard'
+import { indicatorVote } from '../../../lib/indicator-vote.js'
+import IndicatorVoteCard from './IndicatorVoteCard'
 
 const RANGES = ['1mo','3mo','6mo','1y','2y','5y']
 const INDICATORS = ['SMA20','SMA50','EMA12','EMA26','BB','RSI','MACD','Supertrend','ADX']
-
-function SignalBadge({ signal }) {
-  const cfg = {
-    'Strong Buy':  { cls: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30', dot: 'bg-emerald-400' },
-    'Buy':         { cls: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20', dot: 'bg-emerald-400' },
-    'Hold':        { cls: 'bg-amber-500/10 text-amber-400 border-amber-500/20', dot: 'bg-amber-400' },
-    'Sell':        { cls: 'bg-red-500/10 text-red-400 border-red-500/20', dot: 'bg-red-400' },
-    'Strong Sell': { cls: 'bg-red-500/20 text-red-400 border-red-500/30', dot: 'bg-red-400' },
-  }
-  const c = cfg[signal] || cfg['Hold']
-  return (
-    <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-semibold border ${c.cls}`}>
-      <span className={`w-1.5 h-1.5 rounded-full ${c.dot}`} />
-      {signal}
-    </span>
-  )
-}
-
-function deriveSignals(candles, indicators) {
-  if (!candles.length) return []
-  const closes = candles.map(c => c.close)
-  const last = closes[closes.length - 1]
-  const rsi = calcRSI(closes)
-  const lastRSI = rsi[rsi.length - 1]
-  const sma20 = calcSMA(closes, 20)
-  const sma50 = calcSMA(closes, 50)
-  const macd = calcMACD(closes)
-  const lastMACD = macd[macd.length - 1]
-  const bb = calcBollinger(closes)
-  const lastBB = bb[bb.length - 1]
-
-  const signals = []
-  if (lastRSI !== null) {
-    if (lastRSI < 30) signals.push({ name: 'RSI Oversold', signal: 'Buy', value: lastRSI.toFixed(1), desc: 'RSI below 30 — potential oversold reversal' })
-    else if (lastRSI > 70) signals.push({ name: 'RSI Overbought', signal: 'Sell', value: lastRSI.toFixed(1), desc: 'RSI above 70 — potential overbought reversal' })
-    else signals.push({ name: 'RSI Neutral', signal: 'Hold', value: lastRSI.toFixed(1), desc: 'RSI in neutral zone (30–70)' })
-  }
-  if (sma20[sma20.length - 1] && sma50[sma50.length - 1]) {
-    const s20 = sma20[sma20.length - 1], s50 = sma50[sma50.length - 1]
-    if (last > s20 && last > s50) signals.push({ name: 'SMA Trend', signal: 'Buy', value: `${fmt(s20)} / ${fmt(s50)}`, desc: 'Price above both SMA20 and SMA50' })
-    else if (last < s20 && last < s50) signals.push({ name: 'SMA Trend', signal: 'Sell', value: `${fmt(s20)} / ${fmt(s50)}`, desc: 'Price below both SMA20 and SMA50' })
-    else signals.push({ name: 'SMA Trend', signal: 'Hold', value: `${fmt(s20)} / ${fmt(s50)}`, desc: 'Price between moving averages' })
-    if (s20 > s50) signals.push({ name: 'SMA20 vs SMA50', signal: 'Buy', value: '—', desc: 'SMA20 above SMA50 (a state, not a fresh cross)' })
-    else signals.push({ name: 'SMA20 vs SMA50', signal: 'Sell', value: '—', desc: 'SMA20 below SMA50 (a state, not a fresh cross)' })
-  }
-  if (lastMACD.macd !== null && lastMACD.signal !== null) {
-    if (lastMACD.macd > lastMACD.signal) signals.push({ name: 'MACD', signal: 'Buy', value: lastMACD.hist?.toFixed(3), desc: 'MACD line above signal — bullish momentum' })
-    else signals.push({ name: 'MACD', signal: 'Sell', value: lastMACD.hist?.toFixed(3), desc: 'MACD line below signal — bearish momentum' })
-  }
-  if (lastBB.lower && lastBB.upper) {
-    if (last < lastBB.lower) signals.push({ name: 'Bollinger', signal: 'Buy', value: `$${fmt(lastBB.lower)}`, desc: 'Price at lower band — potential bounce' })
-    else if (last > lastBB.upper) signals.push({ name: 'Bollinger', signal: 'Sell', value: `$${fmt(lastBB.upper)}`, desc: 'Price at upper band — potential reversal' })
-    else signals.push({ name: 'Bollinger', signal: 'Hold', value: `$${fmt(lastBB.middle)}`, desc: 'Price inside Bollinger Bands' })
-  }
-  return signals
-}
-
-function aggregateSignal(signals) {
-  const scores = { 'Strong Buy': 2, 'Buy': 1, 'Hold': 0, 'Sell': -1, 'Strong Sell': -2 }
-  const avg = signals.reduce((s, sg) => s + (scores[sg.signal] || 0), 0) / (signals.length || 1)
-  if (avg >= 1.5) return 'Strong Buy'
-  if (avg >= 0.5) return 'Buy'
-  if (avg <= -1.5) return 'Strong Sell'
-  if (avg <= -0.5) return 'Sell'
-  return 'Hold'
-}
 
 // Condensed technical/fundamental snapshot of one symbol for the compare panel.
 function buildCompareSnapshot(candles, summary) {
@@ -89,14 +25,13 @@ function buildCompareSnapshot(candles, summary) {
   const macd   = calcMACD(closes)
   const lastMACD = macd[macd.length - 1]
   const adxR   = calcADX(candles.map(c => c.high), candles.map(c => c.low), closes, 14)
-  const sigs   = deriveSignals(candles, [])
   const pctFrom = idx => (closes.length > idx ? (last / closes[closes.length - 1 - idx] - 1) * 100 : null)
   return {
     price:      last,
     rsi:        rsi[rsi.length - 1],
     macdDir:    lastMACD?.macd != null && lastMACD?.signal != null ? (lastMACD.macd > lastMACD.signal ? 'bullish' : 'bearish') : null,
     adx:        adxR.adx[adxR.adx.length - 1],
-    signal:     aggregateSignal(sigs),
+    signal:     ({ BUY: 'Buy', SELL: 'Sell', HOLD: 'Hold' })[indicatorVote(candles)?.verdict] ?? '—',
     return1m:   pctFrom(21),
     returnFull: closes.length > 1 ? (last / closes[0] - 1) * 100 : null,
     pe:         summary?.pe ?? null,
@@ -118,15 +53,13 @@ function buildRelativeSeries(candlesA, candlesB) {
   }))
 }
 
-export default function AnalysisView({ defaultSymbol }) {
+export default function AnalysisView({ defaultSymbol, onResearch }) {
   const [symbol, setSymbol] = useState(defaultSymbol || 'AAPL')
   const [inputVal, setInputVal] = useState(defaultSymbol || 'AAPL')
   const [range, setRange] = useState('1y')
   const [activeIndicators, setActiveIndicators] = useState(['SMA20','SMA50','BB'])
   const [chartData, setChartData] = useState([])
   const [summary, setSummary] = useState(null)
-  const [signals, setSignals] = useState([])
-  const [overallSignal, setOverallSignal] = useState('Hold')
   const [aiSignal,     setAiSignal]     = useState(null)
   const [loading, setLoading] = useState(false)
   const [searchResults, setSearchResults] = useState([])
@@ -200,22 +133,16 @@ export default function AnalysisView({ defaultSymbol }) {
       setBaseCandles(candles)
       setBaseSnapshot(buildCompareSnapshot(candles, sumRes))
 
-      // Basic signal rows for the side panel
-      const sigs = deriveSignals(candles, activeIndicators)
-      setSignals(sigs)
-      setOverallSignal(aggregateSignal(sigs))
 
       // Advanced multi-indicator signal. Always set (null when history is too
       // thin) — leaving the previous value meant a symbol switch could keep
       // showing the OLD ticker's BUY/stop/target card against the new chart.
-      setAiSignal(candles.length >= 60 ? generateSignal(candles) : null)
+      setAiSignal(indicatorVote(candles))
     }).catch(e => {
       console.warn('Analysis load failed:', e)
       if (cancelled) return
       // A failed load must not leave the previous symbol's analysis on screen
       setChartData([])
-      setSignals([])
-      setOverallSignal('Hold')
       setAiSignal(null)
       setSummary(null)
     })
@@ -533,90 +460,8 @@ export default function AnalysisView({ defaultSymbol }) {
               </SectionCard>
             )}
 
-            {/* AI Signal — Supertrend + RSI + MACD + ADX + Ichimoku combined */}
-            {aiSignal && (
-              <SectionCard title="AI Signal">
-                <div className="flex items-center justify-between mb-3">
-                  <span className={`text-lg font-black tracking-tight
-                    ${aiSignal.action === 'BUY'  ? 'text-emerald-400' :
-                      aiSignal.action === 'SELL' ? 'text-red-400' : 'text-amber-400'}`}>
-                    {aiSignal.action}
-                  </span>
-                  <div className="text-right">
-                    {/* A vote count across the indicators that fired, not a measured probability. */}
-                    <div className="text-xs text-slate-500">Indicators agreeing</div>
-                    <div className="text-sm font-bold text-white">{aiSignal.total ? `${aiSignal.agree} of ${aiSignal.total}` : '—'}</div>
-                  </div>
-                </div>
-                {aiSignal.action === 'BUY' && (
-                  <div className="grid grid-cols-2 gap-2 mb-3">
-                    <div className="p-2 rounded-lg bg-red-500/10 border border-red-500/20">
-                      <div className="text-[10px] text-red-400 font-medium">Stop Loss (below)</div>
-                      <div className="text-xs font-mono text-white">${fmt(aiSignal.stopLoss)}</div>
-                    </div>
-                    <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
-                      <div className="text-[10px] text-emerald-400 font-medium">Take Profit (above)</div>
-                      <div className="text-xs font-mono text-white">${fmt(aiSignal.takeProfit)}</div>
-                    </div>
-                    <div className="col-span-2 p-2 rounded-lg bg-white/[0.04] border border-white/[0.06]">
-                      <div className="text-[10px] text-slate-500 font-medium">Risk / Reward (2 ATR stop, 3 ATR target)</div>
-                      <div className="text-xs font-mono text-white">1 : {aiSignal.riskReward}</div>
-                    </div>
-                  </div>
-                )}
-                {aiSignal.action === 'SELL' && (
-                  // A SELL is bearish: its levels are a SHORT trade (stop above the price, target below), which read as
-                  // backwards under "Stop Loss / Take Profit" on a long-only app. Label them for what they are.
-                  <div className="mb-3 space-y-2">
-                    <p className="text-[11px] text-slate-400">Bearish: if you hold it, this is an exit signal; no new long. Levels from {aiSignal.price != null ? `$${fmt(aiSignal.price)}` : 'the last price'}:</p>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="p-2 rounded-lg bg-red-500/10 border border-red-500/20">
-                        <div className="text-[10px] text-red-400 font-medium">Downside target (below)</div>
-                        <div className="text-xs font-mono text-white">${fmt(aiSignal.takeProfit)}</div>
-                      </div>
-                      <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
-                        <div className="text-[10px] text-emerald-400 font-medium">Bearish view wrong above</div>
-                        <div className="text-xs font-mono text-white">${fmt(aiSignal.stopLoss)}</div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-                <div className="space-y-1">
-                  {aiSignal.rationale.map((r, i) => (
-                    <div key={i} className="flex items-center gap-1.5 text-[11px] text-slate-400">
-                      <span className={`w-1 h-1 rounded-full shrink-0
-                        ${aiSignal.action === 'BUY' ? 'bg-emerald-400' :
-                          aiSignal.action === 'SELL' ? 'bg-red-400' : 'bg-amber-400'}`} />
-                      {r}
-                    </div>
-                  ))}
-                </div>
-                <p className="text-[9px] text-slate-600 mt-2">Supertrend + RSI + MACD + ADX + Ichimoku · Not financial advice</p>
-              </SectionCard>
-            )}
-
-            {/* Signal summary */}
-            <SectionCard title="Technical Signal">
-              <div className="flex justify-center py-3">
-                <SignalBadge signal={overallSignal} />
-              </div>
-              <div className="space-y-2">
-                {signals.map((sg, i) => (
-                  <div key={i} className="flex items-start gap-2 py-1.5 border-b border-white/[0.04] last:border-0">
-                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded mt-0.5 shrink-0
-                      ${sg.signal === 'Buy' ? 'bg-emerald-500/20 text-emerald-400' :
-                        sg.signal === 'Sell' ? 'bg-red-500/20 text-red-400' :
-                        'bg-amber-500/10 text-amber-400'}`}>
-                      {sg.signal}
-                    </span>
-                    <div>
-                      <div className="text-xs text-white">{sg.name}</div>
-                      <div className="text-[10px] text-slate-500">{sg.desc}</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </SectionCard>
+            {/* One verdict: four independent readings, the rule tested on this stock */}
+            <IndicatorVoteCard vote={aiSignal} symbol={symbol} onResearch={onResearch} />
 
             {/* Fundamentals */}
             {summary && (

@@ -258,7 +258,7 @@ function MainApp({ onSignIn }) {
     'portfolio':       () => <PortfolioView portfolio={portfolio} portfolioId={activePortfolioId} authFetch={isAuthenticated ? authFetch : null} />,
     'portfolios':      () => <PortfolioManagerView />,
     'watchlist':       () => <WatchlistView watchlist={watchlist} onAnalyze={navigateToAnalyze} />,
-    'analyze':         () => <AnalysisView defaultSymbol={analyzeSymbol} />,
+    'analyze':         () => <AnalysisView defaultSymbol={analyzeSymbol} onResearch={s => navigate('research-desk', s)} />,
     'recommendations': () => <AdvisoryView portfolio={portfolio} />,
     'montecarlo':      () => <SimulationView portfolio={portfolio} />,
     'strategies':      () => <StrategiesView onAnalyze={navigateToAnalyze} />,
