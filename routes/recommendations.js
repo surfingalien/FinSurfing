@@ -71,6 +71,7 @@ const { RECOMMENDATIONS_SCHEMA } = require('../lib/ai-schemas')
 const { canonicalizeEnums }      = require('../lib/output-schema')
 const { startJsonHeartbeat } = require('../lib/http-heartbeat')
 const recJournal = require('../lib/rec-journal')
+const personaScreen = require('../lib/persona-screen')
 
 // skipLoopback: the background worker calls POST / over loopback, so every
 // user's queued run arrives from the same address. Without the skip they'd
@@ -233,7 +234,18 @@ router.post('/', requireAuth, recLimit, async (req, res) => {
     : holdings
   ).filter(s => !s.includes('-') && !s.includes('=')).slice(0, 5)
 
-  const [quoteData, { earningsSnippet, sentimentSnippet }, macroData, socialSentimentSnippet, insiderResults, optionsResults, filingsResults] = await Promise.all([
+  // A. The persona's screen (lib/persona-screen.js): the candidate list the
+  // model must choose from, measured in code. Focus mode measures only the
+  // user's symbols, so each pick can say which persona rules it meets.
+  const screenPromise = focusSymbols.length
+    ? personaScreen.buildMeasures(focusSymbols.map(s => [String(s).toUpperCase(), personaScreen.classOf(s)]), {
+        fetchBars: sym => require('../lib/internal-api').fetchDailyBars(sym, { range: '1y', headers: fwdHeaders, timeoutMs: 8000 }),
+        fetchFacts: async (sym, price) => { const sf = require('../lib/sec-facts'); const c = await sf.getCompanyFacts(sym); return c ? sf.snapshotAt(c, new Date().toISOString().slice(0, 10), { price }) : null },
+        budgetMs: 30_000,
+      }).then(r => ({ screen: null, ...r })).catch(e => ({ screen: null, measures: {}, failed: [], error: e.message }))
+    : personaScreen.screenLive(persona.id, { includeFunds, headers: fwdHeaders }).catch(e => ({ screen: null, measures: {}, failed: [], error: e.message }))
+
+  const [quoteData, { earningsSnippet, sentimentSnippet }, macroData, socialSentimentSnippet, insiderResults, optionsResults, filingsResults, screened] = await Promise.all([
     focusSymbols.length ? fetchLiveQuotes(focusSymbols, fwdHeaders) : Promise.resolve({ priceMap: {}, analystMap: {} }),
     fetchCatalystContext(symbolsForContext, fwdHeaders, port),
     includeMacro ? getIndicators().catch(() => null) : Promise.resolve(null),
@@ -247,7 +259,20 @@ router.post('/', requireAuth, recLimit, async (req, res) => {
     includeFilings && stocksForAltData.length
       ? Promise.all(stocksForAltData.map(s => getFilingCompact(s, port, fwdHeaders)))
       : Promise.resolve([]),
+    screenPromise,
   ])
+
+  // Holdings are excluded from the candidate list (the prompt says avoid overlap).
+  const heldUpper = new Set(holdings.map(h => String(h).toUpperCase()))
+  const sc = screened.screen
+  if (sc) for (const k of ['stocks', 'etfs', 'crypto', 'funds']) sc[k] = sc[k].filter(c => !heldUpper.has(c.symbol))
+  if (!focusSymbols.length && (!sc || !(sc.stocks.length + sc.etfs.length + sc.crypto.length + sc.funds.length))) {
+    return res.status(503).json({
+      error: `Could not build ${persona.name}'s candidate list right now — no name could be priced and measured${screened.error ? ` (${screened.error})` : ''}. Nothing was asked of the AI.`,
+      personaCheck: sc ? { mode: 'screened', candidates: { stocks: 0, etfs: 0, crypto: 0, funds: 0 }, screenedOut: sc.screenedOut, failed: screened.failed?.length ?? 0 } : null,
+    })
+  }
+  const screenSnippet = sc ? personaScreen.candidateBlock(sc) : ''
 
   const { priceMap: preLivePrices, analystMap } = quoteData
   const macroSnippet = macroData?.macroSummary ?? ''
@@ -286,9 +311,14 @@ router.post('/', requireAuth, recLimit, async (req, res) => {
     ? `\nFOCUS MODE: Analyze ONLY these specific symbols: ${focusStr}. All recommendations must come from this list.`
     : ''
 
+  // B. The slate comes from the persona (maximums per asset class, its own
+  // horizons). The fixed 20/22 below survives only as the shape of focus mode's
+  // fallback text and is no longer used for a screened run.
   const countInstructions = focusStr
     ? `Generate ${Math.min(focusSymbols.length, 20)} recommendations covering the focus symbols above.`
-    : includeFunds
+    : sc
+      ? personaScreen.slateInstructions(sc)
+      : includeFunds
       ? `Generate exactly 22 recommendations split across asset classes and time horizons:
 - 6 Stocks for 3-month holding
 - 4 Stocks for 6-month holding
@@ -311,7 +341,7 @@ router.post('/', requireAuth, recLimit, async (req, res) => {
   // citation it returns can be checked back against it (lib/claim-support.js).
   // This is the same string interpolated into the prompt below — if the two
   // ever drift apart the audit is checking a document nobody read.
-  const evidenceBlock = `${livePriceSnippet}${analystConsensusSnippet}${macroSnippet}${earningsSnippet}${sentimentSnippet}${socialSentimentSnippet}${insiderSnippet}${optionsSnippet}${filingsSnippet}`
+  const evidenceBlock = `${screenSnippet}${livePriceSnippet}${analystConsensusSnippet}${macroSnippet}${earningsSnippet}${sentimentSnippet}${socialSentimentSnippet}${insiderSnippet}${optionsSnippet}${filingsSnippet}`
 
   const prompt = `${personaBlock}You are a senior portfolio strategist channeling the investment philosophy above. Provide specific actionable buy recommendations for a retail investor.
 
@@ -406,7 +436,10 @@ Respond ONLY with a JSON object — no markdown, no explanation, just the JSON:
       return res.status(502).json({ error: 'AI response was incomplete — please try again' })
     }
 
-    try { validateRecommendations(data) } catch (valErr) {
+    // "Return fewer — even none": an empty list is the model declining, not a
+    // malformed answer, and goes on to the abstain path below.
+    const declined = Array.isArray(data.recommendations) && data.recommendations.length === 0 && !truncated
+    if (!declined) try { validateRecommendations(data) } catch (valErr) {
       // On a truncated set, drop the malformed picks instead of failing outright.
       if (truncated && Array.isArray(data.recommendations)) {
         data.recommendations = data.recommendations.filter(r =>
@@ -460,6 +493,18 @@ Respond ONLY with a JSON object — no markdown, no explanation, just the JSON:
         ...(anchored || rec.livePriceUsed ? { livePriceUsed: true } : {}),
       }
     })
+
+    // C. The persona check: in a screened run a pick off the list, of an asset
+    // class or horizon the persona does not hold, or past the slate's count is
+    // dropped and reported; in focus mode each pick carries `personaFit`.
+    const personaChecked = personaScreen.checkPicks(data.recommendations, sc || { persona: persona.id, stocks: [], etfs: [], crypto: [], funds: [], slate: {}, periods: [], rules: [], notes: [], screenedOut: {} }, {
+      focus: !!focusSymbols.length, measures: screened.measures || {},
+      rules: personaScreen.SCREENS[persona.id]?.stock?.rules || [],
+    })
+    data.recommendations = personaChecked.picks
+    const personaCheck = { ...personaChecked.check, unmeasured: screened.failed?.length ?? 0 }
+    if (personaCheck.dropped.length)
+      console.log(`[recommendations] persona check (${persona.id}) dropped ${personaCheck.dropped.length}: ` + personaCheck.dropped.map(d => `${d.symbol} (${d.reason})`).join(', '))
 
     if (pricesAnchored > 0 || levelsRecomputed > 0)
       console.log(`[recommendations] re-anchored ${pricesAnchored}/${recSymbols.length} entries, ` +
@@ -689,6 +734,18 @@ Respond ONLY with a JSON object — no markdown, no explanation, just the JSON:
     })
     const journalled = recJournal.appendEntry(journalEntry)
 
+    // D. Random picks from the SAME screened list, priced at the same close,
+    // to measure whether the AI's choice adds anything to the screen
+    // (lib/persona-shadow.js). Screened runs only; never the learning store.
+    let personaShadows = 0
+    if (sc && !focusSymbols.length && data.recommendations.length) {
+      personaShadows = require('../lib/persona-shadow').logRun({
+        runId: journalled ? journalEntry.id : `${persona.id}-${Date.now()}`,
+        persona: persona.id, at: new Date().toISOString(),
+        picks: data.recommendations.map(r => ({ symbol: r.symbol, type: r.type })), screen: sc,
+      })
+    }
+
     return res.json({
       ...data,
       // Lets the page find this run in GET /journal and show what changed.
@@ -701,6 +758,7 @@ Respond ONLY with a JSON object — no markdown, no explanation, just the JSON:
       // picks the math says are not worth the friction.
       abstained: data.recommendations.length === 0,
       edgeGate,
+      personaCheck: { ...personaCheck, shadowsLogged: personaShadows },
       allocation,
       // What the model claimed as evidence vs what the evidence actually said.
       citationAudit: claimSupport.summarizeAudits(

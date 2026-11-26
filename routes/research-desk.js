@@ -493,6 +493,7 @@ router.get('/track-record', requireAuth, (req, res) => {
     // The picks vs random picks from the SAME priced list (lib/shadow-baseline.js):
     // beating SPY can be the list; beating these is the model.
     vsRandom,
+    personaVsRandom: (() => { try { const ps = require('../lib/persona-shadow'); return ps.compare(ps.readRows()) } catch { return null } })(),
     // Every decider in one table, ranked by the lower bound (lib/leaderboard.js).
     leaderboard: (() => { try { return require('../lib/leaderboard').buildLeaderboard(decisions, vsRandom) } catch { return null } })(),
     edges: edge && { overall: edge.overall, tested: edge.tested, topEdges: edge.topEdges, topDrags: edge.topDrags },
