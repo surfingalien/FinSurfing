@@ -1,6 +1,6 @@
 /**
  * Quant reference — the vocabulary, strategy and model lists, each tied to where FinSurfing implements it.
- * `where` is a route id or `quant-lab/<tab>`; null means a definition only (nothing to run).
+ * `where` is a route id or `quant-lab/<tab>`; '' means a definition only (nothing to run — the entry says why).
  * The status of every item here is checked by tests/quant-reference.test.js against the real route table,
  * so a link can never point at a tab that does not exist.
  */
@@ -78,6 +78,17 @@ export const PLAYBOOK = [
   ['Path dependence', 'Dollar gamma weights realised vol — moves near the strike pay most', Q('options')], ['Which vol to hedge', 'Hedge at realised to lock V(σr) − V(σi); at implied for a smooth path', Q('options')],
   ['Discrete hedging', 'Hedging noise ∝ 1/√N (Derman–Kamal)', Q('options')], ['No-trade band', 'With costs, hedge at the edges of a band (Whalley–Wilmott)', Q('options')],
   ['Variance risk premium', 'Implied above realised on average; the edge is forecasting realised', Q('vol')], ['Skew-aware delta', 'Δ_BS + vega·∂σ/∂S: the smile moves with spot', Q('calculators')],
+]
+
+// [model, formula · meaning, where] — the six models behind execution and market making. Kyle's lambda and
+// Glosten–Milgrom have '' for where: they need data the app does not have, so they are definitions only and say why.
+export const MICROSTRUCTURE = [
+  ['Almgren–Chriss', 'x(t) = X·sinh(κ(T−t))/sinh(κT), κ² = λσ²/η. Minimises impact cost + λ·price risk when selling over time; a higher λ sells faster. Run it as Risk → Exit schedule.', Q('risk')],
+  ['Avellaneda–Stoikov', 'r = s − qγσ²(T−t); spread = γσ²(T−t) + (2/γ)·ln(1 + γ/k). A market maker centres quotes on a reservation price that leans away from its inventory q.', Q('calculators')],
+  ["Kyle's lambda", 'Δp = λ·y, λ = σ_v / (2σ_u). Price moves linearly with net order flow y; more noise trading (σ_u) means a deeper market and a smaller λ, so informed traders hide in it. Definition only: it needs signed order flow (buyer- vs seller-initiated volume), which daily bars do not carry, and signing a day by its own return would be circular.', ''],
+  ['Square-root law', 'I(Q) = Y·σ·√(Q/V), Y ≈ 1, V = daily volume. Impact grows with the square root of size, not linearly. Behind the cost-at-size flag, Risk → Trading cost and the exit schedule.', Q('risk')],
+  ['Glosten–Milgrom', 'ask − bid = μ·(V_H − V_L) (prior ½). The dealer cannot tell informed from uninformed orders, so the spread is the price of adverse selection: it grows with the share of informed traders μ and widens around news. Definition only: it needs quotes around news, which the app does not have.', ''],
+  ['Roll model', 'Cov(Δp_t, Δp_t−1) = −s²/4, so s = 2√(−Cov). Bid-ask bounce makes successive price changes negatively correlated. On daily bars it mostly measures volatility (SPY reads 18–54 bps against a real spread under 1), so the app shows it as evidence only — Risk → Trading cost.', Q('risk')],
 ]
 
 // [method, time, memory, accuracy, best for]

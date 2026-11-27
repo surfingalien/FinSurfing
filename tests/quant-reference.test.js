@@ -23,3 +23,11 @@ test('the reference carries the full vocabulary, strategy, model and algorithm l
   const rows = name => (ref.match(new RegExp(`export const ${name} = \\[([\\s\\S]*?)\\n\\]`))[1].match(/\[['"]/g) || []).length
   expect(rows('TERMS')).toBe(100); expect(rows('PLAYBOOK')).toBe(8); expect(ref.match(/, null\]/g)).toBeNull(); expect(rows('STRATEGIES')).toBe(30); expect(rows('MODELS')).toBe(20); expect(rows('ML_ALGOS')).toBe(20)
 })
+test('market microstructure: six models; only Kyle and Glosten–Milgrom are definitions, and each says what data it lacks', () => {
+  const block = ref.match(/export const MICROSTRUCTURE = \[([\s\S]*?)\n\]/)[1]
+  const rows = block.split('\n').filter(l => /^\s+\[/.test(l))
+  expect(rows).toHaveLength(6)
+  const unlinked = rows.filter(l => /, ''\],?$/.test(l.trim()))
+  expect(unlinked.map(l => l.match(/^\s*\[("[^"]+"|'[^']+')/)[1].slice(1, -1))).toEqual(["Kyle's lambda", 'Glosten–Milgrom'])
+  for (const l of unlinked) expect(l).toMatch(/Definition only: it needs/)
+})
