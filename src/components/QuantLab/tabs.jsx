@@ -257,7 +257,7 @@ export function StrategiesTab() {
 /* ── Risk ──────────────────────────────────────────────────────────────────── */
 export function RiskTab() {
   const [which, setWhich] = useState('stress')
-  const tabs = [['stress', 'Stress test'], ['varbt', 'VaR backtest'], ['capm', 'CAPM & ratios'], ['factors', 'Fama–French factors'], ['premium', 'Risk premium'], ['mc', 'Monte Carlo VaR'], ['copula', 'Copula'], ['pca', 'PCA'], ['dcc', 'DCC correlations'], ['impact', 'Market impact'], ['bayes', 'Bayesian win rate']]
+  const tabs = [['stress', 'Stress test'], ['varbt', 'VaR backtest'], ['capm', 'CAPM & ratios'], ['factors', 'Fama–French factors'], ['premium', 'Risk premium'], ['mc', 'Monte Carlo VaR'], ['copula', 'Copula'], ['pca', 'PCA'], ['dcc', 'DCC correlations'], ['impact', 'Market impact'], ['spread', 'Trading cost'], ['exit', 'Exit schedule'], ['bayes', 'Bayesian win rate']]
   return (
     <div className="space-y-4">
       <div className="flex gap-2 flex-wrap">{tabs.map(([k, l]) => <button key={k} onClick={() => setWhich(k)} className={`px-3 py-1.5 rounded-lg text-xs ${which === k ? 'bg-mint-400/15 text-mint-400 border border-mint-400/30' : 'text-slate-400 border border-slate-500/20'}`}>{l}</button>)}</div>
@@ -297,11 +297,67 @@ export function RiskTab() {
       {which === 'impact' && <RunPanel key="f" title="Market impact (square-root law)" endpoint="/api/quant/risk/impact"
         fields={[num('shares', 'Shares', 50000), num('price', 'Price', 50), num('adv', 'Average daily volume', 1000000), num('dailyVol', 'Daily volatility (decimal)', 0.02), num('spreadBps', 'Quoted spread (bps)', 5)]}
         render={d => <Card><ResultView data={d} /></Card>} />}
+      {which === 'spread' && <RunPanel key="sp" title="Trading cost — is the flat charge enough?" endpoint="/api/quant/risk/spread" needsAuth
+        blurb="Every backtest and edge check here charges one flat round trip (10 bps a stock, 60 bps crypto). The square-root law says how much a trade of this size adds on top, from the stock's own volatility and dollar volume. Below it, three published spread estimators read from daily prices, next to SPY's reading as the yardstick."
+        fields={[{ name: 'symbol', label: 'Symbol', type: 'symbol', default: 'AMC' }, num('notional', 'Order size ($)', 100000)]}
+        render={d => <SpreadResult d={d} />} />}
+      {which === 'exit' && <RunPanel key="ac" title="Exit schedule (Almgren–Chriss)" endpoint="/api/quant/execution/almgren-chriss" needsAuth
+        blurb="How to sell a position over several days. Selling fast costs market impact; selling slowly leaves you exposed to the price moving. Almgren–Chriss finds the schedule that balances the two for a chosen risk aversion λ — λ = 0 sells evenly (TWAP), a higher λ sells more up front. Volatility and volume are measured from the stock's last year of prices; impact is calibrated to the square-root law. Advice only — nothing is traded."
+        fields={[{ name: 'symbol', label: 'Symbol', type: 'symbol', default: 'AMC' }, num('shares', 'Shares to sell', 200000), num('days', 'Over how many days', 5), sel('lambda', 'Risk aversion λ', ['0', '0.0000001', '0.000001', '0.00001', '0.0001'], '0.000001')]}
+        toBody={v => ({ symbol: v.symbol, shares: Number(v.shares), days: Number(v.days), lambda: Number(v.lambda) })}
+        render={d => <ExitResult d={d} />} />}
       {which === 'bayes' && <RunPanel key="g" title="Is this win rate real? (Beta–Binomial)" endpoint="/api/quant/risk/bayes"
         blurb="Update a flat prior with your wins out of trades. Shows the credible interval and the probability the true rate exceeds the threshold."
         fields={[num('wins', 'Wins', 6), num('n', 'Trades', 10), num('threshold', 'Threshold', 0.5)]}
         render={d => <Card><div className="grid sm:grid-cols-4 gap-3"><Stat label="Posterior mean" value={pct(d.posteriorMean)} /><Stat label="95% interval" value={`${pct(d.lo, 0)}–${pct(d.hi, 0)}`} /><Stat label={`P(rate > ${pct(d.threshold, 0)})`} value={pct(d.probAbove, 0)} /><Stat label="Trades" value={d.n} /></div></Card>} />}
     </div>
+  )
+}
+
+function ExitResult({ d }) {
+  return (
+    <>
+      <Card title={`${d.symbol}: sell ${fmt(d.shares, 0)} shares (${fmt(d.notional, 0)}) — ${pct(d.positionShareOfDay, 0)} of a day's volume`}>
+        <div className="grid sm:grid-cols-4 gap-3 mb-2">
+          <Stat label="Expected impact cost" value={`${fmt(d.expectedCostBps, 1)} bps`} sub={`${fmt(d.expectedCost, 0)}`} />
+          <Stat label="Price risk (1 sd)" value={`${fmt(d.sdBps, 0)} bps`} sub={`${fmt(d.sd, 0)}`} />
+          <Stat label="Even (TWAP) instead" value={`${fmt(d.twap.expectedCostBps, 1)} bps`} sub={`risk ${fmt(d.twap.sdBps, 0)} bps`} />
+          <Stat label="Half of what is left goes every" value={d.halfLifeDays ? `${fmt(d.halfLifeDays, 1)} days` : '— (even)'} />
+        </div>
+        <MiniLine data={[{ day: 0, remaining: d.shares, even: d.shares }, ...d.schedule.map((s, i) => ({ day: s.day, remaining: s.remaining, even: Math.round(d.shares * (1 - (i + 1) / d.schedule.length)) }))]} xKey="day" lines={[{ key: 'remaining', name: 'Almgren–Chriss' }, { key: 'even', name: 'Even (TWAP)' }]} height={160} />
+        <div className="mt-2"><ResultView data={d.schedule.map(s => ({ day: s.day, sell: s.sell, remaining: s.remaining, shareOfDayVolume: s.shareOfDayVolume }))} /></div>
+        <div className="mt-2 space-y-1"><Note>{d.note}</Note>{d.warning && <Note tone="warn">{d.warning}</Note>}</div>
+      </Card>
+      <Card title="Cost against risk for other choices of λ">
+        <ResultView data={d.frontier.map(f => ({ lambda: f.lambda, expectedCostBps: f.expectedCostBps, riskBps: f.sdBps, soldOnDay1: f.firstSliceShare }))} />
+      </Card>
+    </>
+  )
+}
+
+function SpreadResult({ d }) {
+  const c = d.sizeCost || {}, e = d.estimates || {}, spy = d.spy
+  const row = (name, mine, theirs, why) => ({ estimator: name, [d.symbol]: mine ?? '—', SPY: theirs ?? '—', note: why || '' })
+  return (
+    <>
+      <Card title={`${d.symbol}: ${c.verdict === 'understated' ? 'the flat cost understates it' : c.verdict === 'in-line' ? 'the flat cost covers it' : 'cannot tell'}`}>
+        <div className="grid sm:grid-cols-4 gap-3 mb-2">
+          <Stat label="Charged everywhere" value={`${d.flatBps} bps`} sub="round trip" />
+          <Stat label="Impact at this size" value={c.extraBps != null ? `+${c.extraBps} bps` : '—'} sub="in and out" />
+          <Stat label="Estimated round trip" value={c.estimatedBps != null ? `${c.estimatedBps} bps` : '—'} />
+          <Stat label="Share of a day's volume" value={c.participation != null ? pct(c.participation, 2) : '—'} />
+        </div>
+        <Note tone={c.verdict === 'understated' ? 'warn' : undefined}>{c.note}</Note>
+      </Card>
+      <Card title="Spread estimated from daily prices (bps, round trip)">
+        <ResultView data={[
+          row('Roll (bid-ask bounce)', e.roll?.bps, spy?.roll?.bps, e.roll?.reason),
+          row('Corwin–Schultz (high-low)', e.corwinSchultz?.bps, spy?.corwinSchultz?.bps, e.corwinSchultz?.reason),
+          row(`Amihud impact of ${fmt(d.notional, 0)}`, e.amihud?.impactBps, spy?.amihud?.impactBps, e.amihud?.reason),
+        ]} />
+        <div className="mt-2"><Note>{d.note}</Note></div>
+      </Card>
+    </>
   )
 }
 
@@ -375,6 +431,7 @@ const CALCS = [
   ['heston', 'Heston stochastic volatility', [num('S', 'Spot', 100), num('K', 'Strike', 100), num('r', 'Rate', 0.03), num('T', 'Years', 1), num('v0', 'Current variance σ²', 0.04), num('theta', 'Long-run variance', 0.04), num('kappa', 'Mean-reversion speed', 2), num('xi', 'Vol of vol', 0.5), num('rho', 'Correlation ρ', -0.7), sel('type', 'Type', ['call', 'put'], 'call')]],
   ['sabr', 'SABR volatility smile', [num('F', 'Forward', 100), num('T', 'Years', 1), num('alpha', 'α (vol level)', 0.2), num('beta', 'β (0–1)', 1), num('rho', 'ρ (skew)', -0.4), num('nu', 'ν (vol of vol)', 0.5)]],
   ['market-making', 'Market making (Avellaneda–Stoikov)', [num('mid', 'Mid price', 100), num('inventory', 'Inventory (+long)', 5), num('gamma', 'Risk aversion γ', 0.1), num('sigma', 'Volatility (price units / √t)', 0.5), num('k', 'Order-arrival decay k', 1.5), num('tau', 'Time left', 1)]],
+  ['almgren-chriss', 'Optimal liquidation (Almgren–Chriss)', [num('shares', 'Shares', 100000), num('price', 'Price', 50), num('dailyVol', 'Daily volatility (decimal)', 0.02), num('adv', 'Average daily volume (shares)', 1000000), num('days', 'Days', 5), num('lambda', 'Risk aversion λ', 0.000001)]],
   ['execution', 'Execution schedule (VWAP / TWAP)', [num('shares', 'Shares', 100000), num('slices', 'Slices', 13), sel('type', 'Type', ['vwap', 'twap'], 'vwap')]],
   ['shortfall', 'Implementation shortfall', [sel('side', 'Side', ['buy', 'sell'], 'buy'), num('arrival', 'Arrival price', 100), num('avgFill', 'Average fill', 100.12)]],
 ]

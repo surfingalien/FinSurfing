@@ -81,7 +81,7 @@ describe('report card and the admission gate', () => {
 
   test('a strategy that clears everything gets a passing card; walk-forward is "review" until judged forward', () => {
     const card = SE.reportCard(item)
-    expect(card.rows.map(r => r.key)).toEqual(['oos', 'walkforward', 'stability', 'costs', 'trades', 'regimes', 'drawdown', 'timing', 'hypothesis', 'deflated', 'pbo', 'cpcv'])
+    expect(card.rows.map(r => r.key)).toEqual(['oos', 'walkforward', 'stability', 'costs', 'trades', 'regimes', 'drawdown', 'size-cost', 'timing', 'hypothesis', 'deflated', 'pbo', 'cpcv'])
     expect(card.rows.filter(r => r.status === 'fail')).toEqual([])
     expect(card.rows.find(r => r.key === 'walkforward').status).toBe('review')
     expect(SE.reportCard({ ...item, params: { blocks: 6 } }).rows.find(r => r.key === 'walkforward').status).toBe('pass')
@@ -156,4 +156,14 @@ describe('hypothesis first', () => {
       expect(e.hypothesisTest).toHaveProperty('verdict')
     }
   })
+})
+
+test('cost at this size: pass when covered, review when not, fail when it erases the mean per position; never a gate', () => {
+  const st = sc => SE.reportCard({ sizeCost: sc }).rows.find(r => r.key === 'size-cost')
+  expect(st(null).status).toBe('na')
+  expect(st({ verdict: 'in-line', extraBps: 1, flatBps: 10, maxExtraBps: 2 }).status).toBe('pass')
+  expect(st({ verdict: 'understated', extraBps: 40, flatBps: 10, maxExtraBps: 80, meanPct: 1.2, meanAfterPct: 0.8 }).status).toBe('review')
+  const f = st({ verdict: 'understated', extraBps: 90, flatBps: 10, maxExtraBps: 150, meanPct: 0.5, meanAfterPct: -0.4 })
+  expect(f.status).toBe('fail'); expect(f.value).toMatch(/0.5% → -0.4%/)
+  expect(SE.evidenceProblem({ sizeCost: { verdict: 'understated', meanAfterPct: -1 } })).toBeNull()
 })
