@@ -6,7 +6,7 @@
  *   pure maths, public   POST /options/*, /calc/:name, /risk/stress|impact|montecarlo|bayes
  *                        — no market data, no AI, no cost: inputs in, numbers out (size-capped)
  *   market-data, sign-in POST /optimize, /volatility, /timeseries, /pairs, /pairs/screen, /statarb, /reversal,
- *                        /risk/capm, /risk/factors, /risk/copula, /risk/pca, /risk/dcc, /ml/compare, /ml/cluster, /ml/rl,
+ *                        /risk/capm, /risk/spread, /execution/almgren-chriss, /risk/factors, /risk/copula, /risk/pca, /risk/dcc, /ml/compare, /ml/cluster, /ml/rl,
  *                        /holdings-scan (every tool above across the user's holdings at once), /event-study
  *                        — fetch daily bars over loopback, so they need a user and a tighter rate limit;
  *                        the slow ones are heartbeated (clients must check `data.error` as well as `res.ok`)
@@ -146,7 +146,7 @@ const CALCS = {
   sabr: a => ({ smile: opt.sabrSmile({ ...a, strikes: a.strikes || [0.8, 0.9, 1, 1.1, 1.2].map(m => m * a.F) }), note: 'Hagan et al. (2002) lognormal SABR implied volatility; alpha is on the scale of F^(1−β).' }),
   parity: calc.parityArbitrage, 'theta-gamma': calc.thetaGamma, capacity: calc.capacity, leverage: calc.leverageMargin, 'short-sale': calc.shortSale,
   'order-book': calc.orderBookWalk, latency: calc.latencyCost, ito: a => calc.itoDemo({ ...a, paths: Math.min(Number(a.paths) || 20000, 50000) }), turnover: calc.turnover,
-  'market-making': calc.avellanedaStoikov, execution: calc.executionSchedule, shortfall: calc.implementationShortfall,
+  'market-making': calc.avellanedaStoikov, 'almgren-chriss': calc.almgrenChriss, execution: calc.executionSchedule, shortfall: calc.implementationShortfall,
 }
 router.get('/calc', (_req, res) => res.json({ calculators: Object.keys(CALCS) }))
 router.post('/calc/:name', light, route('quant/calc', req => {
@@ -271,6 +271,34 @@ router.post('/risk/capm', heavy, route('quant/risk/capm', async req => {
   const s = sym(req.body?.symbol), bm = sym(req.body?.benchmark || 'SPY', 'benchmark'), { map, failed } = await barsMap([s, bm], rangeOf(req.body?.range, '2y'), req, 2)
   if (!map[s] || !map[bm]) bad(`could not load both series — ${failed.join('; ')}`); const hrp = require('../lib/hrp'), al = hrp.alignReturns({ [s]: map[s], [bm]: map[bm] })
   return { symbol: s, benchmark: bm, ...risk.capm(al.returns.map(r => r[al.symbols.indexOf(s)]), al.returns.map(r => r[al.symbols.indexOf(bm)]), { rf: num(req.body?.rf, 'rf', { min: 0, max: 0.3, def: 0.04 }) }), bootstrapSharpe: risk.bootstrapSharpe(al.returns.map(r => r[al.symbols.indexOf(s)]), { B: 400 }) }
+}))
+// Trading cost: the square-root size check that flags symbols, plus the Roll / Corwin–Schultz / Amihud estimates
+// shown beside SPY's own reading, whose real spread is under a basis point (lib/spread-estimates.js).
+router.post('/risk/spread', heavy, route('quant/risk/spread', async req => {
+  const s = sym(req.body?.symbol), notional = num(req.body?.notional, 'notional', { min: 1000, max: 1e9, def: 100_000 })
+  const list = s === 'SPY' ? ['SPY'] : [s, 'SPY'], { map } = await barsMap(list, '2y', req, 1)
+  if (!map[s]) bad(`could not load ${s}`)
+  const SE = require('../lib/spread-estimates'), flatBps = costBpsForSymbol(s)
+  return {
+    symbol: s, notional, flatBps,
+    sizeCost: SE.sizeCost(map[s], { notional, flatBps }),
+    estimates: SE.estimate(map[s], { amihud: { notional } }),
+    spy: map.SPY ? SE.estimate(map.SPY, { amihud: { notional } }) : null,
+    note: 'Daily-bar spread estimators read part of each day\'s volatility as spread: SPY\'s real quoted spread is under 1 bp, so its reading here is the bias. Only the size check flags a symbol.',
+  }
+}))
+// Almgren–Chriss exit schedule for a real symbol: price, daily volatility (60 sessions) and volume (20 sessions)
+// measured from its bars, impact calibrated to the square-root law (lib/quant/calculators.js:almgrenChriss).
+router.post('/execution/almgren-chriss', heavy, route('quant/execution/almgren-chriss', async req => {
+  const s = sym(req.body?.symbol), { map } = await barsMap([s], '1y', req, 1)
+  const liq = require('../lib/spread-estimates').liquidityAt((map[s] || []).filter(b => b && b.c > 0))
+  if (!liq) bad(`${s}: no volume in its price history — the schedule needs daily volume`)
+  const b = req.body || {}, adv = liq.advShares
+  const shares = num(b.shares, 'shares', { min: 1, max: 1e10 })
+  return {
+    symbol: s, price: liq.price, dailyVol: liq.dailyVol, adv, shares, notional: shares * liq.price, positionShareOfDay: shares / adv,
+    ...calc.almgrenChriss({ shares, price: liq.price, dailyVol: liq.dailyVol, adv, days: num(b.days, 'days', { min: 0.1, max: 60, def: 5 }), slices: b.slices == null || b.slices === '' ? null : num(b.slices, 'slices', { min: 1, max: 500 }), lambda: num(b.lambda, 'lambda', { min: 0, max: 1, def: 1e-6 }) }),
+  }
 }))
 // Fama–French five factors + momentum (Ken French's daily files), Newey–West errors (lib/factor-regression.js).
 router.post('/risk/factors', heavy, route('quant/risk/factors', async req => {

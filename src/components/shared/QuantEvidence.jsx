@@ -1,7 +1,8 @@
 /**
  * QuantEvidence — the measured quant context the server computed from a year
  * of daily bars (lib/quant-snapshot.js): volatility outlook, trend vs mean
- * reversion, one-day tail risk, liquidity, beta, volatility state, and where
+ * reversion, one-day tail risk, liquidity (and whether the flat trading cost
+ * understates it at size), beta, volatility state, and where
  * the name sits against the rest of its list. Context, not a signal: nothing
  * here changed the pick. Collapsed by default so a card stays short.
  *
@@ -21,6 +22,7 @@ export default function QuantEvidence({ quant, className = '' }) {
     s.vol21 != null ? `vol ${pct(s.vol21)}` : null,
     s.character && s.character !== 'unknown' ? s.character : null,
     s.var95 != null ? `VaR95 ${pct(s.var95, 1)}` : null,
+    s.costFlag === 'understated' ? `cost +${s.extraCostBps}bp at size` : null,
   ].filter(Boolean).join(' · ')
   return (
     <div className={`mt-2 rounded-lg border border-violet-500/20 bg-violet-500/5 ${className}`}>

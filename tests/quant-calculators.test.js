@@ -63,3 +63,36 @@ test('Avellaneda–Stoikov skews quotes against inventory; VWAP slices sum to th
   expect(C.implementationShortfall({ side: 'buy', arrival: 100, avgFill: 100.1 }).bps).toBeCloseTo(10, 6); expect(C.implementationShortfall({ side: 'sell', arrival: 100, avgFill: 99.9 }).bps).toBeCloseTo(10, 6)
   expect(C.carryTrade({ rateLong: 0.05, rateShort: 0.01, fxVol: 0.08 }).carryToVol).toBeCloseTo(0.5, 9)
 })
+
+describe('Almgren–Chriss', () => {
+  const base = { shares: 100000, price: 50, dailyVol: 0.02, adv: 1e6, days: 5 }
+  test('λ = 0 is the even schedule, and its cost is η·Σn²/τ by hand', () => {
+    const r = C.almgrenChriss({ ...base, lambda: 0 })
+    expect(r.schedule.map(s => s.sell)).toEqual([20000, 20000, 20000, 20000, 20000]); expect(r.halfLifeDays).toBeNull()
+    const eta = 50 * 0.02 * Math.sqrt(0.1) / (0.1 * 1e6)
+    expect(r.expectedCost).toBeCloseTo(eta * 5 * 20000 ** 2, 6); expect(r.expectedCost).toBeCloseTo(r.twap.expectedCost, 9)
+  })
+  test('more risk aversion sells sooner: cost up, risk down, and every share is sold', () => {
+    const lo = C.almgrenChriss({ ...base, lambda: 1e-7 }), hi = C.almgrenChriss({ ...base, lambda: 1e-5 })
+    expect(hi.schedule[0].sell).toBeGreaterThan(lo.schedule[0].sell); expect(hi.expectedCost).toBeGreaterThan(lo.expectedCost); expect(hi.sd).toBeLessThan(lo.sd)
+    for (const r of [lo, hi]) { expect(r.schedule.reduce((a, s) => a + s.sell, 0)).toBeCloseTo(100000, -1); expect(r.schedule.at(-1).remaining).toBe(0) }
+    // Non-increasing sells, front-loaded
+    for (let j = 1; j < hi.schedule.length; j++) expect(hi.schedule[j].sell).toBeLessThanOrEqual(hi.schedule[j - 1].sell)
+  })
+  test('the schedule minimises E + λ·Var: nudging shares between slices never does better', () => {
+    const lambda = 1e-6, r = C.almgrenChriss({ ...base, lambda, slices: 5 })
+    const etaT = r.eta, sigma = 50 * 0.02, obj = n => { let x = 100000, v = 0; const xs = []; for (const q of n) { x -= q; xs.push(x) } ; for (const q of n) v += q * q; return etaT * v + lambda * sigma * sigma * xs.reduce((a, y) => a + y * y, 0) }
+    const n = r.schedule.map(s => s.sell), best = obj(n)
+    for (let i = 0; i < 4; i++) { const m = n.slice(); m[i] += 500; m[i + 1] -= 500; expect(obj(m)).toBeGreaterThan(best - 1e-6); const k = n.slice(); k[i] -= 500; k[i + 1] += 500; expect(obj(k)).toBeGreaterThan(best - 1e-6) }
+  })
+  test('many slices approach the continuous solution X·sinh(κ(T−t))/sinh(κT)', () => {
+    const r = C.almgrenChriss({ ...base, lambda: 1e-6, slices: 400 })
+    const eta = r.eta, k = Math.sqrt(1e-6 * 1 / eta), X = 100000, T = 5
+    const mid = r.schedule[199]; expect(mid.remaining / X).toBeCloseTo(Math.sinh(k * (T - mid.day)) / Math.sinh(k * T), 2)
+  })
+  test('huge risk aversion does not overflow; bad inputs are refused; a heavy slice is warned about', () => {
+    const r = C.almgrenChriss({ ...base, lambda: 1, slices: 50 }); expect(Number.isFinite(r.expectedCost)).toBe(true); expect(r.schedule[0].sell).toBeGreaterThan(99000)
+    expect(() => C.almgrenChriss({ ...base, shares: 0 })).toThrow(); expect(() => C.almgrenChriss({ ...base, gamma: 1 })).toThrow(/gamma/)
+    expect(C.almgrenChriss({ ...base, shares: 2e6, days: 2, lambda: 0 }).warning).toMatch(/day's volume/)
+  })
+})

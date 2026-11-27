@@ -501,7 +501,7 @@ async function fetchTaSnapshot(universe, headers) {
       const yearBars = await fetchDailyBars(sym, { range: '1y', headers, timeoutMs: 12_000 })
       const lastT = yearBars.length ? yearBars[yearBars.length - 1].t : 0
       const bars = yearBars.filter(b => b.t >= lastT - 183 * 864e5)
-      if (yearBars.length >= 60) { quantBars[sym] = yearBars; const qs = quantSnapshot.symbolSnapshot(yearBars, { benchBars: benchBarsRef.bars }); if (!qs.insufficient) quantMap.set(sym, qs) }
+      if (yearBars.length >= 60) { quantBars[sym] = yearBars; const qs = quantSnapshot.symbolSnapshot(yearBars, { benchBars: benchBarsRef.bars, symbol: sym }); if (!qs.insufficient) quantMap.set(sym, qs) }
       if (bars.length < 30) continue
       const li = levelInputs(bars)
       if (li) levelMap.set(sym, li)

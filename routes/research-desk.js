@@ -229,7 +229,7 @@ async function gatherEvidence(sym, req) {
     throw err
   }
 
-  const quantSnap = quantSnapshot.symbolSnapshot(bars, { benchBars: spyBars?.length >= 60 ? spyBars : null })
+  const quantSnap = quantSnapshot.symbolSnapshot(bars, { benchBars: spyBars?.length >= 60 ? spyBars : null, symbol: sym })
   const taLine = compactTaLine(sym, bars.map(b => b.o ?? b.c), bars.map(b => b.h ?? b.c), bars.map(b => b.l ?? b.c), bars.map(b => b.c), bars.map(b => b.v ?? 0),
     { lastBarForming: isLastBarForming(bars, { isCrypto: isCryptoSymbol(sym) }) })
   let records = [], stats = null

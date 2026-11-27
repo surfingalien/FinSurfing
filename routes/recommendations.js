@@ -48,7 +48,7 @@ const planOdds = require('../lib/plan-odds')
 function attachQuant(recs, yearBars, benchBars = null) {
   const snaps = new Map(), forCross = {}
   for (const [sym, b] of Object.entries(yearBars || {})) {
-    const snap = quantSnapshot.symbolSnapshot(b, { benchBars })
+    const snap = quantSnapshot.symbolSnapshot(b, { benchBars, symbol: sym })
     if (!snap.insufficient) { snaps.set(sym, snap); forCross[sym] = b }
   }
   const rel = Object.keys(forCross).length >= 3 ? quantSnapshot.crossSection(forCross) : new Map()

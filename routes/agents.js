@@ -243,9 +243,9 @@ function barsFromChart(data) {
 const mean = a => a.reduce((s, v) => s + v, 0) / a.length
 
 /** Measured quant evidence for the pipeline (lib/quant-snapshot.js); null when history is too short. Pure. */
-function quantFacts(bars, benchBars = null) {
+function quantFacts(bars, benchBars = null, symbol = null) {
   const ms = bs => (bs || []).map(b => ({ ...b, t: b.t * 1000 }))     // chart timestamps are seconds
-  const snap = quantSnapshot.symbolSnapshot(ms(bars), { benchBars: benchBars?.length >= 60 ? ms(benchBars) : null })
+  const snap = quantSnapshot.symbolSnapshot(ms(bars), { benchBars: benchBars?.length >= 60 ? ms(benchBars) : null, symbol })
   if (snap.insufficient) return null
   return { snap, stamp: quantSnapshot.stampOf(snap), evidence: quantSnapshot.evidenceItems(snap), line: quantSnapshot.snapshotLine('', snap).replace(/^:\s*/, '') }
 }
@@ -339,7 +339,7 @@ router.post('/pipeline', async (req, res) => {
     const q     = quoteR.data?.quoteResponse?.result?.[0] ?? null
     const bars  = barsFromChart(chartR.data)
     const facts = pipelineFacts(bars, q?.regularMarketPrice)
-    const quant = quantFacts(bars, barsFromChart(spyR?.data))
+    const quant = quantFacts(bars, barsFromChart(spyR?.data), sym)
     // No price at all used to become $0 and every level was computed off it.
     if (!facts.price)
       return res.status(422).json({ error: `No price for ${sym}: ${quoteR.error || chartR.error || 'no data provider returned one'}` })
